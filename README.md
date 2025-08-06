@@ -1,155 +1,76 @@
-# Test Toolkit Studio
+# Toolkit Studio
 
-A cross-platform IDE for UI automation testing, designed for users without coding experience to create and run automated test scripts.
+测试工具箱系列产品, AI辅助UI自动化测试脚本编写IDE
 
-## Features
+## 主要功能
 
-- 🎯 **User-Friendly Interface**: Modern, dark-themed IDE interface inspired by professional development tools
-- 📱 **Android Testing Support**: Built-in Android SDK integration for mobile app testing
-- 🔐 **Secure Authentication**: Login system with token-based authentication
-- 📊 **Test Case Management**: Import test cases from CSV files and organize them in projects
-- 📝 **Visual Script Editor**: Monaco-based code editor with syntax highlighting for YAML test scripts
-- 🖥️ **Real-time Device Screen**: Live device screen capture and XML element inspection
-- 💾 **Project Structure**: Organized file system for test cases, scripts, and device configurations
+- **项目管理**：自动创建结构化测试项目文件夹，从CSV导入测试用例(未来支持从 Notion, GitHub 或 Toolkit云盘 同步)
+- **脚本编辑**：自动化编辑器，支持语法高亮和多标签, 运行时实时反馈运行步骤和失败位置
+- **设备连接**：多设备设备管理，实时状态检测和屏幕预览
+- **元素定位**：点击屏幕获取元素，查看XML结构, 并直接根据获取的元素创建自动化脚本
+- **测试执行**：运行测试脚本，查看执行日志
 
-## Prerequisites
-
-- Node.js 16+ and npm
-- Android SDK (will be bundled in production build)
-
-## Installation
-
-1. Clone the repository:
-```bash
-cd /Users/eric_konec/Documents/GitHub/test-toolkit-studio
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Set up Android SDK:
-   - Download Android platform-tools
-   - Place them in `android-sdk/platform-tools/` directory
-   - Ensure `adb` executable is available
-
-## Development
-
-Run the application in development mode:
-```bash
-npm start
-```
-
-Run with live reload:
-```bash
-npm run dev
-```
-
-## Building
-
-Build for macOS:
-```bash
-npm run build-mac
-```
-
-Build for Windows:
-```bash
-npm run build-win
-```
-
-Build for both platforms:
-```bash
-npm run build
-```
-
-## Project Structure
+## 本项目结构
 
 ```
 test-toolkit-studio/
-├── main.js              # Main Electron process
-├── renderer/            # Renderer process files
-│   ├── index.html      # Main application UI
-│   ├── login.html      # Login page
-│   ├── styles/         # CSS stylesheets
-│   │   ├── common.css  # Common styles
-│   │   ├── login.css   # Login page styles
-│   │   └── main.css    # Main app styles
-│   └── js/             # JavaScript files
-│       ├── login.js    # Login logic
-│       └── app.js      # Main application logic
-├── assets/             # Application assets
-└── android-sdk/        # Bundled Android SDK tools
-
+├── main.js              # Electron主进程
+├── renderer/            # 渲染器
+│   ├── index.html      # 四合一主界面
+│   ├── login.html      # 登录页
+│   ├── styles/         # css
+│   │   ├── common.css  
+│   │   ├── login.css   
+│   │   └── main.css    
+│   └── js/             # JS逻辑
+│       ├── login.js    
+│       └── app.js      
+├── assets/             # 静态资源
+└── resouces/           # Android SDK等环境资源
 ```
 
-## Test Project Structure
+## 测试项目结构
 
-When you create a new test project, it creates the following structure:
+测试项目的基础目录结构：
 
 ```
 project_root/
-├── cases/              # Individual test cases
+├── cases/              # 测试用例文件夹
 │   └── case_001/       
-│       ├── config.json # Test case configuration
-│       ├── locator/    # Element locators
+│       ├── config.json # 此用例配置
+│       ├── locator/    # 元素定位材料
 │       │   ├── element.json
-│       │   └── img/    # Image recognition assets
-│       └── script/     # Test scripts
+│       │   └── img/    # 图像识别材料
+│       └── script/     # 测试脚本
 │           └── script_001.yaml
-├── devices/            # Device configurations
-├── testcase_map.json   # Test case mapping
-├── testcase_sheet.csv  # Test cases spreadsheet
-└── workarea/           # Current device state
+├── devices/            # 设备配置
+├── testcase_map.json   # 用例映射表
+├── testcase_sheet.csv  # 用例总表
+└── workarea/           # 当前工作区
 ```
 
-## Features Overview
+## 快捷键
 
-### 1. Project Management
-- Create new test projects with organized directory structure
-- Import test cases from CSV files
-- Manage multiple test projects
+- `Cmd/Ctrl + N`：新建项目
+- `Cmd/Ctrl + O`：打开项目
+- `F5`：运行测试
+- `Shift + F5`：停止测试
+- `Cmd/Ctrl + D`：刷新设备
+- `Cmd/Ctrl + S`: 保存
+- `Cmd/Ctrl + W`: 关闭Tab页
 
-### 2. Test Case Editor
-- Visual file explorer for test cases
-- Monaco-based code editor with syntax highlighting
-- Support for YAML test scripts
-- Multi-tab editing
+## 常见问题
 
-### 3. Device Management
-- Add and configure test devices
-- Real-time device connection status
-- ADB integration for Android devices
+### ADB未找到
+设置页面, 使用SDK和ADB自检功能检查内建立环境
 
-### 4. Settings
-- User profile management
-- API server configuration
-- Android SDK status check
-- Application version information
+### 设备未检测到
+1. 开启手机开发者选项
+2. 开启USB调试
+3. USB连接设备
+4. 授权调试请求
 
-## Security
-
-- Token-based authentication with automatic refresh
-- Secure storage of credentials
-- Session management
-
-## Keyboard Shortcuts
-
-- `Cmd/Ctrl + N`: New Project
-- `Cmd/Ctrl + O`: Open Project
-- `F5`: Run Current Test
-- `Shift + F5`: Stop Test
-- `Cmd/Ctrl + D`: Refresh Device
-- `F12`: Toggle Developer Tools
-
-## Troubleshooting
-
-### ADB Not Found
-Ensure Android SDK platform-tools are properly installed in the `android-sdk` directory.
-
-### Device Not Detected
-1. Enable Developer Options on your Android device
-2. Enable USB Debugging
-3. Connect device via USB
-4. Accept the debugging authorization prompt
-
+### 无法获取设备屏幕
+1. 检查设备是否正确连接
+2. 重新插拔USB线
+3. 扫描全部设备
