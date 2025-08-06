@@ -3,6 +3,7 @@ const electron = window.nodeRequire ? window.nodeRequire('electron') : require('
 const { ipcRenderer } = electron;
 const path = window.nodeRequire ? window.nodeRequire('path') : require('path');
 const fs = (window.nodeRequire ? window.nodeRequire('fs') : require('fs')).promises;
+const fsSync = window.nodeRequire ? window.nodeRequire('fs') : require('fs');
 const yaml = window.nodeRequire ? window.nodeRequire('js-yaml') : require('js-yaml');
 const { parse } = window.nodeRequire ? window.nodeRequire('csv-parse/sync') : require('csv-parse/sync');
 
@@ -25,11 +26,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load user info
     loadUserInfo();
     
-    // Check for existing project
-    const lastProject = await ipcRenderer.invoke('store-get', 'last_project');
-    if (lastProject) {
-        await loadProject(lastProject);
-    }
+    // Load project history instead of auto-loading last project
+    await loadProjectHistory();
 });
 
 // Navigation
@@ -64,9 +62,43 @@ function initializeProjectPage() {
     const createProjectBtn = document.getElementById('createProjectBtn');
     const openProjectBtn = document.getElementById('openProjectBtn');
     const importCsvBtn = document.getElementById('importCsvBtn');
+    const backToProjectsBtn = document.getElementById('backToProjectsBtn');
     
     console.log('Initializing project page...');
     
+    // Back to projects button
+    if (backToProjectsBtn) {
+        backToProjectsBtn.addEventListener('click', async () => {
+            // Clear current project
+            currentProject = null;
+            
+            // Update UI
+            document.getElementById('projectInfo').style.display = 'none';
+            document.getElementById('welcomeScreen').style.display = 'flex';
+            
+            // Reload project history
+            await loadProjectHistory();
+            
+            // Clear testcase page
+            const fileTree = document.getElementById('fileTree');
+            if (fileTree) fileTree.innerHTML = '';
+            
+            // Clear editor tabs
+            openTabs = [];
+            const editorTabs = document.getElementById('editorTabs');
+            if (editorTabs) {
+                editorTabs.innerHTML = '<div class="tab active"><span>Welcome</span></div>';
+            }
+            if (monacoEditor) {
+                monacoEditor.setValue('# Welcome to Test Toolkit Studio\n# Open a test script to start editing');
+            }
+            
+            // Clear current project path
+            document.getElementById('currentProjectPath').textContent = 'No project loaded';
+            
+            showNotification('Closed project', 'info');
+        });
+    }
     if (createProjectBtn) {
         createProjectBtn.addEventListener('click', async () => {
             console.log('Create project button clicked');
@@ -96,7 +128,7 @@ function initializeProjectPage() {
                 const projectPath = await ipcRenderer.invoke('select-directory');
                 console.log('Selected path:', projectPath);
                 if (projectPath) {
-                    await loadProject(projectPath);
+                    await openProject(projectPath);
                 }
             } catch (error) {
                 console.error('Error in open project:', error);
@@ -144,13 +176,21 @@ function initializeProjectPage() {
 // Load project
 async function loadProject(projectPath) {
     currentProject = projectPath;
-    await ipcRenderer.invoke('store-set', 'last_project', projectPath);
+    
+    // Update project history
+    await updateProjectHistory(projectPath);
     
     // Update UI
     document.getElementById('projectPath').textContent = projectPath;
     document.getElementById('currentProjectPath').textContent = projectPath;
     document.getElementById('projectInfo').style.display = 'block';
     document.getElementById('welcomeScreen').style.display = 'none';
+    
+    // Clear previous test cases list
+    const testcaseList = document.getElementById('testcaseList');
+    if (testcaseList) {
+        testcaseList.innerHTML = '<div class="text-muted">Loading test cases...</div>';
+    }
     
     // Load test cases if CSV exists
     const sheetPath = path.join(projectPath, 'testcase_sheet.csv');
@@ -164,11 +204,24 @@ async function loadProject(projectPath) {
             displayTestCasesTable(records);
         } catch (error) {
             console.error('Failed to parse existing CSV:', error);
+            if (testcaseList) {
+                testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet. Import a CSV file to get started.</div>';
+            }
+        }
+    } else {
+        if (testcaseList) {
+            testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet. Import a CSV file to get started.</div>';
         }
     }
     
-    // Load file tree
+    // Load file tree for testcase page
     await loadFileTree();
+    
+    // Load saved devices
+    await loadSavedDevices();
+    
+    // Refresh device list
+    await refreshDeviceList();
 }
 
 // Display test cases in table format
@@ -1153,4 +1206,137 @@ window.deleteDevice = async function(filename) {
             showNotification(`Failed to delete device: ${error.message}`, 'error');
         }
     }
+};
+
+// Project History Management
+async function loadProjectHistory() {
+    const projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    
+    const welcomeContent = document.getElementById('welcomeContent');
+    const recentProjects = document.getElementById('recentProjects');
+    const projectList = document.getElementById('projectList');
+    
+    if (projectHistory.length > 0) {
+        // Hide welcome content when there are projects
+        if (welcomeContent) welcomeContent.style.display = 'none';
+        
+        if (recentProjects && projectList) {
+            projectList.innerHTML = '';
+            
+            // Sort by last accessed date (most recent first)
+            projectHistory.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
+            
+            // Display all recent projects (limit to 10)
+            projectHistory.slice(0, 10).forEach((project, index) => {
+                const projectItem = document.createElement('div');
+                projectItem.className = 'project-item';
+                
+                const projectName = path.basename(project.path);
+                const lastAccessed = new Date(project.lastAccessed);
+                const dateStr = formatDate(lastAccessed);
+                
+                projectItem.innerHTML = `
+                    <svg class="project-item-icon" viewBox="0 0 24 24">
+                        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                    </svg>
+                    <div class="project-item-info">
+                        <div class="project-item-name">${projectName}</div>
+                        <div class="project-item-path" title="${project.path}">${project.path}</div>
+                    </div>
+                    <div class="project-item-date">${dateStr}</div>
+                    <button class="project-item-remove" onclick="removeFromHistory('${project.path.replace(/'/g, "\\'").replace(/\\/g, "\\\\")}')" title="Remove from history">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                `;
+                
+                projectItem.addEventListener('click', (e) => {
+                    if (!e.target.closest('.project-item-remove')) {
+                        openProject(project.path);
+                    }
+                });
+                
+                projectList.appendChild(projectItem);
+            });
+            
+            recentProjects.style.display = 'block';
+        }
+    } else {
+        // Show welcome content when no projects
+        if (welcomeContent) welcomeContent.style.display = 'block';
+        if (recentProjects) recentProjects.style.display = 'none';
+    }
+}
+
+// Format date for display
+function formatDate(date) {
+    const now = new Date();
+    const diff = now - date;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) {
+        return 'Today';
+    } else if (days === 1) {
+        return 'Yesterday';
+    } else if (days < 7) {
+        return `${days} days ago`;
+    } else {
+        return date.toLocaleDateString();
+    }
+}
+
+// Open project from history or file dialog
+async function openProject(projectPath) {
+    // Check if directory exists
+    if (!fsSync.existsSync(projectPath)) {
+        showNotification('Project folder not found', 'error');
+        await removeFromHistory(projectPath);
+        return;
+    }
+    
+    // Check if it's a valid project directory
+    const projectFiles = ['testcase_map.json', 'testcase_sheet.csv'];
+    let isValidProject = true;
+    for (const file of projectFiles) {
+        if (!fsSync.existsSync(path.join(projectPath, file))) {
+            isValidProject = false;
+            break;
+        }
+    }
+    
+    if (!isValidProject) {
+        showNotification('Not a valid Test Toolkit project folder', 'error');
+        return;
+    }
+    
+    await loadProject(projectPath);
+}
+
+// Update project history
+async function updateProjectHistory(projectPath) {
+    let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    
+    // Remove if already exists
+    projectHistory = projectHistory.filter(p => p.path !== projectPath);
+    
+    // Add to beginning
+    projectHistory.unshift({
+        path: projectPath,
+        lastAccessed: new Date().toISOString()
+    });
+    
+    // Keep only last 10 projects
+    projectHistory = projectHistory.slice(0, 10);
+    
+    await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
+}
+
+// Remove project from history
+window.removeFromHistory = async function(projectPath) {
+    let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    projectHistory = projectHistory.filter(p => p.path !== projectPath);
+    await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
+    await loadProjectHistory();
+    showNotification('Project removed from history', 'success');
 };
