@@ -1223,10 +1223,14 @@ async function loadProjectHistory() {
     const welcomeContent = document.getElementById('welcomeContent');
     const recentProjects = document.getElementById('recentProjects');
     const projectList = document.getElementById('projectList');
+    const welcomeScreen = document.querySelector('.project-welcome');
     
     if (projectHistory.length > 0) {
         // Hide welcome content when there are projects
         if (welcomeContent) welcomeContent.style.display = 'none';
+        
+        // Remove centering class when showing projects
+        if (welcomeScreen) welcomeScreen.classList.remove('show-welcome');
         
         if (recentProjects && projectList) {
             projectList.innerHTML = '';
@@ -1274,6 +1278,9 @@ async function loadProjectHistory() {
         // Show welcome content when no projects
         if (welcomeContent) welcomeContent.style.display = 'block';
         if (recentProjects) recentProjects.style.display = 'none';
+        
+        // Add class for centering welcome content
+        if (welcomeScreen) welcomeScreen.classList.add('show-welcome');
     }
 }
 

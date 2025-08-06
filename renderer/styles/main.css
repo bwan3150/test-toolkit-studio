@@ -243,6 +243,30 @@ body {
     overflow-y: auto;
 }
 
+/* Project page when no project is loaded */
+.project-welcome {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* When only welcome content is shown, center it */
+.project-welcome:has(#welcomeContent[style*="display: block"]):has(#recentProjects[style*="display: none"]) {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Fallback for browsers that don't support :has() */
+.project-welcome.show-welcome {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
 .project-info {
     animation: fadeIn 0.3s;
 }
@@ -387,7 +411,7 @@ body {
 }
 
 .floating-action-btn:hover {
-    background: #0062a3;
+    background: #e09900;
     transform: translateY(-50%) scale(1.05);
 }
 
@@ -969,35 +993,33 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 24px;
-    width: 100%;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
 }
 
-.welcome-content {
-    text-align: center;
-    padding: 48px;
-}
-
-.welcome-screen h3 {
+.project-welcome h3 {
+    font-size: 20px;
     margin-bottom: 12px;
+    color: var(--text-primary);
 }
 
-.welcome-screen p {
-    margin-bottom: 32px;
+.project-welcome p {
+    margin-bottom: 0;
+    color: var(--text-secondary);
 }
 
 /* Recent Projects List */
 .recent-projects {
     width: 100%;
-    max-width: 900px;
 }
 
 .recent-projects h4 {
     font-size: 18px;
     font-weight: 500;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
     color: var(--text-primary);
-    padding-bottom: 12px;
+    padding-bottom: 16px;
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -1010,7 +1032,7 @@ body {
 .project-item {
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: 16px 20px;
     background: transparent;
     border: 1px solid transparent;
     border-bottom: 1px solid var(--border-color);
@@ -1025,7 +1047,7 @@ body {
 
 .project-item:hover {
     background: var(--bg-secondary);
-    padding-left: 20px;
+    padding-left: 24px;
 }
 
 .project-item-icon {

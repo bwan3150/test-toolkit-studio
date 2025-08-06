@@ -16,7 +16,7 @@
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle, rgba(0, 122, 204, 0.1) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(249, 168, 37, 0.1) 0%, transparent 70%);
     animation: rotate 30s linear infinite;
 }
 
@@ -114,7 +114,7 @@
 #loginForm input:focus {
     border-color: var(--accent-primary);
     background: var(--bg-tertiary);
-    box-shadow: 0 0 0 3px rgba(0, 122, 204, 0.1);
+    box-shadow: 0 0 0 3px rgba(249, 168, 37, 0.1);
 }
 
 #loginForm input::placeholder {
@@ -146,7 +146,7 @@
 .login-button {
     width: 100%;
     padding: 14px;
-    background: linear-gradient(135deg, var(--accent-primary), #0062a3);
+    background: linear-gradient(135deg, var(--accent-primary), #e09900);
     border: none;
     border-radius: 6px;
     color: white;
@@ -164,7 +164,7 @@
 
 .login-button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(0, 122, 204, 0.4);
+    box-shadow: 0 6px 20px rgba(249, 168, 37, 0.4);
 }
 
 .login-button:active {

@@ -16,7 +16,7 @@
     --text-secondary: #9c9c9c;
     --text-disabled: #6c6c6c;
     
-    --accent-primary: #007acc;
+    --accent-primary: #f9a825;
     --accent-success: #4ec9b0;
     --accent-warning: #ce9178;
     --accent-danger: #f48771;
@@ -91,7 +91,7 @@ body {
 }
 
 .btn.btn-primary:hover {
-    background: #0062a3;
+    background: #e09900;
 }
 
 .btn.btn-secondary {
@@ -130,8 +130,8 @@ body {
 
 .btn.btn-outline:hover {
     background: var(--bg-hover);
-    color: var(--accent-danger);
-    border-color: var(--accent-danger);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
 }
 
 .btn.btn-icon {
