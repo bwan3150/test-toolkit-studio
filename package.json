@@ -33,17 +33,20 @@
       "output": "dist"
     },
     "asar": true,
-    "asarUnpack": [
-      "resources/**/*"
-    ],
 
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "assets/logo/toolkit_logo.png",
+      "icon": "assets/logo/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
+      "signIgnore": [
+        "darwin/android-sdk"
+      ],
+      "asarUnpack": [
+        "resources/darwin/**/*"
+      ],
       "extraResources": [
         {
           "from": "resources/darwin",
@@ -55,7 +58,10 @@
 
     "win": {
       "target": "nsis",
-      "icon": "assets/logo/toolkit_logo.png",
+      "icon": "assets/logo/icon.ico",
+      "asarUnpack": [
+        "resources/win32/**/*"
+      ],
       "extraResources": [
         {
           "from": "resources/win32",
@@ -68,6 +74,9 @@
     "linux": {
       "target": "AppImage",
       "icon": "assets/logo/toolkit_logo.png",
+      "asarUnpack": [
+        "resources/linux/**/*"
+      ],
       "extraResources": [
         {
           "from": "resources/linux",
