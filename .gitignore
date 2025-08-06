@@ -4,9 +4,12 @@ package-lock.json
 # Build outputs
 dist/
 out/
-# Keep build config files but ignore temporary build files
-build/
+
+# build的配置文件留着
+build/*
 !build/*.plist
+!build/*.yml
+!build/*.json
 !build/*.yml
 !build/*.json
 
