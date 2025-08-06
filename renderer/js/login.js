@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginButton = document.querySelector('.login-button');
     const buttonText = document.getElementById('buttonText');
     const spinner = document.getElementById('spinner');
+    const versionText = document.getElementById('version-text');
+
+    // Load app version
+    ipcRenderer.invoke('get-app-version').then(version => {
+        versionText.textContent = `Version ${version}`;
+    });
 
     // Load saved base URL if exists
     ipcRenderer.invoke('store-get', 'base_url').then(url => {

@@ -145,20 +145,29 @@ function createWindow() {
       label: 'Help',
       submenu: [
         {
-          label: 'Documentation',
+          label: 'Wiki',
           click: async () => {
             const { shell } = require('electron');
-            await shell.openExternal('https://docs.test-toolkit.app');
+            await shell.openExternal('https://wiki.test-toolkit.app');
+          }
+        },
+        {
+          label: 'Download Portable Toolkit',
+          click: async () => {
+            const { shell } = require('electron');
+            await shell.openExternal('https://www.pgyer.com/omf6LBDa');
           }
         },
         {
           label: 'About',
-          click: () => {
+          click: async () => {
+            const packageJson = require('./package.json');
+            const version = packageJson.version || 'unknown';
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'About Toolkit Studio',
               message: 'Toolkit Studio',
-              detail: 'Version 0.1.0\n\nA cross-platform IDE for UI automation testing.\n\n',
+              detail: `Version ${version}\n\nA Cross-platform Low-code IDE for General UI Automation Testing.\n\n`,
               buttons: ['OK']
             });
           }
@@ -270,6 +279,16 @@ ipcMain.handle('get-user-info', async () => {
     return { success: true, data: response.data };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+// App version
+ipcMain.handle('get-app-version', async () => {
+  try {
+    const packageJson = require('./package.json');
+    return packageJson.version;
+  } catch (error) {
+    return 'unknown';
   }
 });
 

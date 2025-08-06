@@ -969,6 +969,14 @@ function initializeSettingsPage() {
     const checkSdkBtn = document.getElementById('checkSdkBtn');
     const updateBaseUrlBtn = document.getElementById('updateBaseUrlBtn');
     const settingsBaseUrl = document.getElementById('settingsBaseUrl');
+    const aboutVersion = document.getElementById('about-version');
+    
+    // Load app version
+    if (aboutVersion) {
+        ipcRenderer.invoke('get-app-version').then(version => {
+            aboutVersion.textContent = `Version: ${version}`;
+        });
+    }
     
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
