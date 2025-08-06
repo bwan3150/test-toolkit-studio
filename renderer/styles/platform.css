@@ -1,0 +1,45 @@
+/* Platform-specific title bar styles */
+
+/* macOS specific styles */
+.platform-darwin .titlebar-area {
+    height: 38px;
+    background: transparent;
+    -webkit-app-region: drag;
+}
+
+.platform-darwin .app-container {
+    padding-top: 38px;
+    height: calc(100vh - 38px);
+}
+
+/* Make sure interactive elements are not draggable */
+.platform-darwin .sidebar,
+.platform-darwin .page-header,
+.platform-darwin .testcase-header,
+.platform-darwin button,
+.platform-darwin input,
+.platform-darwin select,
+.platform-darwin .nav-item,
+.platform-darwin .device-selector {
+    -webkit-app-region: no-drag;
+}
+
+/* Windows specific styles */
+.platform-win32 .titlebar-area {
+    display: none;
+}
+
+.platform-win32 .app-container {
+    padding-top: 0;
+    height: 100vh;
+}
+
+/* Linux specific styles */
+.platform-linux .titlebar-area {
+    display: none;
+}
+
+.platform-linux .app-container {
+    padding-top: 0;
+    height: 100vh;
+}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Toolkit Studio - Login</title>
+    <link rel="stylesheet" href="styles/common.css">
+    <link rel="stylesheet" href="styles/login.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="logo-container">
+                <img src="../assets/logo/toolkit_logo.png" alt="Test Toolkit Studio" class="logo">
+                <h1>Test Toolkit Studio</h1>
+                <p class="subtitle">Automated Testing IDE</p>
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" placeholder="Enter your email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="baseUrl">Server URL</label>
+                    <input type="url" id="baseUrl" value="https://api.test-toolkit.app" placeholder="API Server URL">
+                </div>
+                
+                <div class="error-message" id="errorMessage"></div>
+                
+                <button type="submit" class="login-button">
+                    <span id="buttonText">Sign In</span>
+                    <div class="spinner" id="spinner"></div>
+                </button>
+            </form>
+            
+            <div class="footer">
+                <p>Version 1.0.0 • © 2025 Konec</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/login.js"></script>
+</body>
+</html>

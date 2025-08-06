@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Toolkit Studio</title>
+    <link rel="stylesheet" href="styles/common.css">
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/platform.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css">
+</head>
+<body>
+    <script>
+        // Set platform class for CSS
+        document.body.classList.add('platform-' + process.platform);
+    </script>
+    
+    <!-- Title bar area for dragging -->
+    <div class="titlebar-area"></div>
+    
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+            <img src="../assets/logo/toolkit_no_focus_logo.png" alt="TT" class="logo-small">
+                <img src="../assets/logo/toolkit_logo.png" alt="Test Toolkit Studio" class="logo-large">
+        </div>
+            
+            <div class="nav-items">
+                <div class="nav-item active" data-page="project">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                    </svg>
+                    <span class="nav-label">Project</span>
+                </div>
+                
+                <div class="nav-item" data-page="testcase">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                    <span class="nav-label">Testcase</span>
+                </div>
+                
+                <div class="nav-item" data-page="device">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                    </svg>
+                    <span class="nav-label">Device</span>
+                </div>
+                
+                <div class="nav-item" data-page="settings">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                    </svg>
+                    <span class="nav-label">Settings</span>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="user-info" id="userInfo">
+                    <div class="user-avatar">U</div>
+                    <span class="user-name">User</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Project Page -->
+            <div class="page active" id="projectPage">
+                <div class="page-header">
+                    <h2>Project Management</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="createProjectBtn">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            New Project
+                        </button>
+                        <button class="btn btn-secondary" id="openProjectBtn">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                            </svg>
+                            Open Project
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="project-content">
+                    <div class="project-info" id="projectInfo" style="display: none;">
+                        <div class="info-card">
+                            <h3>Current Project</h3>
+                            <p class="project-path" id="projectPath"></p>
+                            
+                            <div class="project-actions">
+                                <div class="action-card">
+                                    <h4>Import Test Cases</h4>
+                                    <p>Import test cases from CSV file</p>
+                                    <button class="btn btn-outline" id="importCsvBtn">
+                                        <svg class="btn-icon" viewBox="0 0 24 24">
+                                            <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 9v4h-2v-4H8l4-4 4 4h-3z"/>
+                                        </svg>
+                                        Import CSV
+                                    </button>
+                                </div>
+                                
+                                <div class="action-card">
+                                    <h4>Test Cases</h4>
+                                    <p>View and manage test cases</p>
+                                    <div class="testcase-list" id="testcaseList"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="welcome-screen" id="welcomeScreen">
+                        <svg class="welcome-icon" viewBox="0 0 200 200">
+                            <rect x="40" y="40" width="50" height="50" fill="#ff6b6b" opacity="0.2"/>
+                            <rect x="110" y="40" width="50" height="50" fill="#4ecdc4" opacity="0.2"/>
+                            <rect x="40" y="110" width="50" height="50" fill="#45b7d1" opacity="0.2"/>
+                            <rect x="110" y="110" width="50" height="50" fill="#96ceb4" opacity="0.2"/>
+                        </svg>
+                        <h3>Welcome to Test Toolkit Studio</h3>
+                        <p>Create a new project or open an existing one to get started</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Testcase Page -->
+            <div class="page" id="testcasePage">
+                <div class="testcase-header">
+                    <div class="project-path-bar">
+                        <span id="currentProjectPath">No project loaded</span>
+                    </div>
+                    <div class="device-selector">
+                        <select id="deviceSelect">
+                            <option value="">Select Device</option>
+                        </select>
+                        <button class="btn btn-icon" id="refreshDeviceBtn">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="testcase-container">
+                    <!-- File Explorer -->
+                    <div class="file-explorer" id="fileExplorer">
+                        <div class="explorer-header">
+                            <h3>Case Explorer</h3>
+                        </div>
+                        <div class="file-tree" id="fileTree"></div>
+                    </div>
+                    
+                    <!-- Code Editor -->
+                    <div class="editor-container">
+                        <div class="editor-tabs" id="editorTabs">
+                            <div class="tab active">
+                                <span>Welcome</span>
+                            </div>
+                        </div>
+                        <div id="monacoEditor" class="monaco-editor-container"></div>
+                    </div>
+                    
+                    <!-- Right Panel -->
+                    <div class="right-panel">
+                        <!-- Run Button -->
+                        <div class="run-section">
+                            <button class="btn btn-success btn-block" id="runTestBtn">
+                                <svg class="btn-icon" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                Run Test
+                            </button>
+                        </div>
+                        
+                        <!-- Console -->
+                        <div class="console-container">
+                            <div class="console-header">
+                                <h4>Console Output</h4>
+                                <button class="btn btn-icon btn-small" id="clearConsoleBtn">
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="console-output" id="consoleOutput"></div>
+                        </div>
+                        
+                        <!-- Device Screen -->
+                        <div class="device-screen">
+                            <div class="screen-header">
+                                <h4>Device Screen</h4>
+                                <button class="btn btn-icon btn-small" id="toggleXmlBtn">
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="screen-content" id="screenContent">
+                                <img id="deviceScreenshot" src="" alt="Device screen" style="display: none;">
+                                <div class="screen-placeholder">No device connected</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Device Page -->
+            <div class="page" id="devicePage">
+                <div class="page-header">
+                    <h2>Device Management</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" id="addDeviceBtn">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Add Device
+                        </button>
+                        <button class="btn btn-secondary" id="scanDevicesBtn">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                            Scan Connected
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="device-content">
+                    <div class="device-form" id="deviceForm" style="display: none;">
+                        <h3>Add New Device</h3>
+                        <form id="newDeviceForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Platform Name</label>
+                                    <input type="text" name="platformName" value="Android" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Platform Version</label>
+                                    <input type="text" name="platformVersion" placeholder="e.g., 15" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Device Name</label>
+                                    <input type="text" name="deviceName" placeholder="e.g., OPPO Find X5 Pro" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Automation Name</label>
+                                    <input type="text" name="automationName" value="UiAutomator2" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>App Package</label>
+                                    <input type="text" name="appPackage" placeholder="e.g., com.konec.smarthome" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>App Activity</label>
+                                    <input type="text" name="appActivity" placeholder="e.g., .MainActivity" required>
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Command Timeout</label>
+                                    <input type="number" name="newCommandTimeout" value="6000">
+                                </div>
+                                <div class="form-group">
+                                    <label>No Reset</label>
+                                    <select name="noReset">
+                                        <option value="true">True</option>
+                                        <option value="false">False</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Device</button>
+                                <button type="button" class="btn btn-secondary" id="cancelDeviceBtn">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="device-list">
+                        <h3>Saved Devices</h3>
+                        <div class="device-grid" id="deviceGrid"></div>
+                    </div>
+                    
+                    <div class="connected-devices">
+                        <h3>Connected Devices</h3>
+                        <div class="connected-list" id="connectedList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Page -->
+            <div class="page" id="settingsPage">
+                <div class="page-header">
+                    <h2>Settings</h2>
+                </div>
+                
+                <div class="settings-content">
+                    <div class="settings-section">
+                        <h3>User Information</h3>
+                        <div class="user-details" id="userDetails">
+                            <div class="detail-row">
+                                <span class="detail-label">Username:</span>
+                                <span class="detail-value" id="settingsUsername">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Email:</span>
+                                <span class="detail-value" id="settingsEmail">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Member Group:</span>
+                                <span class="detail-value" id="settingsMemberGroup">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Member Since:</span>
+                                <span class="detail-value" id="settingsMemberSince">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h3>API Configuration</h3>
+                        <div class="form-group">
+                            <label>Base URL</label>
+                            <input type="url" id="settingsBaseUrl" value="https://api.test-toolkit.app">
+                            <button class="btn btn-secondary" id="updateBaseUrlBtn">Update</button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h3>Android SDK</h3>
+                        <div class="sdk-status">
+                            <div class="status-item">
+                                <span>SDK Status:</span>
+                                <span class="status-indicator" id="sdkStatus">Checking...</span>
+                            </div>
+                            <div class="status-item">
+                                <span>ADB Status:</span>
+                                <span class="status-indicator" id="adbStatus">Checking...</span>
+                            </div>
+                            <button class="btn btn-secondary" id="checkSdkBtn">Check SDK</button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <h3>About</h3>
+                        <div class="about-info">
+                            <p><strong>Test Toolkit Studio</strong></p>
+                            <p>Version: 1.0.0</p>
+                            <p>© 2025 Konec. All rights reserved.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <button class="btn btn-danger" id="logoutBtn">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                            </svg>
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="createCaseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create Test Case</h3>
+                <button class="modal-close" id="closeCaseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="createCaseForm">
+                    <div class="form-group">
+                        <label>Case Name</label>
+                        <input type="text" name="caseName" placeholder="e.g., case_001" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea name="description" rows="3" placeholder="Test case description"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Requirements</label>
+                        <textarea name="requirements" rows="3" placeholder="Test requirements"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="confirmCreateCase">Create</button>
+                <button class="btn btn-secondary" id="cancelCreateCase">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Save Node require before Monaco overrides it
+        window.nodeRequire = require;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
