@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles/common.css">
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="styles/platform.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css">
+    <!-- 移除Monaco编辑器的CDN样式 -->
 </head>
 <body>
     <script>
@@ -166,11 +166,15 @@
                     <!-- Code Editor -->
                     <div class="editor-container">
                         <div class="editor-tabs" id="editorTabs">
-                            <div class="tab active">
-                                <span>Welcome</span>
+                            <!-- 动态生成tab -->
+                        </div>
+                        <div id="simpleEditor" class="simple-editor-container">
+                            <div class="editor-wrapper">
+                                <div class="line-numbers" id="lineNumbers"></div>
+                                <textarea id="codeEditor" class="code-editor" placeholder="# 请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本"></textarea>
+                                <pre id="syntaxHighlight" class="syntax-highlight"></pre>
                             </div>
                         </div>
-                        <div id="monacoEditor" class="monaco-editor-container"></div>
                     </div>
                     
                     <!-- Vertical Resizer -->
@@ -432,10 +436,9 @@
     </div>
 
     <script>
-        // Save Node require before Monaco overrides it
+        // Save Node require
         window.nodeRequire = require;
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

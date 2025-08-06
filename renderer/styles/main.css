@@ -165,11 +165,13 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0; /* 允许文本收缩 */
 }
 
 .user-avatar {
     width: 28px;
     height: 28px;
+    min-width: 28px; /* 确保头像宽度不被压缩 */
     background: var(--accent-primary);
     border-radius: 50%;
     display: flex;
@@ -178,6 +180,7 @@ body {
     font-size: 12px;
     font-weight: 600;
     color: white;
+    flex-shrink: 0; /* 防止头像在flex容器中被压缩 */
 }
 
 .user-name {
@@ -563,6 +566,14 @@ body {
     font-size: 13px;
     white-space: nowrap;
     transition: all 0.2s;
+    max-width: 200px; /* 限制tab最大宽度 */
+}
+
+.tab-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
 }
 
 .tab:hover {
@@ -590,9 +601,116 @@ body {
     background: var(--bg-hover);
 }
 
-.monaco-editor-container {
+/* 简单编辑器容器 */
+.simple-editor-container {
     flex: 1;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-wrapper {
+    flex: 1;
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+.line-numbers {
+    width: 60px;
+    min-width: 60px;
+    padding: 16px 8px 16px 16px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-disabled);
+    text-align: right;
+    user-select: none;
+    overflow: hidden;
+    white-space: pre;
+}
+
+.code-editor {
+    flex: 1;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 16px;
+    margin: 0;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    background: transparent;
+    color: var(--text-primary);
+    tab-size: 2;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    position: relative;
+    z-index: 2;
+}
+
+.code-editor:focus {
+    background: transparent;
+}
+
+.code-editor::placeholder {
+    color: var(--text-disabled);
+    font-style: italic;
+}
+
+.syntax-highlight {
+    position: absolute;
+    top: 0;
+    left: 60px;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    padding: 16px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    background: transparent;
+    color: transparent;
+    pointer-events: none;
+    overflow: hidden;
+    white-space: pre;
+    z-index: 1;
+    tab-size: 2;
+}
+
+/* YAML语法高亮样式 */
+.yaml-key {
+    color: #569cd6; /* 蓝色 - 键名 */
+}
+
+.yaml-string {
+    color: #ce9178; /* 橙色 - 字符串值 */
+}
+
+.yaml-number {
+    color: #b5cea8; /* 绿色 - 数字 */
+}
+
+.yaml-boolean {
+    color: #569cd6; /* 蓝色 - 布尔值 */
+}
+
+.yaml-comment {
+    color: #6a9955; /* 深绿色 - 注释 */
+    font-style: italic;
+}
+
+.yaml-null {
+    color: #569cd6; /* 蓝色 - null值 */
+}
+
+.yaml-dash {
+    color: #dcdcaa; /* 黄色 - 数组标识符 */
+    font-weight: bold;
 }
 
 /* Right Panel */
