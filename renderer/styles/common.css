@@ -101,6 +101,7 @@ body {
 
 .btn.btn-secondary:hover {
     background: var(--bg-hover);
+    border-color: var(--accent-primary);
 }
 
 .btn.btn-success {
@@ -124,10 +125,13 @@ body {
 .btn.btn-outline {
     background: transparent;
     border-color: var(--border-color);
+    color: var(--text-secondary);
 }
 
 .btn.btn-outline:hover {
     background: var(--bg-hover);
+    color: var(--accent-danger);
+    border-color: var(--accent-danger);
 }
 
 .btn.btn-icon {
@@ -136,10 +140,21 @@ body {
     height: 32px;
 }
 
+.btn.btn-icon-only {
+    padding: 6px;
+    width: 32px;
+    height: 32px;
+}
+
 .btn.btn-small {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.btn.btn-small.btn-icon-only {
+    width: 28px;
+    height: 28px;
     padding: 4px;
-    width: 24px;
-    height: 24px;
 }
 
 .btn.btn-block {

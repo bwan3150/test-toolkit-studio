@@ -771,16 +771,41 @@ body {
     font-weight: 500;
     margin-bottom: 8px;
     color: var(--text-primary);
+    padding-right: 30px; /* Space for status indicator */
 }
 
 .device-info {
     font-size: 12px;
     color: var(--text-secondary);
     line-height: 1.6;
+    margin-bottom: 12px;
 }
 
 .device-info span {
     display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.device-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.device-actions .btn {
+    flex: 1;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.device-actions .btn-icon-only {
+    flex: 0 0 auto;
+    width: 32px;
+    padding: 6px;
 }
 
 .connected-list {
@@ -796,6 +821,11 @@ body {
     background: var(--bg-secondary);
     border-radius: 6px;
     border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+.connected-item:hover {
+    background: var(--bg-tertiary);
 }
 
 .connected-item .device-id {
@@ -810,6 +840,12 @@ body {
     color: var(--accent-success);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    margin-right: 12px;
+}
+
+.connected-item .btn {
+    font-size: 12px;
+    padding: 4px 12px;
 }
 
 /* Settings Page */

@@ -372,6 +372,18 @@ ipcMain.handle('adb-devices', async () => {
       }
     }
     
+    // Get ADB version
+    let adbVersion = 'Unknown';
+    try {
+      const { stdout: versionOutput } = await execPromise(`"${adbPath}" version`);
+      const versionMatch = versionOutput.match(/Android Debug Bridge version ([\d.\-]+)/);
+      if (versionMatch) {
+        adbVersion = versionMatch[1];
+      }
+    } catch (e) {
+      console.error('Failed to get ADB version:', e);
+    }
+    
     const { stdout } = await execPromise(`"${adbPath}" devices`);
     const lines = stdout.split('\n').filter(line => line && !line.includes('List of devices'));
     const devices = lines.map(line => {
@@ -379,7 +391,7 @@ ipcMain.handle('adb-devices', async () => {
       return { id: id.trim(), status: status?.trim() || 'unknown' };
     }).filter(d => d.id);
     
-    return { success: true, devices, adbPath };
+    return { success: true, devices, adbPath, adbVersion };
   } catch (error) {
     console.error('ADB error:', error);
     return { success: false, error: error.message, devices: [] };

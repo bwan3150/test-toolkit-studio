@@ -341,15 +341,18 @@ function initializeTestcasePage() {
     if (runTestBtn) runTestBtn.addEventListener('click', runCurrentTest);
     if (clearConsoleBtn) clearConsoleBtn.addEventListener('click', clearConsole);
     if (toggleXmlBtn) toggleXmlBtn.addEventListener('click', toggleXmlOverlay);
-    if (refreshDeviceBtn) refreshDeviceBtn.addEventListener('click', refreshDeviceScreen);
+    if (refreshDeviceBtn) refreshDeviceBtn.addEventListener('click', () => {
+        // Manual refresh when button is clicked
+        refreshDeviceScreen();
+    });
     
     if (deviceSelect) {
         deviceSelect.addEventListener('change', (e) => {
+            // Store selected device
             if (e.target.value) {
-                startDeviceScreenCapture(e.target.value);
-            } else {
-                stopDeviceScreenCapture();
+                ipcRenderer.invoke('store-set', 'selected_device', e.target.value);
             }
+            // Don't start auto-refresh anymore
         });
     }
     
@@ -639,7 +642,7 @@ function clearConsole() {
 // Device screen management
 async function refreshDeviceScreen() {
     const deviceSelect = document.getElementById('deviceSelect');
-    if (!deviceSelect.value) {
+    if (!deviceSelect || !deviceSelect.value) {
         showNotification('Please select a device', 'warning');
         return;
     }
@@ -652,25 +655,6 @@ async function refreshDeviceScreen() {
         document.querySelector('.screen-placeholder').style.display = 'none';
     } else {
         showNotification(`Failed to capture screen: ${result.error}`, 'error');
-    }
-}
-
-function startDeviceScreenCapture(deviceId) {
-    stopDeviceScreenCapture();
-    
-    // Initial capture
-    refreshDeviceScreen();
-    
-    // Set up interval for continuous capture
-    deviceScreenInterval = setInterval(() => {
-        refreshDeviceScreen();
-    }, 2000); // Update every 2 seconds
-}
-
-function stopDeviceScreenCapture() {
-    if (deviceScreenInterval) {
-        clearInterval(deviceScreenInterval);
-        deviceScreenInterval = null;
     }
 }
 
@@ -719,19 +703,35 @@ function initializeDevicePage() {
                 deviceConfig[key] = value === 'true' ? true : value === 'false' ? false : value;
             }
             
-            // Generate device file name
-            const timestamp = Date.now();
-            const deviceFileName = `device_${timestamp}.yaml`;
-            const devicePath = path.join(currentProject, 'devices', deviceFileName);
+            // Check if we're in edit mode
+            const deviceForm = document.getElementById('deviceForm');
+            const mode = deviceForm.dataset.mode;
+            let devicePath;
+            
+            if (mode === 'edit' && deviceForm.dataset.filename) {
+                // Edit mode - use existing filename
+                devicePath = path.join(currentProject, 'devices', deviceForm.dataset.filename);
+            } else {
+                // Create mode - generate new filename
+                const timestamp = Date.now();
+                const deviceFileName = `device_${timestamp}.yaml`;
+                devicePath = path.join(currentProject, 'devices', deviceFileName);
+            }
             
             try {
                 await fs.writeFile(devicePath, yaml.dump(deviceConfig));
-                showNotification('Device saved successfully', 'success');
+                showNotification(
+                    mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully',
+                    'success'
+                );
                 
                 deviceForm.style.display = 'none';
                 newDeviceForm.reset();
+                delete deviceForm.dataset.mode;
+                delete deviceForm.dataset.filename;
                 
                 await loadSavedDevices();
+                await refreshDeviceList();
             } catch (error) {
                 showNotification(`Failed to save device: ${error.message}`, 'error');
             }
@@ -752,8 +752,11 @@ async function loadSavedDevices() {
     const devicesPath = path.join(currentProject, 'devices');
     
     try {
+        // Get connected devices first
+        const connectedResult = await ipcRenderer.invoke('adb-devices');
+        const connectedDevices = connectedResult.success ? connectedResult.devices : [];
+        
         const files = await fs.readdir(devicesPath);
-        const connectedDevices = await ipcRenderer.invoke('adb-devices');
         
         for (const file of files) {
             if (file.endsWith('.yaml')) {
@@ -761,18 +764,34 @@ async function loadSavedDevices() {
                 const content = await fs.readFile(filePath, 'utf-8');
                 const config = yaml.load(content);
                 
-                const isConnected = connectedDevices.success && 
-                    connectedDevices.devices.some(d => d.status === 'device');
+                // Check if this device is connected by matching deviceId
+                const isConnected = config.deviceId && connectedDevices.some(d => 
+                    d.id === config.deviceId && d.status === 'device'
+                );
                 
                 const card = document.createElement('div');
                 card.className = 'device-card';
                 card.innerHTML = `
-                    <div class="device-status ${isConnected ? 'connected' : ''}"></div>
+                    <div class="device-status ${isConnected ? 'connected' : ''}" title="${isConnected ? 'Connected' : 'Not Connected'}"></div>
                     <div class="device-name">${config.deviceName}</div>
                     <div class="device-info">
-                        <span>Platform: ${config.platformName} ${config.platformVersion}</span>
-                        <span>Package: ${config.appPackage}</span>
-                        <span>Automation: ${config.automationName}</span>
+                        <span title="${config.platformName} ${config.platformVersion}">Platform: ${config.platformName} ${config.platformVersion}</span>
+                        <span title="${config.appPackage}">Package: ${config.appPackage}</span>
+                        <span title="${config.automationName}">Automation: ${config.automationName}</span>
+                        ${config.deviceId ? `<span title="${config.deviceId}">ID: ${config.deviceId}</span>` : ''}
+                    </div>
+                    <div class="device-actions">
+                        <button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">
+                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
+                                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                            Edit
+                        </button>
+                        <button class="btn btn-outline btn-small btn-icon-only" onclick="deleteDevice('${file}')" title="Delete">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                            </svg>
+                        </button>
                     </div>
                 `;
                 
@@ -792,18 +811,50 @@ async function refreshConnectedDevices() {
     connectedList.innerHTML = '';
     
     if (result.success && result.devices.length > 0) {
+        // Get saved devices to check which ones are already saved
+        let savedDeviceIds = [];
+        if (currentProject) {
+            try {
+                const devicesPath = path.join(currentProject, 'devices');
+                const files = await fs.readdir(devicesPath);
+                for (const file of files) {
+                    if (file.endsWith('.yaml')) {
+                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
+                        const config = yaml.load(content);
+                        if (config.deviceId) {
+                            savedDeviceIds.push(config.deviceId);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading saved devices:', error);
+            }
+        }
+        
         result.devices.forEach(device => {
+            const isSaved = savedDeviceIds.includes(device.id);
             const item = document.createElement('div');
             item.className = 'connected-item';
             item.innerHTML = `
                 <span class="device-id">${device.id}</span>
                 <span class="device-status-text">${device.status}</span>
+                ${!isSaved && device.status === 'device' ? `
+                    <button class="btn btn-primary" onclick="createDeviceFromConnected('${device.id}')">
+                        <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
+                            <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Save
+                    </button>
+                ` : isSaved ? '<span class="text-muted" style="font-size: 12px;">Already saved</span>' : ''}
             `;
             connectedList.appendChild(item);
         });
     } else {
         connectedList.innerHTML = '<div class="text-muted">No devices connected</div>';
     }
+    
+    // Also reload saved devices to update connection status
+    await loadSavedDevices();
     
     // Update device select dropdown
     refreshDeviceList();
@@ -816,22 +867,45 @@ async function refreshDeviceList() {
     
     if (!deviceSelect) return;
     
-    const currentValue = deviceSelect.value;
+    // Get saved device to restore selection
+    const savedSelection = await ipcRenderer.invoke('store-get', 'selected_device');
+    
     deviceSelect.innerHTML = '<option value="">Select Device</option>';
     
     if (result.success && result.devices.length > 0) {
+        // Load saved device configurations to show names instead of IDs
+        let deviceConfigs = {};
+        if (currentProject) {
+            try {
+                const devicesPath = path.join(currentProject, 'devices');
+                const files = await fs.readdir(devicesPath);
+                for (const file of files) {
+                    if (file.endsWith('.yaml')) {
+                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
+                        const config = yaml.load(content);
+                        if (config.deviceId) {
+                            deviceConfigs[config.deviceId] = config.deviceName;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading device configs:', error);
+            }
+        }
+        
         result.devices.forEach(device => {
             if (device.status === 'device') {
                 const option = document.createElement('option');
                 option.value = device.id;
-                option.textContent = device.id;
+                // Use device name if saved, otherwise use ID
+                option.textContent = deviceConfigs[device.id] || device.id;
                 deviceSelect.appendChild(option);
             }
         });
         
-        // Restore selection if still available
-        if (currentValue && Array.from(deviceSelect.options).some(opt => opt.value === currentValue)) {
-            deviceSelect.value = currentValue;
+        // Restore selection if device is still available
+        if (savedSelection && Array.from(deviceSelect.options).some(opt => opt.value === savedSelection)) {
+            deviceSelect.value = savedSelection;
         }
     }
 }
@@ -909,11 +983,12 @@ async function checkSDKStatus() {
     
     if (result.success) {
         if (adbStatus) {
-            adbStatus.textContent = 'Available';
+            adbStatus.textContent = `Available (v${result.adbVersion || 'Unknown'})`;
             adbStatus.className = 'status-indicator success';
         }
         if (sdkStatus) {
-            sdkStatus.textContent = 'Installed';
+            const platform = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux';
+            sdkStatus.textContent = `Built-in SDK (${platform})`;
             sdkStatus.className = 'status-indicator success';
         }
     } else {
@@ -993,3 +1068,89 @@ ipcRenderer.on('menu-refresh-device', () => {
         refreshDeviceScreen();
     }
 });
+
+// Global functions for device management
+window.createDeviceFromConnected = async function(deviceId) {
+    if (!currentProject) {
+        showNotification('Please open a project first', 'warning');
+        return;
+    }
+    
+    // Show device form with pre-filled device ID
+    const deviceForm = document.getElementById('deviceForm');
+    const newDeviceForm = document.getElementById('newDeviceForm');
+    
+    // Reset form and set mode
+    newDeviceForm.reset();
+    deviceForm.dataset.mode = 'create';
+    
+    // Pre-fill the form
+    if (newDeviceForm) {
+        newDeviceForm.querySelector('input[name="deviceId"]').value = deviceId;
+        newDeviceForm.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
+        newDeviceForm.querySelector('input[name="platformName"]').value = 'Android';
+        newDeviceForm.querySelector('input[name="automationName"]').value = 'UiAutomator2';
+        newDeviceForm.querySelector('select[name="noReset"]').value = 'true';
+        newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = '6000';
+    }
+    
+    // Update form title
+    deviceForm.querySelector('h3').textContent = 'Add New Device';
+    deviceForm.style.display = 'block';
+    showNotification('Please complete the device configuration', 'info');
+};
+
+// Edit device configuration
+window.editDevice = async function(filename) {
+    if (!currentProject) return;
+    
+    try {
+        const devicePath = path.join(currentProject, 'devices', filename);
+        const content = await fs.readFile(devicePath, 'utf-8');
+        const config = yaml.load(content);
+        
+        // Show device form with existing data
+        const deviceForm = document.getElementById('deviceForm');
+        const newDeviceForm = document.getElementById('newDeviceForm');
+        
+        // Set mode and store filename
+        deviceForm.dataset.mode = 'edit';
+        deviceForm.dataset.filename = filename;
+        
+        // Fill the form with existing data
+        if (newDeviceForm) {
+            newDeviceForm.querySelector('input[name="deviceName"]').value = config.deviceName || '';
+            newDeviceForm.querySelector('input[name="deviceId"]').value = config.deviceId || '';
+            newDeviceForm.querySelector('input[name="platformName"]').value = config.platformName || 'Android';
+            newDeviceForm.querySelector('input[name="platformVersion"]').value = config.platformVersion || '';
+            newDeviceForm.querySelector('input[name="appPackage"]').value = config.appPackage || '';
+            newDeviceForm.querySelector('input[name="appActivity"]').value = config.appActivity || '';
+            newDeviceForm.querySelector('input[name="automationName"]').value = config.automationName || 'UiAutomator2';
+            newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = config.newCommandTimeout || '6000';
+            newDeviceForm.querySelector('select[name="noReset"]').value = config.noReset ? 'true' : 'false';
+        }
+        
+        // Update form title
+        deviceForm.querySelector('h3').textContent = 'Edit Device';
+        deviceForm.style.display = 'block';
+    } catch (error) {
+        showNotification(`Failed to load device: ${error.message}`, 'error');
+    }
+};
+
+// Delete device configuration
+window.deleteDevice = async function(filename) {
+    if (!currentProject) return;
+    
+    if (confirm('Are you sure you want to delete this device configuration?')) {
+        try {
+            const devicePath = path.join(currentProject, 'devices', filename);
+            await fs.unlink(devicePath);
+            showNotification('Device configuration deleted', 'success');
+            await loadSavedDevices();
+            await refreshDeviceList();
+        } catch (error) {
+            showNotification(`Failed to delete device: ${error.message}`, 'error');
+        }
+    }
+};
