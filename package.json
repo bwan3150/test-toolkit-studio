@@ -15,7 +15,7 @@
     "testing",
     "automation"
   ],
-  "author": "Eric Wang",
+  "author": "Eric Konec",
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1"
@@ -27,28 +27,47 @@
     "js-yaml": "^4.1.0"
   },
   "build": {
-    "appId": "app.testtoolkit.studio",
+    "appId": "com.konec.testtoolkit",
     "productName": "Test Toolkit Studio",
     "directories": {
       "output": "dist"
     },
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "assets/icon.icns"
+      "icon": "assets/logo/toolkit_logo.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/logo/toolkit_logo.png"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/icon.png"
+      "icon": "assets/logo/toolkit_logo.png"
     },
     "extraResources": [
       {
-        "from": "android-sdk",
-        "to": "android-sdk"
+        "from": "resources/darwin",
+        "to": "darwin",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "resources/win32",
+        "to": "win32",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "resources/linux",
+        "to": "linux",
+        "filter": ["**/*"]
       }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "resources/**/*"
     ]
   }
 }

@@ -17,14 +17,19 @@ const store = new Store();
 let mainWindow;
 let isAuthenticated = false;
 
-// Enable live reload for Electron in development
-// Commented out as electron-reload is not installed
-// if (process.argv.includes('--dev')) {
-//   require('electron-reload')(__dirname, {
-//     electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-//     hardResetMethod: 'exit'
-//   });
-// }
+// Helper function to get built-in ADB path
+function getBuiltInAdbPath() {
+  const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
+  const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
+  
+  if (app.isPackaged) {
+    // In production, resources are in the app's resources folder
+    return path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
+  } else {
+    // In development, use the resources folder in the project
+    return path.join(__dirname, 'resources', platform, 'android-sdk', 'platform-tools', adbName);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -345,12 +350,27 @@ ipcMain.handle('create-project-structure', async (event, projectPath) => {
   }
 });
 
-// ADB operations
+// ADB operations with built-in SDK
 ipcMain.handle('adb-devices', async () => {
   try {
-    const adbPath = process.platform === 'win32' 
-      ? path.join(__dirname, 'android-sdk', 'platform-tools', 'adb.exe')
-      : path.join(__dirname, 'android-sdk', 'platform-tools', 'adb');
+    const adbPath = getBuiltInAdbPath();
+    console.log('Using built-in ADB from:', adbPath);
+    
+    // Check if ADB exists
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      console.error('Built-in ADB not found at:', adbPath);
+      return { success: false, error: 'Built-in Android SDK not found', devices: [] };
+    }
+    
+    // Make sure ADB is executable (for macOS/Linux)
+    if (process.platform !== 'win32') {
+      try {
+        await execPromise(`chmod +x "${adbPath}"`);
+      } catch (e) {
+        // Ignore chmod errors
+      }
+    }
     
     const { stdout } = await execPromise(`"${adbPath}" devices`);
     const lines = stdout.split('\n').filter(line => line && !line.includes('List of devices'));
@@ -359,17 +379,21 @@ ipcMain.handle('adb-devices', async () => {
       return { id: id.trim(), status: status?.trim() || 'unknown' };
     }).filter(d => d.id);
     
-    return { success: true, devices };
+    return { success: true, devices, adbPath };
   } catch (error) {
+    console.error('ADB error:', error);
     return { success: false, error: error.message, devices: [] };
   }
 });
 
 ipcMain.handle('adb-screenshot', async (event, deviceId) => {
   try {
-    const adbPath = process.platform === 'win32' 
-      ? path.join(__dirname, 'android-sdk', 'platform-tools', 'adb.exe')
-      : path.join(__dirname, 'android-sdk', 'platform-tools', 'adb');
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: 'Built-in Android SDK not found' };
+    }
     
     const tempPath = path.join(app.getPath('temp'), 'screenshot.png');
     const deviceArg = deviceId ? `-s ${deviceId}` : '';
@@ -385,9 +409,12 @@ ipcMain.handle('adb-screenshot', async (event, deviceId) => {
 
 ipcMain.handle('adb-ui-dump', async (event, deviceId) => {
   try {
-    const adbPath = process.platform === 'win32' 
-      ? path.join(__dirname, 'android-sdk', 'platform-tools', 'adb.exe')
-      : path.join(__dirname, 'android-sdk', 'platform-tools', 'adb');
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: 'Built-in Android SDK not found' };
+    }
     
     const deviceArg = deviceId ? `-s ${deviceId}` : '';
     

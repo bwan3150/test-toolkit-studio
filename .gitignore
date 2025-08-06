@@ -1,8 +1,7 @@
-# Dependencies
 node_modules/
 package-lock.json
 
-# Build output
+# Build
 dist/
 build/
 out/
@@ -15,30 +14,26 @@ out/
 *~
 .DS_Store
 
-# Logs
+# Log
 logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Runtime data
 pids
 *.pid
 *.seed
 *.pid.lock
 
-# Environment variables
+# 环境变量
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Android SDK (should be downloaded separately)
-android-sdk/
-
-# Test projects (user data)
+# 测试项目
 test-projects/
 
 # Electron
