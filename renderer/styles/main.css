@@ -598,11 +598,32 @@ body {
 /* Right Panel */
 .right-panel {
     width: 320px;
+    min-width: 200px;
+    max-width: 600px;
     background: var(--bg-secondary);
     border-left: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    position: relative;
 }
+
+/* Resizers */
+.vertical-resizer {
+    width: 4px;
+    background: var(--border-color);
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.vertical-resizer:hover {
+    background: var(--accent-primary);
+}
+
+.vertical-resizer.dragging {
+    background: var(--accent-primary);
+}
+
 
 .run-section {
     padding: 12px;
@@ -614,6 +635,31 @@ body {
     display: flex;
     flex-direction: column;
     border-bottom: 1px solid var(--border-color);
+    min-height: 32px; /* Minimum height when collapsed */
+    transition: all 0.3s ease;
+}
+
+.console-container.collapsed {
+    flex: 0 0 auto !important;
+    height: 32px !important; /* Only show header when collapsed */
+    min-height: 32px !important;
+    max-height: 32px !important;
+}
+
+.console-container.collapsed .console-output {
+    display: none !important;
+    flex: 0 0 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+.console-container.collapsed #toggleConsoleBtn svg {
+    transform: rotate(-90deg);
+}
+
+#toggleConsoleBtn svg {
+    transition: transform 0.3s ease;
 }
 
 .console-header {
@@ -623,6 +669,11 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.console-header-actions {
+    display: flex;
+    gap: 4px;
 }
 
 .console-header h4 {
@@ -698,6 +749,8 @@ body {
 #deviceScreenshot {
     max-width: 100%;
     max-height: 100%;
+    width: auto;
+    height: auto;
     object-fit: contain;
 }
 

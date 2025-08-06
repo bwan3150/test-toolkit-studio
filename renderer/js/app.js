@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeTestcasePage();
     initializeDevicePage();
     initializeSettingsPage();
+    initializeResizablePanels();
     initializeMonacoEditor();
     
     // Load user info
@@ -1355,3 +1356,62 @@ window.removeFromHistory = async function(projectPath) {
     await loadProjectHistory();
     showNotification('Project removed from history', 'success');
 };
+
+// Resizable Panels Functionality
+function initializeResizablePanels() {
+    const verticalResizer = document.getElementById('verticalResizer');
+    const rightPanel = document.getElementById('rightPanel');
+    const consoleContainer = document.getElementById('consoleContainer');
+    const toggleConsoleBtn = document.getElementById('toggleConsoleBtn');
+    const testcaseContainer = document.querySelector('.testcase-container');
+
+    let isResizing = false;
+    let startX, startWidth;
+
+    // Vertical resizer (adjust right panel width)
+    if (verticalResizer && rightPanel && testcaseContainer) {
+        verticalResizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = rightPanel.offsetWidth;
+            verticalResizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+    }
+
+    // Global mouse move handler
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        if (verticalResizer && verticalResizer.classList.contains('dragging')) {
+            // Vertical resize
+            const deltaX = startX - e.clientX;
+            const newWidth = startWidth + deltaX;
+            const minWidth = 200;
+            const maxWidth = 600;
+            
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                rightPanel.style.width = newWidth + 'px';
+            }
+        }
+    });
+
+    // Global mouse up handler
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            if (verticalResizer) verticalResizer.classList.remove('dragging');
+        }
+    });
+
+    // Console toggle functionality
+    if (toggleConsoleBtn && consoleContainer) {
+        toggleConsoleBtn.addEventListener('click', () => {
+            consoleContainer.classList.toggle('collapsed');
+        });
+    }
+}
