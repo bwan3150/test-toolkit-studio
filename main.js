@@ -156,9 +156,9 @@ function createWindow() {
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: 'About Test Toolkit Studio',
-              message: 'Test Toolkit Studio',
-              detail: 'Version 1.0.0\n\nA cross-platform IDE for UI automation testing.\n\n© 2025 Konec',
+              title: 'About Toolkit Studio',
+              message: 'Toolkit Studio',
+              detail: 'Version 0.1.0\n\nA cross-platform IDE for UI automation testing.\n\n',
               buttons: ['OK']
             });
           }

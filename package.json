@@ -1,6 +1,6 @@
 {
   "name": "test-toolkit-studio",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A cross-platform IDE for UI automation testing",
   "main": "main.js",
   "scripts": {
@@ -27,47 +27,54 @@
     "js-yaml": "^4.1.0"
   },
   "build": {
-    "appId": "com.konec.testtoolkit",
-    "productName": "Test Toolkit Studio",
+    "appId": "app.testtoolkit.studio",
+    "productName": "Toolkit Studio",
     "directories": {
       "output": "dist"
     },
+    "asar": true,
+    "asarUnpack": [
+      "resources/**/*"
+    ],
+
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/logo/toolkit_logo.png",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extraResources": [
+        {
+          "from": "resources/darwin",
+          "to": "darwin",
+          "filter": ["**/*"]
+        }
+      ]
     },
+
     "win": {
       "target": "nsis",
-      "icon": "assets/logo/toolkit_logo.png"
+      "icon": "assets/logo/toolkit_logo.png",
+      "extraResources": [
+        {
+          "from": "resources/win32",
+          "to": "win32",
+          "filter": ["**/*"]
+        }
+      ]
     },
+
     "linux": {
       "target": "AppImage",
-      "icon": "assets/logo/toolkit_logo.png"
-    },
-    "extraResources": [
-      {
-        "from": "resources/darwin",
-        "to": "darwin",
-        "filter": ["**/*"]
-      },
-      {
-        "from": "resources/win32",
-        "to": "win32",
-        "filter": ["**/*"]
-      },
-      {
-        "from": "resources/linux",
-        "to": "linux",
-        "filter": ["**/*"]
-      }
-    ],
-    "asar": true,
-    "asarUnpack": [
-      "resources/**/*"
-    ]
+      "icon": "assets/logo/toolkit_logo.png",
+      "extraResources": [
+        {
+          "from": "resources/linux",
+          "to": "linux",
+          "filter": ["**/*"]
+        }
+      ]
+    }
   }
 }

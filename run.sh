@@ -1,19 +1,16 @@
 #!/bin/bash
 
-echo "🚀 Starting Test Toolkit Studio"
 echo "================================"
 echo ""
 
-# Kill any existing Electron processes
+# Kill existing Electron
 pkill -f "electron" 2>/dev/null || true
 sleep 1
 
-# Check dependencies
 if [ ! -d "node_modules" ]; then
-    echo "📦 Installing dependencies..."
+    echo "安装依赖中..."
     npm install
 fi
 
-# Start the application
-echo "✅ Launching application..."
+echo "正在启动App..."
 npm start
