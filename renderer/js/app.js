@@ -170,7 +170,7 @@ function initializeProjectPage() {
                         await ipcRenderer.invoke('write-file', sheetPath, result.content);
                         
                         // Display test cases in table
-                        displayTestCasesTable(records);
+                        await displayTestCasesTable(records);
                         showNotification(`Imported ${records.length} test cases`, 'success');
                     } catch (error) {
                         showNotification(`Failed to parse CSV: ${error.message}`, 'error');
@@ -209,7 +209,7 @@ async function loadProject(projectPath) {
                 columns: true,
                 skip_empty_lines: true
             });
-            displayTestCasesTable(records);
+            await displayTestCasesTable(records);
         } catch (error) {
             console.error('Failed to parse existing CSV:', error);
             if (testcaseList) {
@@ -233,13 +233,16 @@ async function loadProject(projectPath) {
 }
 
 // Display test cases in table format
-function displayTestCasesTable(records) {
+async function displayTestCasesTable(records) {
     const testcaseList = document.getElementById('testcaseList');
     
     if (records.length === 0) {
         testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet</div>';
         return;
     }
+    
+    // 检查哪些case已经创建
+    const existingCases = await checkExistingCases(records.length);
     
     // Get all column headers
     const headers = Object.keys(records[0]);
@@ -266,6 +269,11 @@ function displayTestCasesTable(records) {
         row.className = 'testcase-row';
         row.dataset.index = index;
         
+        // 如果case已经存在，添加高亮样式
+        if (existingCases[index]) {
+            row.classList.add('case-created');
+        }
+        
         headers.forEach(header => {
             const td = document.createElement('td');
             td.textContent = record[header] || '';
@@ -276,16 +284,30 @@ function displayTestCasesTable(records) {
         // Create floating action button
         const actionBtn = document.createElement('button');
         actionBtn.className = 'floating-action-btn';
-        actionBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" width="16" height="16">
-                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            <span>Create Case</span>
-        `;
-        actionBtn.onclick = (e) => {
-            e.stopPropagation();
-            createTestCase(record, index);
-        };
+        
+        if (existingCases[index]) {
+            // Case已存在，显示"已创建"状态
+            actionBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+                <span>Already Exist</span>
+            `;
+            actionBtn.disabled = true;
+            actionBtn.style.opacity = '0.6';
+        } else {
+            // Case未存在，显示"创建"按钮
+            actionBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+                <span>Create Case</span>
+            `;
+            actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                createTestCase(record, index);
+            };
+        }
         
         row.appendChild(actionBtn);
         
@@ -297,6 +319,59 @@ function displayTestCasesTable(records) {
     // Clear existing content and add table
     testcaseList.innerHTML = '';
     testcaseList.appendChild(table);
+}
+
+// 检查哪些Case已经存在
+async function checkExistingCases(totalCases) {
+    if (!currentProject) return [];
+    
+    const existingCases = [];
+    const casesPath = path.join(currentProject, 'cases');
+    
+    try {
+        // 检查cases目录是否存在
+        if (!fsSync.existsSync(casesPath)) {
+            // cases目录不存在，所有case都未创建
+            return new Array(totalCases).fill(false);
+        }
+        
+        for (let i = 0; i < totalCases; i++) {
+            const caseName = `case_${String(i + 1).padStart(3, '0')}`;
+            const casePath = path.join(casesPath, caseName);
+            
+            // 检查case目录和config.json是否存在
+            const caseExists = fsSync.existsSync(casePath) && 
+                             fsSync.existsSync(path.join(casePath, 'config.json'));
+            
+            existingCases[i] = caseExists;
+        }
+    } catch (error) {
+        console.error('Error checking existing cases:', error);
+        // 出错时假设所有case都未创建
+        return new Array(totalCases).fill(false);
+    }
+    
+    return existingCases;
+}
+
+// 刷新测试用例表格
+async function refreshTestCaseTable() {
+    if (!currentProject) return;
+    
+    // 重新读取CSV文件并显示表格
+    const sheetPath = path.join(currentProject, 'testcase_sheet.csv');
+    const result = await ipcRenderer.invoke('read-file', sheetPath);
+    if (result.success && result.content) {
+        try {
+            const records = parse(result.content, {
+                columns: true,
+                skip_empty_lines: true
+            });
+            await displayTestCasesTable(records);
+        } catch (error) {
+            console.error('Failed to refresh test case table:', error);
+        }
+    }
 }
 
 // Create test case
@@ -373,11 +448,8 @@ async function createTestCase(record, index) {
         
         await fs.writeFile(mapPath, JSON.stringify(testcaseMap, null, 2));
         
-        // Mark row as created
-        const row = document.querySelector(`.testcase-row[data-index="${index}"]`);
-        if (row) {
-            row.classList.add('case-created');
-        }
+        // 重新加载表格以更新状态
+        await refreshTestCaseTable();
         
         // Navigate to testcase page
         document.querySelector('[data-page="testcase"]').click();
