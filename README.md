@@ -17,7 +17,7 @@
 ```
 test-toolkit-studio/
 ├── main.js              # Electron主进程
-├── renderer/            # 渲染器
+├── renderer/            # UI渲染进程
 │   ├── index.html      # 四合一主界面
 │   ├── login.html      # 登录页
 │   ├── styles/         # css
@@ -62,6 +62,56 @@ project_root/
 - `Cmd/Ctrl + W`: 关闭Tab页
 - `Ctrl+Tab`：下一个tab
 - `Ctrl+Shift+Tab`：上一个tab
+
+## Toolkit script
+
+本项目使用自定义自动化测试脚本语言
+
+### 语法
+点击: 
+-   [元素]
+-   [坐标]
+-   [裁切图片]
+按压: 
+-   [元素, 时间]
+-   [坐标, 时间]
+-   [裁切图片, 时间]
+滑动: 
+-   [元素/裁切图片, 坐标A] (将某元素拖动到A)
+-   [坐标, 坐标] (从坐标A到B进行滑动)
+定向滑动:
+-   [元素/裁切图片, 方向, 距离] (将某元素向着上下左右拖动多少距离)
+-   [坐标, 方向, 距离] (从坐标开始, 向着上下左右滑动多少距离)
+输入: 
+
+-   [输入框元素/输入框截图] (向输入框输入文字内容)
+清理: 
+-   [输入框元素/输入框截图] (清理输入框内容)
+隐藏键盘: 
+-   无参数
+返回: 
+-   无参数
+等待: 
+-   [时长]
+-   [元素/裁切图片] (等到某元素或图片出现在屏幕中)
+断言: 
+-   [元素/裁切图片, 是否存在/期望文字/数字范围/颜色, 区域(可选)]
+
+
+Example:
+
+```tks
+用例: case_001
+脚本名: script_001
+详情: 
+	appPackage: com.konec.smarthome
+	appActivity: com.konec.smarthome.test.ui.activity.MainActivity
+步骤:
+    点击 [190,220]
+    返回
+    等待 10s
+    断言 [Login按钮, 存在, ]
+```
 
 ## 常见问题
 

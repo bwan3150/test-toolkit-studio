@@ -23,9 +23,8 @@ function initializeProjectPage() {
             
             // 更新UI
             document.getElementById('projectInfo').style.display = 'none';
-            document.getElementById('welcomeScreen').style.display = 'flex';
             
-            // 重新加载项目历史
+            // 重新加载项目历史（会显示loading状态）
             await loadProjectHistory();
             
             // 清除测试用例页面
@@ -209,20 +208,31 @@ async function updateProjectHistory(projectPath) {
 
 // 加载项目历史 
 async function loadProjectHistory() {
-    const { ipcRenderer, path } = getGlobals();
-    const projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    // 显示loading状态
+    const projectLoading = document.getElementById('projectLoading');
+    const welcomeScreen = document.getElementById('welcomeScreen');
     
-    const welcomeContent = document.getElementById('welcomeContent');
-    const recentProjects = document.getElementById('recentProjects');
-    const projectList = document.getElementById('projectList');
-    const welcomeScreen = document.querySelector('.project-welcome');
+    if (projectLoading) projectLoading.style.display = 'flex';
+    if (welcomeScreen) welcomeScreen.style.display = 'none';
+    
+    try {
+        // 模拟加载延迟以显示loading效果
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        const { ipcRenderer, path } = getGlobals();
+        const projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+        
+        const welcomeContent = document.getElementById('welcomeContent');
+        const recentProjects = document.getElementById('recentProjects');
+        const projectList = document.getElementById('projectList');
+        const welcomeScreenEl = document.querySelector('.project-welcome');
     
     if (projectHistory.length > 0) {
         // 有项目时隐藏欢迎内容
         if (welcomeContent) welcomeContent.style.display = 'none';
         
         // 显示项目时移除居中类
-        if (welcomeScreen) welcomeScreen.classList.remove('show-welcome');
+        if (welcomeScreenEl) welcomeScreenEl.classList.remove('show-welcome');
         
         if (recentProjects && projectList) {
             projectList.innerHTML = '';
@@ -272,7 +282,25 @@ async function loadProjectHistory() {
         if (recentProjects) recentProjects.style.display = 'none';
         
         // 为居中欢迎内容添加类
-        if (welcomeScreen) welcomeScreen.classList.add('show-welcome');
+        if (welcomeScreenEl) welcomeScreenEl.classList.add('show-welcome');
+    }
+        
+        // 隐藏loading，显示welcome screen
+        if (projectLoading) projectLoading.style.display = 'none';
+        if (welcomeScreen) welcomeScreen.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error loading project history:', error);
+        
+        // 出错时也要隐藏loading，显示欢迎界面
+        if (projectLoading) projectLoading.style.display = 'none';
+        if (welcomeScreen) welcomeScreen.style.display = 'flex';
+        
+        // 显示欢迎内容
+        const welcomeContent = document.getElementById('welcomeContent');
+        const recentProjects = document.getElementById('recentProjects');
+        if (welcomeContent) welcomeContent.style.display = 'block';
+        if (recentProjects) recentProjects.style.display = 'none';
     }
 }
 
