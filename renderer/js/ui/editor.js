@@ -427,6 +427,9 @@ function initializeSimpleEditor() {
     // 创建新的编辑器实例
     editorInstance = new SimpleCodeEditor(container);
     
+    // 将编辑器实例存储到容器中，以便后续获取
+    container._editor = editorInstance;
+    
     // 更新全局变量引用
     window.AppGlobals.setCodeEditor({
         get value() { return editorInstance.getValue(); },
@@ -619,6 +622,25 @@ function switchToPreviousTab() {
     }
 }
 
+// 获取指定标签的编辑器实例
+function getEditor(tabId) {
+    const tabContent = document.getElementById(`content-${tabId}`);
+    if (!tabContent) return null;
+    
+    const editorContainer = tabContent.querySelector('.simple-editor-container');
+    if (!editorContainer) return null;
+    
+    return editorContainer._editor || null;
+}
+
+// 获取当前活动编辑器实例
+function getActiveEditor() {
+    const activeTab = document.querySelector('.tab.active');
+    if (!activeTab) return null;
+    
+    return getEditor(activeTab.id);
+}
+
 // 导出函数
 window.EditorModule = {
     initializeSimpleEditor,
@@ -629,5 +651,7 @@ window.EditorModule = {
     saveCurrentFile,
     saveCurrentFileWithNotification,
     switchToNextTab,
-    switchToPreviousTab
+    switchToPreviousTab,
+    getEditor,
+    getActiveEditor
 };

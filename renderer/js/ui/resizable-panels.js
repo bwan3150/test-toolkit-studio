@@ -46,6 +46,14 @@ function initializeResizablePanels() {
             document.body.style.userSelect = '';
             
             if (verticalResizer) verticalResizer.classList.remove('dragging');
+            
+            // 面板调整完成后，重新计算XML标记位置
+            if (window.TestcaseManagerModule && window.TestcaseManagerModule.recalculateXmlMarkersPosition) {
+                // 延迟一下等DOM更新完成
+                setTimeout(() => {
+                    window.TestcaseManagerModule.recalculateXmlMarkersPosition();
+                }, 50);
+            }
         }
     });
 

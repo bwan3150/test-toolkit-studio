@@ -136,6 +136,18 @@ async function loadProject(projectPath) {
     
     window.AppGlobals.setCurrentProject(projectPath);
     
+    // 初始化项目工作区
+    try {
+        const workareaResult = await ipcRenderer.invoke('init-project-workarea', projectPath);
+        if (workareaResult.success) {
+            console.log('项目工作区已初始化:', workareaResult.path);
+        } else {
+            console.warn('工作区初始化失败:', workareaResult.error);
+        }
+    } catch (error) {
+        console.warn('工作区初始化异常:', error);
+    }
+    
     // 更新项目历史
     await updateProjectHistory(projectPath);
     

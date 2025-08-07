@@ -179,6 +179,44 @@
                         <div id="simpleEditor" class="simple-editor-container">
                             <!-- 新编辑器将在这里动态生成 -->
                         </div>
+                        
+                        <!-- UI Elements Panel (Embedded in Editor Area) -->
+                        <div class="ui-elements-bottom-panel" id="uiElementsBottomPanel" style="display: none;">
+                            <div class="panel-header">
+                                <div class="panel-title">
+                                    <h4 id="uiElementsPanelTitle">UI元素列表 (0)</h4>
+                                </div>
+                                <div class="panel-actions">
+                                    <button class="btn btn-icon btn-small" id="toggleElementsPanelBtn" title="收起/展开">
+                                        <svg viewBox="0 0 24 24" id="toggleElementsPanelIcon">
+                                            <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="panel-content" id="uiElementsPanelContent">
+                                <div class="elements-tabs">
+                                    <div class="tab-header">
+                                        <button class="tab-btn active" data-tab="elements-list">元素列表</button>
+                                        <button class="tab-btn" data-tab="element-props" id="elementPropsTab" style="display: none;">元素属性</button>
+                                    </div>
+                                    <div class="tab-content">
+                                        <!-- Elements List Tab -->
+                                        <div class="tab-pane active" id="elementsListPane">
+                                            <div class="elements-list-container" id="elementsListContainer">
+                                                <div class="empty-state">未识别到UI元素</div>
+                                            </div>
+                                        </div>
+                                        <!-- Element Properties Tab -->
+                                        <div class="tab-pane" id="elementPropsPane" style="display: none;">
+                                            <div class="element-props-container" id="elementPropsContainer">
+                                                <div class="empty-state">请选择一个UI元素</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Vertical Resizer -->
@@ -463,6 +501,7 @@
         // Save Node require
         window.nodeRequire = require;
     </script>
+    <script src="js/modules/xml-parser.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>
