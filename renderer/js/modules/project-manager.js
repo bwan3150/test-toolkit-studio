@@ -305,10 +305,218 @@ async function openProject(projectPath) {
     await loadProject(projectPath);
 }
 
-// 其他函数的简化版本...
+// 显示测试用例表格
 async function displayTestCasesTable(records) {
-    // 简化版本 - 这里需要完整的实现
-    console.log('displayTestCasesTable called with', records.length, 'records');
+    const { path, fsSync } = getGlobals();
+    const testcaseList = document.getElementById('testcaseList');
+    
+    if (records.length === 0) {
+        testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet</div>';
+        return;
+    }
+    
+    // 检查哪些case已经创建
+    const existingCases = await checkExistingCases(records.length);
+    
+    // 获取所有列标题
+    const headers = Object.keys(records[0]);
+    
+    // 创建表格
+    const table = document.createElement('table');
+    table.className = 'testcase-table';
+    
+    // 创建表头
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // 创建表体
+    const tbody = document.createElement('tbody');
+    records.forEach((record, index) => {
+        const row = document.createElement('tr');
+        row.className = 'testcase-row';
+        row.dataset.index = index;
+        
+        // 如果case已经存在，添加高亮样式
+        if (existingCases[index]) {
+            row.classList.add('case-created');
+        }
+        
+        headers.forEach(header => {
+            const td = document.createElement('td');
+            td.textContent = record[header] || '';
+            td.title = record[header] || ''; // 长文本的工具提示
+            row.appendChild(td);
+        });
+        
+        // 创建浮动操作按钮
+        const actionBtn = document.createElement('button');
+        actionBtn.className = 'floating-action-btn';
+        
+        if (existingCases[index]) {
+            // Case已存在，显示"已创建"状态
+            actionBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+                <span>Already Exist</span>
+            `;
+            actionBtn.disabled = true;
+            actionBtn.style.opacity = '0.6';
+        } else {
+            // Case未存在，显示"创建"按钮
+            actionBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+                <span>Create Case</span>
+            `;
+            actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                createTestCase(record, index);
+            };
+        }
+        
+        row.appendChild(actionBtn);
+        tbody.appendChild(row);
+    });
+    
+    table.appendChild(tbody);
+    
+    // 清除现有内容并添加表格
+    testcaseList.innerHTML = '';
+    testcaseList.appendChild(table);
+}
+
+// 检查哪些Case已经存在
+async function checkExistingCases(totalCases) {
+    const { path, fsSync } = getGlobals();
+    if (!window.AppGlobals.currentProject) return [];
+    
+    const existingCases = [];
+    const casesPath = path.join(window.AppGlobals.currentProject, 'cases');
+    
+    try {
+        // 检查cases目录是否存在
+        if (!fsSync.existsSync(casesPath)) {
+            // cases目录不存在，所有case都未创建
+            return new Array(totalCases).fill(false);
+        }
+        
+        for (let i = 0; i < totalCases; i++) {
+            const caseName = `case_${String(i + 1).padStart(3, '0')}`;
+            const casePath = path.join(casesPath, caseName);
+            
+            // 检查case目录和config.json是否存在
+            const caseExists = fsSync.existsSync(casePath) && 
+                             fsSync.existsSync(path.join(casePath, 'config.json'));
+            
+            existingCases[i] = caseExists;
+        }
+    } catch (error) {
+        console.error('Error checking existing cases:', error);
+        // 出错时假设所有case都未创建
+        return new Array(totalCases).fill(false);
+    }
+    
+    return existingCases;
+}
+
+// 创建测试用例
+async function createTestCase(record, index) {
+    const { path, fs } = getGlobals();
+    if (!window.AppGlobals.currentProject) {
+        window.NotificationModule.showNotification('No project loaded', 'error');
+        return;
+    }
+    
+    const caseName = `case_${String(index + 1).padStart(3, '0')}`;
+    const casePath = path.join(window.AppGlobals.currentProject, 'cases', caseName);
+    
+    try {
+        // 创建case目录结构
+        await fs.mkdir(casePath, { recursive: true });
+        await fs.mkdir(path.join(casePath, 'locator'), { recursive: true });
+        await fs.mkdir(path.join(casePath, 'locator', 'img'), { recursive: true });
+        await fs.mkdir(path.join(casePath, 'script'), { recursive: true });
+        
+        // 创建config.json
+        const config = {
+            name: caseName,
+            description: record[Object.keys(record)[0]] || '',
+            requirements: record[Object.keys(record)[1]] || '',
+            createdAt: new Date().toISOString(),
+            record: record
+        };
+        
+        await fs.writeFile(
+            path.join(casePath, 'config.json'),
+            JSON.stringify(config, null, 2)
+        );
+        
+        // 创建element.json
+        await fs.writeFile(
+            path.join(casePath, 'locator', 'element.json'),
+            JSON.stringify({}, null, 2)
+        );
+        
+        // 创建样例脚本 - 使用新的 .tks 格式
+        const sampleScript = `用例: ${caseName}
+脚本名: script_001
+详情: 
+    appPackage: ${record.appPackage || 'com.example.app'}
+    appActivity: ${record.appActivity || '.MainActivity'}
+步骤:
+    点击 [190,220]
+    等待 2s
+    断言 [示例元素, 存在]
+`;
+        
+        await fs.writeFile(
+            path.join(casePath, 'script', 'script_001.tks'),
+            sampleScript
+        );
+        
+        // 重新加载表格以更新状态
+        await refreshTestCaseTable();
+        
+        // 导航到testcase页面
+        document.querySelector('[data-page="testcase"]').click();
+        
+        // 重新加载文件树
+        await window.TestcaseManagerModule.loadFileTree();
+        
+        window.NotificationModule.showNotification(`Created test case: ${caseName}`, 'success');
+    } catch (error) {
+        window.NotificationModule.showNotification(`Failed to create test case: ${error.message}`, 'error');
+    }
+}
+
+// 刷新测试用例表格
+async function refreshTestCaseTable() {
+    const { ipcRenderer, path, parse } = getGlobals();
+    if (!window.AppGlobals.currentProject) return;
+    
+    // 重新读取CSV文件并显示表格
+    const sheetPath = path.join(window.AppGlobals.currentProject, 'testcase_sheet.csv');
+    const result = await ipcRenderer.invoke('read-file', sheetPath);
+    if (result.success && result.content) {
+        try {
+            const records = parse(result.content, {
+                columns: true,
+                skip_empty_lines: true
+            });
+            await displayTestCasesTable(records);
+        } catch (error) {
+            console.error('Failed to refresh test case table:', error);
+        }
+    }
 }
 
 async function removeFromHistory(projectPath) {
@@ -328,6 +536,9 @@ window.ProjectManagerModule = {
     initializeProjectPage,
     loadProject,
     displayTestCasesTable,
+    checkExistingCases,
+    createTestCase,
+    refreshTestCaseTable,
     loadProjectHistory,
     formatDate,
     openProject,

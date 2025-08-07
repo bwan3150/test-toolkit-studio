@@ -65,7 +65,7 @@ async function loadFileTree() {
                     scriptContainer.className = 'tree-children';
                     
                     for (const script of scripts) {
-                        if (script.endsWith('.yaml')) {
+                        if (script.endsWith('.tks') || script.endsWith('.yaml')) {
                             const scriptItem = createTreeItem(
                                 script,
                                 'file',
