@@ -960,6 +960,168 @@ body {
     font-weight: bold;
 }
 
+/* Case Explorer 新样式 */
+.case-container {
+    margin-bottom: 4px;
+}
+
+.case-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.case-header:hover {
+    background-color: var(--bg-hover);
+}
+
+.case-toggle-icon {
+    width: 16px;
+    height: 16px;
+    fill: #888;
+    margin-right: 6px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.case-icon {
+    width: 18px;
+    height: 18px;
+    fill: #4a9eff;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.case-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+    cursor: pointer;
+}
+
+.case-label.editing {
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 3px;
+    padding: 2px 6px;
+    outline: none;
+    cursor: text;
+}
+
+.scripts-container {
+    margin-left: 24px;
+    padding-left: 16px;
+    border-left: 1px solid var(--border-color);
+    max-height: 1000px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+    opacity: 1;
+}
+
+.scripts-container.collapsed {
+    max-height: 0;
+    opacity: 0;
+}
+
+.script-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    margin: 2px 0;
+}
+
+.script-item:hover {
+    background-color: var(--bg-hover);
+}
+
+.script-icon {
+    width: 16px;
+    height: 16px;
+    fill: #888;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.script-label {
+    font-size: 12px;
+    color: var(--text-primary);
+    flex: 1;
+    cursor: pointer;
+}
+
+.script-label.editing {
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 3px;
+    padding: 2px 6px;
+    outline: none;
+    cursor: text;
+}
+
+.script-label .editable-name {
+    background: none;
+    outline: none;
+}
+
+.script-label .file-extension {
+    color: var(--text-secondary);
+    pointer-events: none;
+    user-select: none;
+}
+
+/* 右键菜单样式 */
+.context-menu {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 4px 0;
+    min-width: 120px;
+    font-size: 13px;
+}
+
+.context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: background-color 0.2s;
+}
+
+.context-menu-item:hover {
+    background-color: var(--bg-hover);
+}
+
+.context-menu-item:last-child {
+    border-top: 1px solid var(--border-color);
+    margin-top: 4px;
+    padding-top: 8px;
+}
+
+/* Input dialog styles */
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.2);
+}
+
 /* Right Panel */
 .right-panel {
     width: 320px;

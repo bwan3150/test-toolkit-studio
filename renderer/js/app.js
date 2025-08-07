@@ -1,10 +1,7 @@
-// 主应用入口文件 - 模块化重构版本
+// 主应用入口文件
 // 
 // 此文件负责加载所有模块并初始化应用程序
-// 各个功能已拆分为独立模块，便于维护
 
-// ============================================================================
-// 模块加载顺序说明：
 // 1. core/globals.js - 全局变量和依赖项
 // 2. ui/notifications.js - 通知系统
 // 3. ui/navigation.js - 导航管理
@@ -16,7 +13,6 @@
 // 9. modules/device-manager.js - 设备管理
 // 10. utils/keyboard-shortcuts.js - 键盘快捷键
 // 11. utils/ipc-handlers.js - IPC消息处理
-// ============================================================================
 
 // 异步加载模块的辅助函数
 function loadScript(src) {
@@ -135,7 +131,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await window.ProjectManagerModule.loadProjectHistory();
         console.log('✓ 项目历史已加载');
         
-        console.log('🎉 应用初始化完成！');
+        console.log('应用初始化完成！');
         
         // 显示应用加载成功的通知
         window.NotificationModule.showNotification('应用已成功加载', 'success');
