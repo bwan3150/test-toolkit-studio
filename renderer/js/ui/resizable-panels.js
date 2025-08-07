@@ -2,8 +2,7 @@
 function initializeResizablePanels() {
     const verticalResizer = document.getElementById('verticalResizer');
     const rightPanel = document.getElementById('rightPanel');
-    const consoleContainer = document.getElementById('consoleContainer');
-    const toggleConsoleBtn = document.getElementById('toggleConsoleBtn');
+    // 控制台已移至底部面板，不再需要这些引用
     const testcaseContainer = document.querySelector('.testcase-container');
 
     let isResizing = false;
@@ -57,12 +56,7 @@ function initializeResizablePanels() {
         }
     });
 
-    // 控制台切换功能
-    if (toggleConsoleBtn && consoleContainer) {
-        toggleConsoleBtn.addEventListener('click', () => {
-            consoleContainer.classList.toggle('collapsed');
-        });
-    }
+    // 控制台已移至底部面板，不再需要切换功能
 }
 
 // 导出函数

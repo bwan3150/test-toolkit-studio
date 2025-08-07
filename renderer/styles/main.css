@@ -1975,30 +1975,7 @@ body {
     max-height: 40px;
 }
 
-.ui-elements-bottom-panel .panel-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 16px;
-    background: var(--bg-tertiary);
-    border-bottom: 1px solid var(--border-color);
-    min-height: 40px;
-}
-
-.ui-elements-bottom-panel .panel-title h4 {
-    margin: 0;
-    font-size: 14px;
-    color: var(--text-primary);
-}
-
-.ui-elements-bottom-panel .panel-content {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.ui-elements-bottom-panel.collapsed .panel-content {
+.ui-elements-bottom-panel.collapsed .tab-content {
     display: none;
 }
 
@@ -2011,8 +1988,22 @@ body {
 
 .elements-tabs .tab-header {
     display: flex;
+    align-items: center;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-tertiary);
+    min-height: 40px;
+    padding-right: 16px;
+}
+
+.tab-header .tab-btn {
+    margin-right: 0;
+}
+
+.tab-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
 }
 
 .elements-tabs .tab-btn {
@@ -2165,26 +2156,113 @@ body {
     font-style: italic;
 }
 
+/* Empty State 样式优化 */
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+}
+
+.empty-state-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* 嵌入式控制台样式 */
+
+.console-output {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.console-welcome {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+}
+
+.console-welcome-text {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.console-welcome-hint {
+    font-size: 14px;
+    font-style: italic;
+}
+
+.console-log {
+    margin-bottom: 4px;
+    border-left: 3px solid transparent;
+    padding-left: 8px;
+}
+
+.console-log.info {
+    color: var(--text-primary);
+    border-left-color: #2196F3;
+}
+
+.console-log.success {
+    color: #4CAF50;
+    border-left-color: #4CAF50;
+}
+
+.console-log.warning {
+    color: #FF9800;
+    border-left-color: #FF9800;
+}
+
+.console-log.error {
+    color: #F44336;
+    border-left-color: #F44336;
+    font-weight: bold;
+}
+
+.console-timestamp {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-right: 8px;
+}
+
 /* 滚动条优化 */
 .elements-list-container::-webkit-scrollbar,
-.element-props-container::-webkit-scrollbar {
+.element-props-container::-webkit-scrollbar,
+.console-output::-webkit-scrollbar {
     width: 6px;
 }
 
 .elements-list-container::-webkit-scrollbar-track,
-.element-props-container::-webkit-scrollbar-track {
+.element-props-container::-webkit-scrollbar-track,
+.console-output::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 3px;
 }
 
 .elements-list-container::-webkit-scrollbar-thumb,
-.element-props-container::-webkit-scrollbar-thumb {
+.element-props-container::-webkit-scrollbar-thumb,
+.console-output::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.3);
     border-radius: 3px;
 }
 
 .elements-list-container::-webkit-scrollbar-thumb:hover,
-.element-props-container::-webkit-scrollbar-thumb:hover {
+.element-props-container::-webkit-scrollbar-thumb:hover,
+.console-output::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.5);
 }
 

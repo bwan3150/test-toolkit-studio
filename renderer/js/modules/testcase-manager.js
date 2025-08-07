@@ -15,7 +15,7 @@ function initializeTestcasePage() {
     const deviceSelect = document.getElementById('deviceSelect');
     
     if (runTestBtn) runTestBtn.addEventListener('click', runCurrentTest);
-    if (clearConsoleBtn) clearConsoleBtn.addEventListener('click', window.NotificationModule.clearConsole);
+    // 注意：clearConsoleBtn事件已在initializeUIElementsPanel中处理
     if (toggleXmlBtn) toggleXmlBtn.addEventListener('click', toggleXmlOverlay);
     if (refreshDeviceBtn) refreshDeviceBtn.addEventListener('click', () => {
         // 点击按钮时手动刷新
@@ -874,11 +874,12 @@ async function runCurrentTest() {
         return;
     }
     
-    window.NotificationModule.addConsoleLog('Running test...', 'info');
+    ConsoleManager.addLog('开始运行测试...', 'info');
+    ConsoleManager.switchToConsole(); // 自动切换到控制台标签页
     
     // TODO: 实现实际的测试执行
     setTimeout(() => {
-        window.NotificationModule.addConsoleLog('Test execution not yet implemented', 'warning');
+        ConsoleManager.addLog('测试执行功能尚未实现', 'warning');
     }, 1000);
 }
 
@@ -1047,10 +1048,14 @@ async function enableXmlOverlay(deviceId) {
             toggleBtn.setAttribute('title', '关闭XML Overlay');
         }
         
+        
         window.NotificationModule.showNotification(
             `XML Overlay已启用，识别到${currentUIElements.length}个元素`, 
             'success'
         );
+        
+        // 在控制台输出日志
+        ConsoleManager.addLog(`XML Overlay已启用，成功识别到${currentUIElements.length}个UI元素`, 'success');
         
     } catch (error) {
         console.error('启用XML Overlay失败:', error);
@@ -1067,11 +1072,8 @@ function disableXmlOverlay() {
         if (overlay) overlay.remove();
     }
     
-    // 隐藏嵌入式元素面板
-    const bottomPanel = document.getElementById('uiElementsBottomPanel');
-    if (bottomPanel) {
-        bottomPanel.style.display = 'none';
-    }
+    // 清空UI元素列表（但保持面板可见）
+    displayUIElementList([]);
     
     // 重置状态
     currentUIElements = [];
@@ -1083,6 +1085,9 @@ function disableXmlOverlay() {
         toggleBtn.style.background = '';
         toggleBtn.setAttribute('title', '显示XML Overlay');
     }
+    
+    // 在控制台输出日志
+    ConsoleManager.addLog('XML Overlay已关闭', 'info');
     
     window.NotificationModule.showNotification('XML Overlay已关闭', 'info');
 }
@@ -1280,15 +1285,11 @@ function displayUIElementList(elements) {
     // 使用嵌入式UI面板
     const bottomPanel = document.getElementById('uiElementsBottomPanel');
     const elementsContainer = document.getElementById('elementsListContainer');
-    const panelTitle = document.getElementById('uiElementsPanelTitle');
     
-    if (!bottomPanel || !elementsContainer || !panelTitle) {
+    if (!bottomPanel || !elementsContainer) {
         console.error('嵌入式UI面板元素未找到');
         return;
     }
-    
-    // 更新标题
-    panelTitle.textContent = `UI元素列表 (${elements.length})`;
     
     // 生成元素列表HTML
     const elementsHTML = elements.map(el => `
@@ -1308,11 +1309,24 @@ function displayUIElementList(elements) {
     if (elements.length > 0) {
         elementsContainer.innerHTML = elementsHTML;
     } else {
-        elementsContainer.innerHTML = '<div class="empty-state">未识别到UI元素</div>';
+        // 显示空状态信息
+        let emptyStateHTML;
+        if (!xmlOverlayEnabled) {
+            emptyStateHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-text">XML Overlay未启用</div>
+                </div>
+            `;
+        } else {
+            emptyStateHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-text">暂无UI元素</div>
+                </div>
+            `;
+        }
+        
+        elementsContainer.innerHTML = emptyStateHTML;
     }
-    
-    // 显示面板
-    bottomPanel.style.display = 'block';
 }
 
 function selectUIElement(element) {
@@ -1416,9 +1430,6 @@ function showElementProperties(element) {
     // 更新属性容器内容
     elementPropsContainer.innerHTML = propertiesHTML;
     
-    // 显示属性标签页
-    elementPropsTab.style.display = 'block';
-    
     // 切换到属性标签页
     elementsListTab.classList.remove('active');
     elementPropsTab.classList.add('active');
@@ -1426,6 +1437,9 @@ function showElementProperties(element) {
     elementsListPane.classList.remove('active');
     elementPropsPane.style.display = 'block';
     elementPropsPane.classList.add('active');
+    
+    // 触发标签页变化事件
+    document.dispatchEvent(new CustomEvent('tabChanged', { detail: { tabId: 'element-props' } }));
 }
 
 // 全局函数供HTML调用
@@ -1487,27 +1501,24 @@ function initializeUIElementsPanel() {
         // 从localStorage恢复面板状态
         const savedState = localStorage.getItem('uiElementsPanelCollapsed');
         if (savedState === 'true') {
-            panelContent.style.display = 'none';
             bottomPanel.classList.add('collapsed');
-            toggleIcon.innerHTML = '<path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>';
+            toggleIcon.innerHTML = '<path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>';
             toggleBtn.title = '展开';
         }
         
         toggleBtn.addEventListener('click', () => {
-            const isCollapsed = panelContent.style.display === 'none';
+            const isCollapsed = bottomPanel.classList.contains('collapsed');
             
             if (isCollapsed) {
                 // 展开面板
-                panelContent.style.display = 'block';
                 bottomPanel.classList.remove('collapsed');
-                toggleIcon.innerHTML = '<path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>';
+                toggleIcon.innerHTML = '<path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>';
                 toggleBtn.title = '收起';
                 localStorage.setItem('uiElementsPanelCollapsed', 'false');
             } else {
                 // 收起面板
-                panelContent.style.display = 'none';
                 bottomPanel.classList.add('collapsed');
-                toggleIcon.innerHTML = '<path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>';
+                toggleIcon.innerHTML = '<path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>';
                 toggleBtn.title = '展开';
                 localStorage.setItem('uiElementsPanelCollapsed', 'true');
             }
@@ -1520,6 +1531,30 @@ function initializeUIElementsPanel() {
                 toggleBtn.click();
             }
         });
+    }
+    
+    // 清空控制台按钮事件和显示控制
+    const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+    if (clearConsoleBtn) {
+        clearConsoleBtn.addEventListener('click', () => {
+            ConsoleManager.clear();
+        });
+        
+        // 根据当前标签页控制清空按钮的显示
+        const updateClearButtonVisibility = () => {
+            const consoleTab = document.getElementById('consoleTab');
+            if (consoleTab && consoleTab.classList.contains('active')) {
+                clearConsoleBtn.style.display = 'block';
+            } else {
+                clearConsoleBtn.style.display = 'none';
+            }
+        };
+        
+        // 初始检查
+        updateClearButtonVisibility();
+        
+        // 标签页切换时更新按钮显示
+        document.addEventListener('tabChanged', updateClearButtonVisibility);
     }
     
     // 标签页切换
@@ -1540,11 +1575,27 @@ function initializeUIElementsPanel() {
                 pane.classList.remove('active');
             });
             
-            const targetPane = document.getElementById(tabId === 'elements-list' ? 'elementsListPane' : 'elementPropsPane');
+            // 根据标签ID显示对应面板
+            let targetPane;
+            switch (tabId) {
+                case 'elements-list':
+                    targetPane = document.getElementById('elementsListPane');
+                    break;
+                case 'element-props':
+                    targetPane = document.getElementById('elementPropsPane');
+                    break;
+                case 'console-output':
+                    targetPane = document.getElementById('consoleOutputPane');
+                    break;
+            }
+            
             if (targetPane) {
                 targetPane.style.display = 'block';
                 targetPane.classList.add('active');
             }
+            
+            // 触发标签页变化事件，用于更新UI
+            document.dispatchEvent(new CustomEvent('tabChanged', { detail: { tabId } }));
         });
     });
 }
@@ -1603,6 +1654,63 @@ function recalculateXmlMarkersPosition() {
     console.log('XML标记位置重新计算完成');
 }
 
+// 控制台管理功能
+const ConsoleManager = {
+    // 添加控制台日志
+    addLog: function(message, type = 'info') {
+        const consoleOutput = document.getElementById('consoleOutput');
+        if (!consoleOutput) return;
+        
+        // 清除欢迎信息（如果存在）
+        const welcome = consoleOutput.querySelector('.console-welcome');
+        if (welcome) {
+            welcome.remove();
+        }
+        
+        // 创建日志条目
+        const logEntry = document.createElement('div');
+        logEntry.className = `console-log ${type}`;
+        
+        // 添加时间戳
+        const timestamp = new Date().toLocaleTimeString();
+        const timestampSpan = document.createElement('span');
+        timestampSpan.className = 'console-timestamp';
+        timestampSpan.textContent = `[${timestamp}]`;
+        
+        // 添加消息内容
+        const messageSpan = document.createElement('span');
+        messageSpan.textContent = message;
+        
+        logEntry.appendChild(timestampSpan);
+        logEntry.appendChild(messageSpan);
+        consoleOutput.appendChild(logEntry);
+        
+        // 自动滚动到底部
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    },
+    
+    // 清空控制台
+    clear: function() {
+        const consoleOutput = document.getElementById('consoleOutput');
+        if (!consoleOutput) return;
+        
+        consoleOutput.innerHTML = `
+            <div class="console-welcome">
+                <div class="console-welcome-text">控制台已清空</div>
+                <div class="console-welcome-hint">新的输出将在这里显示</div>
+            </div>
+        `;
+    },
+    
+    // 切换到控制台标签页
+    switchToConsole: function() {
+        const consoleTab = document.getElementById('consoleTab');
+        if (consoleTab) {
+            consoleTab.click();
+        }
+    }
+};
+
 // 窗口大小变化时的响应式处理
 function handleWindowResize() {
     // 防抖延迟重新计算
@@ -1622,12 +1730,20 @@ function handleWindowResize() {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initializeUIElementsPanel();
+        initializeBottomPanelDisplay();
         // 添加窗口大小变化监听器
         window.addEventListener('resize', handleWindowResize);
     });
 } else {
     initializeUIElementsPanel();
+    initializeBottomPanelDisplay();
     window.addEventListener('resize', handleWindowResize);
+}
+
+// 初始化底部面板显示
+function initializeBottomPanelDisplay() {
+    // 默认显示底部面板，并显示初始状态
+    displayUIElementList([]); // 传入空数组会显示适当的空状态
 }
 
 // 导出函数
@@ -1640,5 +1756,7 @@ window.TestcaseManagerModule = {
     refreshDeviceScreen,
     toggleXmlOverlay,
     initializeUIElementsPanel,
-    recalculateXmlMarkersPosition
+    initializeBottomPanelDisplay,
+    recalculateXmlMarkersPosition,
+    ConsoleManager
 };
