@@ -1,0 +1,1731 @@
+// Store electron modules before Monaco loader interferes
+const electron = window.nodeRequire ? window.nodeRequire('electron') : require('electron');
+const { ipcRenderer } = electron;
+const path = window.nodeRequire ? window.nodeRequire('path') : require('path');
+const fs = (window.nodeRequire ? window.nodeRequire('fs') : require('fs')).promises;
+const fsSync = window.nodeRequire ? window.nodeRequire('fs') : require('fs');
+const yaml = window.nodeRequire ? window.nodeRequire('js-yaml') : require('js-yaml');
+const { parse } = window.nodeRequire ? window.nodeRequire('csv-parse/sync') : require('csv-parse/sync');
+
+// Global variables
+let currentProject = null;
+let currentCase = null;
+let codeEditor = null;
+let lineNumbers = null;
+let syntaxHighlight = null;
+let openTabs = [];
+let deviceScreenInterval = null;
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', async () => {
+    initializeNavigation();
+    initializeProjectPage();
+    initializeTestcasePage();
+    initializeDevicePage();
+    initializeSettingsPage();
+    initializeResizablePanels();
+    initializeSimpleEditor();
+    initializeKeyboardShortcuts();
+    
+    // Load user info
+    loadUserInfo();
+    
+    // Load project history instead of auto-loading last project
+    await loadProjectHistory();
+});
+
+// Navigation
+function initializeNavigation() {
+    const navItems = document.querySelectorAll('.nav-item');
+    const pages = document.querySelectorAll('.page');
+    
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const targetPage = item.dataset.page;
+            
+            // Update active nav item
+            navItems.forEach(nav => nav.classList.remove('active'));
+            item.classList.add('active');
+            
+            // Update active page
+            pages.forEach(page => page.classList.remove('active'));
+            document.getElementById(`${targetPage}Page`).classList.add('active');
+            
+            // Page-specific actions
+            if (targetPage === 'device') {
+                refreshConnectedDevices();
+            } else if (targetPage === 'settings') {
+                checkSDKStatus();
+            }
+        });
+    });
+}
+
+// Project Page
+function initializeProjectPage() {
+    const createProjectBtn = document.getElementById('createProjectBtn');
+    const openProjectBtn = document.getElementById('openProjectBtn');
+    const importCsvBtn = document.getElementById('importCsvBtn');
+    const backToProjectsBtn = document.getElementById('backToProjectsBtn');
+    
+    console.log('Initializing project page...');
+    
+    // Back to projects button
+    if (backToProjectsBtn) {
+        backToProjectsBtn.addEventListener('click', async () => {
+            // Clear current project
+            currentProject = null;
+            
+            // Update UI
+            document.getElementById('projectInfo').style.display = 'none';
+            document.getElementById('welcomeScreen').style.display = 'flex';
+            
+            // Reload project history
+            await loadProjectHistory();
+            
+            // Clear testcase page
+            const fileTree = document.getElementById('fileTree');
+            if (fileTree) fileTree.innerHTML = '';
+            
+            // Clear editor tabs
+            openTabs = [];
+            const editorTabs = document.getElementById('editorTabs');
+            if (editorTabs) {
+                editorTabs.innerHTML = '';
+            }
+            
+            // 清空编辑器
+            if (codeEditor) {
+                codeEditor.value = '';
+                codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+                updateEditor();
+            }
+            
+            // Clear current project path
+            document.getElementById('currentProjectPath').textContent = 'No project loaded';
+            
+            showNotification('Closed project', 'info');
+        });
+    }
+    if (createProjectBtn) {
+        createProjectBtn.addEventListener('click', async () => {
+            console.log('Create project button clicked');
+            try {
+                const projectPath = await ipcRenderer.invoke('select-directory');
+                console.log('Selected path:', projectPath);
+                if (projectPath) {
+                    const result = await ipcRenderer.invoke('create-project-structure', projectPath);
+                    if (result.success) {
+                        await loadProject(projectPath);
+                        showNotification('Project created successfully', 'success');
+                    } else {
+                        showNotification(`Failed to create project: ${result.error}`, 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Error in create project:', error);
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+        });
+    }
+    
+    if (openProjectBtn) {
+        openProjectBtn.addEventListener('click', async () => {
+            console.log('Open project button clicked');
+            try {
+                const projectPath = await ipcRenderer.invoke('select-directory');
+                console.log('Selected path:', projectPath);
+                if (projectPath) {
+                    await openProject(projectPath);
+                }
+            } catch (error) {
+                console.error('Error in open project:', error);
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+        });
+    }
+    
+    if (importCsvBtn) {
+        importCsvBtn.addEventListener('click', async () => {
+            if (!currentProject) {
+                showNotification('Please open a project first', 'warning');
+                return;
+            }
+            
+            const csvPath = await ipcRenderer.invoke('select-file', [
+                { name: 'CSV Files', extensions: ['csv'] }
+            ]);
+            
+            if (csvPath) {
+                const result = await ipcRenderer.invoke('read-file', csvPath);
+                if (result.success) {
+                    try {
+                        const records = parse(result.content, {
+                            columns: true,
+                            skip_empty_lines: true
+                        });
+                        
+                        // Save to project
+                        const sheetPath = path.join(currentProject, 'testcase_sheet.csv');
+                        await ipcRenderer.invoke('write-file', sheetPath, result.content);
+                        
+                        // Display test cases in table
+                        await displayTestCasesTable(records);
+                        showNotification(`Imported ${records.length} test cases`, 'success');
+                    } catch (error) {
+                        showNotification(`Failed to parse CSV: ${error.message}`, 'error');
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Load project
+async function loadProject(projectPath) {
+    currentProject = projectPath;
+    
+    // Update project history
+    await updateProjectHistory(projectPath);
+    
+    // Update UI
+    document.getElementById('projectPath').textContent = projectPath;
+    document.getElementById('currentProjectPath').textContent = projectPath;
+    document.getElementById('projectInfo').style.display = 'block';
+    document.getElementById('welcomeScreen').style.display = 'none';
+    
+    // Clear previous test cases list
+    const testcaseList = document.getElementById('testcaseList');
+    if (testcaseList) {
+        testcaseList.innerHTML = '<div class="text-muted">Loading test cases...</div>';
+    }
+    
+    // Load test cases if CSV exists
+    const sheetPath = path.join(projectPath, 'testcase_sheet.csv');
+    const result = await ipcRenderer.invoke('read-file', sheetPath);
+    if (result.success && result.content) {
+        try {
+            const records = parse(result.content, {
+                columns: true,
+                skip_empty_lines: true
+            });
+            await displayTestCasesTable(records);
+        } catch (error) {
+            console.error('Failed to parse existing CSV:', error);
+            if (testcaseList) {
+                testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet. Import a CSV file to get started.</div>';
+            }
+        }
+    } else {
+        if (testcaseList) {
+            testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet. Import a CSV file to get started.</div>';
+        }
+    }
+    
+    // Load file tree for testcase page
+    await loadFileTree();
+    
+    // Load saved devices
+    await loadSavedDevices();
+    
+    // Refresh device list
+    await refreshDeviceList();
+}
+
+// Display test cases in table format
+async function displayTestCasesTable(records) {
+    const testcaseList = document.getElementById('testcaseList');
+    
+    if (records.length === 0) {
+        testcaseList.innerHTML = '<div class="text-muted">No test cases imported yet</div>';
+        return;
+    }
+    
+    // 检查哪些case已经创建
+    const existingCases = await checkExistingCases(records.length);
+    
+    // Get all column headers
+    const headers = Object.keys(records[0]);
+    
+    // Create table
+    const table = document.createElement('table');
+    table.className = 'testcase-table';
+    
+    // Create header
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    
+    // Create body
+    const tbody = document.createElement('tbody');
+    records.forEach((record, index) => {
+        const row = document.createElement('tr');
+        row.className = 'testcase-row';
+        row.dataset.index = index;
+        
+        // 如果case已经存在，添加高亮样式
+        if (existingCases[index]) {
+            row.classList.add('case-created');
+        }
+        
+        headers.forEach(header => {
+            const td = document.createElement('td');
+            td.textContent = record[header] || '';
+            td.title = record[header] || ''; // Tooltip for long text
+            row.appendChild(td);
+        });
+        
+        // Create floating action button
+        const actionBtn = document.createElement('button');
+        actionBtn.className = 'floating-action-btn';
+        
+        if (existingCases[index]) {
+            // Case已存在，显示"已创建"状态
+            actionBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+                <span>Already Exist</span>
+            `;
+            actionBtn.disabled = true;
+            actionBtn.style.opacity = '0.6';
+        } else {
+            // Case未存在，显示"创建"按钮
+            actionBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+                <span>Create Case</span>
+            `;
+            actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                createTestCase(record, index);
+            };
+        }
+        
+        row.appendChild(actionBtn);
+        
+        tbody.appendChild(row);
+    });
+    
+    table.appendChild(tbody);
+    
+    // Clear existing content and add table
+    testcaseList.innerHTML = '';
+    testcaseList.appendChild(table);
+}
+
+// 检查哪些Case已经存在
+async function checkExistingCases(totalCases) {
+    if (!currentProject) return [];
+    
+    const existingCases = [];
+    const casesPath = path.join(currentProject, 'cases');
+    
+    try {
+        // 检查cases目录是否存在
+        if (!fsSync.existsSync(casesPath)) {
+            // cases目录不存在，所有case都未创建
+            return new Array(totalCases).fill(false);
+        }
+        
+        for (let i = 0; i < totalCases; i++) {
+            const caseName = `case_${String(i + 1).padStart(3, '0')}`;
+            const casePath = path.join(casesPath, caseName);
+            
+            // 检查case目录和config.json是否存在
+            const caseExists = fsSync.existsSync(casePath) && 
+                             fsSync.existsSync(path.join(casePath, 'config.json'));
+            
+            existingCases[i] = caseExists;
+        }
+    } catch (error) {
+        console.error('Error checking existing cases:', error);
+        // 出错时假设所有case都未创建
+        return new Array(totalCases).fill(false);
+    }
+    
+    return existingCases;
+}
+
+// 刷新测试用例表格
+async function refreshTestCaseTable() {
+    if (!currentProject) return;
+    
+    // 重新读取CSV文件并显示表格
+    const sheetPath = path.join(currentProject, 'testcase_sheet.csv');
+    const result = await ipcRenderer.invoke('read-file', sheetPath);
+    if (result.success && result.content) {
+        try {
+            const records = parse(result.content, {
+                columns: true,
+                skip_empty_lines: true
+            });
+            await displayTestCasesTable(records);
+        } catch (error) {
+            console.error('Failed to refresh test case table:', error);
+        }
+    }
+}
+
+// Create test case
+async function createTestCase(record, index) {
+    if (!currentProject) {
+        showNotification('No project loaded', 'error');
+        return;
+    }
+    
+    const caseName = `case_${String(index + 1).padStart(3, '0')}`;
+    const casePath = path.join(currentProject, 'cases', caseName);
+    
+    try {
+        // Create case directory structure
+        await fs.mkdir(casePath, { recursive: true });
+        await fs.mkdir(path.join(casePath, 'locator'), { recursive: true });
+        await fs.mkdir(path.join(casePath, 'locator', 'img'), { recursive: true });
+        await fs.mkdir(path.join(casePath, 'script'), { recursive: true });
+        
+        // Create config.json
+        const config = {
+            name: caseName,
+            description: record[Object.keys(record)[0]] || '',
+            requirements: record[Object.keys(record)[1]] || '',
+            createdAt: new Date().toISOString(),
+            record: record
+        };
+        
+        await fs.writeFile(
+            path.join(casePath, 'config.json'),
+            JSON.stringify(config, null, 2)
+        );
+        
+        // Create element.json
+        await fs.writeFile(
+            path.join(casePath, 'locator', 'element.json'),
+            JSON.stringify({}, null, 2)
+        );
+        
+        // Create sample script
+        const sampleScript = {
+            name: 'script_001',
+            steps: [
+                {
+                    action: 'launch_app',
+                    params: {
+                        appPackage: 'com.example.app',
+                        appActivity: '.MainActivity'
+                    }
+                }
+            ]
+        };
+        
+        await fs.writeFile(
+            path.join(casePath, 'script', 'script_001.yaml'),
+            yaml.dump(sampleScript)
+        );
+        
+        // Update testcase_map.json
+        const mapPath = path.join(currentProject, 'testcase_map.json');
+        let testcaseMap = {};
+        
+        try {
+            const mapContent = await fs.readFile(mapPath, 'utf-8');
+            testcaseMap = JSON.parse(mapContent);
+        } catch (error) {
+            // File doesn't exist or is invalid
+        }
+        
+        testcaseMap[caseName] = {
+            index: index,
+            createdAt: new Date().toISOString()
+        };
+        
+        await fs.writeFile(mapPath, JSON.stringify(testcaseMap, null, 2));
+        
+        // 重新加载表格以更新状态
+        await refreshTestCaseTable();
+        
+        // Navigate to testcase page
+        document.querySelector('[data-page="testcase"]').click();
+        
+        // Reload file tree
+        await loadFileTree();
+        
+        showNotification(`Created test case: ${caseName}`, 'success');
+    } catch (error) {
+        showNotification(`Failed to create test case: ${error.message}`, 'error');
+    }
+}
+
+// Testcase Page
+function initializeTestcasePage() {
+    const runTestBtn = document.getElementById('runTestBtn');
+    const clearConsoleBtn = document.getElementById('clearConsoleBtn');
+    const toggleXmlBtn = document.getElementById('toggleXmlBtn');
+    const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
+    const deviceSelect = document.getElementById('deviceSelect');
+    
+    if (runTestBtn) runTestBtn.addEventListener('click', runCurrentTest);
+    if (clearConsoleBtn) clearConsoleBtn.addEventListener('click', clearConsole);
+    if (toggleXmlBtn) toggleXmlBtn.addEventListener('click', toggleXmlOverlay);
+    if (refreshDeviceBtn) refreshDeviceBtn.addEventListener('click', () => {
+        // Manual refresh when button is clicked
+        refreshDeviceScreen();
+    });
+    
+    if (deviceSelect) {
+        deviceSelect.addEventListener('change', (e) => {
+            // Store selected device
+            if (e.target.value) {
+                ipcRenderer.invoke('store-set', 'selected_device', e.target.value);
+            }
+            // Don't start auto-refresh anymore
+        });
+    }
+    
+    // Load devices
+    refreshDeviceList();
+}
+
+// Load file tree
+async function loadFileTree() {
+    if (!currentProject) return;
+    
+    const fileTree = document.getElementById('fileTree');
+    fileTree.innerHTML = '';
+    
+    const casesPath = path.join(currentProject, 'cases');
+    
+    try {
+        const cases = await fs.readdir(casesPath);
+        
+        for (const caseName of cases) {
+            const casePath = path.join(casesPath, caseName);
+            const stat = await fs.stat(casePath);
+            
+            if (stat.isDirectory()) {
+                const caseItem = createTreeItem(caseName, 'folder', casePath);
+                fileTree.appendChild(caseItem);
+                
+                // Load scripts
+                const scriptPath = path.join(casePath, 'script');
+                try {
+                    const scripts = await fs.readdir(scriptPath);
+                    const scriptContainer = document.createElement('div');
+                    scriptContainer.className = 'tree-children';
+                    
+                    for (const script of scripts) {
+                        if (script.endsWith('.yaml')) {
+                            const scriptItem = createTreeItem(
+                                script,
+                                'file',
+                                path.join(scriptPath, script)
+                            );
+                            scriptContainer.appendChild(scriptItem);
+                        }
+                    }
+                    
+                    caseItem.appendChild(scriptContainer);
+                } catch (error) {
+                    console.error('Failed to load scripts:', error);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load file tree:', error);
+    }
+}
+
+// Create tree item
+function createTreeItem(name, type, fullPath) {
+    const item = document.createElement('div');
+    item.className = `tree-item ${type === 'folder' ? 'tree-folder' : ''}`;
+    
+    const icon = document.createElement('svg');
+    icon.className = 'tree-icon';
+    icon.setAttribute('viewBox', '0 0 24 24');
+    
+    if (type === 'folder') {
+        icon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
+    } else {
+        icon.innerHTML = '<path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/>';
+    }
+    
+    const label = document.createElement('span');
+    label.textContent = name;
+    
+    item.appendChild(icon);
+    item.appendChild(label);
+    
+    if (type === 'file') {
+        item.addEventListener('click', () => openFile(fullPath));
+    }
+    
+    return item;
+}
+
+// Open file in editor
+async function openFile(filePath) {
+    const result = await ipcRenderer.invoke('read-file', filePath);
+    if (result.success) {
+        const fileName = path.basename(filePath);
+        
+        // Check if already open
+        const existingTab = openTabs.find(tab => tab.path === filePath);
+        if (existingTab) {
+            selectTab(existingTab.id);
+            return;
+        }
+        
+        // Create new tab
+        const tabId = `tab-${Date.now()}`;
+        const tab = {
+            id: tabId,
+            path: filePath,
+            name: fileName,
+            content: result.content
+        };
+        
+        openTabs.push(tab);
+        createTab(tab);
+        selectTab(tabId);
+        
+        // Load content in editor (will be handled by selectTab)
+        // Just ensure the tab is selected, selectTab will handle the editor content
+        console.log('Opening file:', fileName, 'Content length:', result.content.length);
+    } else {
+        showNotification(`Failed to open file: ${result.error}`, 'error');
+    }
+}
+
+// Create tab
+function createTab(tab) {
+    const tabsContainer = document.getElementById('editorTabs');
+    
+    const tabElement = document.createElement('div');
+    tabElement.className = 'tab';
+    tabElement.id = tab.id;
+    tabElement.innerHTML = `
+        <span class="tab-name" title="${tab.path}">${tab.name}</span>
+        <span class="tab-close">×</span>
+    `;
+    
+    tabElement.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('tab-close')) {
+            selectTab(tab.id);
+        }
+    });
+    
+    tabElement.querySelector('.tab-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeTab(tab.id);
+    });
+    
+    tabsContainer.appendChild(tabElement);
+}
+
+// Select tab
+function selectTab(tabId) {
+    console.log('Selecting tab:', tabId);
+    
+    // First, save content of current active tab
+    const currentActiveTab = document.querySelector('.tab.active');
+    if (currentActiveTab && codeEditor) {
+        const currentTabId = currentActiveTab.id;
+        const currentTab = openTabs.find(tab => tab.id === currentTabId);
+        if (currentTab) {
+            currentTab.content = codeEditor.value;
+        }
+    }
+    
+    // Update active tab styling
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    
+    const selectedTab = document.getElementById(tabId);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        
+        // 简单编辑器总是准备就绪的
+        
+        // Load content for selected tab
+        const tabData = openTabs.find(tab => tab.id === tabId);
+        if (tabData && codeEditor) {
+            console.log('Setting content for tab:', tabData.name, 'Content length:', tabData.content.length);
+            codeEditor.value = tabData.content;
+            codeEditor.placeholder = `正在编辑: ${tabData.name}`;
+            updateEditor();
+        }
+    }
+}
+
+// Close tab
+function closeTab(tabId) {
+    const index = openTabs.findIndex(tab => tab.id === tabId);
+    if (index > -1) {
+        openTabs.splice(index, 1);
+        const tabElement = document.getElementById(tabId);
+        if (tabElement) {
+            tabElement.remove();
+        }
+        
+        // Select another tab if available
+        if (openTabs.length > 0) {
+            selectTab(openTabs[openTabs.length - 1].id);
+        } else {
+            // No more tabs, clear editor
+            if (codeEditor) {
+                codeEditor.value = '';
+                codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+                updateEditor();
+            }
+        }
+    }
+}
+
+// Initialize Monaco Editor
+// Initialize Simple Editor
+function initializeSimpleEditor() {
+    codeEditor = document.getElementById('codeEditor');
+    lineNumbers = document.getElementById('lineNumbers');
+    syntaxHighlight = document.getElementById('syntaxHighlight');
+    
+    if (codeEditor) {
+        console.log('Simple Editor initialized successfully');
+        
+        // 设置初始内容为空
+        codeEditor.value = '';
+        codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+        updateEditor();
+        
+        // Save on change with debounce
+        let saveTimeout;
+        codeEditor.addEventListener('input', () => {
+            updateEditor();
+            
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab) {
+                const tabId = activeTab.id;
+                const tab = openTabs.find(t => t.id === tabId);
+                if (tab) {
+                    tab.content = codeEditor.value;
+                    
+                    // 延迟自动保存，避免频繁保存
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(() => {
+                        saveCurrentFile();
+                    }, 1000);
+                }
+            }
+        });
+        
+        // 同步滚动
+        codeEditor.addEventListener('scroll', () => {
+            if (lineNumbers) {
+                lineNumbers.scrollTop = codeEditor.scrollTop;
+            }
+            if (syntaxHighlight) {
+                syntaxHighlight.scrollTop = codeEditor.scrollTop;
+                syntaxHighlight.scrollLeft = codeEditor.scrollLeft;
+            }
+        });
+        
+        // Handle Tab key for indentation
+        codeEditor.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = codeEditor.selectionStart;
+                const end = codeEditor.selectionEnd;
+                
+                // Insert 2 spaces instead of tab
+                const value = codeEditor.value;
+                codeEditor.value = value.substring(0, start) + '  ' + value.substring(end);
+                codeEditor.selectionStart = codeEditor.selectionEnd = start + 2;
+                
+                updateEditor();
+            }
+        });
+    }
+}
+
+// 更新编辑器（行号和语法高亮）
+function updateEditor() {
+    if (!codeEditor) return;
+    
+    const content = codeEditor.value;
+    const lines = content.split('\n');
+    
+    // 更新行号
+    if (lineNumbers) {
+        const lineNumbersContent = lines.map((_, index) => (index + 1).toString()).join('\n');
+        lineNumbers.textContent = lineNumbersContent;
+    }
+    
+    // 更新语法高亮
+    if (syntaxHighlight) {
+        const highlightedContent = highlightYAML(content);
+        syntaxHighlight.innerHTML = highlightedContent;
+    }
+}
+
+// YAML语法高亮函数
+function highlightYAML(text) {
+    if (!text) return '';
+    
+    // HTML转义函数
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+    
+    // 转义HTML
+    let escaped = escapeHtml(text);
+    
+    // YAML语法高亮规则
+    const rules = [
+        // 注释
+        {
+            pattern: /(^|\n)([ ]*)(#.*?)(?=\n|$)/g,
+            replacement: '$1$2<span class="yaml-comment">$3</span>'
+        },
+        // 键名 (key:)
+        {
+            pattern: /^([ ]*)([\w\-_]+)(:)[ ]*/gm,
+            replacement: '$1<span class="yaml-key">$2</span><span class="yaml-key">$3</span> '
+        },
+        // 数组标识符 (-)
+        {
+            pattern: /^([ ]*)(-)([ ]+)/gm,
+            replacement: '$1<span class="yaml-dash">$2</span>$3'
+        },
+        // 字符串值 (引号包围)
+        {
+            pattern: /(['"])((?:\\.|(?!\1)[^\\])*?)\1/g,
+            replacement: '<span class="yaml-string">$1$2$1</span>'
+        },
+        // 布尔值
+        {
+            pattern: /\b(true|false|True|False|TRUE|FALSE)\b/g,
+            replacement: '<span class="yaml-boolean">$1</span>'
+        },
+        // null值
+        {
+            pattern: /\b(null|Null|NULL|~)\b/g,
+            replacement: '<span class="yaml-null">$1</span>'
+        },
+        // 数字
+        {
+            pattern: /\b(\d+(?:\.\d+)?)\b/g,
+            replacement: '<span class="yaml-number">$1</span>'
+        },
+        // 简单字符串值（不在引号中的值）
+        {
+            pattern: /:[ ]+([^'"\s][^\n]*?)(?=\n|$)/g,
+            replacement: ': <span class="yaml-string">$1</span>'
+        }
+    ];
+    
+    // 应用所有规则
+    let highlighted = escaped;
+    rules.forEach(rule => {
+        highlighted = highlighted.replace(rule.pattern, rule.replacement);
+    });
+    
+    return highlighted;
+}
+
+// Save current file
+async function saveCurrentFile() {
+    const activeTab = document.querySelector('.tab.active');
+    if (!activeTab) return;
+    
+    const tabId = activeTab.id;
+    const tab = openTabs.find(t => t.id === tabId);
+    
+    if (tab) {
+        const result = await ipcRenderer.invoke('write-file', tab.path, tab.content);
+        if (!result.success) {
+            console.error('Failed to save file:', result.error);
+        }
+    }
+}
+
+// Save current file with notification
+async function saveCurrentFileWithNotification() {
+    const activeTab = document.querySelector('.tab.active');
+    if (!activeTab) {
+        showNotification('没有可保存的文件', 'warning');
+        return;
+    }
+    
+    const tabId = activeTab.id;
+    const tab = openTabs.find(t => t.id === tabId);
+    
+    if (!tab) {
+        showNotification('没有可保存的文件', 'warning');
+        return;
+    }
+    
+    try {
+        const result = await ipcRenderer.invoke('write-file', tab.path, tab.content);
+        if (result.success) {
+            showNotification(`已保存 ${tab.name}`, 'success');
+        } else {
+            showNotification(`保存失败: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`保存失败: ${error.message}`, 'error');
+    }
+}
+
+
+// Run current test
+async function runCurrentTest() {
+    const activeTab = document.querySelector('.tab.active');
+    if (!activeTab) {
+        showNotification('No test script open', 'warning');
+        return;
+    }
+    
+    const deviceSelect = document.getElementById('deviceSelect');
+    if (!deviceSelect.value) {
+        showNotification('Please select a device', 'warning');
+        return;
+    }
+    
+    addConsoleLog('Running test...', 'info');
+    
+    // TODO: Implement actual test execution
+    setTimeout(() => {
+        addConsoleLog('Test execution not yet implemented', 'warning');
+    }, 1000);
+}
+
+// Console management
+function addConsoleLog(message, type = 'info') {
+    const consoleOutput = document.getElementById('consoleOutput');
+    const line = document.createElement('div');
+    line.className = `console-line ${type}`;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    consoleOutput.appendChild(line);
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+}
+
+function clearConsole() {
+    document.getElementById('consoleOutput').innerHTML = '';
+}
+
+// Device screen management
+async function refreshDeviceScreen() {
+    const deviceSelect = document.getElementById('deviceSelect');
+    if (!deviceSelect || !deviceSelect.value) {
+        showNotification('Please select a device', 'warning');
+        return;
+    }
+    
+    const result = await ipcRenderer.invoke('adb-screenshot', deviceSelect.value);
+    if (result.success) {
+        const img = document.getElementById('deviceScreenshot');
+        img.src = `data:image/png;base64,${result.data}`;
+        img.style.display = 'block';
+        document.querySelector('.screen-placeholder').style.display = 'none';
+    } else {
+        showNotification(`Failed to capture screen: ${result.error}`, 'error');
+    }
+}
+
+function toggleXmlOverlay() {
+    showNotification('XML overlay not yet implemented', 'info');
+}
+
+// Device Page
+function initializeDevicePage() {
+    const addDeviceBtn = document.getElementById('addDeviceBtn');
+    const scanDevicesBtn = document.getElementById('scanDevicesBtn');
+    const deviceForm = document.getElementById('deviceForm');
+    const newDeviceForm = document.getElementById('newDeviceForm');
+    const cancelDeviceBtn = document.getElementById('cancelDeviceBtn');
+    
+    if (addDeviceBtn) {
+        addDeviceBtn.addEventListener('click', () => {
+            deviceForm.style.display = deviceForm.style.display === 'none' ? 'block' : 'none';
+        });
+    }
+    
+    if (cancelDeviceBtn) {
+        cancelDeviceBtn.addEventListener('click', () => {
+            deviceForm.style.display = 'none';
+            newDeviceForm.reset();
+        });
+    }
+    
+    if (scanDevicesBtn) {
+        scanDevicesBtn.addEventListener('click', refreshConnectedDevices);
+    }
+    
+    if (newDeviceForm) {
+        newDeviceForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!currentProject) {
+                showNotification('Please open a project first', 'warning');
+                return;
+            }
+            
+            const formData = new FormData(newDeviceForm);
+            const deviceConfig = {};
+            
+            for (const [key, value] of formData.entries()) {
+                deviceConfig[key] = value === 'true' ? true : value === 'false' ? false : value;
+            }
+            
+            // Check if we're in edit mode
+            const deviceForm = document.getElementById('deviceForm');
+            const mode = deviceForm.dataset.mode;
+            let devicePath;
+            
+            if (mode === 'edit' && deviceForm.dataset.filename) {
+                // Edit mode - use existing filename
+                devicePath = path.join(currentProject, 'devices', deviceForm.dataset.filename);
+            } else {
+                // Create mode - generate new filename
+                const timestamp = Date.now();
+                const deviceFileName = `device_${timestamp}.yaml`;
+                devicePath = path.join(currentProject, 'devices', deviceFileName);
+            }
+            
+            try {
+                await fs.writeFile(devicePath, yaml.dump(deviceConfig));
+                showNotification(
+                    mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully',
+                    'success'
+                );
+                
+                deviceForm.style.display = 'none';
+                newDeviceForm.reset();
+                delete deviceForm.dataset.mode;
+                delete deviceForm.dataset.filename;
+                
+                await loadSavedDevices();
+                await refreshDeviceList();
+            } catch (error) {
+                showNotification(`Failed to save device: ${error.message}`, 'error');
+            }
+        });
+    }
+    
+    // Load saved devices
+    loadSavedDevices();
+}
+
+// Load saved devices
+async function loadSavedDevices() {
+    if (!currentProject) return;
+    
+    const deviceGrid = document.getElementById('deviceGrid');
+    deviceGrid.innerHTML = '';
+    
+    const devicesPath = path.join(currentProject, 'devices');
+    
+    try {
+        // Get connected devices first
+        const connectedResult = await ipcRenderer.invoke('adb-devices');
+        const connectedDevices = connectedResult.success ? connectedResult.devices : [];
+        
+        const files = await fs.readdir(devicesPath);
+        
+        for (const file of files) {
+            if (file.endsWith('.yaml')) {
+                const filePath = path.join(devicesPath, file);
+                const content = await fs.readFile(filePath, 'utf-8');
+                const config = yaml.load(content);
+                
+                // Check if this device is connected by matching deviceId
+                const isConnected = config.deviceId && connectedDevices.some(d => 
+                    d.id === config.deviceId && d.status === 'device'
+                );
+                
+                const card = document.createElement('div');
+                card.className = 'device-card';
+                card.innerHTML = `
+                    <div class="device-status ${isConnected ? 'connected' : ''}" title="${isConnected ? 'Connected' : 'Not Connected'}"></div>
+                    <div class="device-name">${config.deviceName}</div>
+                    <div class="device-info">
+                        <span title="${config.platformName} ${config.platformVersion}">Platform: ${config.platformName} ${config.platformVersion}</span>
+                        <span title="${config.appPackage}">Package: ${config.appPackage}</span>
+                        <span title="${config.automationName}">Automation: ${config.automationName}</span>
+                        ${config.deviceId ? `<span title="${config.deviceId}">ID: ${config.deviceId}</span>` : ''}
+                    </div>
+                    <div class="device-actions">
+                        <button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">
+                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
+                                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                            Edit
+                        </button>
+                        <button class="btn btn-outline btn-small btn-icon-only" onclick="deleteDevice('${file}')" title="Delete">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                
+                deviceGrid.appendChild(card);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load saved devices:', error);
+    }
+}
+
+// Refresh connected devices
+async function refreshConnectedDevices() {
+    const result = await ipcRenderer.invoke('adb-devices');
+    const connectedList = document.getElementById('connectedList');
+    
+    connectedList.innerHTML = '';
+    
+    if (result.success && result.devices.length > 0) {
+        // Get saved devices to check which ones are already saved
+        let savedDeviceIds = [];
+        if (currentProject) {
+            try {
+                const devicesPath = path.join(currentProject, 'devices');
+                const files = await fs.readdir(devicesPath);
+                for (const file of files) {
+                    if (file.endsWith('.yaml')) {
+                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
+                        const config = yaml.load(content);
+                        if (config.deviceId) {
+                            savedDeviceIds.push(config.deviceId);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading saved devices:', error);
+            }
+        }
+        
+        result.devices.forEach(device => {
+            const isSaved = savedDeviceIds.includes(device.id);
+            const item = document.createElement('div');
+            item.className = 'connected-item';
+            item.innerHTML = `
+                <span class="device-id">${device.id}</span>
+                <span class="device-status-text">${device.status}</span>
+                ${!isSaved && device.status === 'device' ? `
+                    <button class="btn btn-primary" onclick="createDeviceFromConnected('${device.id}')">
+                        <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
+                            <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                        Save
+                    </button>
+                ` : isSaved ? '<span class="text-muted" style="font-size: 12px;">Already saved</span>' : ''}
+            `;
+            connectedList.appendChild(item);
+        });
+    } else {
+        connectedList.innerHTML = '<div class="text-muted">No devices connected</div>';
+    }
+    
+    // Also reload saved devices to update connection status
+    await loadSavedDevices();
+    
+    // Update device select dropdown
+    refreshDeviceList();
+}
+
+// Refresh device list in dropdown
+async function refreshDeviceList() {
+    const result = await ipcRenderer.invoke('adb-devices');
+    const deviceSelect = document.getElementById('deviceSelect');
+    
+    if (!deviceSelect) return;
+    
+    // Get saved device to restore selection
+    const savedSelection = await ipcRenderer.invoke('store-get', 'selected_device');
+    
+    deviceSelect.innerHTML = '<option value="">Select Device</option>';
+    
+    if (result.success && result.devices.length > 0) {
+        // Load saved device configurations to show names instead of IDs
+        let deviceConfigs = {};
+        if (currentProject) {
+            try {
+                const devicesPath = path.join(currentProject, 'devices');
+                const files = await fs.readdir(devicesPath);
+                for (const file of files) {
+                    if (file.endsWith('.yaml')) {
+                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
+                        const config = yaml.load(content);
+                        if (config.deviceId) {
+                            deviceConfigs[config.deviceId] = config.deviceName;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading device configs:', error);
+            }
+        }
+        
+        result.devices.forEach(device => {
+            if (device.status === 'device') {
+                const option = document.createElement('option');
+                option.value = device.id;
+                // Use device name if saved, otherwise use ID
+                option.textContent = deviceConfigs[device.id] || device.id;
+                deviceSelect.appendChild(option);
+            }
+        });
+        
+        // Restore selection if device is still available
+        if (savedSelection && Array.from(deviceSelect.options).some(opt => opt.value === savedSelection)) {
+            deviceSelect.value = savedSelection;
+        }
+    }
+}
+
+// Settings Page
+function initializeSettingsPage() {
+    const logoutBtn = document.getElementById('logoutBtn');
+    const checkSdkBtn = document.getElementById('checkSdkBtn');
+    const updateBaseUrlBtn = document.getElementById('updateBaseUrlBtn');
+    const settingsBaseUrl = document.getElementById('settingsBaseUrl');
+    const aboutVersion = document.getElementById('about-version');
+    
+    // Load app version
+    if (aboutVersion) {
+        ipcRenderer.invoke('get-app-version').then(version => {
+            aboutVersion.textContent = `Version: ${version}`;
+        });
+    }
+    
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', async () => {
+            await ipcRenderer.invoke('logout');
+            await ipcRenderer.invoke('navigate-to-login');
+        });
+    }
+    
+    if (checkSdkBtn) {
+        checkSdkBtn.addEventListener('click', checkSDKStatus);
+    }
+    
+    if (updateBaseUrlBtn) {
+        updateBaseUrlBtn.addEventListener('click', async () => {
+            await ipcRenderer.invoke('store-set', 'base_url', settingsBaseUrl.value);
+            showNotification('Base URL updated', 'success');
+        });
+    }
+    
+    // Load base URL
+    ipcRenderer.invoke('store-get', 'base_url').then(url => {
+        if (url && settingsBaseUrl) {
+            settingsBaseUrl.value = url;
+        }
+    });
+}
+
+// Load user info
+async function loadUserInfo() {
+    const result = await ipcRenderer.invoke('get-user-info');
+    
+    if (result.success && result.data.user) {
+        const user = result.data.user;
+        
+        // Update sidebar
+        const userAvatar = document.querySelector('.user-avatar');
+        const userName = document.querySelector('.user-name');
+        
+        if (userAvatar) userAvatar.textContent = user.username.charAt(0).toUpperCase();
+        if (userName) userName.textContent = user.username;
+        
+        // Update settings page
+        const settingsUsername = document.getElementById('settingsUsername');
+        const settingsEmail = document.getElementById('settingsEmail');
+        const settingsMemberGroup = document.getElementById('settingsMemberGroup');
+        const settingsMemberSince = document.getElementById('settingsMemberSince');
+        
+        if (settingsUsername) settingsUsername.textContent = user.username;
+        if (settingsEmail) settingsEmail.textContent = user.email;
+        if (settingsMemberGroup) settingsMemberGroup.textContent = user.memberGroup;
+        if (settingsMemberSince) settingsMemberSince.textContent = new Date(user.createdAt).toLocaleDateString();
+    }
+}
+
+// Check SDK status
+async function checkSDKStatus() {
+    const sdkStatus = document.getElementById('sdkStatus');
+    const adbStatus = document.getElementById('adbStatus');
+    
+    if (sdkStatus) sdkStatus.textContent = 'Checking...';
+    if (adbStatus) adbStatus.textContent = 'Checking...';
+    
+    // Check ADB
+    const result = await ipcRenderer.invoke('adb-devices');
+    
+    if (result.success) {
+        if (adbStatus) {
+            adbStatus.textContent = `Available (v${result.adbVersion || 'Unknown'})`;
+            adbStatus.className = 'status-indicator success';
+        }
+        if (sdkStatus) {
+            const platform = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux';
+            sdkStatus.textContent = `Built-in SDK (${platform})`;
+            sdkStatus.className = 'status-indicator success';
+        }
+    } else {
+        if (adbStatus) {
+            adbStatus.textContent = 'Not Available';
+            adbStatus.className = 'status-indicator error';
+        }
+        if (sdkStatus) {
+            sdkStatus.textContent = 'Not Found';
+            sdkStatus.className = 'status-indicator error';
+        }
+    }
+}
+
+// Show notification
+function showNotification(message, type = 'info') {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    // Create a simple notification toast
+    const toast = document.createElement('div');
+    toast.className = `notification notification-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: ${type === 'success' ? '#4ec9b0' : type === 'error' ? '#f48771' : type === 'warning' ? '#ce9178' : '#569cd6'};
+        color: white;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        animation: slideInUp 0.3s ease;
+        font-size: 13px;
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOutDown 0.3s ease';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                document.body.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+    
+    // Also add to console if on testcase page
+    if (document.getElementById('testcasePage') && document.getElementById('testcasePage').classList.contains('active')) {
+        addConsoleLog(message, type);
+    }
+}
+
+// Handle IPC messages from main process
+ipcRenderer.on('menu-new-project', () => {
+    const btn = document.getElementById('createProjectBtn');
+    if (btn) btn.click();
+});
+
+ipcRenderer.on('menu-open-project', () => {
+    const btn = document.getElementById('openProjectBtn');
+    if (btn) btn.click();
+});
+
+ipcRenderer.on('menu-run-test', () => {
+    if (document.getElementById('testcasePage').classList.contains('active')) {
+        runCurrentTest();
+    }
+});
+
+ipcRenderer.on('menu-stop-test', () => {
+    showNotification('Stop test not yet implemented', 'info');
+});
+
+ipcRenderer.on('menu-refresh-device', () => {
+    if (document.getElementById('testcasePage').classList.contains('active')) {
+        refreshDeviceScreen();
+    }
+});
+
+// Global functions for device management
+window.createDeviceFromConnected = async function(deviceId) {
+    if (!currentProject) {
+        showNotification('Please open a project first', 'warning');
+        return;
+    }
+    
+    // Show device form with pre-filled device ID
+    const deviceForm = document.getElementById('deviceForm');
+    const newDeviceForm = document.getElementById('newDeviceForm');
+    
+    // Reset form and set mode
+    newDeviceForm.reset();
+    deviceForm.dataset.mode = 'create';
+    
+    // Pre-fill the form
+    if (newDeviceForm) {
+        newDeviceForm.querySelector('input[name="deviceId"]').value = deviceId;
+        newDeviceForm.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
+        newDeviceForm.querySelector('input[name="platformName"]').value = 'Android';
+        newDeviceForm.querySelector('input[name="automationName"]').value = 'UiAutomator2';
+        newDeviceForm.querySelector('select[name="noReset"]').value = 'true';
+        newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = '6000';
+    }
+    
+    // Update form title
+    deviceForm.querySelector('h3').textContent = 'Add New Device';
+    deviceForm.style.display = 'block';
+    showNotification('Please complete the device configuration', 'info');
+};
+
+// Edit device configuration
+window.editDevice = async function(filename) {
+    if (!currentProject) return;
+    
+    try {
+        const devicePath = path.join(currentProject, 'devices', filename);
+        const content = await fs.readFile(devicePath, 'utf-8');
+        const config = yaml.load(content);
+        
+        // Show device form with existing data
+        const deviceForm = document.getElementById('deviceForm');
+        const newDeviceForm = document.getElementById('newDeviceForm');
+        
+        // Set mode and store filename
+        deviceForm.dataset.mode = 'edit';
+        deviceForm.dataset.filename = filename;
+        
+        // Fill the form with existing data
+        if (newDeviceForm) {
+            newDeviceForm.querySelector('input[name="deviceName"]').value = config.deviceName || '';
+            newDeviceForm.querySelector('input[name="deviceId"]').value = config.deviceId || '';
+            newDeviceForm.querySelector('input[name="platformName"]').value = config.platformName || 'Android';
+            newDeviceForm.querySelector('input[name="platformVersion"]').value = config.platformVersion || '';
+            newDeviceForm.querySelector('input[name="appPackage"]').value = config.appPackage || '';
+            newDeviceForm.querySelector('input[name="appActivity"]').value = config.appActivity || '';
+            newDeviceForm.querySelector('input[name="automationName"]').value = config.automationName || 'UiAutomator2';
+            newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = config.newCommandTimeout || '6000';
+            newDeviceForm.querySelector('select[name="noReset"]').value = config.noReset ? 'true' : 'false';
+        }
+        
+        // Update form title
+        deviceForm.querySelector('h3').textContent = 'Edit Device';
+        deviceForm.style.display = 'block';
+    } catch (error) {
+        showNotification(`Failed to load device: ${error.message}`, 'error');
+    }
+};
+
+// Delete device configuration
+window.deleteDevice = async function(filename) {
+    if (!currentProject) return;
+    
+    if (confirm('Are you sure you want to delete this device configuration?')) {
+        try {
+            const devicePath = path.join(currentProject, 'devices', filename);
+            await fs.unlink(devicePath);
+            showNotification('Device configuration deleted', 'success');
+            await loadSavedDevices();
+            await refreshDeviceList();
+        } catch (error) {
+            showNotification(`Failed to delete device: ${error.message}`, 'error');
+        }
+    }
+};
+
+// Project History Management
+async function loadProjectHistory() {
+    const projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    
+    const welcomeContent = document.getElementById('welcomeContent');
+    const recentProjects = document.getElementById('recentProjects');
+    const projectList = document.getElementById('projectList');
+    const welcomeScreen = document.querySelector('.project-welcome');
+    
+    if (projectHistory.length > 0) {
+        // Hide welcome content when there are projects
+        if (welcomeContent) welcomeContent.style.display = 'none';
+        
+        // Remove centering class when showing projects
+        if (welcomeScreen) welcomeScreen.classList.remove('show-welcome');
+        
+        if (recentProjects && projectList) {
+            projectList.innerHTML = '';
+            
+            // Sort by last accessed date (most recent first)
+            projectHistory.sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed));
+            
+            // Display all recent projects (limit to 10)
+            projectHistory.slice(0, 10).forEach((project, index) => {
+                const projectItem = document.createElement('div');
+                projectItem.className = 'project-item';
+                
+                const projectName = path.basename(project.path);
+                const lastAccessed = new Date(project.lastAccessed);
+                const dateStr = formatDate(lastAccessed);
+                
+                projectItem.innerHTML = `
+                    <svg class="project-item-icon" viewBox="0 0 24 24">
+                        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                    </svg>
+                    <div class="project-item-info">
+                        <div class="project-item-name">${projectName}</div>
+                        <div class="project-item-path" title="${project.path}">${project.path}</div>
+                    </div>
+                    <div class="project-item-date">${dateStr}</div>
+                    <button class="project-item-remove" onclick="removeFromHistory('${project.path.replace(/'/g, "\\'").replace(/\\/g, "\\\\")}')" title="Remove from history">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                `;
+                
+                projectItem.addEventListener('click', (e) => {
+                    if (!e.target.closest('.project-item-remove')) {
+                        openProject(project.path);
+                    }
+                });
+                
+                projectList.appendChild(projectItem);
+            });
+            
+            recentProjects.style.display = 'block';
+        }
+    } else {
+        // Show welcome content when no projects
+        if (welcomeContent) welcomeContent.style.display = 'block';
+        if (recentProjects) recentProjects.style.display = 'none';
+        
+        // Add class for centering welcome content
+        if (welcomeScreen) welcomeScreen.classList.add('show-welcome');
+    }
+}
+
+// Format date for display
+function formatDate(date) {
+    const now = new Date();
+    const diff = now - date;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) {
+        return 'Today';
+    } else if (days === 1) {
+        return 'Yesterday';
+    } else if (days < 7) {
+        return `${days} days ago`;
+    } else {
+        return date.toLocaleDateString();
+    }
+}
+
+// Open project from history or file dialog
+async function openProject(projectPath) {
+    // Check if directory exists
+    if (!fsSync.existsSync(projectPath)) {
+        showNotification('Project folder not found', 'error');
+        await removeFromHistory(projectPath);
+        return;
+    }
+    
+    // Check if it's a valid project directory
+    const projectFiles = ['testcase_map.json', 'testcase_sheet.csv'];
+    let isValidProject = true;
+    for (const file of projectFiles) {
+        if (!fsSync.existsSync(path.join(projectPath, file))) {
+            isValidProject = false;
+            break;
+        }
+    }
+    
+    if (!isValidProject) {
+        showNotification('Not a valid Test Toolkit project folder', 'error');
+        return;
+    }
+    
+    await loadProject(projectPath);
+}
+
+// Update project history
+async function updateProjectHistory(projectPath) {
+    let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    
+    // Remove if already exists
+    projectHistory = projectHistory.filter(p => p.path !== projectPath);
+    
+    // Add to beginning
+    projectHistory.unshift({
+        path: projectPath,
+        lastAccessed: new Date().toISOString()
+    });
+    
+    // Keep only last 10 projects
+    projectHistory = projectHistory.slice(0, 10);
+    
+    await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
+}
+
+// Remove project from history
+window.removeFromHistory = async function(projectPath) {
+    let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    projectHistory = projectHistory.filter(p => p.path !== projectPath);
+    await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
+    await loadProjectHistory();
+    showNotification('Project removed from history', 'success');
+};
+
+// Resizable Panels Functionality
+function initializeResizablePanels() {
+    const verticalResizer = document.getElementById('verticalResizer');
+    const rightPanel = document.getElementById('rightPanel');
+    const consoleContainer = document.getElementById('consoleContainer');
+    const toggleConsoleBtn = document.getElementById('toggleConsoleBtn');
+    const testcaseContainer = document.querySelector('.testcase-container');
+
+    let isResizing = false;
+    let startX, startWidth;
+
+    // Vertical resizer (adjust right panel width)
+    if (verticalResizer && rightPanel && testcaseContainer) {
+        verticalResizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = rightPanel.offsetWidth;
+            verticalResizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+    }
+
+    // Global mouse move handler
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        if (verticalResizer && verticalResizer.classList.contains('dragging')) {
+            // Vertical resize
+            const deltaX = startX - e.clientX;
+            const newWidth = startWidth + deltaX;
+            const minWidth = 200;
+            const maxWidth = 600;
+            
+            if (newWidth >= minWidth && newWidth <= maxWidth) {
+                rightPanel.style.width = newWidth + 'px';
+            }
+        }
+    });
+
+    // Global mouse up handler
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            if (verticalResizer) verticalResizer.classList.remove('dragging');
+        }
+    });
+
+    // Console toggle functionality
+    if (toggleConsoleBtn && consoleContainer) {
+        toggleConsoleBtn.addEventListener('click', () => {
+            consoleContainer.classList.toggle('collapsed');
+        });
+    }
+}
+
+// Initialize keyboard shortcuts
+function initializeKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Ctrl/Cmd + S 保存当前文件
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            saveCurrentFileWithNotification();
+        }
+        
+        // Ctrl/Cmd + W 关闭当前tab
+        if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+            e.preventDefault();
+            const activeTab = document.querySelector('.tab.active');
+            if (activeTab) {
+                closeTab(activeTab.id);
+            }
+        }
+        
+        // Ctrl + Tab 切换到下一个tab
+        if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
+            e.preventDefault();
+            switchToNextTab();
+        }
+        
+        // Ctrl + Shift + Tab 切换到上一个tab
+        if (e.ctrlKey && e.key === 'Tab' && e.shiftKey) {
+            e.preventDefault();
+            switchToPreviousTab();
+        }
+    });
+}
+
+// 切换到下一个tab
+function switchToNextTab() {
+    const allTabs = document.querySelectorAll('.tab');
+    if (allTabs.length <= 1) return;
+    
+    const currentActiveTab = document.querySelector('.tab.active');
+    if (!currentActiveTab) return;
+    
+    // 找到当前tab的索引
+    let currentIndex = -1;
+    allTabs.forEach((tab, index) => {
+        if (tab === currentActiveTab) {
+            currentIndex = index;
+        }
+    });
+    
+    // 切换到下一个tab（循环）
+    const nextIndex = (currentIndex + 1) % allTabs.length;
+    const nextTab = allTabs[nextIndex];
+    
+    if (nextTab && nextTab.id) {
+        selectTab(nextTab.id);
+    }
+}
+
+// 切换到上一个tab
+function switchToPreviousTab() {
+    const allTabs = document.querySelectorAll('.tab');
+    if (allTabs.length <= 1) return;
+    
+    const currentActiveTab = document.querySelector('.tab.active');
+    if (!currentActiveTab) return;
+    
+    // 找到当前tab的索引
+    let currentIndex = -1;
+    allTabs.forEach((tab, index) => {
+        if (tab === currentActiveTab) {
+            currentIndex = index;
+        }
+    });
+    
+    // 切换到上一个tab（循环）
+    const prevIndex = currentIndex === 0 ? allTabs.length - 1 : currentIndex - 1;
+    const prevTab = allTabs[prevIndex];
+    
+    if (prevTab && prevTab.id) {
+        selectTab(prevTab.id);
+    }
+}
