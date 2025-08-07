@@ -79,17 +79,14 @@ function createCollapsibleCaseItem(caseName, casePath) {
     const caseHeader = document.createElement('div');
     caseHeader.className = 'case-header';
     
-    // 折叠/展开箭头
-    const toggleIcon = document.createElement('svg');
-    toggleIcon.className = 'case-toggle-icon';
-    toggleIcon.setAttribute('viewBox', '0 0 24 24');
-    toggleIcon.innerHTML = '<path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>';
-    
-    // Case图标
-    const caseIcon = document.createElement('svg');
+    // Case文件夹图标 - 直接点击切换展开/折叠
+    const caseIconContainer = document.createElement('div');
+    caseIconContainer.className = 'icon-container case-icon-wrapper';
+    const caseIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     caseIcon.className = 'case-icon';
     caseIcon.setAttribute('viewBox', '0 0 24 24');
-    caseIcon.innerHTML = '<path fill="currentColor" d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
+    caseIcon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
+    caseIconContainer.appendChild(caseIcon);
     
     // Case名称
     const caseLabelSpan = document.createElement('span');
@@ -104,14 +101,14 @@ function createCollapsibleCaseItem(caseName, casePath) {
     const isExpanded = expandedCases.has(casePath);
     if (isExpanded) {
         scriptsContainer.classList.remove('collapsed');
-        toggleIcon.style.transform = 'rotate(90deg)';
+        // 展开状态使用打开的文件夹图标
+        caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
     } else {
         scriptsContainer.classList.add('collapsed');
-        toggleIcon.style.transform = 'rotate(0deg)';
+        // 折叠状态使用关闭的文件夹图标 (已在创建时设置)
     }
     
-    caseHeader.appendChild(toggleIcon);
-    caseHeader.appendChild(caseIcon);
+    caseHeader.appendChild(caseIconContainer);
     caseHeader.appendChild(caseLabelSpan);
     
     caseContainer.appendChild(caseHeader);
@@ -172,18 +169,21 @@ function createScriptItem(scriptName, scriptPath, casePath) {
     scriptItem.dataset.casePath = casePath;
     scriptItem.dataset.scriptName = scriptName;
     
-    // 脚本图标
-    const scriptIcon = document.createElement('svg');
+    // 脚本图标 - 使用固定容器
+    const scriptContainer = document.createElement('div');
+    scriptContainer.className = 'icon-container script-container';
+    const scriptIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     scriptIcon.className = 'script-icon';
     scriptIcon.setAttribute('viewBox', '0 0 24 24');
-    scriptIcon.innerHTML = '<path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/>';
+    scriptIcon.innerHTML = '<path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/>';
+    scriptContainer.appendChild(scriptIcon);
     
     // 脚本名称
     const scriptLabel = document.createElement('span');
     scriptLabel.className = 'script-label';
     scriptLabel.textContent = scriptName;
     
-    scriptItem.appendChild(scriptIcon);
+    scriptItem.appendChild(scriptContainer);
     scriptItem.appendChild(scriptLabel);
     
     // 点击打开文件
@@ -213,17 +213,21 @@ function createScriptItem(scriptName, scriptPath, casePath) {
 // 切换case文件夹的折叠状态
 function toggleCaseFolder(caseContainer) {
     const scriptsContainer = caseContainer.querySelector('.scripts-container');
-    const toggleIcon = caseContainer.querySelector('.case-toggle-icon');
+    const caseIcon = caseContainer.querySelector('.case-icon');
     const casePath = caseContainer.dataset.casePath;
     
     if (scriptsContainer.classList.contains('collapsed')) {
+        // 展开
         scriptsContainer.classList.remove('collapsed');
-        toggleIcon.style.transform = 'rotate(90deg)';
         expandedCases.add(casePath);
+        // 切换到打开的文件夹图标
+        caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
     } else {
+        // 折叠
         scriptsContainer.classList.add('collapsed');
-        toggleIcon.style.transform = 'rotate(0deg)';
         expandedCases.delete(casePath);
+        // 切换到关闭的文件夹图标
+        caseIcon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
     }
 }
 
@@ -232,9 +236,13 @@ function createTreeItem(name, type, fullPath) {
     const item = document.createElement('div');
     item.className = `tree-item ${type === 'folder' ? 'tree-folder' : ''}`;
     
-    const icon = document.createElement('svg');
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     icon.className = 'tree-icon';
     icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('width', '16');
+    icon.setAttribute('height', '16');
+    icon.style.width = '16px';
+    icon.style.height = '16px';
     
     if (type === 'folder') {
         icon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
