@@ -1119,29 +1119,32 @@ async function createUIOverlay(elements, screenSize) {
     const oldOverlay = screenContent.querySelector('.ui-overlay');
     if (oldOverlay) oldOverlay.remove();
     
-    // 创建新的叠层容器
+    // 计算图片在容器中的实际显示区域
+    const imageDisplayInfo = calculateImageDisplayArea(deviceImage, screenContent);
+    if (!imageDisplayInfo) {
+        console.error('无法计算图片显示区域');
+        return;
+    }
+    
+    console.log('图片显示信息:', imageDisplayInfo);
+    console.log('设备屏幕尺寸:', screenSize);
+    
+    // 创建新的叠层容器，只覆盖图片显示区域
     const overlay = document.createElement('div');
     overlay.className = 'ui-overlay';
     overlay.style.cssText = `
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        left: ${imageDisplayInfo.left}px;
+        top: ${imageDisplayInfo.top}px;
+        width: ${imageDisplayInfo.width}px;
+        height: ${imageDisplayInfo.height}px;
         pointer-events: none;
         z-index: 10;
     `;
     
-    // 获取图片实际显示尺寸
-    const imageRect = deviceImage.getBoundingClientRect();
-    const containerRect = screenContent.getBoundingClientRect();
-    
-    console.log('图片尺寸:', imageRect);
-    console.log('屏幕尺寸:', screenSize);
-    
     // 为每个UI元素创建可视化标记
     elements.forEach((element, index) => {
-        const marker = createElementMarker(element, screenSize, imageRect, containerRect);
+        const marker = createElementMarker(element, screenSize, imageDisplayInfo);
         overlay.appendChild(marker);
     });
     
@@ -1150,52 +1153,84 @@ async function createUIOverlay(elements, screenSize) {
     screenContent.appendChild(overlay);
 }
 
-function createElementMarker(element, screenSize, imageRect, containerRect) {
+// 计算图片在容器中的实际显示区域
+function calculateImageDisplayArea(image, container) {
+    if (!image.complete || !image.naturalWidth || !image.naturalHeight) {
+        return null;
+    }
+    
+    const containerStyle = getComputedStyle(container);
+    const containerPadding = {
+        left: parseFloat(containerStyle.paddingLeft) || 0,
+        top: parseFloat(containerStyle.paddingTop) || 0,
+        right: parseFloat(containerStyle.paddingRight) || 0,
+        bottom: parseFloat(containerStyle.paddingBottom) || 0
+    };
+    
+    // 容器可用空间
+    const availableWidth = container.clientWidth - containerPadding.left - containerPadding.right;
+    const availableHeight = container.clientHeight - containerPadding.top - containerPadding.bottom;
+    
+    // 图片原始尺寸
+    const imageNaturalRatio = image.naturalWidth / image.naturalHeight;
+    const availableRatio = availableWidth / availableHeight;
+    
+    let displayWidth, displayHeight;
+    
+    // 模拟 object-fit: contain 的行为
+    if (imageNaturalRatio > availableRatio) {
+        // 图片更宽，以宽度为准
+        displayWidth = availableWidth;
+        displayHeight = availableWidth / imageNaturalRatio;
+    } else {
+        // 图片更高，以高度为准
+        displayHeight = availableHeight;
+        displayWidth = availableHeight * imageNaturalRatio;
+    }
+    
+    // 计算图片在容器中的位置（居中显示）
+    const left = containerPadding.left + (availableWidth - displayWidth) / 2;
+    const top = containerPadding.top + (availableHeight - displayHeight) / 2;
+    
+    return {
+        left,
+        top,
+        width: displayWidth,
+        height: displayHeight,
+        scaleX: displayWidth / image.naturalWidth,
+        scaleY: displayHeight / image.naturalHeight
+    };
+}
+
+function createElementMarker(element, screenSize, imageDisplayInfo) {
     const marker = document.createElement('div');
     marker.className = 'ui-element-marker';
     marker.dataset.elementIndex = element.index;
     
-    // 计算缩放比例
-    const scaleX = imageRect.width / screenSize.width;
-    const scaleY = imageRect.height / screenSize.height;
+    // 使用设备屏幕尺寸和图片显示比例计算位置
+    const scaleX = imageDisplayInfo.width / screenSize.width;
+    const scaleY = imageDisplayInfo.height / screenSize.height;
     
-    // 计算在容器中的位置
+    // 计算在overlay中的相对位置
     const left = element.bounds[0] * scaleX;
     const top = element.bounds[1] * scaleY;
     const width = element.width * scaleX;
     const height = element.height * scaleY;
     
+    // 只设置位置和尺寸，样式交给CSS处理
     marker.style.cssText = `
         position: absolute;
         left: ${left}px;
         top: ${top}px;
         width: ${width}px;
         height: ${height}px;
-        border: 2px solid #00ff00;
-        background: rgba(0, 255, 0, 0.1);
-        pointer-events: all;
-        cursor: pointer;
-        box-sizing: border-box;
-        transition: all 0.2s ease;
     `;
     
     // 添加元素索引标签
     const label = document.createElement('div');
     label.className = 'element-label';
     label.textContent = element.index;
-    label.style.cssText = `
-        position: absolute;
-        top: -20px;
-        left: 0;
-        background: #00ff00;
-        color: black;
-        padding: 2px 4px;
-        font-size: 12px;
-        font-weight: bold;
-        border-radius: 3px;
-        min-width: 16px;
-        text-align: center;
-    `;
+    // 样式由CSS类处理，只设置文本内容
     marker.appendChild(label);
     
     // 添加交互事件
@@ -1262,23 +1297,14 @@ function showElementTooltip(element, marker, event) {
     tooltip.style.left = Math.max(10, left) + 'px';
     tooltip.style.top = Math.max(10, top) + 'px';
     
-    // 高亮当前元素
-    marker.style.borderColor = '#ffff00';
-    marker.style.background = 'rgba(255, 255, 0, 0.2)';
+    // CSS hover状态会自动处理高亮效果
 }
 
 function hideElementTooltip() {
     const tooltip = document.querySelector('.element-tooltip');
     if (tooltip) tooltip.remove();
     
-    // 恢复所有元素的样式（除了选中的）
-    const markers = document.querySelectorAll('.ui-element-marker');
-    markers.forEach(marker => {
-        if (!marker.classList.contains('selected')) {
-            marker.style.borderColor = '#00ff00';
-            marker.style.background = 'rgba(0, 255, 0, 0.1)';
-        }
-    });
+    // CSS会自动处理样式状态，无需手动重置
 }
 
 function displayUIElementList(elements) {
@@ -1610,13 +1636,16 @@ function recalculateXmlMarkersPosition() {
         return; // 如果没有overlay或元素，不需要重新计算
     }
     
-    // 获取当前图片和容器的尺寸
-    const imageRect = deviceImage.getBoundingClientRect();
-    const containerRect = screenContent.getBoundingClientRect();
+    // 重新计算图片显示区域
+    const imageDisplayInfo = calculateImageDisplayArea(deviceImage, screenContent);
+    if (!imageDisplayInfo) {
+        console.error('重新计算时无法获取图片显示区域');
+        return;
+    }
     
-    console.log('重新计算XML标记位置 - 图片尺寸:', imageRect);
+    console.log('重新计算XML标记位置 - 新的显示区域:', imageDisplayInfo);
     
-    // 获取原始屏幕尺寸（如果可用的话）
+    // 获取原始屏幕尺寸
     let screenSize = currentScreenSize;
     if (!screenSize) {
         // 尝试从第一个元素推断屏幕尺寸
@@ -1627,23 +1656,29 @@ function recalculateXmlMarkersPosition() {
         screenSize = { width: maxBounds.width, height: maxBounds.height };
     }
     
+    // 更新overlay本身的位置和大小
+    overlay.style.left = imageDisplayInfo.left + 'px';
+    overlay.style.top = imageDisplayInfo.top + 'px';
+    overlay.style.width = imageDisplayInfo.width + 'px';
+    overlay.style.height = imageDisplayInfo.height + 'px';
+    
     // 重新计算每个标记的位置
     const markers = overlay.querySelectorAll('.ui-element-marker');
-    markers.forEach((marker, index) => {
+    markers.forEach((marker) => {
         const elementIndex = parseInt(marker.dataset.elementIndex);
         const element = currentUIElements.find(el => el.index === elementIndex);
         
         if (element) {
-            // 计算新的缩放比例和位置
-            const scaleX = imageRect.width / screenSize.width;
-            const scaleY = imageRect.height / screenSize.height;
+            // 使用新的缩放比例计算位置
+            const scaleX = imageDisplayInfo.width / screenSize.width;
+            const scaleY = imageDisplayInfo.height / screenSize.height;
             
             const left = element.bounds[0] * scaleX;
             const top = element.bounds[1] * scaleY;
             const width = element.width * scaleX;
             const height = element.height * scaleY;
             
-            // 更新标记位置
+            // 更新标记位置（相对于overlay）
             marker.style.left = left + 'px';
             marker.style.top = top + 'px';
             marker.style.width = width + 'px';
@@ -1713,7 +1748,7 @@ const ConsoleManager = {
 
 // 窗口大小变化时的响应式处理
 function handleWindowResize() {
-    // 防抖延迟重新计算
+    // 防抖延迟重新计算，缩短延迟时间以提高响应性
     if (handleWindowResize.timeout) {
         clearTimeout(handleWindowResize.timeout);
     }
@@ -1723,7 +1758,7 @@ function handleWindowResize() {
         if (xmlOverlayEnabled && currentUIElements.length > 0) {
             recalculateXmlMarkersPosition();
         }
-    }, 200);
+    }, 100);
 }
 
 // 在页面加载时初始化

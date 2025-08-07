@@ -1761,48 +1761,7 @@ body {
     z-index: 10;
 }
 
-.ui-element-marker {
-    position: absolute;
-    border: 2px solid #00ff00;
-    background: rgba(0, 255, 0, 0.1);
-    pointer-events: all;
-    cursor: pointer;
-    box-sizing: border-box;
-    transition: all 0.2s ease;
-}
-
-.ui-element-marker:hover {
-    border-color: #ffff00 !important;
-    background: rgba(255, 255, 0, 0.2) !important;
-    z-index: 20;
-}
-
-.ui-element-marker.selected {
-    border-color: #ff0000 !important;
-    background: rgba(255, 0, 0, 0.2) !important;
-    border-width: 3px !important;
-    z-index: 15;
-}
-
-.element-label {
-    position: absolute;
-    top: -20px;
-    left: 0;
-    background: #00ff00;
-    color: black;
-    padding: 2px 4px;
-    font-size: 12px;
-    font-weight: bold;
-    border-radius: 3px;
-    min-width: 16px;
-    text-align: center;
-    font-family: monospace;
-}
-
-.ui-element-marker.selected .element-label {
-    background: #ff0000;
-    color: white;
-}
+/* 第一个重复定义已移除，统一使用下方的优化版本 */
 
 .element-tooltip {
     position: fixed;
@@ -1959,6 +1918,85 @@ body {
 /* 确保设备屏幕容器支持叠层 */
 #screenContent {
     position: relative;
+}
+
+/* XML Overlay 标记优化样式 */
+.ui-overlay {
+    /* 确保overlay不会阻挡图片下方的交互 */
+    pointer-events: none;
+}
+
+/* XML Overlay 标记 - 统一优化样式 */
+.ui-element-marker {
+    position: absolute;
+    /* 使用更细的边框，视觉效果更好 */
+    border: 1px solid #007ACC;
+    background: rgba(0, 122, 204, 0.08);
+    /* 只有标记本身可以交互，不阻挡下层元素 */
+    pointer-events: all;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 2px;
+    /* 确保小元素仍可见和可点击 */
+    min-width: 8px;
+    min-height: 8px;
+    /* 提升性能的优化 */
+    will-change: transform, border-color, background-color;
+}
+
+.ui-element-marker:hover {
+    border-color: #005a9e;
+    background: rgba(0, 122, 204, 0.15);
+    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.25);
+    transform: scale(1.01);
+    z-index: 20;
+}
+
+.ui-element-marker:hover .element-label {
+    background: #005a9e;
+    transform: scale(1.05);
+}
+
+.ui-element-marker.selected {
+    border-color: #ff6b35;
+    background: rgba(255, 107, 53, 0.12);
+    box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.4);
+    z-index: 15;
+}
+
+.ui-element-marker.selected .element-label {
+    background: #ff6b35;
+}
+
+/* 元素标签优化 */
+.element-label {
+    position: absolute;
+    top: -16px;
+    left: 0;
+    background: #007ACC;
+    color: white;
+    padding: 1px 4px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 2px;
+    min-width: 14px;
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+    /* 防止标签超出屏幕边界 */
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* 性能优化 */
+    will-change: transform, background-color;
+}
+
+.element-label {
+    /* 防止标签超出屏幕边界 */
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* 嵌入式UI元素面板样式 */
