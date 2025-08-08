@@ -1040,6 +1040,64 @@ body {
     font-weight: bold;
 }
 
+/* 图片定位器样式 */
+/* 移除wrapper样式，简化结构 */
+
+.inline-image-locator {
+    /* 简化方案：作为普通行内元素，不影响文本流 */
+    height: 18px; /* 稍小于一行高度，避免影响行高 */
+    width: auto; /* 自动宽度保持比例 */
+    max-width: 36px; /* 合理的最大宽度 */
+    border-radius: 2px;
+    border: 1px solid #444;
+    vertical-align: middle; /* 与文字中线对齐 */
+    cursor: text;
+    transition: all 0.2s ease;
+    object-fit: contain; /* 保持图片宽高比 */
+    background: #2d2d2d;
+    user-select: none;
+    pointer-events: auto;
+    margin: 0 1px; /* 小边距，避免与文字粘连 */
+}
+
+.inline-image-locator:hover {
+    border-color: #569cd6;
+    box-shadow: 0 0 4px rgba(86, 156, 214, 0.3);
+    background: #363636;
+}
+
+.inline-image-locator:active,
+.inline-image-locator:focus {
+    border-color: #007acc;
+    box-shadow: 0 0 6px rgba(0, 122, 204, 0.4);
+    outline: none;
+}
+
+/* ContentEditable编辑器样式 */
+.editor-content {
+    font-family: Consolas, "Courier New", monospace !important;
+    font-size: 14px !important;
+    line-height: 21px !important;
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+    font-kerning: none !important;
+    text-rendering: optimizeSpeed !important;
+    -webkit-font-smoothing: none !important;
+    outline: none !important;
+    border: none !important;
+}
+
+.image-locator-fallback {
+    color: #ce9178;
+}
+
+/* 图片行的空行号样式 */
+.line-number.image-line {
+    /* 空行号，用于图片显示行 */
+    color: transparent;
+    background: rgba(100, 100, 100, 0.1); /* 淡色背景提示这是图片行 */
+}
+
 /* Case Explorer 新样式 */
 .case-container {
     margin-bottom: 8px;

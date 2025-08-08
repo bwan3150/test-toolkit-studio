@@ -89,6 +89,11 @@ class LocatorManager {
             }
             
             this.updateLocatorList(this.locators);
+            
+            // 刷新编辑器中的图片定位器显示
+            if (window.AppGlobals.codeEditor && typeof window.AppGlobals.codeEditor.refreshImageLocators === 'function') {
+                window.AppGlobals.codeEditor.refreshImageLocators();
+            }
         } catch (error) {
             console.error('加载locator失败:', error);
             window.NotificationModule.showNotification('加载Locator库失败', 'error');

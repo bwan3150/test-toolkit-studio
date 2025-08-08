@@ -2410,6 +2410,11 @@ const ScreenModeManager = {
                 window.LocatorManagerModule.loadLocators();
             }
             
+            // 刷新编辑器中的图片定位器显示
+            if (window.AppGlobals.codeEditor && typeof window.AppGlobals.codeEditor.refreshImageLocators === 'function') {
+                window.AppGlobals.codeEditor.refreshImageLocators();
+            }
+            
             return true; // 保存成功
             
         } catch (error) {
