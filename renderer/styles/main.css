@@ -2550,7 +2550,8 @@ body {
 .locator-list {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: visible;
+    padding: 8px 0; /* 增加上下内边距，为hover效果留出空间 */
 }
 
 .locator-item {

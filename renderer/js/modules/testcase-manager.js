@@ -2480,7 +2480,7 @@ const ScreenModeManager = {
             coordinateMarker.style.top = screenY + 'px';
             
             // 更新坐标标签
-            const coordText = `(${deviceCoords.x}, ${deviceCoords.y})`;
+            const coordText = `${deviceCoords.x},${deviceCoords.y}`;
             coordinateLabel.textContent = coordText;
             
             // 复制到剪贴板
