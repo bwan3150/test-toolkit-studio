@@ -356,10 +356,24 @@ ipcMain.handle('create-project-structure', async (event, projectPath) => {
     await fs.mkdir(path.join(projectPath, 'cases'), { recursive: true });
     await fs.mkdir(path.join(projectPath, 'devices'), { recursive: true });
     await fs.mkdir(path.join(projectPath, 'workarea'), { recursive: true });
+    await fs.mkdir(path.join(projectPath, 'result'), { recursive: true });
     
     // Create initial files
     await fs.writeFile(path.join(projectPath, 'testcase_map.json'), '{}', 'utf-8');
     await fs.writeFile(path.join(projectPath, 'testcase_sheet.csv'), '', 'utf-8');
+    
+    // Create README for each folder
+    await fs.writeFile(
+      path.join(projectPath, 'workarea', 'README.md'),
+      '# Workarea\n\n此文件夹用于存放临时文件，如当前截图和UI树XML文件。',
+      'utf-8'
+    );
+    
+    await fs.writeFile(
+      path.join(projectPath, 'result', 'README.md'),
+      '# Result\n\n此文件夹用于存放测试执行结果。',
+      'utf-8'
+    );
     
     console.log('Project structure created at:', projectPath);
     return { success: true };
@@ -594,4 +608,63 @@ ipcMain.handle('navigate-to-app', async () => {
 ipcMain.handle('navigate-to-login', async () => {
   mainWindow.loadFile('renderer/login.html');
   return { success: true };
+});
+
+// 执行ADB Shell命令 - 用于TKS脚本引擎
+ipcMain.handle('adb-shell-command', async (event, command, deviceId = null) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: 'Built-in Android SDK not found' };
+    }
+    
+    // 构建完整的ADB命令
+    const deviceArg = deviceId ? `-s ${deviceId}` : '';
+    const fullCommand = `"${adbPath}" ${deviceArg} shell ${command}`;
+    
+    console.log('执行ADB Shell命令:', fullCommand);
+    
+    const { stdout, stderr } = await execPromise(fullCommand);
+    
+    if (stderr && !stderr.includes('Warning')) {
+      // 某些ADB命令会在stderr输出警告，但仍然成功
+      console.warn('ADB命令警告:', stderr);
+    }
+    
+    return { 
+      success: true, 
+      output: stdout,
+      error: stderr
+    };
+  } catch (error) {
+    console.error('ADB Shell命令执行失败:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      output: error.stdout || '',
+      stderr: error.stderr || ''
+    };
+  }
+});
+
+// 批量执行ADB命令 - 用于复杂操作
+ipcMain.handle('adb-batch-commands', async (event, commands, deviceId = null) => {
+  const results = [];
+  
+  for (const command of commands) {
+    const result = await ipcMain._events['adb-shell-command'][0](event, command, deviceId);
+    results.push({
+      command,
+      ...result
+    });
+    
+    // 如果某个命令失败，停止执行
+    if (!result.success && command.required !== false) {
+      break;
+    }
+  }
+  
+  return results;
 });

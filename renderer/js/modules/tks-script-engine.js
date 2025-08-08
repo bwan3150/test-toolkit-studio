@@ -1,0 +1,1129 @@
+// TKS脚本引擎模块
+// 用于解析和执行.tks测试脚本
+
+// 使用立即执行函数避免全局变量污染
+(function() {
+    // 获取全局模块的引用，避免与全局变量冲突
+    let tksFs, tksPath;
+    
+    const initModules = () => {
+        if (window.AppGlobals) {
+            tksFs = window.AppGlobals.fs;
+            tksPath = window.AppGlobals.path;
+        } else {
+            tksFs = (window.nodeRequire ? window.nodeRequire('fs') : require('fs')).promises;
+            tksPath = window.nodeRequire ? window.nodeRequire('path') : require('path');
+        }
+    };
+    
+    // 立即初始化
+    initModules();
+
+/**
+ * TKS脚本解析器类
+ * 负责解析.tks脚本文件并转换为可执行的指令序列
+ */
+class TKSScriptParser {
+    constructor() {
+        // 支持的命令类型
+        this.commandTypes = {
+            '启动': 'launch',
+            '关闭': 'close',
+            '点击': 'click',
+            '按压': 'press',
+            '滑动': 'swipe',
+            '定向滑动': 'directional_swipe',
+            '输入': 'input',
+            '清理': 'clear',
+            '隐藏键盘': 'hide_keyboard',
+            '返回': 'back',
+            '等待': 'wait',
+            '断言': 'assert'
+        };
+
+        // 方向映射
+        this.directions = {
+            '上': 'up',
+            '下': 'down',
+            '左': 'left',
+            '右': 'right'
+        };
+    }
+
+    /**
+     * 解析.tks脚本文件
+     * @param {string} scriptPath - 脚本文件路径
+     * @returns {Object} 解析后的脚本对象
+     */
+    async parseFile(scriptPath) {
+        const content = await tksFs.readFile(scriptPath, 'utf-8');
+        return this.parse(content);
+    }
+
+    /**
+     * 解析脚本内容
+     * @param {string} content - 脚本内容
+     * @returns {Object} 解析后的脚本对象
+     */
+    parse(content) {
+        const lines = content.split('\n').map(line => line.trim());
+        const script = {
+            caseId: '',
+            scriptName: '',
+            details: {},
+            steps: [],
+            metadata: {
+                createTime: new Date().toISOString(),
+                version: '1.0'
+            }
+        };
+
+        let currentSection = null;
+        let currentStep = null;
+        let inDetails = false;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // 跳过空行和注释
+            if (!line || line.startsWith('#')) continue;
+
+            // 解析用例ID
+            if (line.startsWith('用例:')) {
+                script.caseId = line.substring(3).trim();
+                continue;
+            }
+
+            // 解析脚本名
+            if (line.startsWith('脚本名:')) {
+                script.scriptName = line.substring(4).trim();
+                continue;
+            }
+
+            // 进入详情部分
+            if (line === '详情:') {
+                inDetails = true;
+                currentSection = 'details';
+                continue;
+            }
+
+            // 进入步骤部分
+            if (line === '步骤:') {
+                inDetails = false;
+                currentSection = 'steps';
+                continue;
+            }
+
+            // 解析详情内容
+            if (inDetails && line.includes(':')) {
+                const [key, value] = line.split(':').map(s => s.trim());
+                script.details[key] = value;
+                continue;
+            }
+
+            // 解析步骤
+            if (currentSection === 'steps') {
+                const step = this.parseStep(line);
+                if (step) {
+                    script.steps.push(step);
+                }
+            }
+        }
+
+        return script;
+    }
+
+    /**
+     * 解析单个步骤
+     * @param {string} line - 步骤行
+     * @returns {Object|null} 步骤对象
+     */
+    parseStep(line) {
+        // 先尝试匹配方括号格式：命令 [参数1, 参数2]
+        let match = line.match(/^(\S+)\s*\[(.*)\]$/);
+        let command, paramsStr;
+        
+        if (match) {
+            // 方括号格式
+            command = match[1];
+            paramsStr = match[2];
+        } else {
+            // 尝试匹配简单格式：命令 参数1 参数2
+            match = line.match(/^(\S+)\s+(.*)$/);
+            if (match) {
+                command = match[1];
+                paramsStr = match[2];
+                // 将简单格式转换为方括号格式以便统一处理
+                paramsStr = paramsStr.trim();
+            } else {
+                // 只有命令，没有参数
+                match = line.match(/^(\S+)$/);
+                if (match) {
+                    command = match[1];
+                    paramsStr = '';
+                } else {
+                    return null;
+                }
+            }
+        }
+
+        const commandType = this.commandTypes[command];
+        
+        if (!commandType) {
+            console.warn(`未知命令: ${command}`);
+            return null;
+        }
+
+        // 解析参数
+        const params = this.parseParameters(paramsStr);
+        
+        return {
+            type: commandType,
+            command: command,
+            params: params,
+            raw: line
+        };
+    }
+
+    /**
+     * 解析参数字符串
+     * @param {string} paramsStr - 参数字符串
+     * @returns {Array} 参数数组
+     */
+    parseParameters(paramsStr) {
+        if (!paramsStr.trim()) return [];
+        
+        // 检查是否包含逗号（方括号格式）
+        if (paramsStr.includes(',')) {
+            // 方括号格式：分割参数，处理可能包含逗号的字符串
+            const params = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < paramsStr.length; i++) {
+                const char = paramsStr[i];
+                
+                if (char === '"' || char === "'") {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    params.push(this.parseParameter(current.trim()));
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            if (current.trim()) {
+                params.push(this.parseParameter(current.trim()));
+            }
+            
+            return params;
+        } else {
+            // 简单格式：按空格分割，但保持引号内的内容
+            const tokens = [];
+            let current = '';
+            let inQuotes = false;
+            let quoteChar = '';
+            
+            for (let i = 0; i < paramsStr.length; i++) {
+                const char = paramsStr[i];
+                
+                if ((char === '"' || char === "'") && !inQuotes) {
+                    inQuotes = true;
+                    quoteChar = char;
+                    current += char;
+                } else if (char === quoteChar && inQuotes) {
+                    inQuotes = false;
+                    current += char;
+                    quoteChar = '';
+                } else if (char === ' ' && !inQuotes) {
+                    if (current.trim()) {
+                        tokens.push(this.parseParameter(current.trim()));
+                        current = '';
+                    }
+                } else {
+                    current += char;
+                }
+            }
+            
+            if (current.trim()) {
+                tokens.push(this.parseParameter(current.trim()));
+            }
+            
+            return tokens;
+        }
+    }
+
+    /**
+     * 解析单个参数
+     * @param {string} param - 参数字符串
+     * @returns {*} 解析后的参数值
+     */
+    parseParameter(param) {
+        // 移除引号
+        if ((param.startsWith('"') && param.endsWith('"')) ||
+            (param.startsWith("'") && param.endsWith("'"))) {
+            return param.slice(1, -1);
+        }
+        
+        // 解析数字
+        if (/^\d+$/.test(param)) {
+            return parseInt(param);
+        }
+        
+        // 解析时间（如 10s）
+        if (/^\d+s$/.test(param)) {
+            return {
+                type: 'duration',
+                value: parseInt(param.slice(0, -1)),
+                unit: 'seconds'
+            };
+        }
+        
+        // 解析坐标 [x,y]
+        if (/^\d+,\d+$/.test(param)) {
+            const [x, y] = param.split(',').map(n => parseInt(n));
+            return { type: 'coordinate', x, y };
+        }
+        
+        // 解析方向
+        if (this.directions[param]) {
+            return { type: 'direction', value: this.directions[param] };
+        }
+        
+        // 解析布尔值
+        if (param === '存在' || param === 'true') return true;
+        if (param === '不存在' || param === 'false') return false;
+        
+        // 默认返回字符串
+        return param;
+    }
+}
+
+/**
+ * TKS脚本执行器类
+ * 负责执行解析后的脚本指令
+ */
+class TKSScriptExecutor {
+    constructor(projectPath, deviceId = null) {
+        this.projectPath = projectPath;
+        this.deviceId = deviceId;
+        this.isRunning = false;
+        this.currentStep = 0;
+        this.elementCache = new Map();
+    }
+
+    /**
+     * 执行脚本
+     * @param {Object} script - 解析后的脚本对象
+     * @returns {Object} 执行结果
+     */
+    async execute(script) {
+        this.isRunning = true;
+        this.currentStep = 0;
+        
+        const result = {
+            success: true,
+            caseId: script.caseId,
+            scriptName: script.scriptName,
+            startTime: new Date().toISOString(),
+            endTime: null,
+            steps: [],
+            error: null
+        };
+
+        try {
+            // 执行每个步骤
+            for (const step of script.steps) {
+                if (!this.isRunning) {
+                    result.error = '执行被中止';
+                    result.success = false;
+                    break;
+                }
+
+                this.currentStep++;
+                console.log(`执行步骤 ${this.currentStep}: ${step.raw}`);
+                
+                const stepResult = await this.executeStep(step, script);
+                result.steps.push({
+                    index: this.currentStep,
+                    ...stepResult
+                });
+
+                if (!stepResult.success) {
+                    result.success = false;
+                    result.error = stepResult.error;
+                    break;
+                }
+            }
+        } catch (error) {
+            result.success = false;
+            result.error = error.message;
+        }
+
+        result.endTime = new Date().toISOString();
+        this.isRunning = false;
+        
+        // 保存执行结果
+        await this.saveResult(result);
+        
+        return result;
+    }
+
+    /**
+     * 执行单个步骤
+     * @param {Object} step - 步骤对象
+     * @param {Object} script - 完整脚本对象（用于获取上下文）
+     * @returns {Object} 步骤执行结果
+     */
+    async executeStep(step, script) {
+        const startTime = Date.now();
+        const result = {
+            type: step.type,
+            command: step.command,
+            params: step.params,
+            success: true,
+            error: null,
+            duration: 0
+        };
+
+        try {
+            // 在执行前获取当前UI状态
+            await this.captureCurrentState();
+
+            switch (step.type) {
+                case 'launch':
+                    await this.executeLaunch(step.params, script.details);
+                    break;
+                case 'close':
+                    await this.executeClose(step.params);
+                    break;
+                case 'click':
+                    await this.executeClick(step.params);
+                    break;
+                case 'press':
+                    await this.executePress(step.params);
+                    break;
+                case 'swipe':
+                    await this.executeSwipe(step.params);
+                    break;
+                case 'directional_swipe':
+                    await this.executeDirectionalSwipe(step.params);
+                    break;
+                case 'input':
+                    await this.executeInput(step.params);
+                    break;
+                case 'clear':
+                    await this.executeClear(step.params);
+                    break;
+                case 'hide_keyboard':
+                    await this.executeHideKeyboard();
+                    break;
+                case 'back':
+                    await this.executeBack();
+                    break;
+                case 'wait':
+                    await this.executeWait(step.params);
+                    break;
+                case 'assert':
+                    await this.executeAssert(step.params);
+                    break;
+                default:
+                    throw new Error(`未知的命令类型: ${step.type}`);
+            }
+        } catch (error) {
+            result.success = false;
+            result.error = error.message;
+        }
+
+        result.duration = Date.now() - startTime;
+        return result;
+    }
+
+    /**
+     * 获取当前UI状态（截图和XML）
+     */
+    async captureCurrentState() {
+        const { ipcRenderer } = window.AppGlobals;
+        
+        // 获取截图和UI树
+        const screenshotResult = await ipcRenderer.invoke('adb-screenshot', this.deviceId, this.projectPath);
+        if (!screenshotResult.success) {
+            throw new Error('获取屏幕截图失败: ' + screenshotResult.error);
+        }
+
+        // 获取UI树
+        const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', this.deviceId);
+        if (uiDumpResult.success) {
+            // 解析UI树并缓存元素
+            const parser = new window.XMLParser();
+            if (uiDumpResult.screenSize) {
+                parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
+            }
+            
+            const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
+            const elements = parser.extractUIElements(optimizedTree || uiDumpResult.xml);
+            
+            // 缓存元素供后续使用
+            this.currentElements = elements;
+            this.currentUITree = uiDumpResult.xml;
+        }
+    }
+
+    /**
+     * 启动应用
+     */
+    async executeLaunch(params, details) {
+        const { ipcRenderer } = window.AppGlobals;
+        const appPackage = params[0] || details.appPackage;
+        const appActivity = details.appActivity;
+        
+        if (!appPackage) {
+            throw new Error('未指定应用包名');
+        }
+
+        const command = appActivity ? 
+            `am start -n ${appPackage}/${appActivity}` :
+            `monkey -p ${appPackage} -c android.intent.category.LAUNCHER 1`;
+        
+        const result = await this.runAdbCommand(command);
+        if (!result.success) {
+            throw new Error(`启动应用失败: ${result.error}`);
+        }
+        
+        // 等待应用启动
+        await this.sleep(2000);
+    }
+
+    /**
+     * 关闭应用
+     */
+    async executeClose(params) {
+        const appPackage = params[0];
+        if (!appPackage) {
+            throw new Error('未指定应用包名');
+        }
+
+        const result = await this.runAdbCommand(`am force-stop ${appPackage}`);
+        if (!result.success) {
+            throw new Error(`关闭应用失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 点击操作
+     */
+    async executeClick(params) {
+        const target = params[0];
+        
+        if (!target) {
+            throw new Error('点击目标未指定');
+        }
+
+        let x, y;
+
+        // 判断目标类型
+        if (typeof target === 'object' && target.type === 'coordinate') {
+            // 直接使用坐标
+            x = target.x;
+            y = target.y;
+        } else if (typeof target === 'string') {
+            // 查找元素
+            const element = await this.findElement(target);
+            if (!element) {
+                throw new Error(`未找到元素: ${target}`);
+            }
+            x = element.centerX;
+            y = element.centerY;
+        } else {
+            throw new Error('无效的点击目标');
+        }
+
+        const result = await this.runAdbCommand(`input tap ${x} ${y}`);
+        if (!result.success) {
+            throw new Error(`点击失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 长按操作
+     */
+    async executePress(params) {
+        const target = params[0];
+        const duration = params[1] || 1000; // 默认1秒
+        
+        let x, y;
+
+        if (typeof target === 'object' && target.type === 'coordinate') {
+            x = target.x;
+            y = target.y;
+        } else if (typeof target === 'string') {
+            const element = await this.findElement(target);
+            if (!element) {
+                throw new Error(`未找到元素: ${target}`);
+            }
+            x = element.centerX;
+            y = element.centerY;
+        }
+
+        // 使用swipe模拟长按
+        const result = await this.runAdbCommand(`input swipe ${x} ${y} ${x} ${y} ${duration}`);
+        if (!result.success) {
+            throw new Error(`长按失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 滑动操作
+     */
+    async executeSwipe(params) {
+        const from = params[0];
+        const to = params[1];
+        const duration = params[2] || 300; // 默认300ms
+        
+        let x1, y1, x2, y2;
+
+        // 解析起始点
+        if (typeof from === 'object' && from.type === 'coordinate') {
+            x1 = from.x;
+            y1 = from.y;
+        } else if (typeof from === 'string') {
+            const element = await this.findElement(from);
+            if (!element) {
+                throw new Error(`未找到起始元素: ${from}`);
+            }
+            x1 = element.centerX;
+            y1 = element.centerY;
+        }
+
+        // 解析终点
+        if (typeof to === 'object' && to.type === 'coordinate') {
+            x2 = to.x;
+            y2 = to.y;
+        } else if (typeof to === 'string') {
+            const element = await this.findElement(to);
+            if (!element) {
+                throw new Error(`未找到目标元素: ${to}`);
+            }
+            x2 = element.centerX;
+            y2 = element.centerY;
+        }
+
+        const result = await this.runAdbCommand(`input swipe ${x1} ${y1} ${x2} ${y2} ${duration}`);
+        if (!result.success) {
+            throw new Error(`滑动失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 定向滑动操作
+     */
+    async executeDirectionalSwipe(params) {
+        const target = params[0];
+        const direction = params[1];
+        const distance = params[2] || 300; // 默认300像素
+        
+        let x, y;
+
+        if (typeof target === 'object' && target.type === 'coordinate') {
+            x = target.x;
+            y = target.y;
+        } else if (typeof target === 'string') {
+            const element = await this.findElement(target);
+            if (!element) {
+                throw new Error(`未找到元素: ${target}`);
+            }
+            x = element.centerX;
+            y = element.centerY;
+        }
+
+        let x2 = x, y2 = y;
+        const dir = direction.type === 'direction' ? direction.value : direction;
+
+        switch (dir) {
+            case 'up':
+                y2 = y - distance;
+                break;
+            case 'down':
+                y2 = y + distance;
+                break;
+            case 'left':
+                x2 = x - distance;
+                break;
+            case 'right':
+                x2 = x + distance;
+                break;
+            default:
+                throw new Error(`无效的方向: ${dir}`);
+        }
+
+        const result = await this.runAdbCommand(`input swipe ${x} ${y} ${x2} ${y2} 300`);
+        if (!result.success) {
+            throw new Error(`定向滑动失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 输入文本
+     */
+    async executeInput(params) {
+        const target = params[0];
+        const text = params[1] || '';
+        
+        // 先点击输入框
+        if (target) {
+            await this.executeClick([target]);
+            await this.sleep(500); // 等待键盘弹出
+        }
+
+        // 输入文本
+        const escapedText = text.replace(/"/g, '\\"').replace(/'/g, "\\'");
+        const result = await this.runAdbCommand(`input text "${escapedText}"`);
+        if (!result.success) {
+            throw new Error(`输入文本失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 清理输入框
+     */
+    async executeClear(params) {
+        const target = params[0];
+        
+        // 先点击输入框
+        if (target) {
+            await this.executeClick([target]);
+            await this.sleep(500);
+        }
+
+        // 全选并删除
+        await this.runAdbCommand('input keyevent KEYCODE_MOVE_END');
+        await this.runAdbCommand('input keyevent --longpress $(printf "KEYCODE_DEL %.0s" {1..50})');
+    }
+
+    /**
+     * 隐藏键盘
+     */
+    async executeHideKeyboard() {
+        const result = await this.runAdbCommand('input keyevent KEYCODE_BACK');
+        if (!result.success) {
+            // 尝试其他方法
+            await this.runAdbCommand('input keyevent 111'); // KEYCODE_ESCAPE
+        }
+    }
+
+    /**
+     * 返回操作
+     */
+    async executeBack() {
+        const result = await this.runAdbCommand('input keyevent KEYCODE_BACK');
+        if (!result.success) {
+            throw new Error(`返回操作失败: ${result.error}`);
+        }
+    }
+
+    /**
+     * 等待操作
+     */
+    async executeWait(params) {
+        const target = params[0];
+        
+        if (!target) {
+            throw new Error('等待目标未指定');
+        }
+
+        // 判断是时间等待还是元素等待
+        if (typeof target === 'object' && target.type === 'duration') {
+            // 时间等待
+            await this.sleep(target.value * 1000);
+        } else if (typeof target === 'string') {
+            // 元素等待
+            const timeout = 30000; // 最多等待30秒
+            const startTime = Date.now();
+            
+            while (Date.now() - startTime < timeout) {
+                await this.captureCurrentState();
+                const element = await this.findElement(target);
+                if (element) {
+                    return; // 找到元素，结束等待
+                }
+                await this.sleep(1000); // 每秒检查一次
+            }
+            
+            throw new Error(`等待元素超时: ${target}`);
+        }
+    }
+
+    /**
+     * 断言操作
+     */
+    async executeAssert(params) {
+        const target = params[0];
+        const condition = params[1];
+        const area = params[2]; // 可选的区域限制
+        
+        if (!target || condition === undefined) {
+            throw new Error('断言参数不完整');
+        }
+
+        await this.captureCurrentState();
+        const element = await this.findElement(target);
+        
+        // 根据条件类型进行断言
+        if (condition === true || condition === '存在') {
+            if (!element) {
+                throw new Error(`断言失败: 元素 "${target}" 不存在`);
+            }
+        } else if (condition === false || condition === '不存在') {
+            if (element) {
+                throw new Error(`断言失败: 元素 "${target}" 存在`);
+            }
+        } else if (typeof condition === 'string') {
+            // 文本断言
+            if (!element) {
+                throw new Error(`断言失败: 元素 "${target}" 不存在`);
+            }
+            if (element.text !== condition && element.contentDesc !== condition) {
+                throw new Error(`断言失败: 元素文本不匹配，期望 "${condition}"，实际 "${element.text || element.contentDesc}"`);
+            }
+        }
+    }
+
+    /**
+     * 查找元素
+     * @param {string} selector - 元素选择器（可以是别名或实际属性）
+     * @returns {Object|null} 找到的元素
+     */
+    async findElement(selector) {
+        // 首先检查是否是元素别名
+        const elementDef = await this.getElementDefinition(selector);
+        
+        if (elementDef) {
+            // 使用定义的选择器查找
+            return this.findElementByDefinition(elementDef);
+        }
+        
+        // 否则直接在当前元素中查找
+        if (!this.currentElements) {
+            return null;
+        }
+
+        // 通过文本查找
+        for (const element of this.currentElements) {
+            if (element.text === selector || 
+                element.contentDesc === selector || 
+                element.hint === selector ||
+                (element.resourceId && element.resourceId.includes(selector))) {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取元素定义
+     * @param {string} alias - 元素别名
+     * @returns {Object|null} 元素定义
+     */
+    async getElementDefinition(alias) {
+        // 从element.json中读取元素定义
+        const elementFile = tksPath.join(
+            this.projectPath, 
+            'cases', 
+            this.currentCaseFolder || '', 
+            'locator', 
+            'element.json'
+        );
+
+        try {
+            const content = await tksFs.readFile(elementFile, 'utf-8');
+            const elements = JSON.parse(content);
+            return elements[alias] || null;
+        } catch (error) {
+            // 文件不存在或解析失败
+            return null;
+        }
+    }
+
+    /**
+     * 根据元素定义查找元素
+     * @param {Object} definition - 元素定义
+     * @returns {Object|null} 找到的元素
+     */
+    findElementByDefinition(definition) {
+        if (!this.currentElements) return null;
+
+        for (const element of this.currentElements) {
+            let matches = true;
+
+            // 检查各种属性
+            if (definition.text && element.text !== definition.text) {
+                matches = false;
+            }
+            if (definition.resourceId && !element.resourceId.includes(definition.resourceId)) {
+                matches = false;
+            }
+            if (definition.className && !element.className.includes(definition.className)) {
+                matches = false;
+            }
+            if (definition.contentDesc && element.contentDesc !== definition.contentDesc) {
+                matches = false;
+            }
+            if (definition.xpath && element.xpath !== definition.xpath) {
+                matches = false;
+            }
+
+            if (matches) {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 执行ADB命令
+     */
+    async runAdbCommand(command) {
+        const { ipcRenderer } = window.AppGlobals;
+        
+        // 使用新的IPC处理器执行ADB shell命令
+        const result = await ipcRenderer.invoke('adb-shell-command', command, this.deviceId);
+        
+        if (!result.success) {
+            console.error(`ADB命令执行失败: ${command}`, result.error);
+        } else {
+            console.log(`ADB命令执行成功: ${command}`);
+        }
+        
+        return result;
+    }
+
+    /**
+     * 保存执行结果
+     */
+    async saveResult(result) {
+        // 保存到result文件夹而不是workarea
+        const resultDir = tksPath.join(this.projectPath, 'result');
+        
+        // 确保result目录存在
+        try {
+            await tksFs.mkdir(resultDir, { recursive: true });
+        } catch (error) {
+            // 目录可能已存在，忽略错误
+        }
+        
+        // 生成结果文件名，包含更多信息
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const status = result.success ? 'PASS' : 'FAIL';
+        const resultFileName = `${result.caseId}_${timestamp}_${status}.json`;
+        const resultPath = tksPath.join(resultDir, resultFileName);
+
+        try {
+            await tksFs.writeFile(resultPath, JSON.stringify(result, null, 2));
+            console.log(`执行结果已保存到: ${resultPath}`);
+        } catch (error) {
+            console.error('保存执行结果失败:', error);
+        }
+    }
+
+    /**
+     * 停止执行
+     */
+    stop() {
+        this.isRunning = false;
+    }
+
+    /**
+     * 辅助函数：睡眠
+     */
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * 设置当前用例文件夹
+     */
+    setCurrentCase(caseFolder) {
+        this.currentCaseFolder = caseFolder;
+    }
+}
+
+/**
+ * TKS脚本管理器
+ * 提供脚本的高级管理功能
+ */
+class TKSScriptManager {
+    constructor(projectPath) {
+        this.projectPath = projectPath;
+        this.parser = new TKSScriptParser();
+        this.executor = null;
+    }
+
+    /**
+     * 加载并验证脚本
+     */
+    async loadScript(scriptPath) {
+        try {
+            const script = await this.parser.parseFile(scriptPath);
+            
+            // 验证脚本
+            this.validateScript(script);
+            
+            return script;
+        } catch (error) {
+            throw new Error(`加载脚本失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 验证脚本
+     */
+    validateScript(script) {
+        if (!script.caseId) {
+            throw new Error('脚本缺少用例ID');
+        }
+        
+        if (!script.steps || script.steps.length === 0) {
+            throw new Error('脚本没有定义任何步骤');
+        }
+
+        // 验证每个步骤
+        for (let i = 0; i < script.steps.length; i++) {
+            const step = script.steps[i];
+            if (!step.type) {
+                throw new Error(`步骤 ${i + 1} 无效`);
+            }
+        }
+    }
+
+    /**
+     * 运行脚本
+     */
+    async runScript(scriptPath, deviceId = null) {
+        const script = await this.loadScript(scriptPath);
+        
+        // 创建执行器
+        this.executor = new TKSScriptExecutor(this.projectPath, deviceId);
+        
+        // 设置用例文件夹
+        const caseFolder = tksPath.dirname(scriptPath).split(tksPath.sep).pop();
+        this.executor.setCurrentCase(caseFolder);
+        
+        // 执行脚本
+        const result = await this.executor.execute(script);
+        
+        return result;
+    }
+
+    /**
+     * 停止当前执行
+     */
+    stopExecution() {
+        if (this.executor) {
+            this.executor.stop();
+        }
+    }
+
+    /**
+     * 创建新脚本模板
+     */
+    async createScriptTemplate(caseId, scriptName) {
+        const template = `用例: ${caseId}
+脚本名: ${scriptName}
+详情: 
+    appPackage: com.example.app
+    appActivity: com.example.app.MainActivity
+步骤:
+    启动 [com.example.app]
+    等待 [3s]
+    点击 [登录按钮]
+    输入 [用户名输入框, "testuser"]
+    输入 [密码输入框, "password123"]
+    点击 [确认按钮]
+    等待 [主页面]
+    断言 [欢迎文本, 存在]
+    返回
+    关闭 [com.example.app]
+`;
+
+        const scriptPath = tksPath.join(
+            this.projectPath,
+            'cases',
+            caseId,
+            `${scriptName}.tks`
+        );
+
+        // 确保目录存在
+        const dir = tksPath.dirname(scriptPath);
+        await tksFs.mkdir(dir, { recursive: true });
+
+        // 创建locator目录和element.json
+        const locatorDir = tksPath.join(dir, 'locator');
+        await tksFs.mkdir(locatorDir, { recursive: true });
+        
+        // 确保项目级别的result目录存在
+        const resultDir = tksPath.join(this.projectPath, 'result');
+        await tksFs.mkdir(resultDir, { recursive: true });
+        
+        const elementFile = tksPath.join(locatorDir, 'element.json');
+        const elementTemplate = {
+            "登录按钮": {
+                "resourceId": "com.example.app:id/login_button",
+                "text": "登录"
+            },
+            "用户名输入框": {
+                "resourceId": "com.example.app:id/username_input",
+                "className": "android.widget.EditText"
+            },
+            "密码输入框": {
+                "resourceId": "com.example.app:id/password_input",
+                "className": "android.widget.EditText"
+            },
+            "确认按钮": {
+                "resourceId": "com.example.app:id/confirm_button",
+                "text": "确认"
+            },
+            "主页面": {
+                "resourceId": "com.example.app:id/main_container"
+            },
+            "欢迎文本": {
+                "contentDesc": "欢迎",
+                "className": "android.widget.TextView"
+            }
+        };
+
+        await tksFs.writeFile(elementFile, JSON.stringify(elementTemplate, null, 4));
+        await tksFs.writeFile(scriptPath, template);
+
+        return scriptPath;
+    }
+}
+
+    // 导出到全局
+    window.TKSScriptParser = TKSScriptParser;
+    window.TKSScriptExecutor = TKSScriptExecutor;
+    window.TKSScriptManager = TKSScriptManager;
+
+    // 导出模块
+    window.TKSScriptModule = {
+        Parser: TKSScriptParser,
+        Executor: TKSScriptExecutor,
+        Manager: TKSScriptManager,
+        
+        // 便捷方法
+        createManager: (projectPath) => new TKSScriptManager(projectPath),
+        parseScript: async (content) => {
+            const parser = new TKSScriptParser();
+            return parser.parse(content);
+        },
+        runScript: async (scriptPath, projectPath, deviceId) => {
+            const manager = new TKSScriptManager(projectPath);
+            return await manager.runScript(scriptPath, deviceId);
+        }
+    };
+
+    console.log('TKS脚本引擎模块已加载');
+
+})(); // 结束立即执行函数

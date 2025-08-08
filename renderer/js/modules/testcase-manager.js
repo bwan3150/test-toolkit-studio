@@ -1028,6 +1028,9 @@ async function enableXmlOverlay(deviceId) {
         currentUIElements = xmlParser.extractUIElements(optimizedTree);
         console.log('提取的UI元素:', currentUIElements);
         
+        // 暴露到全局，供TKS集成模块使用
+        window.currentUIElements = currentUIElements;
+        
         if (currentUIElements.length === 0) {
             console.warn('未提取到任何UI元素，可能需要检查XML格式或优化算法');
         }

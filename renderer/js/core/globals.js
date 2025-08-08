@@ -10,6 +10,7 @@ const { parse } = window.nodeRequire ? window.nodeRequire('csv-parse/sync') : re
 // 全局变量
 let currentProject = null;
 let currentCase = null;
+let currentTab = null;
 let codeEditor = null;
 let lineNumbers = null;
 let syntaxHighlight = null;
@@ -27,6 +28,7 @@ window.AppGlobals = {
     parse,
     currentProject,
     currentCase,
+    currentTab,
     codeEditor,
     lineNumbers,
     syntaxHighlight,
@@ -36,6 +38,7 @@ window.AppGlobals = {
     // 设置器函数
     setCurrentProject: (project) => { currentProject = project; window.AppGlobals.currentProject = project; },
     setCurrentCase: (testCase) => { currentCase = testCase; window.AppGlobals.currentCase = testCase; },
+    setCurrentTab: (tab) => { currentTab = tab; window.AppGlobals.currentTab = tab; },
     setCodeEditor: (editor) => { codeEditor = editor; window.AppGlobals.codeEditor = editor; },
     setLineNumbers: (ln) => { lineNumbers = ln; window.AppGlobals.lineNumbers = ln; },
     setSyntaxHighlight: (sh) => { syntaxHighlight = sh; window.AppGlobals.syntaxHighlight = sh; },

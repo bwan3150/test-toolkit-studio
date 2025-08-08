@@ -204,8 +204,8 @@ class SimpleCodeEditor {
         }
         
         // 3. 动作关键词 (支持缩进)
-        else if (/^\s*(点击|按压|滑动|定向滑动|输入|清理|隐藏键盘|返回|等待|断言)\s/.test(result)) {
-            result = result.replace(/^(\s*)(点击|按压|滑动|定向滑动|输入|清理|隐藏键盘|返回|等待|断言)(\s)/, 
+        else if (/^\s*(启动|关闭|点击|按压|滑动|定向滑动|输入|清理|隐藏键盘|返回|等待|断言)\s/.test(result)) {
+            result = result.replace(/^(\s*)(启动|关闭|点击|按压|滑动|定向滑动|输入|清理|隐藏键盘|返回|等待|断言)(\s)/, 
                 '$1<span class="syntax-action">$2</span>$3');
         }
         
@@ -296,7 +296,7 @@ class SimpleCodeEditor {
         result = result.replace(/^(\s*)(-)(\s+)/, '$1<span class="syntax-dash">$2</span>$3');
         
         // 4. 中文动作关键词（行首）
-        const lowCodeActions = ['点击', '按压', '滑动', '定向滑动', '输入', '清理', '隐藏键盘', '返回', '等待', '断言'];
+        const lowCodeActions = ['启动', '关闭', '点击', '按压', '滑动', '定向滑动', '输入', '清理', '隐藏键盘', '返回', '等待', '断言'];
         for (const action of lowCodeActions) {
             const regex = new RegExp(`^(\\s*)(${action})(\\s|$)`);
             if (regex.test(result)) {
@@ -501,6 +501,9 @@ function selectTab(tabId) {
             console.log('Setting content for tab:', tabData.name, 'Content length:', tabData.content.length);
             window.AppGlobals.codeEditor.value = tabData.content;
             window.AppGlobals.codeEditor.placeholder = `正在编辑: ${tabData.name}`;
+            
+            // 更新当前标签页全局变量
+            window.AppGlobals.setCurrentTab(tabData);
         }
     }
 }
@@ -526,6 +529,8 @@ function closeTab(tabId) {
                 window.AppGlobals.codeEditor.value = '';
                 window.AppGlobals.codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
             }
+            // 清空当前标签页
+            window.AppGlobals.setCurrentTab(null);
         }
     }
 }
