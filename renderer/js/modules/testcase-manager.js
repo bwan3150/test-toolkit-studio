@@ -1859,6 +1859,7 @@ function initializeBottomPanelDisplay() {
 
 // 设备屏幕模式管理
 const ScreenModeManager = {
+    initialized: false,
     currentMode: 'normal', // 'normal', 'xml', 'screenshot', 'coordinate'
     screenshotSelector: null,
     isSelecting: false,
@@ -1926,10 +1927,19 @@ const ScreenModeManager = {
     
     // 初始化模式管理器
     init() {
+        // 防止重复初始化
+        if (this.initialized) {
+            console.log('ScreenModeManager 已经初始化过了，跳过重复初始化');
+            return;
+        }
+        
         this.setupModeButtons();
         this.setupScreenshotMode();
         this.setupCoordinateMode();
         this.setupZoomControls();
+        
+        this.initialized = true;
+        console.log('ScreenModeManager 初始化完成');
     },
     
     // 设置模式切换按钮
@@ -2250,10 +2260,15 @@ const ScreenModeManager = {
         if (confirmBtn) {
             console.log('截图确认按钮找到，绑定事件');
             
+            // 移除已存在的事件监听器避免重复绑定
+            if (confirmBtn._screenshotClickHandler) {
+                confirmBtn.removeEventListener('click', confirmBtn._screenshotClickHandler);
+            }
+            
             // 防止重复处理
             let isProcessing = false;
             
-            confirmBtn.addEventListener('click', (e) => {
+            const clickHandler = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
@@ -2266,7 +2281,11 @@ const ScreenModeManager = {
                 this.captureSelectedArea().finally(() => {
                     isProcessing = false;
                 });
-            });
+            };
+            
+            // 保存处理器引用并添加监听器
+            confirmBtn._screenshotClickHandler = clickHandler;
+            confirmBtn.addEventListener('click', clickHandler);
             
             
         } else {
@@ -2275,10 +2294,19 @@ const ScreenModeManager = {
         
         // 取消按钮
         if (cancelBtn) {
-            cancelBtn.addEventListener('click', () => {
+            // 移除已存在的事件监听器避免重复绑定
+            if (cancelBtn._screenshotCancelHandler) {
+                cancelBtn.removeEventListener('click', cancelBtn._screenshotCancelHandler);
+            }
+            
+            const cancelHandler = () => {
                 console.log('截图取消按钮被点击');
                 screenshotSelector.style.display = 'none';
-            });
+            };
+            
+            // 保存处理器引用并添加监听器
+            cancelBtn._screenshotCancelHandler = cancelHandler;
+            cancelBtn.addEventListener('click', cancelHandler);
         } else {
             console.error('截图取消按钮未找到');
         }
