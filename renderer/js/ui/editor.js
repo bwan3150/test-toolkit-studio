@@ -6,6 +6,7 @@ class SimpleCodeEditor {
         this.value = '';
         this.listeners = [];
         this.saveTimeout = null;
+        this.isComposing = false; // 是否在输入法组合输入中
         
         this.createEditor();
         this.setupEventListeners();
@@ -64,8 +65,28 @@ class SimpleCodeEditor {
     }
     
     setupEventListeners() {
+        // 处理输入法组合输入
+        this.contentEl.addEventListener('compositionstart', () => {
+            this.isComposing = true;
+        });
+        
+        this.contentEl.addEventListener('compositionend', () => {
+            this.isComposing = false;
+            // 组合输入结束后立即更新
+            this.updateValue();
+            this.updateLineNumbers();
+            this.applySyntaxHighlighting();
+            this.triggerChange();
+        });
+        
         // 处理输入事件
         this.contentEl.addEventListener('input', (e) => {
+            // 输入时隐藏预览
+            this.hideImagePreview();
+            
+            // 如果在组合输入中，跳过更新
+            if (this.isComposing) return;
+            
             this.updateValue();
             this.updateLineNumbers();
             this.applySyntaxHighlighting();
@@ -91,6 +112,8 @@ class SimpleCodeEditor {
         this.contentEl.addEventListener('click', (e) => {
             if (e.target.classList.contains('inline-image-locator')) {
                 e.preventDefault();
+                // 点击时立即隐藏预览
+                this.hideImagePreview();
                 this.handleImageLocatorClick(e.target);
             }
         });
@@ -111,6 +134,8 @@ class SimpleCodeEditor {
         
         // 监听光标位置变化，用于图片/文本模式切换
         this.contentEl.addEventListener('keyup', () => {
+            // 键盘操作时隐藏预览
+            this.hideImagePreview();
             setTimeout(() => this.checkImageLocatorCursor(), 50);
         });
         
@@ -120,6 +145,7 @@ class SimpleCodeEditor {
         
         // 监听失去焦点，恢复所有图片显示
         this.contentEl.addEventListener('blur', () => {
+            this.hideImagePreview(); // 失焦时隐藏预览
             setTimeout(() => this.restoreAllImages(), 100);
         });
     }
@@ -386,7 +412,7 @@ class SimpleCodeEditor {
                     
                     // 直接渲染为内联图片，失败时显示原始文本
                     const fallbackText = originalText || `@{${imageName}}`;
-                    return `<img class="inline-image-locator" src="${imagePath}" alt="${imageName}" data-name="${imageName}" title="点击编辑: ${fallbackText}" onerror="this.outerHTML='<span class=&quot;syntax-string&quot;>${fallbackText}</span>';">`;
+                    return `<img class="inline-image-locator" src="${imagePath}" alt="${imageName}" data-name="${imageName}" onerror="this.outerHTML='<span class=&quot;syntax-string&quot;>${fallbackText}</span>';">`;
                 }
             }
         } catch (error) {
