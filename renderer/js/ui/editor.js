@@ -991,6 +991,11 @@ class SimpleCodeEditor {
     
     // 修改语法高亮应用方法以支持执行行高亮
     applySyntaxHighlightingWithExecution() {
+        // 如果正在组合输入，不进行语法高亮
+        if (this.isComposing) {
+            return;
+        }
+        
         if (!this.value) {
             this.showPlaceholder();
             return;
@@ -1016,7 +1021,7 @@ class SimpleCodeEditor {
             return highlightedLine;
         });
         
-        this.highlightEl.innerHTML = highlightedLines.join('\n');
+        this.contentEl.innerHTML = highlightedLines.join('\n');
     }
     
     // 应用带光标状态的语法高亮
