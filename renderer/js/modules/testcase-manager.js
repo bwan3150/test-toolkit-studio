@@ -1385,15 +1385,27 @@ function displayUIElementList(elements) {
     
     // 生成元素列表HTML
     const elementsHTML = elements.map(el => `
-        <div class="element-item" data-index="${el.index}" onclick="selectElementByIndex(${el.index})">
-            <div class="element-header">
-                <span class="element-index">[${el.index}]</span>
-                <span class="element-type">${el.className.split('.').pop()}</span>
+        <div class="element-item" data-index="${el.index}">
+            <div class="element-main" onclick="selectElementByIndex(${el.index})">
+                <div class="element-header">
+                    <span class="element-index">[${el.index}]</span>
+                    <span class="element-type">${el.className.split('.').pop()}</span>
+                </div>
+                ${el.text ? `<div class="element-text">文本: ${el.text}</div>` : ''}
+                ${el.contentDesc ? `<div class="element-desc">描述: ${el.contentDesc}</div>` : ''}
+                ${el.hint ? `<div class="element-hint">提示: ${el.hint}</div>` : ''}
+                <div class="element-size">${el.width}×${el.height} @ (${el.centerX},${el.centerY})</div>
             </div>
-            ${el.text ? `<div class="element-text">文本: ${el.text}</div>` : ''}
-            ${el.contentDesc ? `<div class="element-desc">描述: ${el.contentDesc}</div>` : ''}
-            ${el.hint ? `<div class="element-hint">提示: ${el.hint}</div>` : ''}
-            <div class="element-size">${el.width}×${el.height} @ (${el.centerX},${el.centerY})</div>
+            <div class="element-actions">
+                <button class="btn-icon-small save-to-locator-btn" 
+                        onclick="event.stopPropagation(); saveElementToLocatorFromList(${el.index})" 
+                        title="入库"
+                        style="background: transparent; border: none; padding: 4px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20">
+                        <path fill="#FF9800" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                    </svg>
+                </button>
+            </div>
         </div>
     `).join('');
     
@@ -1542,6 +1554,22 @@ window.selectElementByIndex = function(index) {
     const element = currentUIElements.find(el => el.index === index);
     if (element) {
         selectUIElement(element);
+    }
+};
+
+// 从列表直接入库元素
+window.saveElementToLocatorFromList = async function(index) {
+    const element = currentUIElements.find(el => el.index === index);
+    if (element) {
+        if (window.LocatorManager && window.LocatorManager.instance) {
+            await window.LocatorManager.instance.saveElement(element);
+        } else {
+            console.error('Locator管理器未初始化');
+            window.NotificationModule.showNotification('Locator管理器未初始化', 'error');
+        }
+    } else {
+        console.error('未找到指定索引的元素:', index);
+        window.NotificationModule.showNotification('元素未找到', 'error');
     }
 };
 

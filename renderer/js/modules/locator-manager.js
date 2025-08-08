@@ -305,44 +305,32 @@ class LocatorManager {
                 const imagePath = projectPath ? PathModule.join(projectPath, data.path) : data.path;
                 
                 return `
-                    <div class="locator-item image-type" draggable="true" data-name="${name}" data-type="image">
-                        <img class="item-thumbnail" src="${imagePath}" alt="${name}">
-                        <div class="item-info">
-                            <div class="item-name">${name}</div>
-                            <div class="item-path">${data.path}</div>
+                    <div class="locator-card image-type" draggable="true" data-name="${name}" data-type="image">
+                        <div class="card-thumbnail">
+                            <img src="${imagePath}" alt="${name}">
                         </div>
-                        <div class="locator-actions">
-                            <button class="btn-icon-small delete-locator-btn" data-name="${name}" title="删除">
-                                <svg viewBox="0 0 24 24" width="16" height="16">
-                                    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                </svg>
-                            </button>
+                        <div class="card-content">
+                            <div class="card-title">${name}</div>
+                            <div class="card-type">image</div>
                         </div>
                     </div>
                 `;
             } else if (data.type === 'xml') {
                 // XML元素类型显示
                 return `
-                    <div class="locator-item" draggable="true" data-name="${name}" data-type="xml">
-                        <div class="locator-header">
-                            <span class="locator-name">${name}</span>
-                            <div class="locator-actions">
-                                <button class="btn-icon-small edit-locator-btn" data-name="${name}" title="编辑">
-                                    <svg viewBox="0 0 24 24" width="16" height="16">
-                                        <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                                    </svg>
-                                </button>
-                                <button class="btn-icon-small delete-locator-btn" data-name="${name}" title="删除">
-                                    <svg viewBox="0 0 24 24" width="16" height="16">
-                                        <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                                    </svg>
-                                </button>
-                            </div>
+                    <div class="locator-card xml-type" draggable="true" data-name="${name}" data-type="xml">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" width="24" height="24">
+                                <path fill="currentColor" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
+                            </svg>
                         </div>
-                        <div class="locator-details">
-                            ${data.text ? `<div class="locator-text">文本: ${data.text}</div>` : ''}
-                            ${data.resourceId ? `<div class="locator-id">ID: ${data.resourceId.split('/').pop()}</div>` : ''}
-                            <div class="locator-type">${data.className ? data.className.split('.').pop() : 'Element'}</div>
+                        <div class="card-content">
+                            <div class="card-title">${name}</div>
+                            <div class="card-info">
+                                ${data.text ? `<div class="card-text">${data.text}</div>` : ''}
+                                ${data.resourceId ? `<div class="card-id">${data.resourceId.split('/').pop()}</div>` : ''}
+                                <div class="card-type">${data.className ? data.className.split('.').pop() : 'Element'}</div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -354,37 +342,81 @@ class LocatorManager {
 
         locatorList.innerHTML = listHTML;
 
-        // 为每个元素添加拖动事件
-        locatorList.querySelectorAll('.locator-item').forEach(item => {
+        // 为每个元素添加拖动和右键菜单事件
+        locatorList.querySelectorAll('.locator-card').forEach(item => {
             this.setupItemDragEvents(item);
+            this.setupItemContextMenu(item);
         });
-        
-        // 添加事件委托处理编辑和删除按钮
-        this.setupActionButtons(locatorList);
     }
     
-    // 设置操作按钮的事件委托
-    setupActionButtons(locatorList) {
-        // 删除已存在的事件监听器避免重复绑定
-        const existingHandler = locatorList._buttonClickHandler;
-        if (existingHandler) {
-            locatorList.removeEventListener('click', existingHandler);
+    // 设置卡片右键菜单
+    setupItemContextMenu(item) {
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const name = item.dataset.name;
+            this.showContextMenu(e, name);
+        });
+    }
+    
+    // 显示右键菜单
+    showContextMenu(event, name) {
+        // 移除已存在的菜单
+        const existingMenu = document.querySelector('.locator-context-menu');
+        if (existingMenu) {
+            existingMenu.remove();
         }
         
-        // 创建新的事件处理器
-        const buttonClickHandler = async (e) => {
-            if (e.target.closest('.edit-locator-btn')) {
-                const name = e.target.closest('.edit-locator-btn').dataset.name;
+        // 创建菜单
+        const menu = document.createElement('div');
+        menu.className = 'locator-context-menu';
+        menu.style.cssText = `
+            position: fixed;
+            top: ${event.clientY}px;
+            left: ${event.clientX}px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            min-width: 120px;
+        `;
+        
+        menu.innerHTML = `
+            <div class="context-menu-item" data-action="edit">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+                重命名
+            </div>
+            <div class="context-menu-item" data-action="delete">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+                删除
+            </div>
+        `;
+        
+        // 添加点击事件
+        menu.addEventListener('click', async (e) => {
+            const action = e.target.closest('.context-menu-item')?.dataset.action;
+            if (action === 'edit') {
                 await this.editLocator(name);
-            } else if (e.target.closest('.delete-locator-btn')) {
-                const name = e.target.closest('.delete-locator-btn').dataset.name;
+            } else if (action === 'delete') {
                 await this.deleteLocator(name);
             }
-        };
+            menu.remove();
+        });
         
-        // 保存处理器引用并添加监听器
-        locatorList._buttonClickHandler = buttonClickHandler;
-        locatorList.addEventListener('click', buttonClickHandler);
+        // 点击其他地方关闭菜单
+        const closeMenu = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+        
+        document.body.appendChild(menu);
     }
 
     // 设置拖放功能
@@ -460,6 +492,15 @@ class LocatorManager {
     setupSearch() {
         const searchInput = document.getElementById('locatorSearchInput');
         if (searchInput) {
+            // 阻止搜索框的点击和聚焦事件冒泡
+            searchInput.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            
+            searchInput.addEventListener('focus', (e) => {
+                e.stopPropagation();
+            });
+            
             searchInput.addEventListener('input', (e) => {
                 this.filterLocators(e.target.value);
             });
@@ -468,7 +509,7 @@ class LocatorManager {
 
     // 过滤locator列表
     filterLocators(searchTerm) {
-        const items = document.querySelectorAll('.locator-item');
+        const items = document.querySelectorAll('.locator-card');
         const term = searchTerm.toLowerCase();
 
         items.forEach(item => {
@@ -532,8 +573,83 @@ class LocatorManager {
     // 获取新名称
     async promptForNewName(oldName) {
         return new Promise((resolve) => {
-            const newName = prompt(`重命名元素 "${oldName}"`, oldName);
-            resolve(newName ? newName.trim() : null);
+            // 创建模态框
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog';
+            dialog.style.cssText = `
+                background: #2d2d2d;
+                border-radius: 8px;
+                padding: 20px;
+                width: 400px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            `;
+
+            dialog.innerHTML = `
+                <h3 style="margin: 0 0 15px 0; color: #fff;">重命名元素</h3>
+                <input type="text" id="newNameInput" 
+                    placeholder="请输入新名称" 
+                    value="${oldName}"
+                    style="width: 100%; padding: 8px; background: #1e1e1e; border: 1px solid #444; 
+                           color: #fff; border-radius: 4px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button id="cancelRenameBtn" style="padding: 6px 16px; background: #444; color: #fff; 
+                            border: none; border-radius: 4px; cursor: pointer;">取消</button>
+                    <button id="confirmRenameBtn" style="padding: 6px 16px; background: #4CAF50; color: #fff; 
+                            border: none; border-radius: 4px; cursor: pointer;">确认</button>
+                </div>
+            `;
+
+            modal.appendChild(dialog);
+            document.body.appendChild(modal);
+
+            const input = dialog.querySelector('#newNameInput');
+            const confirmBtn = dialog.querySelector('#confirmRenameBtn');
+            const cancelBtn = dialog.querySelector('#cancelRenameBtn');
+
+            // 自动聚焦并选中文本
+            input.focus();
+            input.select();
+
+            // 确认处理
+            const handleConfirm = () => {
+                const name = input.value.trim();
+                if (name) {
+                    document.body.removeChild(modal);
+                    resolve(name);
+                } else {
+                    input.style.borderColor = '#f44336';
+                    input.placeholder = '名称不能为空';
+                }
+            };
+
+            // 事件监听
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', () => {
+                document.body.removeChild(modal);
+                resolve(null);
+            });
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleConfirm();
+                if (e.key === 'Escape') {
+                    document.body.removeChild(modal);
+                    resolve(null);
+                }
+            });
         });
     }
 
