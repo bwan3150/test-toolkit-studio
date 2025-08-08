@@ -41,7 +41,7 @@ function initializeProjectPage() {
             // 清空编辑器
             if (window.AppGlobals.codeEditor) {
                 window.AppGlobals.codeEditor.value = '';
-                window.AppGlobals.codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+                window.AppGlobals.codeEditor.placeholder = '在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑';
             }
             
             // 清除当前项目路径

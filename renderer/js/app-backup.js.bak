@@ -97,7 +97,7 @@ function initializeProjectPage() {
             // 清空编辑器
             if (codeEditor) {
                 codeEditor.value = '';
-                codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+                codeEditor.placeholder = '在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑';
                 updateEditor();
             }
             
@@ -682,7 +682,7 @@ function closeTab(tabId) {
             // No more tabs, clear editor
             if (codeEditor) {
                 codeEditor.value = '';
-                codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+                codeEditor.placeholder = '在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑';
                 updateEditor();
             }
         }
@@ -701,7 +701,7 @@ function initializeSimpleEditor() {
         
         // 设置初始内容为空
         codeEditor.value = '';
-        codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+        codeEditor.placeholder = '在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑';
         updateEditor();
         
         // Save on change with debounce

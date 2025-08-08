@@ -60,7 +60,7 @@ class SimpleCodeEditor {
             overflow: 'auto'
         });
         
-        this.setPlaceholder('请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本');
+        this.setPlaceholder('在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑');
     }
     
     setupEventListeners() {
@@ -92,6 +92,20 @@ class SimpleCodeEditor {
             if (e.target.classList.contains('inline-image-locator')) {
                 e.preventDefault();
                 this.handleImageLocatorClick(e.target);
+            }
+        });
+        
+        // 处理图片定位器的hover预览
+        this.contentEl.addEventListener('mouseover', (e) => {
+            if (e.target.classList.contains('inline-image-locator')) {
+                // 立即显示预览，提高效率
+                this.showImagePreview(e.target, e);
+            }
+        });
+        
+        this.contentEl.addEventListener('mouseout', (e) => {
+            if (e.target.classList.contains('inline-image-locator')) {
+                this.hideImagePreview();
             }
         });
         
@@ -693,6 +707,91 @@ class SimpleCodeEditor {
         this.updateValue();
     }
     
+    // 显示图片预览
+    showImagePreview(imageElement, event) {
+        // 如果预览已存在，先移除
+        this.hideImagePreview();
+        
+        const imageSrc = imageElement.src;
+        const imageName = imageElement.dataset.name;
+        
+        if (!imageSrc || !imageName) return;
+        
+        // 创建预览容器
+        const preview = document.createElement('div');
+        preview.className = 'image-preview-tooltip';
+        preview.innerHTML = `
+            <div class="preview-header">${imageName}</div>
+            <img src="${imageSrc}" alt="${imageName}" class="preview-image">
+        `;
+        
+        // 添加到body
+        document.body.appendChild(preview);
+        this.currentPreview = preview;
+        
+        // 计算位置
+        this.positionPreview(preview, imageElement, event);
+        
+        // 立即显示
+        requestAnimationFrame(() => {
+            if (this.currentPreview === preview) {
+                preview.classList.add('show');
+            }
+        });
+        
+        // 监听鼠标移动以更新位置
+        this.previewMouseMoveHandler = (e) => {
+            this.positionPreview(preview, imageElement, e);
+        };
+        document.addEventListener('mousemove', this.previewMouseMoveHandler);
+    }
+    
+    // 隐藏图片预览
+    hideImagePreview() {
+        if (this.currentPreview) {
+            document.body.removeChild(this.currentPreview);
+            this.currentPreview = null;
+        }
+        
+        if (this.previewMouseMoveHandler) {
+            document.removeEventListener('mousemove', this.previewMouseMoveHandler);
+            this.previewMouseMoveHandler = null;
+        }
+    }
+    
+    // 定位预览窗口
+    positionPreview(preview, imageElement, event) {
+        const mouseX = event.clientX;
+        const mouseY = event.clientY;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        // 预览窗口尺寸
+        const previewWidth = 300; // 预估宽度
+        const previewHeight = 200; // 预估高度
+        const offset = 15; // 鼠标偏移
+        
+        let left = mouseX + offset;
+        let top = mouseY + offset;
+        
+        // 防止超出右边界
+        if (left + previewWidth > windowWidth) {
+            left = mouseX - previewWidth - offset;
+        }
+        
+        // 防止超出下边界
+        if (top + previewHeight > windowHeight) {
+            top = mouseY - previewHeight - offset;
+        }
+        
+        // 防止超出左边界和上边界
+        left = Math.max(10, left);
+        top = Math.max(10, top);
+        
+        preview.style.left = left + 'px';
+        preview.style.top = top + 'px';
+    }
+    
     // 检查光标是否在图片定位器文本范围内
     checkImageLocatorCursor() {
         const selection = window.getSelection();
@@ -762,6 +861,7 @@ class SimpleCodeEditor {
     
     destroy() {
         clearTimeout(this.saveTimeout);
+        this.hideImagePreview(); // 清理图片预览
         this.listeners = [];
     }
     
@@ -958,7 +1058,7 @@ function closeTab(tabId) {
             // 没有更多标签，清空编辑器
             if (window.AppGlobals.codeEditor) {
                 window.AppGlobals.codeEditor.value = '';
-                window.AppGlobals.codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
+                window.AppGlobals.codeEditor.placeholder = '在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑';
             }
             // 清空当前标签页
             window.AppGlobals.setCurrentTab(null);
