@@ -279,36 +279,63 @@ class LocatorManager {
             locatorList.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-text">暂无保存的元素</div>
-                    <div class="empty-state-hint">在元素属性页面点击"入库"保存元素</div>
+                    <div class="empty-state-hint">在元素属性页面点击"入库"保存元素，或使用截图模式保存图片定位器</div>
                 </div>
             `;
             return;
         }
 
-        const listHTML = entries.map(([name, data]) => `
-            <div class="locator-item" draggable="true" data-name="${name}">
-                <div class="locator-header">
-                    <span class="locator-name">${name}</span>
-                    <div class="locator-actions">
-                        <button class="btn-icon-small" onclick="LocatorManager.editLocator('${name}')" title="编辑">
-                            <svg viewBox="0 0 24 24" width="16" height="16">
-                                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                            </svg>
-                        </button>
-                        <button class="btn-icon-small" onclick="LocatorManager.deleteLocator('${name}')" title="删除">
-                            <svg viewBox="0 0 24 24" width="16" height="16">
-                                <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                            </svg>
-                        </button>
+        const listHTML = entries.map(([name, data]) => {
+            // 判断是否为图片类型的定位器
+            if (data.type === 'image') {
+                const { path: PathModule } = window.AppGlobals;
+                const projectPath = window.AppGlobals.currentProject;
+                const imagePath = projectPath ? PathModule.join(projectPath, data.path) : data.path;
+                
+                return `
+                    <div class="locator-item image-type" draggable="true" data-name="${name}" data-type="image">
+                        <img class="item-thumbnail" src="${imagePath}" alt="${name}">
+                        <div class="item-info">
+                            <div class="item-name">${name}</div>
+                            <div class="item-path">${data.path}</div>
+                        </div>
+                        <div class="locator-actions">
+                            <button class="btn-icon-small" onclick="LocatorManager.deleteLocator('${name}')" title="删除">
+                                <svg viewBox="0 0 24 24" width="16" height="16">
+                                    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="locator-details">
-                    ${data.text ? `<div class="locator-text">文本: ${data.text}</div>` : ''}
-                    ${data.resourceId ? `<div class="locator-id">ID: ${data.resourceId.split('/').pop()}</div>` : ''}
-                    <div class="locator-type">${data.className.split('.').pop()}</div>
-                </div>
-            </div>
-        `).join('');
+                `;
+            } else {
+                // 原有的XML元素类型显示
+                return `
+                    <div class="locator-item" draggable="true" data-name="${name}" data-type="xml">
+                        <div class="locator-header">
+                            <span class="locator-name">${name}</span>
+                            <div class="locator-actions">
+                                <button class="btn-icon-small" onclick="LocatorManager.editLocator('${name}')" title="编辑">
+                                    <svg viewBox="0 0 24 24" width="16" height="16">
+                                        <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                    </svg>
+                                </button>
+                                <button class="btn-icon-small" onclick="LocatorManager.deleteLocator('${name}')" title="删除">
+                                    <svg viewBox="0 0 24 24" width="16" height="16">
+                                        <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="locator-details">
+                            ${data.text ? `<div class="locator-text">文本: ${data.text}</div>` : ''}
+                            ${data.resourceId ? `<div class="locator-id">ID: ${data.resourceId.split('/').pop()}</div>` : ''}
+                            <div class="locator-type">${data.className ? data.className.split('.').pop() : 'Element'}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        }).join('');
 
         locatorList.innerHTML = listHTML;
 
@@ -332,7 +359,12 @@ class LocatorManager {
                 editorTextarea.addEventListener('drop', (e) => {
                     e.preventDefault();
                     const elementName = e.dataTransfer.getData('text/plain');
-                    if (elementName && elementName.startsWith('[') && elementName.endsWith(']')) {
+                    
+                    // 检查是否为有效的定位器引用（XML元素[name]或图片@{name}）
+                    const isXmlElement = elementName && elementName.startsWith('[') && elementName.endsWith(']');
+                    const isImageElement = elementName && elementName.startsWith('@{') && elementName.endsWith('}');
+                    
+                    if (isXmlElement || isImageElement) {
                         // 在光标位置插入文本
                         const start = editorTextarea.selectionStart;
                         const end = editorTextarea.selectionEnd;
@@ -350,7 +382,8 @@ class LocatorManager {
                         // 触发input事件以更新编辑器
                         editorTextarea.dispatchEvent(new Event('input'));
                         
-                        window.NotificationModule.showNotification(`已插入元素引用: ${elementName}`, 'success');
+                        const typeText = isImageElement ? '图片定位器' : '元素引用';
+                        window.NotificationModule.showNotification(`已插入${typeText}: ${elementName}`, 'success');
                     }
                 });
             }
@@ -361,8 +394,18 @@ class LocatorManager {
     setupItemDragEvents(item) {
         item.addEventListener('dragstart', (e) => {
             const name = item.dataset.name;
+            const type = item.dataset.type || 'xml';
             e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('text/plain', `[${name}]`);
+            
+            // 根据类型设置不同的拖拽数据格式
+            if (type === 'image') {
+                // 图片类型使用特殊格式，比如 @{图片名称}
+                e.dataTransfer.setData('text/plain', `@{${name}}`);
+            } else {
+                // XML元素类型使用原有格式 [元素名称]
+                e.dataTransfer.setData('text/plain', `[${name}]`);
+            }
+            
             item.style.opacity = '0.5';
         });
 
@@ -503,6 +546,7 @@ window.LocatorManager = {
     
     deleteLocator: (name) => locatorManager.deleteLocator(name),
     editLocator: (name) => locatorManager.editLocator(name),
+    loadLocators: () => locatorManager.loadLocators(),
     
     // 初始化方法
     initialize: async () => {

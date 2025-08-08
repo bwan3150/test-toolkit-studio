@@ -1844,6 +1844,443 @@ function initializeBottomPanelDisplay() {
     displayUIElementList([]); // 传入空数组会显示适当的空状态
 }
 
+// 设备屏幕模式管理
+const ScreenModeManager = {
+    currentMode: 'normal', // 'normal', 'xml', 'screenshot', 'coordinate'
+    screenshotSelector: null,
+    isSelecting: false,
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+    
+    // 初始化模式管理器
+    init() {
+        this.setupModeButtons();
+        this.setupScreenshotMode();
+        this.setupCoordinateMode();
+    },
+    
+    // 设置模式切换按钮
+    setupModeButtons() {
+        const normalModeBtn = document.getElementById('normalModeBtn');
+        const xmlModeBtn = document.getElementById('xmlModeBtn');
+        const screenshotModeBtn = document.getElementById('screenshotModeBtn');
+        const coordinateModeBtn = document.getElementById('coordinateModeBtn');
+        
+        if (normalModeBtn) {
+            normalModeBtn.addEventListener('click', () => this.switchMode('normal'));
+        }
+        if (xmlModeBtn) {
+            xmlModeBtn.addEventListener('click', () => this.switchMode('xml'));
+        }
+        if (screenshotModeBtn) {
+            screenshotModeBtn.addEventListener('click', () => this.switchMode('screenshot'));
+        }
+        if (coordinateModeBtn) {
+            coordinateModeBtn.addEventListener('click', () => this.switchMode('coordinate'));
+        }
+    },
+    
+    // 切换模式
+    switchMode(mode) {
+        this.currentMode = mode;
+        const screenContent = document.getElementById('screenContent');
+        const screenshotSelector = document.getElementById('screenshotSelector');
+        const coordinateMarker = document.getElementById('coordinateMarker');
+        
+        // 重置所有模式按钮状态
+        document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+        
+        // 清理之前的模式状态
+        screenContent.classList.remove('screenshot-mode', 'coordinate-mode');
+        if (screenshotSelector) screenshotSelector.style.display = 'none';
+        if (coordinateMarker) coordinateMarker.style.display = 'none';
+        
+        // 先禁用任何活动的 XML overlay
+        const existingOverlay = document.querySelector('.ui-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+        
+        switch(mode) {
+            case 'normal':
+                document.getElementById('normalModeBtn').classList.add('active');
+                // 纯屏幕模式，不显示任何覆盖层
+                xmlOverlayEnabled = false;
+                break;
+                
+            case 'xml':
+                document.getElementById('xmlModeBtn').classList.add('active');
+                // 启用XML overlay
+                xmlOverlayEnabled = true;
+                const deviceSelect = document.getElementById('deviceSelect');
+                if (deviceSelect?.value) {
+                    enableXmlOverlay(deviceSelect.value);
+                }
+                break;
+                
+            case 'screenshot':
+                document.getElementById('screenshotModeBtn').classList.add('active');
+                screenContent.classList.add('screenshot-mode');
+                xmlOverlayEnabled = false;
+                window.NotificationModule.showNotification('截图模式：拖动鼠标框选要截取的区域', 'info');
+                break;
+                
+            case 'coordinate':
+                document.getElementById('coordinateModeBtn').classList.add('active');
+                screenContent.classList.add('coordinate-mode');
+                xmlOverlayEnabled = false;
+                window.NotificationModule.showNotification('坐标模式：点击屏幕获取坐标', 'info');
+                break;
+        }
+    },
+    
+    // 设置截图模式
+    setupScreenshotMode() {
+        const screenContent = document.getElementById('screenContent');
+        const screenshotSelector = document.getElementById('screenshotSelector');
+        const selectorBox = screenshotSelector.querySelector('.selector-box');
+        const confirmBtn = document.getElementById('confirmScreenshotBtn');
+        const cancelBtn = document.getElementById('cancelScreenshotBtn');
+        const deviceImage = document.getElementById('deviceScreenshot');
+        
+        let isSelecting = false;
+        let startX = 0, startY = 0;
+        
+        // 鼠标按下开始选择
+        screenContent.addEventListener('mousedown', (e) => {
+            if (this.currentMode !== 'screenshot' || e.target !== deviceImage) return;
+            
+            isSelecting = true;
+            const rect = deviceImage.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            
+            screenshotSelector.style.display = 'block';
+            selectorBox.style.left = startX + 'px';
+            selectorBox.style.top = startY + 'px';
+            selectorBox.style.width = '0px';
+            selectorBox.style.height = '0px';
+            
+            // 隐藏控制按钮
+            screenshotSelector.querySelector('.selector-controls').style.display = 'none';
+        });
+        
+        // 鼠标移动更新选择框
+        screenContent.addEventListener('mousemove', (e) => {
+            if (!isSelecting || this.currentMode !== 'screenshot') return;
+            
+            const rect = deviceImage.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            const left = Math.min(startX, currentX);
+            const top = Math.min(startY, currentY);
+            const width = Math.abs(currentX - startX);
+            const height = Math.abs(currentY - startY);
+            
+            selectorBox.style.left = left + 'px';
+            selectorBox.style.top = top + 'px';
+            selectorBox.style.width = width + 'px';
+            selectorBox.style.height = height + 'px';
+        });
+        
+        // 鼠标释放结束选择
+        screenContent.addEventListener('mouseup', (e) => {
+            if (!isSelecting || this.currentMode !== 'screenshot') return;
+            
+            isSelecting = false;
+            const rect = deviceImage.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            
+            // 计算选择区域
+            this.startX = Math.min(startX, endX);
+            this.startY = Math.min(startY, endY);
+            this.endX = Math.max(startX, endX);
+            this.endY = Math.max(startY, endY);
+            
+            // 如果选择区域太小，忽略
+            if (Math.abs(this.endX - this.startX) < 10 || Math.abs(this.endY - this.startY) < 10) {
+                screenshotSelector.style.display = 'none';
+                return;
+            }
+            
+            // 显示控制按钮
+            const controls = screenshotSelector.querySelector('.selector-controls');
+            controls.style.display = 'flex';
+            controls.style.left = this.endX + 'px';
+            controls.style.top = this.startY + 'px';
+        });
+        
+        // 确认按钮
+        confirmBtn.addEventListener('click', () => {
+            this.captureSelectedArea();
+        });
+        
+        // 取消按钮
+        cancelBtn.addEventListener('click', () => {
+            screenshotSelector.style.display = 'none';
+        });
+    },
+    
+    // 截取选中区域
+    async captureSelectedArea() {
+        const { fs, fsSync, path } = getGlobals();
+        const projectPath = window.AppGlobals.currentProject;
+        
+        if (!projectPath) {
+            window.NotificationModule.showNotification('请先打开项目', 'error');
+            return;
+        }
+        
+        // 使用 workarea 中的截图文件
+        const screenshotPath = path.join(projectPath, 'workarea', 'current_screenshot.png');
+        
+        try {
+            // 检查截图文件是否存在（fs 已经是 fs.promises）
+            const screenshotExists = await fs.access(screenshotPath).then(() => true).catch(() => false);
+            if (!screenshotExists) {
+                window.NotificationModule.showNotification('请先刷新设备屏幕截图', 'error');
+                document.getElementById('screenshotSelector').style.display = 'none';
+                return;
+            }
+            
+            // 读取截图文件
+            const imageBuffer = await fs.readFile(screenshotPath);
+            const base64Full = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+            
+            // 创建临时图片对象来获取原始尺寸
+            const tempImg = new Image();
+            tempImg.src = base64Full;
+            
+            await new Promise((resolve) => {
+                tempImg.onload = resolve;
+            });
+            
+            // 获取显示的设备图片以计算缩放比例
+            const deviceImage = document.getElementById('deviceScreenshot');
+            const rect = deviceImage.getBoundingClientRect();
+            
+            // 计算实际图片中的坐标（考虑图片缩放）
+            const scaleX = tempImg.width / rect.width;
+            const scaleY = tempImg.height / rect.height;
+            
+            const realStartX = Math.round(this.startX * scaleX);
+            const realStartY = Math.round(this.startY * scaleY);
+            const realEndX = Math.round(this.endX * scaleX);
+            const realEndY = Math.round(this.endY * scaleY);
+            
+            // 创建Canvas来裁切图片
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const width = realEndX - realStartX;
+            const height = realEndY - realStartY;
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // 从完整图片绘制裁切区域
+            ctx.drawImage(tempImg, realStartX, realStartY, width, height, 0, 0, width, height);
+            
+            // 转换为Base64
+            const base64Image = canvas.toDataURL('image/png');
+            
+            // 弹出对话框让用户输入别名
+            const alias = await this.promptForAlias();
+            if (!alias) {
+                document.getElementById('screenshotSelector').style.display = 'none';
+                return;
+            }
+            
+            // 保存图片到项目locator/img文件夹
+            await this.saveImageLocator(alias, base64Image);
+            
+            // 隐藏选择器
+            document.getElementById('screenshotSelector').style.display = 'none';
+            
+        } catch (error) {
+            console.error('截取图片失败:', error);
+            window.NotificationModule.showNotification('截取失败: ' + error.message, 'error');
+            document.getElementById('screenshotSelector').style.display = 'none';
+        }
+    },
+    
+    // 提示用户输入别名
+    async promptForAlias() {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <h3>保存截图定位器</h3>
+                    <input type="text" id="imageAliasInput" placeholder="请输入截图别名" autofocus>
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button class="btn btn-secondary" id="cancelAliasBtn">取消</button>
+                        <button class="btn btn-primary" id="confirmAliasBtn">确定</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            const input = modal.querySelector('#imageAliasInput');
+            const confirmBtn = modal.querySelector('#confirmAliasBtn');
+            const cancelBtn = modal.querySelector('#cancelAliasBtn');
+            
+            const confirm = () => {
+                const value = input.value.trim();
+                if (value) {
+                    document.body.removeChild(modal);
+                    resolve(value);
+                } else {
+                    window.NotificationModule.showNotification('请输入别名', 'warning');
+                }
+            };
+            
+            const cancel = () => {
+                document.body.removeChild(modal);
+                resolve(null);
+            };
+            
+            confirmBtn.addEventListener('click', confirm);
+            cancelBtn.addEventListener('click', cancel);
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') confirm();
+                if (e.key === 'Escape') cancel();
+            });
+            
+            input.focus();
+        });
+    },
+    
+    // 保存图片定位器
+    async saveImageLocator(alias, base64Image) {
+        const { fs, fsSync, path, ipcRenderer } = getGlobals();
+        const projectPath = window.AppGlobals.currentProject;
+        
+        if (!projectPath) {
+            window.NotificationModule.showNotification('请先打开项目', 'error');
+            return;
+        }
+        
+        try {
+            // 确保目录存在
+            const locatorDir = path.join(projectPath, 'locator');
+            const imgDir = path.join(locatorDir, 'img');
+            
+            // 使用 fs API（fs 已经是 fs.promises）
+            try {
+                await fs.mkdir(locatorDir, { recursive: true });
+            } catch (err) {
+                // 目录可能已存在，忽略错误
+            }
+            
+            try {
+                await fs.mkdir(imgDir, { recursive: true });
+            } catch (err) {
+                // 目录可能已存在，忽略错误
+            }
+            
+            // 保存图片文件
+            const fileName = `${alias.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_')}.png`;
+            const filePath = path.join(imgDir, fileName);
+            const base64Data = base64Image.replace(/^data:image\/png;base64,/, '');
+            await fs.writeFile(filePath, Buffer.from(base64Data, 'base64'));
+            
+            // 更新element.json
+            const elementsPath = path.join(locatorDir, 'element.json');
+            let elements = {};
+            
+            // 尝试读取现有的element.json
+            try {
+                const content = await fs.readFile(elementsPath, 'utf-8');
+                elements = JSON.parse(content);
+            } catch (err) {
+                // 文件不存在或解析失败，使用空对象
+                console.log('element.json not found or invalid, creating new one');
+            }
+            
+            // 添加新的图片定位器（使用相对路径）
+            elements[alias] = {
+                type: 'image',
+                path: `locator/img/${fileName}`,
+                addedAt: new Date().toISOString()
+            };
+            
+            // 保存更新后的element.json
+            await fs.writeFile(elementsPath, JSON.stringify(elements, null, 2));
+            
+            window.NotificationModule.showNotification(`图片定位器 "${alias}" 已保存`, 'success');
+            
+            // 刷新Locator库显示
+            if (window.LocatorManagerModule) {
+                window.LocatorManagerModule.loadLocators();
+            }
+            
+        } catch (error) {
+            console.error('保存图片定位器失败:', error);
+            window.NotificationModule.showNotification('保存失败: ' + error.message, 'error');
+        }
+    },
+    
+    // 设置坐标模式
+    setupCoordinateMode() {
+        const screenContent = document.getElementById('screenContent');
+        const deviceImage = document.getElementById('deviceScreenshot');
+        const coordinateMarker = document.getElementById('coordinateMarker');
+        const coordinateDot = coordinateMarker.querySelector('.coordinate-dot');
+        const coordinateLabel = coordinateMarker.querySelector('.coordinate-label');
+        
+        screenContent.addEventListener('click', async (e) => {
+            if (this.currentMode !== 'coordinate' || e.target !== deviceImage) return;
+            
+            const rect = deviceImage.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // 计算实际图片中的坐标
+            const scaleX = deviceImage.naturalWidth / rect.width;
+            const scaleY = deviceImage.naturalHeight / rect.height;
+            
+            const realX = Math.round(x * scaleX);
+            const realY = Math.round(y * scaleY);
+            
+            // 显示坐标标记
+            coordinateMarker.style.display = 'block';
+            coordinateMarker.style.left = x + 'px';
+            coordinateMarker.style.top = y + 'px';
+            
+            // 更新坐标标签
+            const coordText = `(${realX}, ${realY})`;
+            coordinateLabel.textContent = coordText;
+            
+            // 复制到剪贴板
+            try {
+                await navigator.clipboard.writeText(coordText);
+                window.NotificationModule.showNotification(`坐标 ${coordText} 已复制到剪贴板`, 'success');
+            } catch (err) {
+                console.error('Failed to copy coordinates:', err);
+                window.NotificationModule.showNotification('复制坐标失败', 'error');
+            }
+            
+            // 3秒后自动隐藏标记
+            setTimeout(() => {
+                coordinateMarker.style.display = 'none';
+            }, 3000);
+        });
+    }
+};
+
+// 在页面加载时初始化模式管理器
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        ScreenModeManager.init();
+    });
+} else {
+    ScreenModeManager.init();
+}
+
 // 导出函数
 window.TestcaseManagerModule = {
     initializeTestcasePage,
@@ -1856,5 +2293,6 @@ window.TestcaseManagerModule = {
     initializeUIElementsPanel,
     initializeBottomPanelDisplay,
     recalculateXmlMarkersPosition,
-    ConsoleManager
+    ConsoleManager,
+    ScreenModeManager
 };

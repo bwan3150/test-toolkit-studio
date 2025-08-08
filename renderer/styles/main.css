@@ -2568,3 +2568,132 @@ body {
     border: 2px dashed #4EC9B0;
     background: rgba(78, 201, 176, 0.1);
 }
+
+/* 设备屏幕模式切换按钮组 */
+.screen-mode-buttons {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.mode-btn {
+    opacity: 0.6;
+    transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+    opacity: 0.8;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.mode-btn.active {
+    opacity: 1;
+    background: #4CAF50;
+    color: white;
+}
+
+/* 截图选择器样式 */
+.screenshot-selector {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    cursor: crosshair;
+}
+
+.selector-box {
+    position: absolute;
+    border: 2px dashed #4CAF50;
+    background: rgba(76, 175, 80, 0.2);
+    pointer-events: none;
+}
+
+.selector-controls {
+    position: absolute;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(45, 45, 45, 0.95);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.selector-controls button {
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+/* 坐标标记样式 */
+.coordinate-marker {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.coordinate-dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #ff5722;
+    border: 2px solid white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.coordinate-label {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(45, 45, 45, 0.95);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 坐标模式下的鼠标样式 */
+#screenContent.coordinate-mode {
+    cursor: crosshair;
+}
+
+/* 截图模式下禁用XML overlay */
+#screenContent.screenshot-mode .ui-overlay {
+    display: none;
+}
+
+/* Locator库中的图片项样式 */
+.locator-item.image-type {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.locator-item.image-type .item-thumbnail {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #1e1e1e;
+}
+
+.locator-item.image-type .item-info {
+    flex: 1;
+}
+
+.locator-item.image-type .item-name {
+    font-weight: 500;
+    color: #4EC9B0;
+}
+
+.locator-item.image-type .item-path {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+}
