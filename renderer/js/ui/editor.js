@@ -898,6 +898,12 @@ class SimpleCodeEditor {
         if (selection.rangeCount === 0) return;
         
         const range = selection.getRangeAt(0);
+        
+        // 如果有选择文本（不是单纯的光标位置），不进行处理，保持用户选择
+        if (!range.collapsed) {
+            return;
+        }
+        
         const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
         const text = this.getPlainText();
         

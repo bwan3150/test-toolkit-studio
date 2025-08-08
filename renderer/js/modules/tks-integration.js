@@ -102,6 +102,7 @@ class TKSScriptRunner {
         }
 
         this.isRunning = true;
+        this.updateRunButton(true);
         
         try {
             // 获取项目路径
@@ -166,6 +167,7 @@ class TKSScriptRunner {
             throw error;
         } finally {
             this.isRunning = false;
+            this.updateRunButton(false);
         }
     }
 
@@ -175,8 +177,29 @@ class TKSScriptRunner {
     stopExecution() {
         if (this.isRunning) {
             this.isRunning = false;
+            this.updateRunButton(false);
             window.TestcaseManagerModule.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
             window.NotificationModule.showNotification('已停止执行', 'info');
+        }
+    }
+    
+    /**
+     * 更新运行按钮状态
+     */
+    updateRunButton(isRunning) {
+        const runTestBtn = document.getElementById('runTestBtn');
+        if (!runTestBtn) return;
+        
+        if (isRunning) {
+            // 运行中状态 - 变成停止按钮
+            runTestBtn.textContent = 'Stop Test';
+            runTestBtn.className = 'btn btn-danger';
+            runTestBtn.onclick = () => this.stopExecution();
+        } else {
+            // 空闲状态 - 变成运行按钮
+            runTestBtn.textContent = 'Run Test';
+            runTestBtn.className = 'btn btn-primary';
+            runTestBtn.onclick = () => this.handleRunTest();
         }
     }
 }
