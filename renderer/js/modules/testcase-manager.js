@@ -1868,12 +1868,6 @@ const ScreenModeManager = {
     endX: 0,
     endY: 0,
     
-    // 缩放相关
-    zoomLevel: 1.0,
-    minZoom: 0.5,
-    maxZoom: 3.0,
-    zoomStep: 0.25,
-    
     // 统一的坐标转换系统
     getImageDisplayInfo() {
         const deviceImage = document.getElementById('deviceScreenshot');
@@ -1936,7 +1930,6 @@ const ScreenModeManager = {
         this.setupModeButtons();
         this.setupScreenshotMode();
         this.setupCoordinateMode();
-        this.setupZoomControls();
         
         this.initialized = true;
         console.log('ScreenModeManager 初始化完成');
@@ -2032,96 +2025,6 @@ const ScreenModeManager = {
         }
     },
     
-    // 设置缩放控制
-    setupZoomControls() {
-        const zoomInBtn = document.getElementById('zoomInBtn');
-        const zoomOutBtn = document.getElementById('zoomOutBtn');
-        const zoomResetBtn = document.getElementById('zoomResetBtn');
-        const screenContent = document.getElementById('screenContent');
-        
-        if (zoomInBtn) {
-            zoomInBtn.addEventListener('click', () => {
-                this.zoomIn();
-            });
-        }
-        
-        if (zoomOutBtn) {
-            zoomOutBtn.addEventListener('click', () => {
-                this.zoomOut();
-            });
-        }
-        
-        if (zoomResetBtn) {
-            zoomResetBtn.addEventListener('click', () => {
-                this.resetZoom();
-            });
-        }
-        
-        // 添加鼠标滚轮缩放
-        if (screenContent) {
-            screenContent.addEventListener('wheel', (e) => {
-                if (e.ctrlKey || e.metaKey) {
-                    e.preventDefault();
-                    if (e.deltaY < 0) {
-                        this.zoomIn();
-                    } else {
-                        this.zoomOut();
-                    }
-                }
-            }, { passive: false });
-        }
-    },
-    
-    // 放大
-    zoomIn() {
-        if (this.zoomLevel < this.maxZoom) {
-            this.zoomLevel = Math.min(this.maxZoom, this.zoomLevel + this.zoomStep);
-            this.applyZoom();
-        }
-    },
-    
-    // 缩小
-    zoomOut() {
-        if (this.zoomLevel > this.minZoom) {
-            this.zoomLevel = Math.max(this.minZoom, this.zoomLevel - this.zoomStep);
-            this.applyZoom();
-        }
-    },
-    
-    // 重置缩放
-    resetZoom() {
-        this.zoomLevel = 1.0;
-        this.applyZoom();
-    },
-    
-    // 应用缩放
-    applyZoom() {
-        const deviceImage = document.getElementById('deviceScreenshot');
-        const screenContent = document.getElementById('screenContent');
-        const zoomLevel = document.getElementById('zoomLevel');
-        
-        if (deviceImage) {
-            deviceImage.style.transform = `scale(${this.zoomLevel})`;
-            
-            if (this.zoomLevel > 1.0) {
-                screenContent.classList.add('zoomable');
-            } else {
-                screenContent.classList.remove('zoomable');
-            }
-        }
-        
-        if (zoomLevel) {
-            zoomLevel.textContent = `${Math.round(this.zoomLevel * 100)}%`;
-        }
-        
-        // 重新计算所有覆盖层的位置
-        if (this.currentMode === 'xml' && xmlOverlayEnabled) {
-            // 延迟重新计算，等待transform动画完成
-            setTimeout(() => {
-                recalculateXmlMarkersPosition();
-            }, 200);
-        }
-    },
     
     // 设置截图模式
     setupScreenshotMode() {
@@ -2371,14 +2274,14 @@ const ScreenModeManager = {
             const base64Image = canvas.toDataURL('image/png');
             
             // 弹出对话框让用户输入别名
-            const alias = await this.promptForAlias();
-            if (!alias) {
-                document.getElementById('screenshotSelector').style.display = 'none';
-                return;
-            }
-            
-            // 保存图片到项目locator/img文件夹
-            await this.saveImageLocator(alias, base64Image);
+            let alias;
+            do {
+                alias = await this.promptForAlias();
+                if (!alias) {
+                    document.getElementById('screenshotSelector').style.display = 'none';
+                    return;
+                }
+            } while (!await this.saveImageLocator(alias, base64Image)); // 如果保存失败（重名）则重新输入
             
             // 隐藏选择器
             document.getElementById('screenshotSelector').style.display = 'none';
@@ -2484,6 +2387,12 @@ const ScreenModeManager = {
                 console.log('element.json not found or invalid, creating new one');
             }
             
+            // 检查名称是否已存在
+            if (elements[alias]) {
+                window.NotificationModule.showNotification(`定位器名称 "${alias}" 已存在，请使用其他名称`, 'warning');
+                return false;
+            }
+            
             // 添加新的图片定位器（使用相对路径）
             elements[alias] = {
                 type: 'image',
@@ -2501,9 +2410,12 @@ const ScreenModeManager = {
                 window.LocatorManagerModule.loadLocators();
             }
             
+            return true; // 保存成功
+            
         } catch (error) {
             console.error('保存图片定位器失败:', error);
             window.NotificationModule.showNotification('保存失败: ' + error.message, 'error');
+            return false; // 保存失败
         }
     },
     

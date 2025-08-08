@@ -109,9 +109,16 @@ class LocatorManager {
                 customName = await this.promptForElementName(element);
                 if (!customName) return false; // 用户取消
             }
+            
+            // 检查名称是否已存在
+            if (this.locators[customName]) {
+                window.NotificationModule.showNotification(`元素名称 "${customName}" 已存在，请使用其他名称`, 'warning');
+                return false;
+            }
 
             // 构建locator对象
             const locatorData = {
+                type: 'xml', // 统一添加类型字段
                 className: element.className,
                 bounds: element.bounds,
                 text: element.text || undefined,
@@ -308,8 +315,8 @@ class LocatorManager {
                         </div>
                     </div>
                 `;
-            } else {
-                // 原有的XML元素类型显示
+            } else if (data.type === 'xml') {
+                // XML元素类型显示
                 return `
                     <div class="locator-item" draggable="true" data-name="${name}" data-type="xml">
                         <div class="locator-header">
@@ -334,8 +341,11 @@ class LocatorManager {
                         </div>
                     </div>
                 `;
+            } else {
+                // 不支持的类型或缺少type字段，不显示
+                return '';
             }
-        }).join('');
+        }).filter(html => html !== '').join('');
 
         locatorList.innerHTML = listHTML;
 
