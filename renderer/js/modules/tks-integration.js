@@ -12,6 +12,7 @@ class TKSScriptRunner {
         this.isRunning = false;
         this.currentScript = null;
         this.initialized = false;
+        this.currentExecutor = null; // 保存当前执行器的引用
     }
 
     /**
@@ -115,7 +116,7 @@ class TKSScriptRunner {
             
             // 使用TKS引擎执行脚本
             if (window.TKSScriptModule && window.TKSScriptModule.Executor) {
-                const executor = new window.TKSScriptModule.Executor(projectPath, deviceId);
+                this.currentExecutor = new window.TKSScriptModule.Executor(projectPath, deviceId);
                 
                 // 从脚本路径推断case文件夹
                 const { path } = window.AppGlobals;
@@ -127,14 +128,14 @@ class TKSScriptRunner {
                 if (caseIndex !== -1 && caseIndex < pathParts.length - 2) {
                     caseFolder = pathParts[caseIndex + 1]; // case_001, case_002 etc.
                     console.log('推断的case文件夹:', caseFolder);
-                    executor.setCurrentCase(caseFolder);
+                    this.currentExecutor.setCurrentCase(caseFolder);
                 } else {
                     console.warn('无法推断case文件夹，locator引用可能无法工作');
                 }
                 
                 // 设置脚本物理文件名（去掉.tks扩展名）
                 const fileName = path.basename(scriptPath, '.tks');
-                executor.setScriptFileName(fileName);
+                this.currentExecutor.setScriptFileName(fileName);
                 console.log('设置脚本文件名:', fileName);
                 
                 // 解析脚本
@@ -146,7 +147,7 @@ class TKSScriptRunner {
                 }
 
                 // 执行脚本
-                const result = await executor.execute(parsedScript);
+                const result = await this.currentExecutor.execute(parsedScript);
                 
                 if (result.success) {
                     const executedSteps = result.steps ? result.steps.length : 0;
@@ -167,6 +168,7 @@ class TKSScriptRunner {
             throw error;
         } finally {
             this.isRunning = false;
+            this.currentExecutor = null; // 清除执行器引用
             this.updateRunButton(false);
         }
     }
@@ -175,8 +177,17 @@ class TKSScriptRunner {
      * 停止执行
      */
     stopExecution() {
-        if (this.isRunning) {
+        if (this.isRunning && this.currentExecutor) {
+            console.log('用户请求停止脚本执行');
+            // 停止TKS执行器
+            this.currentExecutor.stop();
+            // 清除编辑器执行高亮
+            if (window.AppGlobals.codeEditor) {
+                window.AppGlobals.codeEditor.clearExecutionHighlight();
+            }
+            // 更新状态
             this.isRunning = false;
+            this.currentExecutor = null;
             this.updateRunButton(false);
             window.TestcaseManagerModule.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
             window.NotificationModule.showNotification('已停止执行', 'info');
@@ -192,13 +203,23 @@ class TKSScriptRunner {
         
         if (isRunning) {
             // 运行中状态 - 变成停止按钮
-            runTestBtn.textContent = 'Stop Test';
-            runTestBtn.className = 'btn btn-danger';
+            runTestBtn.innerHTML = `
+                <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path d="M6 6h12v12H6z"/>
+                </svg>
+                Stop Test
+            `;
+            runTestBtn.className = 'btn btn-danger btn-block';
             runTestBtn.onclick = () => this.stopExecution();
         } else {
             // 空闲状态 - 变成运行按钮
-            runTestBtn.textContent = 'Run Test';
-            runTestBtn.className = 'btn btn-primary';
+            runTestBtn.innerHTML = `
+                <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+                Run Test
+            `;
+            runTestBtn.className = 'btn btn-primary btn-block';
             runTestBtn.onclick = () => this.handleRunTest();
         }
     }
