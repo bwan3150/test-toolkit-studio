@@ -131,6 +131,11 @@ class TKSScriptRunner {
                     console.warn('无法推断case文件夹，locator引用可能无法工作');
                 }
                 
+                // 设置脚本物理文件名（去掉.tks扩展名）
+                const fileName = path.basename(scriptPath, '.tks');
+                executor.setScriptFileName(fileName);
+                console.log('设置脚本文件名:', fileName);
+                
                 // 解析脚本
                 const parser = new window.TKSScriptModule.Parser();
                 const parsedScript = parser.parse(scriptContent);

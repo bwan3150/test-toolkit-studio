@@ -40,15 +40,18 @@ project_root/
 ├── cases/              # 测试用例文件夹
 │   └── case_001/       
 │       ├── config.json # 此用例配置
-│       ├── locator/    # 元素定位材料
-│       │   ├── element.json
-│       │   └── img/    # 图像识别材料
+│       ├── result/     # 此用例下脚本运行log结果存放处
 │       └── script/     # 测试脚本
 │           └── script_001.yaml
 ├── devices/            # 设备配置
+├── locator/            # 元素定位材料
+│   ├── element.json    # xml 元素定位信息 
+│   └── img/            # 裁切截图 图像识别元素定位信息 
 ├── testcase_map.json   # 用例映射表
 ├── testcase_sheet.csv  # 用例总表
 └── workarea/           # 当前工作区
+    ├── current_screenshot.png    # 当前设备屏幕截图
+    └── current_ui_tree.xml       # 当前设备屏幕xml UI树信息
 ```
 
 ## 快捷键

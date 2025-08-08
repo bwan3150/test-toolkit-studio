@@ -356,11 +356,13 @@ ipcMain.handle('create-project-structure', async (event, projectPath) => {
     await fs.mkdir(path.join(projectPath, 'cases'), { recursive: true });
     await fs.mkdir(path.join(projectPath, 'devices'), { recursive: true });
     await fs.mkdir(path.join(projectPath, 'workarea'), { recursive: true });
-    await fs.mkdir(path.join(projectPath, 'result'), { recursive: true });
+    await fs.mkdir(path.join(projectPath, 'locator'), { recursive: true });
+    await fs.mkdir(path.join(projectPath, 'locator', 'img'), { recursive: true });
     
     // Create initial files
     await fs.writeFile(path.join(projectPath, 'testcase_map.json'), '{}', 'utf-8');
     await fs.writeFile(path.join(projectPath, 'testcase_sheet.csv'), '', 'utf-8');
+    await fs.writeFile(path.join(projectPath, 'locator', 'element.json'), '{}', 'utf-8');
     
     // Create README for each folder
     await fs.writeFile(
@@ -370,8 +372,8 @@ ipcMain.handle('create-project-structure', async (event, projectPath) => {
     );
     
     await fs.writeFile(
-      path.join(projectPath, 'result', 'README.md'),
-      '# Result\n\n此文件夹用于存放测试执行结果。',
+      path.join(projectPath, 'locator', 'README.md'),
+      '# Locator\n\n此文件夹用于存放所有测试用例共享的元素定位信息。\n- element.json: XML元素定位信息\n- img/: 图像识别元素定位截图',
       'utf-8'
     );
     

@@ -536,8 +536,7 @@ async function createTestCase(record, index) {
     try {
         // 创建case目录结构
         await fs.mkdir(casePath, { recursive: true });
-        await fs.mkdir(path.join(casePath, 'locator'), { recursive: true });
-        await fs.mkdir(path.join(casePath, 'locator', 'img'), { recursive: true });
+        await fs.mkdir(path.join(casePath, 'result'), { recursive: true });
         await fs.mkdir(path.join(casePath, 'script'), { recursive: true });
         
         // 创建config.json
@@ -554,10 +553,11 @@ async function createTestCase(record, index) {
             JSON.stringify(config, null, 2)
         );
         
-        // 创建element.json
+        // 创建case级别的README
         await fs.writeFile(
-            path.join(casePath, 'locator', 'element.json'),
-            JSON.stringify({}, null, 2)
+            path.join(casePath, 'result', 'README.md'),
+            '# Result\n\n此文件夹用于存放该测试用例的执行结果和日志。',
+            'utf-8'
         );
         
         // 创建样例脚本 - 使用新的 .tks 格式

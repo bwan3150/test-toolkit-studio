@@ -970,12 +970,10 @@ class TKSScriptExecutor {
      * @returns {Object|null} 元素定义
      */
     async getElementDefinition(alias) {
-        // 从element.json中读取元素定义
+        // 从项目级别的element.json中读取元素定义
         const elementFile = tksPath.join(
-            this.projectPath, 
-            'cases', 
-            this.currentCaseFolder || '', 
-            'locator', 
+            this.projectPath,
+            'locator',
             'element.json'
         );
 
@@ -1056,8 +1054,8 @@ class TKSScriptExecutor {
      * 保存执行结果
      */
     async saveResult(result) {
-        // 保存到result文件夹而不是workarea
-        const resultDir = tksPath.join(this.projectPath, 'result');
+        // 保存到当前case的result文件夹
+        const resultDir = tksPath.join(this.projectPath, 'cases', this.currentCaseFolder, 'result');
         
         // 确保result目录存在
         try {
@@ -1066,10 +1064,12 @@ class TKSScriptExecutor {
             // 目录可能已存在，忽略错误
         }
         
-        // 生成结果文件名，包含更多信息
+        // 生成结果文件名：物理文件名 + 时间 + 结果
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
         const status = result.success ? 'PASS' : 'FAIL';
-        const resultFileName = `${result.caseId}_${timestamp}_${status}.json`;
+        // 直接使用物理文件名，如果没有设置则使用默认值
+        const fileName = this.scriptFileName || 'unknown_script';
+        const resultFileName = `${fileName}_${timestamp}_${status}.json`;
         const resultPath = tksPath.join(resultDir, resultFileName);
 
         try {
@@ -1099,6 +1099,13 @@ class TKSScriptExecutor {
      */
     setCurrentCase(caseFolder) {
         this.currentCaseFolder = caseFolder;
+    }
+    
+    /**
+     * 设置脚本物理文件名
+     */
+    setScriptFileName(fileName) {
+        this.scriptFileName = fileName;
     }
 }
 
@@ -1163,6 +1170,10 @@ class TKSScriptManager {
         const caseFolder = tksPath.dirname(scriptPath).split(tksPath.sep).pop();
         this.executor.setCurrentCase(caseFolder);
         
+        // 获取物理文件名（去掉扩展名）并设置
+        const fileName = tksPath.basename(scriptPath, '.tks');
+        this.executor.setScriptFileName(fileName);
+        
         // 执行脚本
         const result = await this.executor.execute(script);
         
@@ -1211,12 +1222,12 @@ class TKSScriptManager {
         const dir = tksPath.dirname(scriptPath);
         await tksFs.mkdir(dir, { recursive: true });
 
-        // 创建locator目录和element.json
-        const locatorDir = tksPath.join(dir, 'locator');
+        // 确保项目级别的locator目录和element.json存在
+        const locatorDir = tksPath.join(this.projectPath, 'locator');
         await tksFs.mkdir(locatorDir, { recursive: true });
         
-        // 确保项目级别的result目录存在
-        const resultDir = tksPath.join(this.projectPath, 'result');
+        // 确保当前case的result目录存在
+        const resultDir = tksPath.join(this.projectPath, 'cases', caseId, 'result');
         await tksFs.mkdir(resultDir, { recursive: true });
         
         const elementFile = tksPath.join(locatorDir, 'element.json');

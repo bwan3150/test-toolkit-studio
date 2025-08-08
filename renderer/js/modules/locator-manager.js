@@ -58,21 +58,25 @@ class LocatorManager {
         return null;
     }
 
-    // 加载locator文件
+    // 加载locator文件 - 改为从项目级别加载
     async loadLocators() {
-        if (!this.currentCasePath) {
-            this.inferCurrentCasePath();
-        }
-
-        if (!this.currentCasePath) {
-            console.log('没有选中的测试用例');
+        const projectPath = window.AppGlobals.currentProject;
+        if (!projectPath) {
+            console.log('没有打开的项目');
             this.updateLocatorList({});
             return;
         }
 
         try {
             const { path, fs } = window.AppGlobals;
-            const locatorPath = path.join(this.currentCasePath, 'locator', 'element.json');
+            // 更改为项目级别的locator路径
+            const projectPath = window.AppGlobals.currentProject;
+            if (!projectPath) {
+                console.log('没有打开的项目');
+                this.updateLocatorList({});
+                return;
+            }
+            const locatorPath = path.join(projectPath, 'locator', 'element.json');
             
             // 检查文件是否存在
             try {
@@ -93,13 +97,9 @@ class LocatorManager {
 
     // 保存元素到locator库
     async saveElement(element, customName = null) {
-        if (!this.currentCasePath) {
-            // 尝试重新推断case路径
-            this.inferCurrentCasePath();
-        }
-        
-        if (!this.currentCasePath) {
-            window.NotificationModule.showNotification('请先选择或打开一个测试用例', 'warning');
+        const projectPath = window.AppGlobals.currentProject;
+        if (!projectPath) {
+            window.NotificationModule.showNotification('请先打开一个项目', 'warning');
             return false;
         }
 
@@ -249,7 +249,12 @@ class LocatorManager {
     // 保存locators到文件
     async saveLocatorsToFile() {
         const { path, fs } = window.AppGlobals;
-        const locatorDir = path.join(this.currentCasePath, 'locator');
+        // 更改为项目级别的locator路径
+        const projectPath = window.AppGlobals.currentProject;
+        if (!projectPath) {
+            throw new Error('没有打开的项目');
+        }
+        const locatorDir = path.join(projectPath, 'locator');
         const locatorPath = path.join(locatorDir, 'element.json');
 
         // 确保locator目录存在
