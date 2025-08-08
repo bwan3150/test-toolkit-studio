@@ -300,7 +300,7 @@ class LocatorManager {
                             <div class="item-path">${data.path}</div>
                         </div>
                         <div class="locator-actions">
-                            <button class="btn-icon-small" onclick="LocatorManager.deleteLocator('${name}')" title="删除">
+                            <button class="btn-icon-small delete-locator-btn" data-name="${name}" title="删除">
                                 <svg viewBox="0 0 24 24" width="16" height="16">
                                     <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                                 </svg>
@@ -315,12 +315,12 @@ class LocatorManager {
                         <div class="locator-header">
                             <span class="locator-name">${name}</span>
                             <div class="locator-actions">
-                                <button class="btn-icon-small" onclick="LocatorManager.editLocator('${name}')" title="编辑">
+                                <button class="btn-icon-small edit-locator-btn" data-name="${name}" title="编辑">
                                     <svg viewBox="0 0 24 24" width="16" height="16">
                                         <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                                     </svg>
                                 </button>
-                                <button class="btn-icon-small" onclick="LocatorManager.deleteLocator('${name}')" title="删除">
+                                <button class="btn-icon-small delete-locator-btn" data-name="${name}" title="删除">
                                     <svg viewBox="0 0 24 24" width="16" height="16">
                                         <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                                     </svg>
@@ -343,6 +343,33 @@ class LocatorManager {
         locatorList.querySelectorAll('.locator-item').forEach(item => {
             this.setupItemDragEvents(item);
         });
+        
+        // 添加事件委托处理编辑和删除按钮
+        this.setupActionButtons(locatorList);
+    }
+    
+    // 设置操作按钮的事件委托
+    setupActionButtons(locatorList) {
+        // 删除已存在的事件监听器避免重复绑定
+        const existingHandler = locatorList._buttonClickHandler;
+        if (existingHandler) {
+            locatorList.removeEventListener('click', existingHandler);
+        }
+        
+        // 创建新的事件处理器
+        const buttonClickHandler = async (e) => {
+            if (e.target.closest('.edit-locator-btn')) {
+                const name = e.target.closest('.edit-locator-btn').dataset.name;
+                await this.editLocator(name);
+            } else if (e.target.closest('.delete-locator-btn')) {
+                const name = e.target.closest('.delete-locator-btn').dataset.name;
+                await this.deleteLocator(name);
+            }
+        };
+        
+        // 保存处理器引用并添加监听器
+        locatorList._buttonClickHandler = buttonClickHandler;
+        locatorList.addEventListener('click', buttonClickHandler);
     }
 
     // 设置拖放功能

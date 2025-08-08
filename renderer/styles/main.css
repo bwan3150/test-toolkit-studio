@@ -2618,6 +2618,8 @@ body {
     background: rgba(45, 45, 45, 0.95);
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    z-index: 150; /* 确保按钮在最上层 */
+    pointer-events: all; /* 确保可以点击 */
 }
 
 .selector-controls button {
@@ -2696,4 +2698,57 @@ body {
     font-size: 11px;
     color: #888;
     margin-top: 2px;
+}
+
+/* 缩放控制样式 */
+.screen-zoom-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(45, 45, 45, 0.9);
+    border-radius: 6px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 200;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.zoom-btn {
+    width: 28px;
+    height: 28px;
+    padding: 4px;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+}
+
+.zoom-btn:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.zoom-level {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 40px;
+    text-align: center;
+    padding: 0 4px;
+}
+
+/* 支持缩放的屏幕内容 */
+.screen-content.zoomable {
+    overflow: auto;
+    cursor: grab;
+}
+
+.screen-content.zoomable:active {
+    cursor: grabbing;
+}
+
+.screen-content.zoomable #deviceScreenshot {
+    transition: transform 0.2s ease;
+    transform-origin: center center;
 }
