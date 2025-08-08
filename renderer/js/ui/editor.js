@@ -72,11 +72,13 @@ class SimpleCodeEditor {
         
         this.contentEl.addEventListener('compositionend', () => {
             this.isComposing = false;
-            // 组合输入结束后立即更新
-            this.updateValue();
-            this.updateLineNumbers();
-            this.applySyntaxHighlighting();
-            this.triggerChange();
+            // 组合输入结束后延迟更新，确保输入内容已经正确插入DOM
+            setTimeout(() => {
+                this.updateValue();
+                this.updateLineNumbers();
+                this.applySyntaxHighlighting();
+                this.triggerChange();
+            }, 10);
         });
         
         // 处理输入事件
@@ -98,6 +100,9 @@ class SimpleCodeEditor {
             if (e.key === 'Tab') {
                 e.preventDefault();
                 this.insertText('  '); // 插入2个空格
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                this.insertText('\n'); // 插入换行符
             }
         });
         
@@ -154,18 +159,24 @@ class SimpleCodeEditor {
         const selection = window.getSelection();
         const range = selection.getRangeAt(0);
         
+        // 保存插入前的光标位置
+        const startOffset = this.getTextOffset(range.startContainer, range.startOffset);
+        
         range.deleteContents();
-        range.insertNode(document.createTextNode(text));
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
         
-        // 移动光标到插入文本后
-        range.setStartAfter(range.endContainer);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
+        // 计算插入后光标应该在的位置
+        const targetOffset = startOffset + text.length;
         
+        // 更新内容
         this.updateValue();
         this.updateLineNumbers();
         this.applySyntaxHighlighting();
+        
+        // 在语法高亮后恢复光标到正确位置
+        this.restoreCursorPosition(targetOffset);
+        
         this.triggerChange();
     }
     
@@ -258,6 +269,11 @@ class SimpleCodeEditor {
     }
     
     applySyntaxHighlighting() {
+        // 如果正在组合输入，不进行语法高亮
+        if (this.isComposing) {
+            return;
+        }
+        
         if (!this.value) {
             this.showPlaceholder();
             return;
