@@ -27,9 +27,9 @@ class SimpleCodeEditor {
         this.contentEl = document.getElementById('editorContent');
         
         
-        // 设置ContentEditable样式
+        // 设置ContentEditable样式 - 使用应用统一的等宽字体
         const fontSettings = {
-            fontFamily: 'Consolas, "Courier New", monospace',
+            fontFamily: 'var(--font-mono)', // 使用应用统一的等宽字体变量
             fontSize: '14px',
             lineHeight: '21px',
             letterSpacing: 'normal',
@@ -93,6 +93,20 @@ class SimpleCodeEditor {
                 e.preventDefault();
                 this.handleImageLocatorClick(e.target);
             }
+        });
+        
+        // 监听光标位置变化，用于图片/文本模式切换
+        this.contentEl.addEventListener('keyup', () => {
+            setTimeout(() => this.checkImageLocatorCursor(), 50);
+        });
+        
+        this.contentEl.addEventListener('mouseup', () => {
+            setTimeout(() => this.checkImageLocatorCursor(), 50);
+        });
+        
+        // 监听失去焦点，恢复所有图片显示
+        this.contentEl.addEventListener('blur', () => {
+            setTimeout(() => this.restoreAllImages(), 100);
         });
     }
     
@@ -679,8 +693,70 @@ class SimpleCodeEditor {
         this.updateValue();
     }
     
+    // 检查光标是否在图片定位器文本范围内
+    checkImageLocatorCursor() {
+        const selection = window.getSelection();
+        if (selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
+        const text = this.getPlainText();
+        
+        // 查找所有图片定位器位置
+        const imageLocatorRegex = /@\{([^}]+)\}/g;
+        let match;
+        let shouldRerender = false;
+        
+        while ((match = imageLocatorRegex.exec(text)) !== null) {
+            const start = match.index;
+            const end = match.index + match[0].length;
+            
+            // 如果光标不在任何图片定位器文本内，且当前有文本形式的定位器，则恢复图片
+            if (!(cursorOffset >= start && cursorOffset <= end)) {
+                shouldRerender = true;
+            }
+        }
+        
+        if (shouldRerender) {
+            this.restoreAllImages();
+        }
+    }
+    
+    // 恢复所有图片显示
+    restoreAllImages() {
+        // 重新应用语法高亮，这会将所有@{name}转换回图片
+        this.applySyntaxHighlighting();
+    }
+    
     // 刷新图片定位器渲染
     refreshImageLocators() {
+        this.applySyntaxHighlighting();
+    }
+    
+    // 更新字体设置
+    updateFontSettings(fontFamily, fontSize) {
+        const lineHeight = fontSize + 7; // 保持行高与字体大小的比例
+        
+        const fontSettings = {
+            fontFamily: fontFamily,
+            fontSize: fontSize + 'px',
+            lineHeight: lineHeight + 'px'
+        };
+        
+        // 更新ContentEditable样式
+        Object.assign(this.contentEl.style, fontSettings);
+        
+        // 更新行号的字体设置以保持对齐
+        if (this.lineNumbersEl) {
+            Object.assign(this.lineNumbersEl.style, {
+                fontFamily: fontFamily,
+                fontSize: fontSize + 'px',
+                lineHeight: lineHeight + 'px'
+            });
+        }
+        
+        // 重新计算行号和重新渲染
+        this.updateLineNumbers();
         this.applySyntaxHighlighting();
     }
     
@@ -786,20 +862,22 @@ function initializeSimpleEditor() {
         set placeholder(text) { editorInstance.setPlaceholder(text); },
         focus() { editorInstance.focus(); },
         refreshImageLocators() { editorInstance.refreshImageLocators(); },
+        updateFontSettings(fontFamily, fontSize) { editorInstance.updateFontSettings(fontFamily, fontSize); },
         highlightExecutingLine(lineNumber) { editorInstance.highlightExecutingLine(lineNumber); },
         highlightErrorLine(lineNumber) { editorInstance.highlightErrorLine(lineNumber); },
         clearExecutionHighlight() { editorInstance.clearExecutionHighlight(); }
     });
     
     console.log('New Simple Editor initialized successfully');
+    
+    // 初始化后立即加载字体设置
+    setTimeout(() => {
+        if (window.SettingsModule && window.SettingsModule.loadEditorFontSettings) {
+            window.SettingsModule.loadEditorFontSettings();
+        }
+    }, 100);
 }
 
-// 更新编辑器（兼容旧接口）
-function updateEditor() {
-    if (editorInstance) {
-        editorInstance.applySyntaxHighlighting();
-    }
-}
 
 // 标签管理函数
 function createTab(tab) {
@@ -1002,7 +1080,6 @@ function getActiveEditor() {
 // 导出函数
 window.EditorModule = {
     initializeSimpleEditor,
-    updateEditor,
     createTab,
     selectTab,
     closeTab,

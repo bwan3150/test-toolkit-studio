@@ -449,6 +449,28 @@
                     </div>
                     
                     <div class="settings-section">
+                        <h3>编辑器设置</h3>
+                        <div class="form-group">
+                            <label>字体设置</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <select id="editorFontFamily" style="flex: 1;">
+                                    <option value="var(--font-mono)">应用默认字体</option>
+                                    <option value="Consolas, 'Courier New', monospace">Consolas</option>
+                                    <option value="'SF Mono', Monaco, monospace">'SF Mono'</option>
+                                    <option value="'Cascadia Code', monospace">'Cascadia Code'</option>
+                                    <option value="'Fira Code', monospace">'Fira Code'</option>
+                                    <option value="'JetBrains Mono', monospace">'JetBrains Mono'</option>
+                                    <option value="Monaco, monospace">Monaco</option>
+                                    <option value="'Courier New', monospace">'Courier New'</option>
+                                </select>
+                                <input type="number" id="editorFontSize" min="10" max="24" value="14" style="width: 60px;">
+                                <span>px</span>
+                            </div>
+                            <button class="btn btn-secondary" id="applyFontSettings">应用字体设置</button>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
                         <h3>Android SDK</h3>
                         <div class="sdk-status">
                             <div class="status-item">

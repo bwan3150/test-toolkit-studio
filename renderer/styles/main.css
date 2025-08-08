@@ -1075,7 +1075,7 @@ body {
 
 /* ContentEditable编辑器样式 */
 .editor-content {
-    font-family: Consolas, "Courier New", monospace !important;
+    font-family: var(--font-mono) !important; /* 使用应用统一的等宽字体 */
     font-size: 14px !important;
     line-height: 21px !important;
     letter-spacing: normal !important;

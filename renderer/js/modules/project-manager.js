@@ -42,7 +42,6 @@ function initializeProjectPage() {
             if (window.AppGlobals.codeEditor) {
                 window.AppGlobals.codeEditor.value = '';
                 window.AppGlobals.codeEditor.placeholder = '请在Project页面选择测试项创建Case后, 在左侧文件树选择对应YAML文件开始编辑自动化脚本';
-                window.EditorModule.updateEditor();
             }
             
             // 清除当前项目路径

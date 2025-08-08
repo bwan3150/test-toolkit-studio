@@ -9,6 +9,11 @@ function initializeSettingsPage() {
     const settingsBaseUrl = document.getElementById('settingsBaseUrl');
     const aboutVersion = document.getElementById('about-version');
     
+    // 编辑器字体设置
+    const editorFontFamily = document.getElementById('editorFontFamily');
+    const editorFontSize = document.getElementById('editorFontSize');
+    const applyFontSettings = document.getElementById('applyFontSettings');
+    
     // 加载应用版本
     if (aboutVersion) {
         ipcRenderer.invoke('get-app-version').then(version => {
@@ -40,6 +45,75 @@ function initializeSettingsPage() {
             settingsBaseUrl.value = url;
         }
     });
+    
+    // 应用字体设置
+    if (applyFontSettings) {
+        applyFontSettings.addEventListener('click', async () => {
+            const fontFamily = editorFontFamily.value;
+            const fontSize = parseInt(editorFontSize.value);
+            
+            if (fontSize < 10 || fontSize > 24) {
+                window.NotificationModule.showNotification('字体大小必须在10-24px之间', 'error');
+                return;
+            }
+            
+            // 保存设置到本地存储
+            await ipcRenderer.invoke('store-set', 'editor_font_family', fontFamily);
+            await ipcRenderer.invoke('store-set', 'editor_font_size', fontSize);
+            
+            // 应用到当前编辑器
+            applyEditorFontSettings(fontFamily, fontSize);
+            
+            window.NotificationModule.showNotification('字体设置已应用', 'success');
+        });
+    }
+    
+    // 加载已保存的字体设置
+    loadEditorFontSettings();
+}
+
+// 加载编辑器字体设置
+async function loadEditorFontSettings() {
+    const { ipcRenderer } = window.AppGlobals;
+    
+    try {
+        const fontFamily = await ipcRenderer.invoke('store-get', 'editor_font_family');
+        const fontSize = await ipcRenderer.invoke('store-get', 'editor_font_size');
+        
+        const editorFontFamily = document.getElementById('editorFontFamily');
+        const editorFontSize = document.getElementById('editorFontSize');
+        
+        if (fontFamily && editorFontFamily) {
+            editorFontFamily.value = fontFamily;
+        }
+        
+        if (fontSize && editorFontSize) {
+            editorFontSize.value = fontSize;
+        }
+        
+        // 应用到编辑器
+        if (fontFamily || fontSize) {
+            applyEditorFontSettings(
+                fontFamily || "var(--font-mono)", 
+                fontSize || 14
+            );
+        }
+    } catch (error) {
+        console.warn('Failed to load editor font settings:', error);
+    }
+}
+
+// 应用字体设置到编辑器
+function applyEditorFontSettings(fontFamily, fontSize) {
+    // 更新编辑器字体设置
+    if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.updateFontSettings) {
+        window.AppGlobals.codeEditor.updateFontSettings(fontFamily, fontSize);
+    }
+    
+    // 更新CSS变量（如果使用）
+    document.documentElement.style.setProperty('--editor-font-family', fontFamily);
+    document.documentElement.style.setProperty('--editor-font-size', fontSize + 'px');
+    document.documentElement.style.setProperty('--editor-line-height', (fontSize + 7) + 'px'); // fontSize + 7 for line-height
 }
 
 // 加载用户信息
@@ -108,5 +182,7 @@ async function checkSDKStatus() {
 window.SettingsModule = {
     initializeSettingsPage,
     loadUserInfo,
-    checkSDKStatus
+    checkSDKStatus,
+    loadEditorFontSettings,
+    applyEditorFontSettings
 };
