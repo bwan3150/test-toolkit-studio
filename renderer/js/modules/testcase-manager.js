@@ -117,17 +117,35 @@ function createCollapsibleCaseItem(caseName, casePath) {
     caseContainer.appendChild(caseHeader);
     caseContainer.appendChild(scriptsContainer);
     
-    // 点击切换折叠/展开（只在点击图标和空白区域时触发）
+    // 用于处理单击和双击冲突的变量
+    let clickTimeout = null;
+    
+    // 点击切换折叠/展开（整行可点击）
     caseHeader.addEventListener('click', (e) => {
-        // 如果点击的是标签本身，不触发折叠
-        if (e.target === caseLabelSpan) return;
         e.stopPropagation();
-        toggleCaseFolder(caseContainer);
+        
+        // 清除之前的单击延迟
+        if (clickTimeout) {
+            clearTimeout(clickTimeout);
+        }
+        
+        // 延迟执行单击操作，如果是双击则会被清除
+        clickTimeout = setTimeout(() => {
+            toggleCaseFolder(caseContainer);
+            clickTimeout = null;
+        }, 200);
     });
     
-    // 双击重命名Case
+    // 双击重命名Case（只在文字区域生效）
     caseLabelSpan.addEventListener('dblclick', (e) => {
         e.stopPropagation();
+        
+        // 清除单击延迟，防止展开操作
+        if (clickTimeout) {
+            clearTimeout(clickTimeout);
+            clickTimeout = null;
+        }
+        
         startInlineEdit(caseLabelSpan, 'case', casePath, caseName);
     });
     

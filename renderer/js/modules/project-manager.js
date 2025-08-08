@@ -400,15 +400,19 @@ async function displayTestCasesTable(records) {
         actionBtn.className = 'floating-action-btn';
         
         if (existingCases[index]) {
-            // Case已存在，显示"已创建"状态
+            // Case已存在，显示"已创建"状态，但仍可点击跳转到Testcase页面
             actionBtn.innerHTML = `
                 <svg viewBox="0 0 24 24" width="16" height="16">
                     <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                 </svg>
                 <span>Already Exist</span>
             `;
-            actionBtn.disabled = true;
-            actionBtn.style.opacity = '0.6';
+            actionBtn.style.opacity = '0.8'; // 稍微透明但仍可点击
+            actionBtn.style.cursor = 'pointer';
+            actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                navigateToTestcase(record, index);
+            };
         } else {
             // Case未存在，显示"创建"按钮
             actionBtn.innerHTML = `
@@ -424,6 +428,24 @@ async function displayTestCasesTable(records) {
         }
         
         row.appendChild(actionBtn);
+        
+        // 为已存在的case添加整行点击功能
+        if (existingCases[index]) {
+            row.style.cursor = 'pointer';
+            row.addEventListener('click', (e) => {
+                // 如果点击的是按钮，让按钮处理（避免双重触发）
+                if (e.target.closest('.floating-action-btn')) return;
+                navigateToTestcase(record, index);
+            });
+            // 添加悬停效果
+            row.addEventListener('mouseenter', () => {
+                row.style.backgroundColor = 'var(--bg-hover, rgba(255, 255, 255, 0.05))';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.backgroundColor = '';
+            });
+        }
+        
         tbody.appendChild(row);
     });
     
@@ -432,6 +454,38 @@ async function displayTestCasesTable(records) {
     // 清除现有内容并添加表格
     testcaseList.innerHTML = '';
     testcaseList.appendChild(table);
+}
+
+// 导航到testcase页面（用于已存在的case）
+async function navigateToTestcase(record, index) {
+    try {
+        // 导航到testcase页面
+        document.querySelector('[data-page="testcase"]').click();
+        
+        // 重新加载文件树
+        await window.TestcaseManagerModule.loadFileTree();
+        
+        // 可选：展开对应的case文件夹
+        const caseName = `case_${String(index + 1).padStart(3, '0')}`;
+        
+        // 显示通知
+        window.NotificationModule.showNotification(`已跳转到测试用例页面: ${caseName}`, 'info');
+        
+        // 尝试展开对应的case文件夹（如果文件树加载完成）
+        setTimeout(() => {
+            const caseContainer = document.querySelector(`[data-case-path*="${caseName}"]`);
+            if (caseContainer && window.TestcaseManagerModule.toggleCaseFolder) {
+                const scriptsContainer = caseContainer.querySelector('.scripts-container');
+                if (scriptsContainer && scriptsContainer.classList.contains('collapsed')) {
+                    window.TestcaseManagerModule.toggleCaseFolder(caseContainer);
+                }
+            }
+        }, 500);
+        
+    } catch (error) {
+        console.error('Failed to navigate to testcase:', error);
+        window.NotificationModule.showNotification(`跳转失败: ${error.message}`, 'error');
+    }
 }
 
 // 检查哪些Case已经存在
@@ -578,6 +632,7 @@ window.ProjectManagerModule = {
     displayTestCasesTable,
     checkExistingCases,
     createTestCase,
+    navigateToTestcase,
     refreshTestCaseTable,
     loadProjectHistory,
     formatDate,
