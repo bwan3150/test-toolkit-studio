@@ -604,16 +604,21 @@ class TKSScriptExecutor {
      */
     async executeLaunch(params, details) {
         const { ipcRenderer } = window.AppGlobals;
-        const appPackage = params[0] || details.appPackage;
-        const appActivity = details.appActivity;
+        const appPackage = params[0];
+        const appActivity = params[1];
         
         if (!appPackage) {
             throw new Error('未指定应用包名');
         }
+        
+        if (!appActivity) {
+            throw new Error('未指定应用Activity');
+        }
 
-        const command = appActivity ? 
-            `am start -n ${appPackage}/${appActivity}` :
-            `monkey -p ${appPackage} -c android.intent.category.LAUNCHER 1`;
+        const command = `am start -n ${appPackage}/${appActivity}`;
+        
+        console.log(`启动命令: ${command}`);
+        console.log(`包名: ${appPackage}, Activity: ${appActivity}`);
         
         const result = await this.runAdbCommand(command);
         if (!result.success) {
