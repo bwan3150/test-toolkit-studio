@@ -392,9 +392,9 @@ class TKSScriptExecutor {
         };
 
         try {
-            // 在执行前获取当前UI状态
+            // 获取当前UI状态，缓存元素信息供操作使用
             await this.captureCurrentState();
-
+            
             switch (step.type) {
                 case 'launch':
                     await this.executeLaunch(step.params, script.details);
@@ -445,21 +445,15 @@ class TKSScriptExecutor {
     }
 
     /**
-     * 获取当前UI状态（截图和XML）
+     * 获取当前UI状态（仅用于缓存元素，不更新屏幕显示）
      */
     async captureCurrentState() {
         const { ipcRenderer } = window.AppGlobals;
         
-        // 获取截图和UI树
-        const screenshotResult = await ipcRenderer.invoke('adb-screenshot', this.deviceId, this.projectPath);
-        if (!screenshotResult.success) {
-            throw new Error('获取屏幕截图失败: ' + screenshotResult.error);
-        }
-
-        // 获取UI树
+        // 仅获取UI树用于元素查找，屏幕更新在执行前已完成
         const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', this.deviceId);
         if (uiDumpResult.success) {
-            // 解析UI树并缓存元素
+            // 解析UI树并缓存元素供后续查找使用
             const parser = new window.XMLParser();
             if (uiDumpResult.screenSize) {
                 parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
@@ -473,6 +467,7 @@ class TKSScriptExecutor {
             this.currentUITree = uiDumpResult.xml;
         }
     }
+    
 
     /**
      * 启动应用

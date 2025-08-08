@@ -475,6 +475,13 @@ ipcMain.handle('adb-screenshot', async (event, deviceId, projectPath = null) => 
         } catch (xmlError) {
           console.warn('获取UI树失败，但截图保存成功:', xmlError.message);
         }
+        
+        // 返回截图路径和base64数据
+        return { 
+          success: true, 
+          data: imageData.toString('base64'),
+          screenshotPath: screenshotPath
+        };
       } catch (saveError) {
         console.warn('保存到工作区失败:', saveError.message);
         // 不影响截图返回

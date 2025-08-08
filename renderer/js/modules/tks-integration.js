@@ -578,7 +578,6 @@ class TKSScriptRunner {
             // 输出开始信息
             this.logToConsole('info', `开始执行脚本: ${path.basename(scriptPath)}`);
             this.logToConsole('info', `目标设备: ${deviceId}`);
-            this.logToConsole('info', '-----------------------------------');
             
             // 加载TKS脚本引擎（如果还没加载）
             if (!window.TKSScriptModule) {
@@ -615,35 +614,18 @@ class TKSScriptRunner {
                 }
             }
             
-            // 执行脚本
+            // 使用自定义的执行方法，支持实时高亮和截图更新
             this.logToConsole('info', '开始执行步骤...');
+            const executionResult = await this.executeScriptWithProgress(executor, script, deviceId, projectPath);
             
-            for (let i = 0; i < script.steps.length; i++) {
-                if (!this.isRunning) {
-                    this.logToConsole('warning', '执行已中止');
-                    break;
-                }
-                
-                const step = script.steps[i];
-                this.logToConsole('info', `[步骤 ${i + 1}/${script.steps.length}] ${step.raw}`);
-                
-                try {
-                    const result = await executor.executeStep(step, script);
-                    
-                    if (result.success) {
-                        this.logToConsole('success', `  ✓ 执行成功 (${result.duration}ms)`);
-                    } else {
-                        this.logToConsole('error', `  ✗ 执行失败: ${result.error}`);
-                        break;
-                    }
-                } catch (error) {
-                    this.logToConsole('error', `  ✗ 异常: ${error.message}`);
-                    break;
-                }
+            // 清除高亮
+            this.clearScriptHighlight();
+            
+            if (executionResult.success) {
+                this.logToConsole('success', '脚本执行完成');
+            } else {
+                this.logToConsole('error', `脚本执行失败: ${executionResult.error}`);
             }
-            
-            this.logToConsole('info', '-----------------------------------');
-            this.logToConsole('success', '脚本执行完成');
             
             // 提示结果已保存
             const resultDir = path.join(projectPath, 'result');
@@ -747,6 +729,357 @@ class TKSScriptRunner {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    /**
+     * 高亮脚本中的当前执行行
+     */
+    highlightScriptLine(stepIndex) {
+        // 获取编辑器内容
+        const editor = document.getElementById('editorTextarea');
+        if (!editor) {
+            console.log('编辑器元素未找到，尝试查找其他可能的编辑器');
+            return;
+        }
+        
+        // 清除之前的高亮
+        this.clearScriptHighlight();
+        
+        // 获取编辑器文本内容
+        const content = editor.value || editor.textContent;
+        if (!content) return;
+        
+        const lines = content.split('\n');
+        let currentStepLine = -1;
+        let stepCount = 0;
+        
+        // 找到对应的步骤行号
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // 跳过空行、注释和元数据行
+            if (!line || line.startsWith('#') || line.startsWith('用例:') || 
+                line.startsWith('脚本名:') || line.startsWith('详情:') || 
+                line === '步骤:' || line.includes(':')) {
+                continue;
+            }
+            
+            // 如果这是一个步骤行
+            if (this.isStepLine(line)) {
+                if (stepCount === stepIndex) {
+                    currentStepLine = i;
+                    break;
+                }
+                stepCount++;
+            }
+        }
+        
+        if (currentStepLine !== -1) {
+            // 高亮该行
+            this.addLineHighlight(currentStepLine);
+            
+            // 滚动到该行
+            this.scrollToLine(currentStepLine);
+        }
+    }
+    
+    /**
+     * 判断是否是步骤行
+     */
+    isStepLine(line) {
+        const commands = ['启动', '关闭', '点击', '按压', '滑动', '定向滑动', '输入', '清理', '隐藏键盘', '返回', '等待', '断言'];
+        return commands.some(cmd => line.startsWith(cmd));
+    }
+    
+    /**
+     * 添加行高亮
+     */
+    addLineHighlight(lineNumber) {
+        const editor = document.getElementById('editorTextarea');
+        if (!editor) return;
+        
+        // 如果是textarea，使用overlay方式
+        if (editor.tagName === 'TEXTAREA') {
+            this.highlightInTextarea(lineNumber);
+        }
+    }
+    
+    /**
+     * 在textarea中高亮行
+     */
+    highlightInTextarea(lineNumber) {
+        const editor = document.getElementById('editorTextarea');
+        if (!editor) return;
+        
+        // 使用现有的highlight layer或创建overlay
+        let overlay = document.getElementById('script-highlight-overlay');
+        const highlightLayer = document.getElementById('editorHighlight');
+        
+        // 优先使用现有的highlight layer
+        if (highlightLayer) {
+            // 使用现有的highlight layer
+            const content = editor.value;
+            if (!content) return;
+            
+            const lines = content.split('\n');
+            const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 21; // 14px * 1.5
+            const paddingTop = parseFloat(getComputedStyle(editor).paddingTop) || 16;
+            
+            const top = paddingTop + lineHeight * lineNumber;
+            
+            // 在highlight layer中添加高亮行
+            const highlightLine = document.createElement('div');
+            highlightLine.id = 'script-execution-highlight';
+            highlightLine.className = 'script-execution-highlight';
+            highlightLine.style.cssText = `
+                position: absolute;
+                left: 16px;
+                right: 16px;
+                top: ${top}px;
+                height: ${lineHeight}px;
+                background: rgba(255, 193, 7, 0.3);
+                border: 1px solid #ffc107;
+                border-radius: 2px;
+                pointer-events: none;
+                z-index: 10;
+                animation: highlight-pulse 1s ease-in-out infinite alternate;
+            `;
+            
+            // 清除之前的高亮
+            const existingHighlight = highlightLayer.querySelector('#script-execution-highlight');
+            if (existingHighlight) {
+                existingHighlight.remove();
+            }
+            
+            highlightLayer.appendChild(highlightLine);
+            
+            console.log(`高亮已设置在第${lineNumber}行，top: ${top}px`);
+        } else {
+            // 后备方案：创建独立的overlay
+            const editorContainer = editor.parentElement;
+            
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'script-highlight-overlay';
+                overlay.className = 'script-highlight-overlay';
+                editorContainer.style.position = 'relative';
+                editorContainer.appendChild(overlay);
+            }
+            
+            // 计算行位置
+            const content = editor.value;
+            const lines = content.split('\n');
+            const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 21;
+            const paddingTop = parseFloat(getComputedStyle(editor).paddingTop) || 16;
+            
+            const top = paddingTop + lineHeight * lineNumber;
+            
+            // 设置高亮位置
+            overlay.style.top = `${top}px`;
+            overlay.style.height = `${lineHeight}px`;
+            overlay.style.display = 'block';
+            
+            console.log(`高亮overlay已设置在第${lineNumber}行，top: ${top}px`);
+        }
+    }
+    
+    /**
+     * 滚动到指定行
+     */
+    scrollToLine(lineNumber) {
+        const editor = document.getElementById('editorTextarea');
+        if (!editor) return;
+        
+        const lineHeight = parseInt(getComputedStyle(editor).lineHeight) || 20;
+        const scrollTop = Math.max(0, (lineNumber - 2) * lineHeight);
+        
+        editor.scrollTop = scrollTop;
+    }
+    
+    /**
+     * 清除脚本高亮
+     */
+    clearScriptHighlight() {
+        // 清除highlight layer中的高亮
+        const highlightLayer = document.getElementById('editorHighlight');
+        if (highlightLayer) {
+            const executionHighlight = highlightLayer.querySelector('#script-execution-highlight');
+            if (executionHighlight) {
+                executionHighlight.remove();
+            }
+        }
+        
+        // 清除overlay高亮
+        const overlay = document.getElementById('script-highlight-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+        
+        console.log('高亮已清除');
+    }
+    
+    /**
+     * 获取当前状态并更新UI显示
+     */
+    async captureAndUpdateState(executor) {
+        try {
+            const { ipcRenderer } = getGlobals();
+            
+            // 获取截图
+            const screenshotResult = await ipcRenderer.invoke('adb-screenshot', executor.deviceId, executor.projectPath);
+            
+            if (screenshotResult.success) {
+                // 更新设备屏幕显示
+                if (screenshotResult.screenshotPath) {
+                    const deviceScreen = document.getElementById('deviceScreenshot');
+                    if (deviceScreen) {
+                        deviceScreen.src = screenshotResult.screenshotPath + '?t=' + Date.now();
+                        deviceScreen.style.display = 'block';
+                        
+                        const placeholder = deviceScreen.parentElement.querySelector('.screen-placeholder');
+                        if (placeholder) {
+                            placeholder.style.display = 'none';
+                        }
+                    }
+                    this.logToConsole('info', '屏幕截图已更新');
+                } else if (screenshotResult.data) {
+                    // 使用base64数据
+                    const deviceScreen = document.getElementById('deviceScreenshot');
+                    if (deviceScreen) {
+                        deviceScreen.src = 'data:image/png;base64,' + screenshotResult.data;
+                        deviceScreen.style.display = 'block';
+                        
+                        const placeholder = deviceScreen.parentElement.querySelector('.screen-placeholder');
+                        if (placeholder) {
+                            placeholder.style.display = 'none';
+                        }
+                    }
+                    this.logToConsole('info', '屏幕截图已更新（base64）');
+                }
+                
+                // 如果XML overlay启用，也更新UI树
+                await this.updateXmlOverlayFromCapture(executor.deviceId);
+            } else {
+                this.logToConsole('warning', '获取截图失败: ' + screenshotResult.error);
+            }
+        } catch (error) {
+            this.logToConsole('error', '获取状态失败: ' + error.message);
+        }
+    }
+    
+    /**
+     * 从截图获取时同时更新XML overlay
+     */
+    async updateXmlOverlayFromCapture(deviceId) {
+        try {
+            // 检查XML overlay是否已启用
+            const toggleBtn = document.getElementById('toggleXmlBtn');
+            if (!toggleBtn || !toggleBtn.classList.contains('active')) {
+                return; // XML overlay未启用
+            }
+            
+            const { ipcRenderer } = getGlobals();
+            
+            // 获取UI树
+            const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', deviceId);
+            
+            if (uiDumpResult.success && window.XMLParser && window.TestcaseManagerModule) {
+                const parser = new window.XMLParser();
+                if (uiDumpResult.screenSize) {
+                    parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
+                }
+                
+                // 解析UI元素
+                let elements;
+                try {
+                    const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
+                    elements = parser.extractUIElements(optimizedTree || uiDumpResult.xml);
+                } catch (error) {
+                    elements = parser.extractUIElements(uiDumpResult.xml);
+                }
+                
+                if (elements && elements.length > 0) {
+                    // 更新全局UI元素
+                    window.currentUIElements = elements;
+                    
+                    // 更新UI元素显示
+                    if (window.TestcaseManagerModule.updateUIElements) {
+                        window.TestcaseManagerModule.updateUIElements(elements);
+                    }
+                    
+                    // 重新渲染XML overlay
+                    if (window.TestcaseManagerModule.renderXmlOverlay) {
+                        window.TestcaseManagerModule.renderXmlOverlay(elements);
+                    }
+                    
+                    this.logToConsole('info', `XML overlay已更新，包含${elements.length}个元素`);
+                }
+            }
+        } catch (error) {
+            console.error('更新XML overlay异常:', error);
+        }
+    }
+    
+    /**
+     * 带进度显示的脚本执行方法
+     */
+    async executeScriptWithProgress(executor, script, deviceId, projectPath) {
+        const result = {
+            success: true,
+            caseId: script.caseId,
+            scriptName: script.scriptName,
+            startTime: new Date().toISOString(),
+            endTime: null,
+            steps: [],
+            error: null
+        };
+
+        try {
+            // 执行每个步骤
+            for (let i = 0; i < script.steps.length; i++) {
+                if (!this.isRunning) {
+                    result.error = '执行被中止';
+                    result.success = false;
+                    break;
+                }
+
+                const step = script.steps[i];
+                
+                // 高亮当前执行行
+                this.highlightScriptLine(i);
+                
+                // 先获取当前UI状态和截图，更新屏幕显示
+                await this.captureAndUpdateState(executor);
+                
+                this.logToConsole('info', `[步骤 ${i + 1}/${script.steps.length}] ${step.raw}`);
+                
+                const stepResult = await executor.executeStep(step, script);
+                result.steps.push({
+                    index: i + 1,
+                    ...stepResult
+                });
+
+                if (stepResult.success) {
+                    this.logToConsole('success', `  ✓ 执行成功 (${stepResult.duration}ms)`);
+                } else {
+                    this.logToConsole('error', `  ✗ 执行失败: ${stepResult.error}`);
+                    result.success = false;
+                    result.error = stepResult.error;
+                    break;
+                }
+            }
+        } catch (error) {
+            result.success = false;
+            result.error = error.message;
+            this.logToConsole('error', `  ✗ 异常: ${error.message}`);
+        }
+
+        result.endTime = new Date().toISOString();
+        
+        // 保存执行结果
+        await executor.saveResult(result);
+        
+        return result;
     }
 }
 
@@ -973,6 +1306,30 @@ style.textContent = `
 
 .btn-danger:hover {
     background: #da190b !important;
+}
+
+/* 脚本高亮overlay */
+.script-highlight-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: rgba(255, 193, 7, 0.3);
+    border: 1px solid #ffc107;
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 1;
+    display: none;
+    animation: highlight-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes highlight-pulse {
+    0% { background: rgba(255, 193, 7, 0.2); }
+    100% { background: rgba(255, 193, 7, 0.4); }
+}
+
+/* 脚本执行高亮样式 */
+.script-execution-highlight {
+    animation: highlight-pulse 1s ease-in-out infinite alternate;
 }
 `;
 document.head.appendChild(style);
