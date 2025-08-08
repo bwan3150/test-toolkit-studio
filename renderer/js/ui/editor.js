@@ -175,8 +175,44 @@ class SimpleCodeEditor {
     }
     
     getPlainText() {
-        // 从ContentEditable提取纯文本
-        return this.contentEl.textContent || '';
+        // 从ContentEditable提取纯文本，需要将图片元素转换回原始文本
+        let text = '';
+        const walker = document.createTreeWalker(
+            this.contentEl,
+            NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+            {
+                acceptNode: (node) => {
+                    // 接受文本节点和img元素
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                    if (node.nodeType === Node.ELEMENT_NODE && 
+                        node.tagName.toLowerCase() === 'img' && 
+                        node.classList.contains('inline-image-locator')) {
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                    return NodeFilter.FILTER_SKIP;
+                }
+            },
+            false
+        );
+        
+        let currentNode;
+        while (currentNode = walker.nextNode()) {
+            if (currentNode.nodeType === Node.TEXT_NODE) {
+                text += currentNode.textContent;
+            } else if (currentNode.nodeType === Node.ELEMENT_NODE && 
+                       currentNode.tagName.toLowerCase() === 'img' && 
+                       currentNode.classList.contains('inline-image-locator')) {
+                // 将图片元素转换回原始的 @{name} 格式
+                const imageName = currentNode.dataset.name || currentNode.alt;
+                if (imageName) {
+                    text += `@{${imageName}}`;
+                }
+            }
+        }
+        
+        return text;
     }
     
     setValue(text) {
@@ -387,16 +423,34 @@ class SimpleCodeEditor {
     
     // 渲染图片定位器为实际图片
     renderImageLocator(imageName, originalText) {
-        // 检查是否正在编辑这个定位器
-        if (this.currentEditingLocator && this.currentEditingLocator.name === imageName) {
-            // 如果正在编辑，显示文本形式
-            return `@{<span class="syntax-string">${imageName}</span>}`;
+        // 使用ContentEditable的光标检测来判断是否正在编辑这个定位器
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
+            const text = this.getPlainText();
+            
+            // 查找所有与此图片名匹配的定位器位置
+            const searchText = `@{${imageName}}`;
+            let index = text.indexOf(searchText);
+            
+            while (index !== -1) {
+                const start = index;
+                const end = index + searchText.length;
+                
+                // 如果光标在这个特定的定位器范围内，显示为文本
+                if (cursorOffset >= start && cursorOffset <= end) {
+                    return `@{<span class="syntax-string">${imageName}</span>}`;
+                }
+                
+                // 查找下一个同名的定位器
+                index = text.indexOf(searchText, end);
+            }
         }
         
         // 获取当前项目路径
         const projectPath = window.AppGlobals.currentProject;
         if (!projectPath) {
-            // 如果没有项目，显示原始文本
             return `@{<span class="syntax-string">${imageName}</span>}`;
         }
         
@@ -404,15 +458,17 @@ class SimpleCodeEditor {
         try {
             // 从LocatorManager获取定位器信息
             const locatorManager = window.LocatorManagerModule?.instance;
+            
             if (locatorManager && locatorManager.locators && locatorManager.locators[imageName]) {
                 const locatorData = locatorManager.locators[imageName];
+                
                 if (locatorData.type === 'image' && locatorData.path) {
                     const { path: PathModule } = window.AppGlobals;
                     const imagePath = PathModule.join(projectPath, locatorData.path);
                     
                     // 直接渲染为内联图片，失败时显示原始文本
                     const fallbackText = originalText || `@{${imageName}}`;
-                    return `<img class="inline-image-locator" src="${imagePath}" alt="${imageName}" data-name="${imageName}" onerror="this.outerHTML='<span class=&quot;syntax-string&quot;>${fallbackText}</span>';">`;
+                    return `<img class="inline-image-locator" src="file://${imagePath}" alt="${imageName}" data-name="${imageName}" onerror="this.outerHTML='<span class=&quot;syntax-string&quot;>${fallbackText.replace(/"/g, '&quot;')}</span>';">`;
                 }
             }
         } catch (error) {
@@ -655,13 +711,15 @@ class SimpleCodeEditor {
     
     setPlaceholder(text) {
         this.placeholderText = text;
-        if (!this.value) {
+        // 只有当内容确实为空，并且编辑器没有任何文本内容时才显示占位符
+        if (!this.value && (!this.contentEl.textContent || this.contentEl.textContent.trim() === '')) {
             this.showPlaceholder();
         }
     }
     
     showPlaceholder() {
-        if (!this.value) {
+        // 只有当确实没有内容时才显示占位符
+        if (!this.value && (!this.contentEl.textContent || this.contentEl.textContent.trim() === '')) {
             this.contentEl.innerHTML = `<span class="editor-placeholder">${this.placeholderText}</span>`;
         }
     }
