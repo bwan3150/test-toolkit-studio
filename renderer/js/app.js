@@ -47,8 +47,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 3. 加载业务功能模块
         await loadScript('./js/modules/project-manager.js');
+        await loadScript('./js/modules/xml-parser.js');
         await loadScript('./js/modules/testcase-manager.js');
         await loadScript('./js/modules/device-manager.js');
+        await loadScript('./js/modules/locator-manager.js');
         
         // 4. 加载TKS脚本引擎模块
         await loadScript('./js/modules/tks-script-engine.js');
@@ -114,6 +116,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 初始化TKS集成模块
             window.TKSIntegrationModule.initializeTKSIntegration();
             console.log('✓ TKS脚本引擎已初始化');
+            
+            // 初始化Locator管理器
+            if (window.LocatorManager) {
+                window.LocatorManager.initialize();
+                console.log('✓ Locator管理器已初始化');
+            }
         } catch (error) {
             console.error('业务功能初始化失败:', error);
             throw error;

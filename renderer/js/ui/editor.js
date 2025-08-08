@@ -407,6 +407,60 @@ class SimpleCodeEditor {
         clearTimeout(this.saveTimeout);
         this.listeners = [];
     }
+    
+    // 高亮当前执行的行
+    highlightExecutingLine(lineNumber) {
+        console.log(`编辑器: 高亮执行行 ${lineNumber}`);
+        this.currentExecutingLine = lineNumber;
+        this.currentErrorLine = null; // 清除错误行高亮
+        this.applySyntaxHighlightingWithExecution();
+    }
+    
+    // 高亮错误行
+    highlightErrorLine(lineNumber) {
+        console.log(`编辑器: 高亮错误行 ${lineNumber}`);
+        this.currentErrorLine = lineNumber;
+        this.currentExecutingLine = null; // 清除执行行高亮
+        this.applySyntaxHighlightingWithExecution();
+    }
+    
+    // 清除执行行高亮
+    clearExecutionHighlight() {
+        console.log('编辑器: 清除执行行高亮');
+        this.currentExecutingLine = null;
+        this.currentErrorLine = null;
+        this.applySyntaxHighlighting();
+    }
+    
+    // 修改语法高亮应用方法以支持执行行高亮
+    applySyntaxHighlightingWithExecution() {
+        if (!this.value) {
+            this.showPlaceholder();
+            return;
+        }
+        
+        this.hidePlaceholder();
+        
+        // 按行处理，同时应用语法高亮和执行行高亮
+        const lines = this.value.split('\n');
+        const highlightedLines = lines.map((line, index) => {
+            const lineNumber = index + 1;
+            let highlightedLine = this.highlightTksLine(line);
+            
+            // 如果是当前执行的行，添加执行高亮
+            if (this.currentExecutingLine === lineNumber) {
+                highlightedLine = `<span class="executing-line">${highlightedLine}</span>`;
+            }
+            // 如果是错误行，添加错误高亮
+            else if (this.currentErrorLine === lineNumber) {
+                highlightedLine = `<span class="error-line">${highlightedLine}</span>`;
+            }
+            
+            return highlightedLine;
+        });
+        
+        this.highlightEl.innerHTML = highlightedLines.join('\n');
+    }
 }
 
 let editorInstance = null;
@@ -435,7 +489,10 @@ function initializeSimpleEditor() {
         get value() { return editorInstance.getValue(); },
         set value(val) { editorInstance.setValue(val); },
         set placeholder(text) { editorInstance.setPlaceholder(text); },
-        focus() { editorInstance.focus(); }
+        focus() { editorInstance.focus(); },
+        highlightExecutingLine(lineNumber) { editorInstance.highlightExecutingLine(lineNumber); },
+        highlightErrorLine(lineNumber) { editorInstance.highlightErrorLine(lineNumber); },
+        clearExecutionHighlight() { editorInstance.clearExecutionHighlight(); }
     });
     
     console.log('New Simple Editor initialized successfully');

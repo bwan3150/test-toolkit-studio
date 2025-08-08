@@ -123,7 +123,7 @@ class TKSScriptParser {
 
             // 解析步骤
             if (currentSection === 'steps') {
-                const step = this.parseStep(line);
+                const step = this.parseStep(line, i + 1);
                 if (step) {
                     script.steps.push(step);
                 }
@@ -136,9 +136,10 @@ class TKSScriptParser {
     /**
      * 解析单个步骤
      * @param {string} line - 步骤行
+     * @param {number} lineNumber - 行号
      * @returns {Object|null} 步骤对象
      */
-    parseStep(line) {
+    parseStep(line, lineNumber = 0) {
         // 先尝试匹配方括号格式：命令 [参数1, 参数2]
         let match = line.match(/^(\S+)\s*\[(.*)\]$/);
         let command, paramsStr;
@@ -181,7 +182,8 @@ class TKSScriptParser {
             type: commandType,
             command: command,
             params: params,
-            raw: line
+            raw: line,
+            lineNumber: lineNumber
         };
     }
 
@@ -337,6 +339,9 @@ class TKSScriptExecutor {
         };
 
         try {
+            // 不再在开始时获取UI，改为每个步骤执行前刷新
+            console.log('TKS执行器: 开始执行脚本步骤...');
+            
             // 执行每个步骤
             for (const step of script.steps) {
                 if (!this.isRunning) {
@@ -348,6 +353,12 @@ class TKSScriptExecutor {
                 this.currentStep++;
                 console.log(`执行步骤 ${this.currentStep}: ${step.raw}`);
                 
+                // 高亮当前执行的行
+                if (step.lineNumber && window.AppGlobals.codeEditor) {
+                    console.log(`高亮执行行: ${step.lineNumber}`);
+                    window.AppGlobals.codeEditor.highlightExecutingLine(step.lineNumber);
+                }
+                
                 const stepResult = await this.executeStep(step, script);
                 result.steps.push({
                     index: this.currentStep,
@@ -357,16 +368,39 @@ class TKSScriptExecutor {
                 if (!stepResult.success) {
                     result.success = false;
                     result.error = stepResult.error;
+                    // 出错时高亮错误行（保持红色高亮）
+                    if (step.lineNumber && window.AppGlobals.codeEditor) {
+                        console.log(`高亮错误行: ${step.lineNumber}`);
+                        window.AppGlobals.codeEditor.highlightErrorLine(step.lineNumber);
+                    }
                     break;
                 }
             }
         } catch (error) {
             result.success = false;
             result.error = error.message;
+            // 异常时不清除高亮，让用户看到出错的位置
+            console.log('TKS执行器: 发生异常，保持当前高亮状态');
         }
 
         result.endTime = new Date().toISOString();
         this.isRunning = false;
+        
+        // 只有在成功完成时才清除编辑器执行行高亮
+        if (result.success && window.AppGlobals.codeEditor) {
+            console.log('脚本成功完成，清除编辑器执行行高亮');
+            window.AppGlobals.codeEditor.clearExecutionHighlight();
+        } else if (!result.success) {
+            console.log('脚本执行失败，保持错误行高亮');
+        }
+        
+        // 脚本执行完成后进行最终UI刷新，显示结果状态
+        try {
+            console.log('TKS执行器: 执行完成，进行最终UI刷新...');
+            await this.refreshUIForStep();
+        } catch (error) {
+            console.warn('TKS执行器: 最终UI刷新失败:', error);
+        }
         
         // 保存执行结果
         await this.saveResult(result);
@@ -392,8 +426,26 @@ class TKSScriptExecutor {
         };
 
         try {
-            // 获取当前UI状态，缓存元素信息供操作使用
-            await this.captureCurrentState();
+            // 步骤执行前刷新UI状态
+            console.log(`步骤${this.currentStep}: 刷新设备UI状态...`);
+            await this.refreshUIForStep();
+            
+            if (!this.currentElements || this.currentElements.length === 0) {
+                console.warn(`步骤${this.currentStep}: 未能获取到UI元素`);
+            } else {
+                console.log(`步骤${this.currentStep}: 已获取到 ${this.currentElements.length} 个UI元素`);
+            }
+        } catch (error) {
+            console.error(`步骤${this.currentStep}: UI刷新失败:`, error);
+            // UI刷新失败不影响步骤执行，继续执行
+        }
+
+        // 注释掉原来的captureCurrentState，因为refreshUIForStep已经包含了这个功能
+        // try {
+        //     // 获取当前UI状态，缓存元素信息供操作使用
+        //     await this.captureCurrentState();
+        
+        try {
             
             switch (step.type) {
                 case 'launch':
@@ -442,6 +494,84 @@ class TKSScriptExecutor {
 
         result.duration = Date.now() - startTime;
         return result;
+    }
+
+    /**
+     * 步骤级UI刷新 - 获取截图、UI树并更新前端显示
+     */
+    async refreshUIForStep() {
+        const { ipcRenderer } = window.AppGlobals;
+        
+        try {
+            // 1. 获取设备截图和UI树，自动保存到workarea
+            console.log(`TKS执行器: 获取设备截图和UI树...`);
+            const projectPath = this.projectPath;
+            const screenshotResult = await ipcRenderer.invoke('adb-screenshot', this.deviceId, projectPath);
+            
+            if (screenshotResult.success) {
+                // 2. 更新前端DEVICE SCREEN显示
+                const img = document.getElementById('deviceScreenshot');
+                if (img) {
+                    img.src = `data:image/png;base64,${screenshotResult.data}`;
+                    img.style.display = 'block';
+                    const placeholder = document.querySelector('.screen-placeholder');
+                    if (placeholder) placeholder.style.display = 'none';
+                }
+                console.log(`TKS执行器: 截图已更新到前端显示`);
+            }
+            
+            // 3. 获取UI树并解析元素
+            const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', this.deviceId);
+            if (uiDumpResult.success && uiDumpResult.xml) {
+                // 解析UI树并缓存元素
+                const parser = new window.XMLParser();
+                if (uiDumpResult.screenSize) {
+                    parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
+                }
+                
+                console.log(`TKS执行器: XML长度: ${uiDumpResult.xml.length}`);
+                console.log(`TKS执行器: XML前200字符:`, uiDumpResult.xml.substring(0, 200));
+                
+                const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
+                console.log(`TKS执行器: 优化后的树:`, optimizedTree ? '成功' : '失败');
+                
+                // 如果优化失败，传递原始XML作为回退
+                const elements = parser.extractUIElements(optimizedTree, uiDumpResult.xml);
+                console.log(`TKS执行器: 提取到 ${elements.length} 个元素`);
+                
+                // 4. 更新实例状态
+                this.currentElements = elements;
+                this.currentUITree = uiDumpResult.xml;
+                
+                console.log(`TKS执行器: UI树已更新，共解析 ${elements.length} 个元素`);
+                
+                // 5. 保存UI树到workarea（如果没有被截图接口保存的话）
+                if (projectPath && window.AppGlobals.fs && window.AppGlobals.path) {
+                    try {
+                        const { fs, path } = window.AppGlobals;
+                        const workareaDir = path.join(projectPath, 'workarea');
+                        const xmlPath = path.join(workareaDir, 'current_ui_tree.xml');
+                        
+                        // 确保workarea目录存在
+                        await fs.mkdir(workareaDir, { recursive: true });
+                        // 保存UI树
+                        await fs.writeFile(xmlPath, uiDumpResult.xml, 'utf8');
+                        console.log(`TKS执行器: UI树已保存到 ${xmlPath}`);
+                    } catch (error) {
+                        console.warn(`TKS执行器: 保存UI树到workarea失败:`, error);
+                    }
+                }
+            } else {
+                console.warn(`TKS执行器: UI树获取失败`);
+                this.currentElements = [];
+                this.currentUITree = null;
+            }
+            
+        } catch (error) {
+            console.error(`TKS执行器: refreshUIForStep失败:`, error);
+            this.currentElements = [];
+            this.currentUITree = null;
+        }
     }
 
     /**
@@ -849,12 +979,21 @@ class TKSScriptExecutor {
             'element.json'
         );
 
+        console.log('查找locator元素:', alias);
+        console.log('当前case文件夹:', this.currentCaseFolder);
+        console.log('Locator文件路径:', elementFile);
+
         try {
             const content = await tksFs.readFile(elementFile, 'utf-8');
             const elements = JSON.parse(content);
-            return elements[alias] || null;
+            console.log('已加载locator文件，包含元素:', Object.keys(elements));
+            
+            const elementDef = elements[alias] || null;
+            console.log(`查找元素"${alias}":`, elementDef ? '找到' : '未找到');
+            
+            return elementDef;
         } catch (error) {
-            // 文件不存在或解析失败
+            console.error('读取元素定义失败:', error);
             return null;
         }
     }

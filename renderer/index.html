@@ -186,6 +186,7 @@
                                 <div class="tab-header">
                                     <button class="tab-btn active" data-tab="elements-list">UI元素</button>
                                     <button class="tab-btn" data-tab="element-props" id="elementPropsTab">元素属性</button>
+                                    <button class="tab-btn" data-tab="locator-lib" id="locatorLibTab">Locator库</button>
                                     <button class="tab-btn" data-tab="console-output" id="consoleTab">控制台</button>
                                     <div class="tab-actions">
                                         <button class="btn btn-icon btn-small" id="toggleElementsPanelBtn" title="收起">
@@ -214,6 +215,20 @@
                                         <div class="element-props-container" id="elementPropsContainer">
                                             <div class="empty-state">
                                                 <div class="empty-state-text">未选择元素</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Locator Library Tab -->
+                                    <div class="tab-pane" id="locatorLibPane" style="display: none;">
+                                        <div class="locator-lib-container" id="locatorLibContainer">
+                                            <div class="locator-search-bar">
+                                                <input type="text" id="locatorSearchInput" placeholder="搜索元素名称...">
+                                            </div>
+                                            <div class="locator-list" id="locatorList">
+                                                <div class="empty-state">
+                                                    <div class="empty-state-text">暂无保存的元素</div>
+                                                    <div class="empty-state-hint">在元素属性页面点击"入库"保存元素</div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -493,9 +508,6 @@
         // Save Node require
         window.nodeRequire = require;
     </script>
-    <script src="js/modules/xml-parser.js"></script>
-    <script src="js/modules/tks-script-engine.js"></script>
-    <script src="js/modules/tks-integration.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

@@ -941,6 +941,38 @@ body {
     pointer-events: none;
 }
 
+/* 执行行高亮样式 */
+.executing-line {
+    background: rgba(255, 193, 7, 0.2);
+    border-left: 3px solid #ffc107;
+    padding-left: 8px;
+    margin-left: -8px;
+    animation: pulse-execution 1s infinite alternate;
+    display: inline-block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* 错误行高亮样式 */
+.error-line {
+    background: rgba(220, 53, 69, 0.2);
+    border-left: 3px solid #dc3545;
+    padding-left: 8px;
+    margin-left: -8px;
+    display: inline-block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@keyframes pulse-execution {
+    from {
+        background: rgba(255, 193, 7, 0.15);
+    }
+    to {
+        background: rgba(255, 193, 7, 0.25);
+    }
+}
+
 /* 新的语法高亮样式 */
 .syntax-comment {
     color: #6a9955;
@@ -2372,4 +2404,167 @@ body {
         padding: 6px 8px;
         font-size: 11px;
     }
+}
+
+/* Locator库样式 */
+.locator-lib-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+}
+
+.locator-search-bar {
+    margin-bottom: 8px;
+}
+
+.locator-search-bar input {
+    width: 100%;
+    padding: 6px 12px;
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 13px;
+}
+
+.locator-search-bar input:focus {
+    outline: none;
+    border-color: #007ACC;
+}
+
+.locator-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.locator-item {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    padding: 8px;
+    cursor: move;
+    transition: all 0.2s;
+}
+
+.locator-item:hover {
+    background: #333;
+    border-color: #007ACC;
+    transform: translateX(2px);
+}
+
+.locator-item[draggable="true"]:active {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.locator-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.locator-name {
+    font-weight: bold;
+    color: #4EC9B0;
+    font-size: 13px;
+}
+
+.locator-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.locator-actions .btn-icon-small {
+    background: transparent;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s;
+}
+
+.locator-actions .btn-icon-small:hover {
+    color: #fff;
+}
+
+.locator-details {
+    font-size: 11px;
+    color: #999;
+}
+
+.locator-text,
+.locator-id,
+.locator-type {
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.locator-type {
+    color: #D7BA7D;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-dialog {
+    background: #2d2d2d;
+    border-radius: 8px;
+    padding: 20px;
+    width: 400px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.modal-dialog h3 {
+    margin: 0 0 15px 0;
+    color: #fff;
+}
+
+.modal-dialog input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    background: #1e1e1e;
+    border: 1px solid #444;
+    color: #fff;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.modal-dialog input[type="text"]:focus {
+    outline: none;
+    border-color: #007ACC;
+}
+
+.modal-dialog button {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.modal-dialog button:hover {
+    opacity: 0.9;
+}
+
+/* 编辑器拖放提示 */
+#editorTextarea[data-drag-over="true"] {
+    border: 2px dashed #4EC9B0;
+    background: rgba(78, 201, 176, 0.1);
 }

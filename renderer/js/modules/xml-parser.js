@@ -351,18 +351,42 @@ class XMLParser {
     }
     
     // 从优化后的树中提取UI元素列表
-    extractUIElements(optimizedTree) {
-        if (!optimizedTree) return [];
+    extractUIElements(optimizedTree, rawXmlString = null) {
+        if (!optimizedTree && !rawXmlString) {
+            console.log('extractUIElements: 没有优化树也没有原始XML，返回空数组');
+            return [];
+        }
         
         const elements = [];
         const indexCounter = {};
         
-        // 如果是原始XML根节点，使用简化提取
-        if (optimizedTree.nodeName === 'hierarchy' && optimizedTree.children.length > 0) {
-            console.log('检测到原始XML hierarchy，使用简化提取');
-            this._extractElementsFromRawXML(optimizedTree, elements);
-        } else {
-            this._extractElementsFromNode(optimizedTree, elements, indexCounter, '');
+        // 如果有优化后的树，优先使用
+        if (optimizedTree) {
+            // 如果是原始XML根节点，使用简化提取
+            if (optimizedTree.nodeName === 'hierarchy' && optimizedTree.children.length > 0) {
+                console.log('检测到原始XML hierarchy，使用简化提取');
+                this._extractElementsFromRawXML(optimizedTree, elements);
+            } else {
+                this._extractElementsFromNode(optimizedTree, elements, indexCounter, '');
+            }
+        }
+        // 如果没有优化树但有原始XML，使用原始XML进行回退解析
+        else if (rawXmlString) {
+            console.log('优化树为空，使用原始XML进行回退解析');
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(rawXmlString, 'text/xml');
+                const root = doc.documentElement;
+                
+                if (root && root.nodeName === 'hierarchy') {
+                    console.log('原始XML解析成功，开始提取元素');
+                    this._extractElementsFromRawXML(root, elements);
+                } else {
+                    console.error('原始XML根节点无效');
+                }
+            } catch (error) {
+                console.error('原始XML解析失败:', error);
+            }
         }
         
         // 重新分配连续索引
@@ -376,6 +400,8 @@ class XMLParser {
     
     // 从原始XML直接提取元素（备用方案）
     _extractElementsFromRawXML(hierarchyNode, elements) {
+        console.log('开始简化提取，hierarchy子节点数:', hierarchyNode.children ? hierarchyNode.children.length : 0);
+        
         const traverse = (node) => {
             if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'node') {
                 // 检查是否为可交互元素
@@ -384,6 +410,19 @@ class XMLParser {
                 const hasText = node.getAttribute('text')?.trim();
                 const hasContentDesc = node.getAttribute('content-desc')?.trim();
                 const hasHint = node.getAttribute('hint')?.trim();
+                
+                // 调试：显示每个检查的节点信息
+                if (clickable || focusable || hasText || hasContentDesc || hasHint) {
+                    console.log('找到候选元素:', {
+                        className: node.getAttribute('class'),
+                        clickable,
+                        focusable,
+                        text: hasText,
+                        contentDesc: hasContentDesc,
+                        hint: hasHint,
+                        bounds: node.getAttribute('bounds')
+                    });
+                }
                 
                 // 更宽松的条件：任何有文本、可点击、可聚焦的元素都包含
                 if (clickable || focusable || hasText || hasContentDesc || hasHint) {

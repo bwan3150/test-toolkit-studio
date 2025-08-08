@@ -14,7 +14,8 @@ function initializeTestcasePage() {
     const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
     const deviceSelect = document.getElementById('deviceSelect');
     
-    if (runTestBtn) runTestBtn.addEventListener('click', runCurrentTest);
+    // Run Test按钮事件处理已移至tks-integration.js模块
+    // if (runTestBtn) runTestBtn.addEventListener('click', runCurrentTest);
     // 注意：clearConsoleBtn事件已在initializeUIElementsPanel中处理
     if (toggleXmlBtn) toggleXmlBtn.addEventListener('click', toggleXmlOverlay);
     if (refreshDeviceBtn) refreshDeviceBtn.addEventListener('click', () => {
@@ -103,6 +104,8 @@ function createCollapsibleCaseItem(caseName, casePath) {
         scriptsContainer.classList.remove('collapsed');
         // 展开状态使用打开的文件夹图标
         caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
+        // 异步加载脚本文件
+        loadCaseScripts(caseContainer, casePath);
     } else {
         scriptsContainer.classList.add('collapsed');
         // 折叠状态使用关闭的文件夹图标 (已在创建时设置)
@@ -142,9 +145,18 @@ async function loadCaseScripts(caseItem, casePath) {
     const { path, fs } = getGlobals();
     const scriptsContainer = caseItem.querySelector('.scripts-container');
     
+    if (!scriptsContainer) {
+        console.error('loadCaseScripts: scripts-container not found', caseItem);
+        return;
+    }
+    
+    // 清空之前加载的脚本，避免重复
+    scriptsContainer.innerHTML = '';
+    
     const scriptPath = path.join(casePath, 'script');
     try {
         const scripts = await fs.readdir(scriptPath);
+        console.log(`加载case脚本: ${casePath}, 找到${scripts.length}个文件`);
         
         for (const script of scripts) {
             if (script.endsWith('.tks') || script.endsWith('.yaml')) {
@@ -158,6 +170,8 @@ async function loadCaseScripts(caseItem, casePath) {
         }
     } catch (error) {
         console.error('Failed to load scripts for case:', casePath, error);
+        // 如果script目录不存在，显示提示信息
+        scriptsContainer.innerHTML = '<div style="padding: 8px; color: #888; font-size: 12px;">暂无脚本文件</div>';
     }
 }
 
@@ -216,18 +230,35 @@ function toggleCaseFolder(caseContainer) {
     const caseIcon = caseContainer.querySelector('.case-icon');
     const casePath = caseContainer.dataset.casePath;
     
+    if (!scriptsContainer) {
+        console.error('toggleCaseFolder: 缺少scripts-container元素', caseContainer);
+        return;
+    }
+    
+    if (!caseIcon) {
+        console.warn('toggleCaseFolder: 缺少case-icon元素，跳过图标更新', caseContainer);
+    }
+    
     if (scriptsContainer.classList.contains('collapsed')) {
         // 展开
         scriptsContainer.classList.remove('collapsed');
         expandedCases.add(casePath);
-        // 切换到打开的文件夹图标
-        caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
+        // 切换到打开的文件夹图标（如果图标存在）
+        if (caseIcon) {
+            caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
+        }
+        
+        // 自动加载脚本文件
+        const caseItem = caseContainer;
+        loadCaseScripts(caseItem, casePath);
     } else {
         // 折叠
         scriptsContainer.classList.add('collapsed');
         expandedCases.delete(casePath);
-        // 切换到关闭的文件夹图标
-        caseIcon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
+        // 切换到关闭的文件夹图标（如果图标存在）
+        if (caseIcon) {
+            caseIcon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
+        }
     }
 }
 
@@ -1025,7 +1056,8 @@ async function enableXmlOverlay(deviceId) {
             }
         }
         
-        currentUIElements = xmlParser.extractUIElements(optimizedTree);
+        // 如果优化失败，传递原始XML作为回退
+        currentUIElements = xmlParser.extractUIElements(optimizedTree, result.xml);
         console.log('提取的UI元素:', currentUIElements);
         
         // 暴露到全局，供TKS集成模块使用
@@ -1448,9 +1480,12 @@ function showElementProperties(element) {
             <div class="prop-group">
                 <h4 class="prop-title">操作</h4>
                 <div class="action-buttons">
-                    <button class="btn btn-action btn-click" onclick="insertElementReference(${element.index}, 'click')">插入点击</button>
-                    <button class="btn btn-action btn-input" onclick="insertElementReference(${element.index}, 'input')">插入输入</button>
-                    <button class="btn btn-action btn-assert" onclick="insertElementReference(${element.index}, 'assert')">插入断言</button>
+                    <button class="btn btn-primary" onclick="saveElementToLocator(${element.index})">
+                        <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align: middle; margin-right: 4px;">
+                            <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                        </svg>
+                        入库
+                    </button>
                 </div>
             </div>
         </div>
@@ -1612,6 +1647,13 @@ function initializeUIElementsPanel() {
                     break;
                 case 'element-props':
                     targetPane = document.getElementById('elementPropsPane');
+                    break;
+                case 'locator-lib':
+                    targetPane = document.getElementById('locatorLibPane');
+                    // 加载Locator库
+                    if (window.LocatorManager && window.LocatorManager.instance) {
+                        window.LocatorManager.instance.loadLocators();
+                    }
                     break;
                 case 'console-output':
                     targetPane = document.getElementById('consoleOutputPane');
