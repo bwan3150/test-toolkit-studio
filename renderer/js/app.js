@@ -49,6 +49,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/modules/project-manager.js');
         await loadScript('./js/modules/testcase-manager.js');
         await loadScript('./js/modules/device-manager.js');
+        
+        // 4. 加载TKS脚本引擎模块
+        await loadScript('./js/modules/tks-script-engine.js');
+        await loadScript('./js/modules/tks-integration.js');
         console.log('✓ 业务模块已加载');
         
         // 4. 加载工具模块
@@ -65,7 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'NavigationModule', 'EditorModule', 'ResizablePanelsModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
             'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
-            'NotificationModule', 'AppGlobals'
+            'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
         ];
         
         for (const moduleName of requiredModules) {
@@ -106,6 +110,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             window.SettingsModule.initializeSettingsPage();
             console.log('✓ 设置模块已初始化');
+            
+            // 初始化TKS集成模块
+            window.TKSIntegrationModule.initializeTKSIntegration();
+            console.log('✓ TKS脚本引擎已初始化');
         } catch (error) {
             console.error('业务功能初始化失败:', error);
             throw error;

@@ -110,17 +110,69 @@ project_root/
 
 ### 举例
 
+TKS 脚本基础语法示例：
+
 ```tks
-用例: case_001
-脚本名: script_001
+用例: basic_example
+脚本名: basic_test
 详情: 
-	appPackage: com.konec.smarthome
-	appActivity: com.konec.smarthome.test.ui.activity.MainActivity
+    appPackage: com.example.app
 步骤:
-    点击 [190,220]
+    # 应用管理
+    启动 com.example.app
+    关闭 com.example.app
+    
+    # 点击操作
+    点击 [按钮]
+    点击 100,200
+    
+    # 长按操作
+    按压 [元素, 1000]
+    按压 [300,400, 2000]
+    
+    # 滑动操作
+    滑动 [元素1, 元素2]
+    滑动 [100,100, 200,200]
+    
+    # 定向滑动
+    定向滑动 [元素, 上, 100]
+    定向滑动 [100,100, 下, 200]
+    
+    # 文本操作
+    输入 [输入框, "文本内容"]
+    清理 [输入框]
+    
+    # 系统操作
+    隐藏键盘
     返回
-    等待 10s
-    断言 [Login按钮, 存在, ]
+    
+    # 等待操作
+    等待 3s
+    等待 [元素]
+    
+    # 断言验证
+    断言 [元素, 存在]
+    断言 [元素, 不存在]
+    断言 [元素, "文本内容"]
+```
+
+#### locator配置
+
+```json
+{
+    "登录按钮": {
+        "resourceId": "com.konec.smarthome:id/login_button",
+        "text": "登录"
+    },
+    "用户名输入框": {
+        "resourceId": "com.konec.smarthome:id/username_input",
+        "className": "android.widget.EditText"
+    },
+    "设备列表": {
+        "resourceId": "com.konec.smarthome:id/device_list",
+        "className": "androidx.recyclerview.widget.RecyclerView"
+    }
+}
 ```
 
 

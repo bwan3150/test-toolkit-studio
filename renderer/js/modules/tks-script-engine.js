@@ -193,65 +193,69 @@ class TKSScriptParser {
     parseParameters(paramsStr) {
         if (!paramsStr.trim()) return [];
         
-        // 检查是否包含逗号（方括号格式）
-        if (paramsStr.includes(',')) {
-            // 方括号格式：分割参数，处理可能包含逗号的字符串
-            const params = [];
-            let current = '';
-            let inQuotes = false;
+        // 使用正则表达式来分割参数，支持坐标格式
+        const params = [];
+        let current = '';
+        let inQuotes = false;
+        let quoteChar = '';
+        
+        for (let i = 0; i < paramsStr.length; i++) {
+            const char = paramsStr[i];
             
-            for (let i = 0; i < paramsStr.length; i++) {
-                const char = paramsStr[i];
+            if ((char === '"' || char === "'") && !inQuotes) {
+                inQuotes = true;
+                quoteChar = char;
+                current += char;
+            } else if (char === quoteChar && inQuotes) {
+                inQuotes = false;
+                current += char;
+                quoteChar = '';
+            } else if (char === ',' && !inQuotes) {
+                // 检查是否是坐标中的逗号
+                const trimmed = current.trim();
+                const remaining = paramsStr.slice(i + 1).trim();
                 
-                if (char === '"' || char === "'") {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    params.push(this.parseParameter(current.trim()));
-                    current = '';
+                // 如果当前部分是数字且后面紧跟数字，这是坐标格式
+                if (/^\d+$/.test(trimmed) && /^\d+/.test(remaining.split(/[\s,]/)[0])) {
+                    current += char;
                 } else {
-                    current += char;
-                }
-            }
-            
-            if (current.trim()) {
-                params.push(this.parseParameter(current.trim()));
-            }
-            
-            return params;
-        } else {
-            // 简单格式：按空格分割，但保持引号内的内容
-            const tokens = [];
-            let current = '';
-            let inQuotes = false;
-            let quoteChar = '';
-            
-            for (let i = 0; i < paramsStr.length; i++) {
-                const char = paramsStr[i];
-                
-                if ((char === '"' || char === "'") && !inQuotes) {
-                    inQuotes = true;
-                    quoteChar = char;
-                    current += char;
-                } else if (char === quoteChar && inQuotes) {
-                    inQuotes = false;
-                    current += char;
-                    quoteChar = '';
-                } else if (char === ' ' && !inQuotes) {
+                    // 这是参数分隔符
                     if (current.trim()) {
-                        tokens.push(this.parseParameter(current.trim()));
+                        params.push(this.parseParameter(current.trim()));
+                    }
+                    current = '';
+                }
+            } else if (char === ' ' && !inQuotes) {
+                // 空格分割，但要考虑是否在坐标后面
+                const trimmed = current.trim();
+                if (trimmed) {
+                    // 检查下一个非空字符
+                    let nextChar = '';
+                    for (let j = i + 1; j < paramsStr.length; j++) {
+                        if (paramsStr[j] !== ' ') {
+                            nextChar = paramsStr[j];
+                            break;
+                        }
+                    }
+                    
+                    // 如果当前是坐标格式且下一个是数字，继续添加到当前参数
+                    if (trimmed.includes(',') && /^\d/.test(nextChar)) {
+                        current += char;
+                    } else {
+                        params.push(this.parseParameter(trimmed));
                         current = '';
                     }
-                } else {
-                    current += char;
                 }
+            } else {
+                current += char;
             }
-            
-            if (current.trim()) {
-                tokens.push(this.parseParameter(current.trim()));
-            }
-            
-            return tokens;
         }
+        
+        if (current.trim()) {
+            params.push(this.parseParameter(current.trim()));
+        }
+        
+        return params;
     }
 
     /**
@@ -539,6 +543,11 @@ class TKSScriptExecutor {
             throw new Error('无效的点击目标');
         }
 
+        // 检查坐标有效性
+        if (x === undefined || y === undefined) {
+            throw new Error(`坐标解析失败: (${x},${y})`);
+        }
+
         const result = await this.runAdbCommand(`input tap ${x} ${y}`);
         if (!result.success) {
             throw new Error(`点击失败: ${result.error}`);
@@ -594,6 +603,8 @@ class TKSScriptExecutor {
             }
             x1 = element.centerX;
             y1 = element.centerY;
+        } else {
+            throw new Error('无效的起始点参数');
         }
 
         // 解析终点
@@ -607,6 +618,13 @@ class TKSScriptExecutor {
             }
             x2 = element.centerX;
             y2 = element.centerY;
+        } else {
+            throw new Error('无效的终点参数');
+        }
+
+        // 检查坐标有效性
+        if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
+            throw new Error(`坐标解析失败: from(${x1},${y1}) to(${x2},${y2})`);
         }
 
         const result = await this.runAdbCommand(`input swipe ${x1} ${y1} ${x2} ${y2} ${duration}`);
