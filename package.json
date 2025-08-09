@@ -21,9 +21,10 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "electron-store": "^8.1.0",
     "axios": "^1.6.2",
     "csv-parse": "^5.5.3",
+    "electron-store": "^8.1.0",
+    "jimp": "^1.6.0",
     "js-yaml": "^4.1.0"
   },
   "build": {
@@ -33,7 +34,6 @@
       "output": "dist"
     },
     "asar": true,
-
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/logo/icon.icns",
@@ -51,11 +51,12 @@
         {
           "from": "resources/darwin",
           "to": "darwin",
-          "filter": ["**/*"]
+          "filter": [
+            "**/*"
+          ]
         }
       ]
     },
-
     "win": {
       "target": "nsis",
       "icon": "assets/logo/icon.ico",
@@ -66,11 +67,12 @@
         {
           "from": "resources/win32",
           "to": "win32",
-          "filter": ["**/*"]
+          "filter": [
+            "**/*"
+          ]
         }
       ]
     },
-
     "linux": {
       "target": "AppImage",
       "icon": "assets/logo/toolkit_logo.png",
@@ -81,7 +83,9 @@
         {
           "from": "resources/linux",
           "to": "linux",
-          "filter": ["**/*"]
+          "filter": [
+            "**/*"
+          ]
         }
       ]
     }

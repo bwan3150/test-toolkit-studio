@@ -294,6 +294,12 @@ class TKSScriptParser {
             return { type: 'coordinate', x, y };
         }
         
+        // 解析图像引用 @{图片名称}
+        if (param.startsWith('@{') && param.endsWith('}')) {
+            const imageName = param.slice(2, -1);
+            return { type: 'image_reference', name: imageName };
+        }
+        
         // 解析方向
         if (this.directions[param]) {
             return { type: 'direction', value: this.directions[param] };
@@ -687,6 +693,16 @@ class TKSScriptExecutor {
             // 直接使用坐标
             x = target.x;
             y = target.y;
+        } else if (typeof target === 'object' && target.type === 'image_reference') {
+            // 图像引用 - 查找图像元素
+            console.log('处理图像引用:', target);
+            const element = await this.findElement(target);
+            if (!element) {
+                throw new Error(`未找到图像元素: ${target.name}`);
+            }
+            x = element.centerX;
+            y = element.centerY;
+            console.log(`图像元素坐标: (${x}, ${y})`);
         } else if (typeof target === 'string') {
             // 查找元素
             const element = await this.findElement(target);
@@ -696,7 +712,7 @@ class TKSScriptExecutor {
             x = element.centerX;
             y = element.centerY;
         } else {
-            throw new Error('无效的点击目标');
+            throw new Error(`无效的点击目标: ${JSON.stringify(target)}`);
         }
 
         // 检查坐标有效性
@@ -722,6 +738,14 @@ class TKSScriptExecutor {
         if (typeof target === 'object' && target.type === 'coordinate') {
             x = target.x;
             y = target.y;
+        } else if (typeof target === 'object' && target.type === 'image_reference') {
+            // 图像引用 - 查找图像元素
+            const element = await this.findElement(target);
+            if (!element) {
+                throw new Error(`未找到图像元素: ${target.name}`);
+            }
+            x = element.centerX;
+            y = element.centerY;
         } else if (typeof target === 'string') {
             const element = await this.findElement(target);
             if (!element) {
@@ -752,6 +776,13 @@ class TKSScriptExecutor {
         if (typeof from === 'object' && from.type === 'coordinate') {
             x1 = from.x;
             y1 = from.y;
+        } else if (typeof from === 'object' && from.type === 'image_reference') {
+            const element = await this.findElement(from);
+            if (!element) {
+                throw new Error(`未找到起始图像元素: ${from.name}`);
+            }
+            x1 = element.centerX;
+            y1 = element.centerY;
         } else if (typeof from === 'string') {
             const element = await this.findElement(from);
             if (!element) {
@@ -767,6 +798,13 @@ class TKSScriptExecutor {
         if (typeof to === 'object' && to.type === 'coordinate') {
             x2 = to.x;
             y2 = to.y;
+        } else if (typeof to === 'object' && to.type === 'image_reference') {
+            const element = await this.findElement(to);
+            if (!element) {
+                throw new Error(`未找到目标图像元素: ${to.name}`);
+            }
+            x2 = element.centerX;
+            y2 = element.centerY;
         } else if (typeof to === 'string') {
             const element = await this.findElement(to);
             if (!element) {
@@ -802,6 +840,13 @@ class TKSScriptExecutor {
         if (typeof target === 'object' && target.type === 'coordinate') {
             x = target.x;
             y = target.y;
+        } else if (typeof target === 'object' && target.type === 'image_reference') {
+            const element = await this.findElement(target);
+            if (!element) {
+                throw new Error(`未找到图像元素: ${target.name}`);
+            }
+            x = element.centerX;
+            y = element.centerY;
         } else if (typeof target === 'string') {
             const element = await this.findElement(target);
             if (!element) {
@@ -970,30 +1015,41 @@ class TKSScriptExecutor {
 
     /**
      * 查找元素
-     * @param {string} selector - 元素选择器（可以是别名或实际属性）
+     * @param {string|object} selector - 元素选择器（可以是别名、实际属性或图像引用对象）
      * @returns {Object|null} 找到的元素
      */
     async findElement(selector) {
-        // 首先检查是否是元素别名
-        const elementDef = await this.getElementDefinition(selector);
-        
-        if (elementDef) {
-            // 使用定义的选择器查找
-            return this.findElementByDefinition(elementDef);
-        }
-        
-        // 否则直接在当前元素中查找
-        if (!this.currentElements) {
+        // 如果是图像引用对象，直接查找图像元素
+        if (typeof selector === 'object' && selector.type === 'image_reference') {
+            const elementDef = await this.getElementDefinition(selector.name);
+            if (elementDef) {
+                return await this.findElementByDefinition(elementDef);
+            }
             return null;
         }
+        
+        // 如果是字符串，检查是否是元素别名
+        if (typeof selector === 'string') {
+            const elementDef = await this.getElementDefinition(selector);
+            
+            if (elementDef) {
+                // 使用定义的选择器查找
+                return await this.findElementByDefinition(elementDef);
+            }
+            
+            // 否则直接在当前元素中查找
+            if (!this.currentElements) {
+                return null;
+            }
 
-        // 通过文本查找
-        for (const element of this.currentElements) {
-            if (element.text === selector || 
-                element.contentDesc === selector || 
-                element.hint === selector ||
-                (element.resourceId && element.resourceId.includes(selector))) {
-                return element;
+            // 通过文本查找
+            for (const element of this.currentElements) {
+                if (element.text === selector || 
+                    element.contentDesc === selector || 
+                    element.hint === selector ||
+                    (element.resourceId && element.resourceId.includes(selector))) {
+                    return element;
+                }
             }
         }
 
@@ -1037,7 +1093,13 @@ class TKSScriptExecutor {
      * @param {Object} definition - 元素定义
      * @returns {Object|null} 找到的元素
      */
-    findElementByDefinition(definition) {
+    async findElementByDefinition(definition) {
+        // 如果是图像类型，使用图像匹配
+        if (definition.type === 'image') {
+            return await this.findElementByImage(definition);
+        }
+        
+        // XML元素匹配的原有逻辑
         if (!this.currentElements) return null;
 
         for (const element of this.currentElements) {
@@ -1066,6 +1128,68 @@ class TKSScriptExecutor {
         }
 
         return null;
+    }
+
+    /**
+     * 通过图像匹配查找元素
+     * @param {Object} definition - 图像元素定义
+     * @returns {Object|null} 找到的元素
+     */
+    async findElementByImage(definition) {
+        try {
+            console.log('开始图像匹配:', definition);
+            
+            // 构建模板图片路径
+            const templatePath = tksPath.join(this.projectPath, definition.path);
+            console.log('模板图片路径:', templatePath);
+            
+            // 构建当前截图路径
+            const screenshotPath = tksPath.join(this.projectPath, 'workarea', 'current_screenshot.png');
+            console.log('当前截图路径:', screenshotPath);
+            
+            // 检查文件是否存在
+            try {
+                await tksFs.access(templatePath);
+                await tksFs.access(screenshotPath);
+            } catch (error) {
+                console.error('图像文件不存在:', error.message);
+                return null;
+            }
+            
+            // 创建图像匹配器实例
+            const imageMatcher = new window.ImageMatcher();
+            
+            // 执行图像匹配
+            const matchResult = await imageMatcher.templateMatch(screenshotPath, templatePath);
+            
+            console.log('图像匹配结果:', matchResult);
+            
+            if (matchResult.success) {
+                // 简化逻辑：直接使用截图坐标，因为截图通常就是设备屏幕的实际尺寸
+                console.log(`图像匹配成功，使用坐标: (${matchResult.center_x}, ${matchResult.center_y}), 置信度: ${matchResult.confidence.toFixed(3)}`);
+                
+                // 返回符合Element格式的对象
+                return {
+                    centerX: matchResult.center_x,
+                    centerY: matchResult.center_y,
+                    x: matchResult.bounding_box.x,
+                    y: matchResult.bounding_box.y,
+                    width: matchResult.bounding_box.width,
+                    height: matchResult.bounding_box.height,
+                    confidence: matchResult.confidence,
+                    type: 'image',
+                    source: 'image_matching',
+                    templatePath: templatePath
+                };
+            } else {
+                console.error('图像匹配失败:', matchResult.error);
+                return null;
+            }
+            
+        } catch (error) {
+            console.error('图像匹配出错:', error);
+            return null;
+        }
     }
 
     /**
