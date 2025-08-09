@@ -201,27 +201,25 @@ class TKSScriptRunner {
      * 停止执行
      */
     stopExecution() {
+        console.log('TKSScriptRunner: 用户请求停止脚本执行');
+        
         if (this.isRunning && this.currentExecutor) {
-            console.log('用户请求停止脚本执行');
             // 停止TKS执行器
             this.currentExecutor.stop();
-            // 清除编辑器执行高亮
-            if (window.AppGlobals.codeEditor) {
-                window.AppGlobals.codeEditor.clearExecutionHighlight();
-            }
-            // 更新状态
-            this.isRunning = false;
-            this.currentExecutor = null;
-            this.updateRunButton(false);
-            
-            // 恢复屏幕模式切换功能
-            if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
-                window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
-            }
-            
-            window.TestcaseManagerModule.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
-            window.NotificationModule.showNotification('已停止执行', 'info');
         }
+        
+        // 更新状态
+        this.isRunning = false;
+        this.currentExecutor = null;
+        this.updateRunButton(false);
+        
+        // 恢复屏幕模式切换功能
+        if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
+            window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
+        }
+        
+        window.TestcaseManagerModule.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
+        window.NotificationModule.showNotification('已停止执行', 'info');
     }
     
     /**
@@ -231,26 +229,36 @@ class TKSScriptRunner {
         const runTestBtn = document.getElementById('runTestBtn');
         if (!runTestBtn) return;
         
+        // 移除所有旧的事件监听器
+        const newBtn = runTestBtn.cloneNode(true);
+        runTestBtn.parentNode.replaceChild(newBtn, runTestBtn);
+        
         if (isRunning) {
             // 运行中状态 - 变成停止按钮
-            runTestBtn.innerHTML = `
+            newBtn.innerHTML = `
                 <svg class="btn-icon" viewBox="0 0 24 24">
                     <path d="M6 6h12v12H6z"/>
                 </svg>
                 Stop Test
             `;
-            runTestBtn.className = 'btn btn-danger btn-block';
-            runTestBtn.onclick = () => this.stopExecution();
+            newBtn.className = 'btn btn-danger btn-block';
+            newBtn.addEventListener('click', () => {
+                console.log('Stop Test按钮被点击');
+                this.stopExecution();
+            });
         } else {
             // 空闲状态 - 变成运行按钮
-            runTestBtn.innerHTML = `
+            newBtn.innerHTML = `
                 <svg class="btn-icon" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z"/>
                 </svg>
                 Run Test
             `;
-            runTestBtn.className = 'btn btn-primary btn-block';
-            runTestBtn.onclick = () => this.handleRunTest();
+            newBtn.className = 'btn btn-primary btn-block';
+            newBtn.addEventListener('click', () => {
+                console.log('Run Test按钮被点击');
+                this.handleRunTest();
+            });
         }
     }
 }

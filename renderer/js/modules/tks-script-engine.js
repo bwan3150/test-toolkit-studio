@@ -319,6 +319,8 @@ class TKSScriptExecutor {
         this.isRunning = false;
         this.currentStep = 0;
         this.elementCache = new Map();
+        this.currentCommand = null; // 当前执行的命令
+        this.shouldStop = false; // 停止标志
     }
 
     /**
@@ -328,6 +330,7 @@ class TKSScriptExecutor {
      */
     async execute(script) {
         this.isRunning = true;
+        this.shouldStop = false; // 重置停止标志
         this.currentStep = 0;
         
         // 在脚本开始执行时设置编辑器为测试运行状态
@@ -349,7 +352,7 @@ class TKSScriptExecutor {
             
             // 执行每个步骤
             for (const step of script.steps) {
-                if (!this.isRunning) {
+                if (!this.isRunning || this.shouldStop) {
                     result.error = '执行被中止';
                     result.success = false;
                     break;
@@ -426,6 +429,18 @@ class TKSScriptExecutor {
      * @returns {Object} 步骤执行结果
      */
     async executeStep(step, script) {
+        // 在步骤开始前检查是否需要停止
+        if (this.shouldStop) {
+            return {
+                type: step.type,
+                command: step.command,
+                params: step.params,
+                success: false,
+                error: '执行被中止',
+                duration: 0
+            };
+        }
+        
         const startTime = Date.now();
         const result = {
             type: step.type,
@@ -901,6 +916,11 @@ class TKSScriptExecutor {
             const startTime = Date.now();
             
             while (Date.now() - startTime < timeout) {
+                // 检查是否需要停止
+                if (this.shouldStop) {
+                    throw new Error('执行被中止');
+                }
+                
                 await this.captureCurrentState();
                 const element = await this.findElement(target);
                 if (element) {
@@ -1054,8 +1074,19 @@ class TKSScriptExecutor {
     async runAdbCommand(command) {
         const { ipcRenderer } = window.AppGlobals;
         
+        // 如果已经要求停止，直接返回
+        if (this.shouldStop) {
+            return { success: false, error: '执行已被中止' };
+        }
+        
+        // 保存当前命令
+        this.currentCommand = command;
+        
         // 使用新的IPC处理器执行ADB shell命令
         const result = await ipcRenderer.invoke('adb-shell-command', command, this.deviceId);
+        
+        // 清除当前命令
+        this.currentCommand = null;
         
         if (!result.success) {
             console.error(`ADB命令执行失败: ${command}`, result.error);
@@ -1100,7 +1131,16 @@ class TKSScriptExecutor {
      * 停止执行
      */
     stop() {
+        console.log('TKSScriptExecutor: 收到停止请求');
+        
         this.isRunning = false;
+        this.shouldStop = true; // 设置停止标志
+        
+        // 如果有正在执行的ADB命令，尝试中断它
+        if (this.currentCommand) {
+            console.log(`TKSScriptExecutor: 尝试中断当前命令: ${this.currentCommand}`);
+            // TODO: 可以通过IPC发送中断信号给主进程
+        }
         
         // 停止测试时恢复编辑器交互状态
         if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
@@ -1117,7 +1157,28 @@ class TKSScriptExecutor {
      * 辅助函数：睡眠
      */
     sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        return new Promise((resolve, reject) => {
+            // 如果已经要求停止，立即拒绝
+            if (this.shouldStop) {
+                reject(new Error('执行被中止'));
+                return;
+            }
+            
+            const checkInterval = 100; // 每100ms检查一次
+            let elapsed = 0;
+            
+            const interval = setInterval(() => {
+                elapsed += checkInterval;
+                
+                if (this.shouldStop) {
+                    clearInterval(interval);
+                    reject(new Error('执行被中止'));
+                } else if (elapsed >= ms) {
+                    clearInterval(interval);
+                    resolve();
+                }
+            }, checkInterval);
+        });
     }
 
     /**
