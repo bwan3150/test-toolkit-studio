@@ -53,16 +53,12 @@ function createWindow() {
     windowOptions.trafficLightPosition = { x: 15, y: 13 };
     windowOptions.frame = true;
   }
-  // Windows平台配置
+  // Windows平台配置  
   else if (process.platform === 'win32') {
+    // 完全隐藏系统标题栏，使用自定义标题栏
+    windowOptions.frame = false;
     windowOptions.titleBarStyle = 'hidden';
-    windowOptions.titleBarOverlay = {
-      color: '#1e1e1e',
-      symbolColor: '#ffffff',
-      height: 32
-    };
-    // 保持frame为true以保留拖拽功能，只隐藏菜单栏
-    windowOptions.frame = true;
+    windowOptions.backgroundColor = '#1e1e1e';
   }
   // Linux和其他平台
   else {
@@ -799,4 +795,32 @@ ipcMain.handle('get-current-app', async (event, deviceId) => {
       error: `获取失败: ${error.message}`
     };
   }
+});
+
+// 自定义标题栏窗口控制
+ipcMain.handle('window-minimize', () => {
+  if (mainWindow) {
+    mainWindow.minimize();
+  }
+});
+
+ipcMain.handle('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+  return mainWindow ? mainWindow.isMaximized() : false;
+});
+
+ipcMain.handle('window-close', () => {
+  if (mainWindow) {
+    mainWindow.close();
+  }
+});
+
+ipcMain.handle('window-is-maximized', () => {
+  return mainWindow ? mainWindow.isMaximized() : false;
 });

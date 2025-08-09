@@ -26,12 +26,101 @@
 
 /* Windows specific styles */
 .platform-win32 .titlebar-area {
-    display: none;
+    height: 32px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    display: block;
 }
 
 .platform-win32 .app-container {
-    padding-top: 0;
-    height: 100vh;
+    padding-top: 32px;
+    height: calc(100vh - 32px);
+}
+
+/* 隐藏其他平台的自定义标题栏 */
+.platform-darwin .custom-titlebar,
+.platform-linux .custom-titlebar {
+    display: none !important;
+}
+
+/* 只在Windows上显示自定义标题栏 */
+.platform-win32-only {
+    display: none;
+}
+
+.platform-win32 .platform-win32-only {
+    display: flex;
+}
+
+/* 自定义标题栏样式 */
+.custom-titlebar {
+    width: 100%;
+    height: 32px;
+    background: #1e1e1e;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    font-size: 13px;
+}
+
+.titlebar-drag-region {
+    flex: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+    -webkit-app-region: drag;
+}
+
+.titlebar-title {
+    font-weight: 400;
+    color: #cccccc;
+}
+
+.titlebar-controls {
+    display: flex;
+    height: 100%;
+    -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+    width: 46px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.titlebar-btn:hover {
+    background-color: #404040;
+}
+
+.titlebar-btn.close-btn:hover {
+    background-color: #e74c3c;
+}
+
+.titlebar-btn:active {
+    background-color: #555555;
+}
+
+.titlebar-btn.close-btn:active {
+    background-color: #c0392b;
+}
+
+/* 最大化状态时的图标 */
+.window-maximized .maximize-btn svg {
+    transform: scale(0.9);
+}
+
+.window-maximized .maximize-btn svg path {
+    d: path("M2,2 L8,2 L8,8 L2,8 Z M0,0 L6,0 L6,6 L4,6 L4,4 L2,4 L2,2 L0,2 Z");
 }
 
 /* Linux specific styles */
