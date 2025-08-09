@@ -903,8 +903,26 @@ async function performCaseRename(casePath, oldName, newName) {
     const newPath = path.join(parentPath, newName);
     
     try {
+        // 检查目标路径是否已存在
+        try {
+            await fs.access(newPath);
+            window.NotificationModule.showNotification(`名称 "${newName}" 已存在`, 'warning');
+            // 恢复原名称
+            const caseContainer = document.querySelector(`[data-case-path="${casePath}"]`);
+            const labelElement = caseContainer?.querySelector('.case-label');
+            if (labelElement) {
+                labelElement.textContent = oldName;
+            }
+            return;
+        } catch {
+            // 目标不存在，可以继续
+        }
+        
         await fs.rename(casePath, newPath);
         window.NotificationModule.showNotification(`Case重命名成功: ${oldName} -> ${newName}`, 'success');
+        
+        // 更新 testcase_map.json
+        await updateTestcaseMapping(oldName, newName);
         
         // 更新展开状态
         if (expandedCases.has(casePath)) {
@@ -919,6 +937,7 @@ async function performCaseRename(casePath, oldName, newName) {
         await loadFileTree();
         
     } catch (error) {
+        console.error('重命名失败:', error);
         window.NotificationModule.showNotification(`重命名失败: ${error.message}`, 'error');
         // 恢复原名称
         const caseContainer = document.querySelector(`[data-case-path="${casePath}"]`);
@@ -935,6 +954,22 @@ async function performScriptRename(scriptPath, oldName, newName, casePath) {
     const newPath = path.join(path.dirname(scriptPath), newName);
     
     try {
+        // 检查目标文件是否已存在
+        try {
+            await fs.access(newPath);
+            window.NotificationModule.showNotification(`文件 "${newName}" 已存在`, 'warning');
+            // 恢复原名称
+            const scriptItem = document.querySelector(`[data-script-path="${scriptPath}"]`);
+            const labelElement = scriptItem?.querySelector('.script-label');
+            if (labelElement) {
+                labelElement.innerHTML = '';
+                labelElement.textContent = oldName;
+            }
+            return;
+        } catch {
+            // 目标不存在，可以继续
+        }
+        
         await fs.rename(scriptPath, newPath);
         window.NotificationModule.showNotification(`脚本重命名成功: ${oldName} -> ${newName}`, 'success');
         
@@ -945,6 +980,7 @@ async function performScriptRename(scriptPath, oldName, newName, casePath) {
         await loadFileTree();
         
     } catch (error) {
+        console.error('重命名失败:', error);
         window.NotificationModule.showNotification(`重命名失败: ${error.message}`, 'error');
         // 恢复原名称
         const scriptItem = document.querySelector(`[data-script-path="${scriptPath}"]`);
@@ -953,6 +989,38 @@ async function performScriptRename(scriptPath, oldName, newName, casePath) {
             labelElement.innerHTML = '';
             labelElement.textContent = oldName;
         }
+    }
+}
+
+// 更新 testcase_map.json 映射
+async function updateTestcaseMapping(oldCaseName, newCaseName) {
+    const { path, fs, ipcRenderer } = getGlobals();
+    if (!window.AppGlobals.currentProject) return;
+    
+    const mapPath = path.join(window.AppGlobals.currentProject, 'testcase_map.json');
+    
+    try {
+        // 读取当前映射
+        let mapping = {};
+        try {
+            const content = await fs.readFile(mapPath, 'utf-8');
+            mapping = JSON.parse(content);
+        } catch {
+            // 文件不存在或解析失败，使用空对象
+        }
+        
+        // 查找使用旧名称的映射并更新
+        for (const [key, value] of Object.entries(mapping)) {
+            if (value === oldCaseName) {
+                mapping[key] = newCaseName;
+            }
+        }
+        
+        // 保存更新后的映射
+        await fs.writeFile(mapPath, JSON.stringify(mapping, null, 2));
+        
+    } catch (error) {
+        console.error('更新testcase映射失败:', error);
     }
 }
 
@@ -2664,6 +2732,7 @@ window.TestcaseManagerModule = {
     runCurrentTest,
     refreshDeviceScreen,
     toggleXmlOverlay,
+    toggleCaseFolder,
     initializeUIElementsPanel,
     initializeBottomPanelDisplay,
     recalculateXmlMarkersPosition,

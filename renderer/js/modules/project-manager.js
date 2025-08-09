@@ -457,20 +457,33 @@ async function displayTestCasesTable(records) {
 
 // 导航到testcase页面（用于已存在的case）
 async function navigateToTestcase(record, index) {
+    const { path, fs } = getGlobals();
+    
     try {
+        // 获取映射的case名称
+        let caseName = `case_${String(index + 1).padStart(3, '0')}`;
+        
+        if (window.AppGlobals.currentProject) {
+            const mapPath = path.join(window.AppGlobals.currentProject, 'testcase_map.json');
+            try {
+                const content = await fs.readFile(mapPath, 'utf-8');
+                const mapping = JSON.parse(content);
+                caseName = mapping[index.toString()] || caseName;
+            } catch {
+                // 使用默认名称
+            }
+        }
+        
         // 导航到testcase页面
         document.querySelector('[data-page="testcase"]').click();
         
         // 重新加载文件树
         await window.TestcaseManagerModule.loadFileTree();
         
-        // 可选：展开对应的case文件夹
-        const caseName = `case_${String(index + 1).padStart(3, '0')}`;
-        
         // 显示通知
         window.NotificationModule.showNotification(`已跳转到测试用例页面: ${caseName}`, 'info');
         
-        // 尝试展开对应的case文件夹（如果文件树加载完成）
+        // 尝试展开对应的case文件夹
         setTimeout(() => {
             const caseContainer = document.querySelector(`[data-case-path*="${caseName}"]`);
             if (caseContainer && window.TestcaseManagerModule.toggleCaseFolder) {
@@ -489,13 +502,23 @@ async function navigateToTestcase(record, index) {
 
 // 检查哪些Case已经存在
 async function checkExistingCases(totalCases) {
-    const { path, fsSync } = getGlobals();
+    const { path, fsSync, fs } = getGlobals();
     if (!window.AppGlobals.currentProject) return [];
     
     const existingCases = [];
     const casesPath = path.join(window.AppGlobals.currentProject, 'cases');
+    const mapPath = path.join(window.AppGlobals.currentProject, 'testcase_map.json');
     
     try {
+        // 读取映射文件
+        let mapping = {};
+        try {
+            const content = await fs.readFile(mapPath, 'utf-8');
+            mapping = JSON.parse(content);
+        } catch {
+            // 映射文件不存在，使用默认名称检查
+        }
+        
         // 检查cases目录是否存在
         if (!fsSync.existsSync(casesPath)) {
             // cases目录不存在，所有case都未创建
@@ -503,7 +526,8 @@ async function checkExistingCases(totalCases) {
         }
         
         for (let i = 0; i < totalCases; i++) {
-            const caseName = `case_${String(i + 1).padStart(3, '0')}`;
+            // 优先使用映射中的名称，否则使用默认名称
+            const caseName = mapping[i.toString()] || `case_${String(i + 1).padStart(3, '0')}`;
             const casePath = path.join(casesPath, caseName);
             
             // 检查case目录和config.json是否存在
@@ -544,13 +568,17 @@ async function createTestCase(record, index) {
             description: record[Object.keys(record)[0]] || '',
             requirements: record[Object.keys(record)[1]] || '',
             createdAt: new Date().toISOString(),
-            record: record
+            record: record,
+            rowIndex: index // 添加行索引
         };
         
         await fs.writeFile(
             path.join(casePath, 'config.json'),
             JSON.stringify(config, null, 2)
         );
+        
+        // 更新 testcase_map.json
+        await updateTestcaseMap(index, caseName);
         
         // 创建case级别的README
         await fs.writeFile(
@@ -612,6 +640,36 @@ async function refreshTestCaseTable() {
     }
 }
 
+// 新增函数：更新测试用例映射
+async function updateTestcaseMap(rowIndex, caseName) {
+    const { path, fs } = getGlobals();
+    if (!window.AppGlobals.currentProject) return;
+    
+    const mapPath = path.join(window.AppGlobals.currentProject, 'testcase_map.json');
+    
+    try {
+        // 读取当前映射
+        let mapping = {};
+        try {
+            const content = await fs.readFile(mapPath, 'utf-8');
+            mapping = JSON.parse(content);
+        } catch {
+            // 文件不存在或解析失败，使用空对象
+        }
+        
+        // 更新映射（使用行索引作为key）
+        mapping[rowIndex.toString()] = caseName;
+        
+        // 保存映射
+        await fs.writeFile(mapPath, JSON.stringify(mapping, null, 2));
+        
+        console.log('更新testcase映射:', rowIndex, '->', caseName);
+        
+    } catch (error) {
+        console.error('更新testcase映射失败:', error);
+    }
+}
+
 async function removeFromHistory(projectPath) {
     const { ipcRenderer } = getGlobals();
     let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
@@ -637,5 +695,6 @@ window.ProjectManagerModule = {
     formatDate,
     openProject,
     updateProjectHistory,
+    updateTestcaseMap,
     removeFromHistory
 };
