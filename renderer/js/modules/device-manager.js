@@ -121,7 +121,6 @@ async function loadSavedDevices() {
                     <div class="device-name">${config.deviceName}</div>
                     <div class="device-info">
                         <span title="${config.platformName} ${config.platformVersion}">Platform: ${config.platformName} ${config.platformVersion}</span>
-                        <span title="${config.appPackage}">Package: ${config.appPackage}</span>
                         <span title="${config.automationName}">Automation: ${config.automationName}</span>
                         ${config.deviceId ? `<span title="${config.deviceId}">ID: ${config.deviceId}</span>` : ''}
                     </div>
@@ -177,24 +176,133 @@ async function refreshConnectedDevices() {
             }
         }
         
-        result.devices.forEach(device => {
+        // 为每个连接的设备创建卡片
+        for (const device of result.devices) {
             const isSaved = savedDeviceIds.includes(device.id);
             const item = document.createElement('div');
-            item.className = 'connected-item';
-            item.innerHTML = `
-                <span class="device-id">${device.id}</span>
-                <span class="device-status-text">${device.status}</span>
-                ${!isSaved && device.status === 'device' ? `
-                    <button class="btn btn-primary" onclick="createDeviceFromConnected('${device.id}')">
-                        <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
-                            <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                        </svg>
-                        Save
-                    </button>
-                ` : isSaved ? '<span class="text-muted" style="font-size: 12px;">Already saved</span>' : ''}
+            item.className = 'device-card';
+            
+            // 获取保存的设备名称
+            let savedDeviceName = '';
+            if (window.AppGlobals.currentProject) {
+                try {
+                    const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
+                    const files = await fs.readdir(devicesPath);
+                    for (const file of files) {
+                        if (file.endsWith('.yaml')) {
+                            const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
+                            const config = yaml.load(content);
+                            if (config.deviceId === device.id) {
+                                savedDeviceName = config.deviceName;
+                                break;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('获取设备名称失败:', error);
+                }
+            }
+            
+            // 创建卡片内容
+            let cardContent = `
+                <div class="device-card-header">
+                    <div class="device-main-row">
+                        <div class="device-id-row">
+                            <div class="device-status-indicator ${device.status === 'device' ? 'connected' : ''}" title="${device.status === 'device' ? 'Connected' : 'Not Connected'}"></div>
+                            <span class="device-id">${device.id}</span>
+                        </div>
+                        <div class="device-actions-inline">
+                            ${device.status === 'device' ? (!isSaved ? `
+                                <button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${device.id}')">
+                                    <svg viewBox="0 0 24 24" width="14" height="14">
+                                        <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                    </svg>
+                                    保存
+                                </button>
+                            ` : `
+                                <span class="saved-indicator-inline">
+                                    <svg viewBox="0 0 24 24" width="14" height="14">
+                                        <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                    </svg>
+                                    已保存
+                                </span>
+                            `) : ''}
+                        </div>
+                    </div>
+                    ${savedDeviceName ? `<div class="device-saved-label">${savedDeviceName}</div>` : ''}
+                </div>
             `;
+            
+            // 如果设备已连接，获取并显示当前App信息
+            if (device.status === 'device') {
+                try {
+                    const appResult = await ipcRenderer.invoke('get-current-app', device.id);
+                    if (appResult.success) {
+                        cardContent += `
+                            <div class="device-card-body">
+                                <div class="app-section">
+                                    <div class="app-title">当前运行应用</div>
+                                    <div class="app-details">
+                                        <div class="app-field">
+                                            <span class="field-label">PACKAGE</span>
+                                            <div class="field-value-group">
+                                                <span class="field-value">${appResult.packageName}</span>
+                                                <button class="copy-btn" onclick="copyToClipboard('package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
+                                                    <svg viewBox="0 0 24 24" width="14" height="14">
+                                                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                                    </svg>
+                                                </button>
+                                                <span id="package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.packageName}</span>
+                                            </div>
+                                        </div>
+                                        <div class="app-field">
+                                            <span class="field-label">Activity</span>
+                                            <div class="field-value-group">
+                                                <span class="field-value">${appResult.activityName}</span>
+                                                <button class="copy-btn" onclick="copyToClipboard('activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
+                                                    <svg viewBox="0 0 24 24" width="14" height="14">
+                                                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                                    </svg>
+                                                </button>
+                                                <span id="activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.activityName}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        cardContent += `
+                            <div class="device-card-body">
+                                <div class="app-section">
+                                    <div class="no-app-info">无法获取应用信息</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    cardContent += `
+                        <div class="device-card-body">
+                            <div class="app-section">
+                                <div class="no-app-info">获取应用信息失败</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            } else {
+                cardContent += `
+                    <div class="device-card-body">
+                        <div class="app-section">
+                            <div class="no-app-info">设备未连接</div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            
+            item.innerHTML = cardContent;
             connectedList.appendChild(item);
-        });
+        }
     } else {
         connectedList.innerHTML = '<div class="text-muted">No devices connected</div>';
     }
@@ -311,8 +419,6 @@ async function editDevice(filename) {
             newDeviceForm.querySelector('input[name="deviceId"]').value = config.deviceId || '';
             newDeviceForm.querySelector('input[name="platformName"]').value = config.platformName || 'Android';
             newDeviceForm.querySelector('input[name="platformVersion"]').value = config.platformVersion || '';
-            newDeviceForm.querySelector('input[name="appPackage"]').value = config.appPackage || '';
-            newDeviceForm.querySelector('input[name="appActivity"]').value = config.appActivity || '';
             newDeviceForm.querySelector('input[name="automationName"]').value = config.automationName || 'UiAutomator2';
             newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = config.newCommandTimeout || '6000';
             newDeviceForm.querySelector('select[name="noReset"]').value = config.noReset ? 'true' : 'false';
@@ -343,10 +449,24 @@ async function deleteDevice(filename) {
     }
 }
 
+
+// 复制到剪贴板的辅助函数
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (element && element.textContent && element.textContent !== '-') {
+        navigator.clipboard.writeText(element.textContent).then(() => {
+            window.NotificationModule.showNotification('已复制到剪贴板', 'success');
+        }).catch(err => {
+            window.NotificationModule.showNotification('复制失败', 'error');
+        });
+    }
+}
+
 // 全局函数用于设备管理
 window.createDeviceFromConnected = createDeviceFromConnected;
 window.editDevice = editDevice;
 window.deleteDevice = deleteDevice;
+window.copyToClipboard = copyToClipboard;
 
 // 导出函数
 window.DeviceManagerModule = {
@@ -356,5 +476,6 @@ window.DeviceManagerModule = {
     refreshDeviceList,
     createDeviceFromConnected,
     editDevice,
-    deleteDevice
+    deleteDevice,
+    copyToClipboard
 };

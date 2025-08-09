@@ -677,3 +677,97 @@ ipcMain.handle('adb-batch-commands', async (event, commands, deviceId = null) =>
   
   return results;
 });
+
+// 获取当前运行的App信息 - 包名和Activity
+ipcMain.handle('get-current-app', async (event, deviceId) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: '内置Android SDK未找到' };
+    }
+    
+    if (!deviceId) {
+      return { success: false, error: '请提供设备ID' };
+    }
+    
+    let packageName = '';
+    let activityName = '';
+    
+    // 方法1: 尝试获取顶层Activity（最有效）
+    try {
+      const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell dumpsys activity top`);
+      if (stdout) {
+        const lines = stdout.split('\n');
+        for (const line of lines) {
+          if (line.includes('ACTIVITY')) {
+            const matches = line.match(/([a-zA-Z0-9._]+)\/([a-zA-Z0-9._$]+)/g);
+            if (matches && matches.length > 0) {
+              const fullActivity = matches[0];
+              if (!fullActivity.includes('android/') && !fullActivity.includes('system/') && !fullActivity.includes('com.android.')) {
+                const parts = fullActivity.split('/');
+                packageName = parts[0];
+                activityName = parts[1];
+                if (activityName.startsWith('.')) {
+                  activityName = packageName + activityName;
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // 继续尝试其他方法
+    }
+    
+    // 方法2: 如果方法1失败，尝试activity activities
+    if (!packageName) {
+      try {
+        const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell dumpsys activity activities`);
+        if (stdout) {
+          const lines = stdout.split('\n');
+          for (const line of lines) {
+            if (line.includes('mResumedActivity') || line.includes('mFocusedActivity')) {
+              const matches = line.match(/([a-zA-Z0-9._]+)\/([a-zA-Z0-9._$]+)/g);
+              if (matches && matches.length > 0) {
+                const fullActivity = matches[0];
+                if (!fullActivity.includes('android/') && !fullActivity.includes('system/') && !fullActivity.includes('com.android.')) {
+                  const parts = fullActivity.split('/');
+                  packageName = parts[0];
+                  activityName = parts[1];
+                  if (activityName.startsWith('.')) {
+                    activityName = packageName + activityName;
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // 继续尝试其他方法
+      }
+    }
+    
+    if (packageName) {
+      return { 
+        success: true, 
+        packageName: packageName,
+        activityName: activityName || '未获取到Activity'
+      };
+    } else {
+      return { 
+        success: false, 
+        error: '无法获取当前运行的应用信息。请确保设备屏幕已解锁并且有应用正在前台运行。'
+      };
+    }
+    
+  } catch (error) {
+    return { 
+      success: false,
+      error: `获取失败: ${error.message}`
+    };
+  }
+});
