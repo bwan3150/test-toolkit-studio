@@ -23,12 +23,14 @@ class SimpleCodeEditor {
                 </div>
                 <div class="editor-main">
                     <div class="editor-content" id="editorContent" contenteditable="true"></div>
+                    <div class="editor-status-indicator" id="editorStatusIndicator"></div>
                 </div>
             </div>
         `;
         
         this.lineNumbersEl = document.getElementById('lineNumbersNew');
         this.contentEl = document.getElementById('editorContent');
+        this.statusIndicatorEl = document.getElementById('editorStatusIndicator');
         
         
         // 设置ContentEditable样式 - 使用应用统一的等宽字体
@@ -65,6 +67,9 @@ class SimpleCodeEditor {
         });
         
         this.setPlaceholder('在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑');
+        
+        // 初始化状态指示器
+        this.updateStatusIndicator();
     }
     
     setupEventListeners() {
@@ -575,6 +580,26 @@ class SimpleCodeEditor {
         }
     }
     
+    // 更新编辑器状态提示
+    updateStatusIndicator() {
+        if (!this.statusIndicatorEl) return;
+        
+        if (this.isTestRunning) {
+            // 测试运行状态 - 黄色
+            this.statusIndicatorEl.className = 'editor-status-indicator running';
+            this.statusIndicatorEl.textContent = '运行中';
+            this.statusIndicatorEl.style.display = 'block';
+        } else if (this.forceTextMode) {
+            // 文本编辑模式 - 蓝色
+            this.statusIndicatorEl.className = 'editor-status-indicator text-mode';
+            this.statusIndicatorEl.textContent = '文本模式';
+            this.statusIndicatorEl.style.display = 'block';
+        } else {
+            // 普通状态 - 隐藏
+            this.statusIndicatorEl.style.display = 'none';
+        }
+    }
+    
     // 切换所有图片定位器为文本格式
     toggleAllImagesToText() {
         try {
@@ -589,14 +614,15 @@ class SimpleCodeEditor {
             // 如果已经是强制文本模式，则切换回图片模式
             if (this.forceTextMode) {
                 this.forceTextMode = false;
-                this.contentEl.removeAttribute('data-force-text');
                 console.log('切换回图片模式');
             } else {
                 // 切换到强制文本模式
                 this.forceTextMode = true;
-                this.contentEl.setAttribute('data-force-text', 'true');
                 console.log('切换到文本模式');
             }
+            
+            // 更新状态提示
+            this.updateStatusIndicator();
             
             // 抑制光标恢复
             this.suppressCursorRestore = true;
@@ -1352,6 +1378,9 @@ class SimpleCodeEditor {
             this.contentEl.style.pointerEvents = 'auto';
             this.contentEl.style.userSelect = 'text';
         }
+        
+        // 更新状态提示
+        this.updateStatusIndicator();
     }
     
     // 高亮当前执行的行
