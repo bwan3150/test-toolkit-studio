@@ -2775,27 +2775,114 @@ body {
     background: rgba(78, 201, 176, 0.1);
 }
 
-/* 设备屏幕模式切换按钮组 */
-.screen-mode-buttons {
-    display: flex;
-    gap: 4px;
+/* 设备屏幕模式滑块切换器 */
+.mode-slider-container {
     margin-left: auto;
+    position: relative;
 }
 
-.mode-btn {
-    opacity: 0.6;
+.mode-slider {
+    position: relative;
+    display: flex;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 3px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.slider-track {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    bottom: 3px;
+    width: calc(25% - 3px);
+    pointer-events: none;
+}
+
+.slider-indicator {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.mode-options {
+    display: flex;
+    position: relative;
+    z-index: 1;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 16px;
+    position: relative;
+}
+
+.mode-option:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-option.active {
+    color: white;
+}
+
+.mode-option.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.mode-icon {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
     transition: all 0.2s ease;
 }
 
-.mode-btn:hover {
-    opacity: 0.8;
-    background: rgba(255, 255, 255, 0.1);
+/* 四种模式的不同颜色 */
+.slider-indicator.mode-normal {
+    background: linear-gradient(135deg, #FF9800, #F57C00);
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.4);
 }
 
-.mode-btn.active {
-    opacity: 1;
-    background: #4CAF50;
-    color: white;
+.slider-indicator.mode-xml {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+}
+
+.slider-indicator.mode-crop {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.slider-indicator.mode-coordinate {
+    background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+    box-shadow: 0 2px 8px rgba(156, 39, 176, 0.4);
+}
+
+/* 滑块指示器位置动画 */
+.mode-slider[data-active="normal"] .slider-indicator {
+    transform: translateX(0);
+}
+
+.mode-slider[data-active="xml"] .slider-indicator {
+    transform: translateX(100%);
+}
+
+.mode-slider[data-active="crop"] .slider-indicator {
+    transform: translateX(200%);
+}
+
+.mode-slider[data-active="coordinate"] .slider-indicator {
+    transform: translateX(300%);
 }
 
 /* 截图选择器样式 */

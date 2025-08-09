@@ -1963,25 +1963,31 @@ const ScreenModeManager = {
         console.log('ScreenModeManager 初始化完成');
     },
     
-    // 设置模式切换按钮
+    // 设置模式切换滑块
     setupModeButtons() {
-        const normalModeBtn = document.getElementById('normalModeBtn');
-        const xmlModeBtn = document.getElementById('xmlModeBtn');
-        const screenshotModeBtn = document.getElementById('screenshotModeBtn');
-        const coordinateModeBtn = document.getElementById('coordinateModeBtn');
+        const modeOptions = document.querySelectorAll('.mode-option');
+        const modeSlider = document.getElementById('modeSlider');
         
-        if (normalModeBtn) {
-            normalModeBtn.addEventListener('click', () => this.switchMode('normal'));
-        }
-        if (xmlModeBtn) {
-            xmlModeBtn.addEventListener('click', () => this.switchMode('xml'));
-        }
-        if (screenshotModeBtn) {
-            screenshotModeBtn.addEventListener('click', () => this.switchMode('screenshot'));
-        }
-        if (coordinateModeBtn) {
-            coordinateModeBtn.addEventListener('click', () => this.switchMode('coordinate'));
-        }
+        modeOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                // 检查是否被禁用（测试运行期间）
+                if (option.classList.contains('disabled')) {
+                    return;
+                }
+                
+                const mode = option.dataset.mode;
+                // 处理不同的模式名称映射
+                let actualMode = mode;
+                if (mode === 'crop') {
+                    actualMode = 'screenshot';
+                }
+                
+                this.switchMode(actualMode);
+            });
+        });
+        
+        // 初始化滑块位置
+        this.updateSliderPosition('normal');
     },
     
     // 切换模式
@@ -1991,8 +1997,8 @@ const ScreenModeManager = {
         const screenshotSelector = document.getElementById('screenshotSelector');
         const coordinateMarker = document.getElementById('coordinateMarker');
         
-        // 重置所有模式按钮状态
-        document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+        // 重置所有模式选项状态
+        document.querySelectorAll('.mode-option').forEach(option => option.classList.remove('active'));
         
         // 清理之前的模式状态
         screenContent.classList.remove('screenshot-mode', 'coordinate-mode');
@@ -2005,15 +2011,21 @@ const ScreenModeManager = {
             existingOverlay.remove();
         }
         
+        // 更新滑块位置和激活状态
+        let uiMode = mode;
+        if (mode === 'screenshot') {
+            uiMode = 'crop'; // UI中显示为crop模式
+        }
+        
+        this.updateSliderPosition(uiMode);
+        
         switch(mode) {
             case 'normal':
-                document.getElementById('normalModeBtn').classList.add('active');
                 // 纯屏幕模式，不显示任何覆盖层
                 xmlOverlayEnabled = false;
                 break;
                 
             case 'xml':
-                document.getElementById('xmlModeBtn').classList.add('active');
                 // 启用XML overlay
                 xmlOverlayEnabled = true;
                 const deviceSelect = document.getElementById('deviceSelect');
@@ -2023,22 +2035,63 @@ const ScreenModeManager = {
                 break;
                 
             case 'screenshot':
-                document.getElementById('screenshotModeBtn').classList.add('active');
                 screenContent.classList.add('screenshot-mode');
                 xmlOverlayEnabled = false;
-                window.NotificationModule.showNotification('截图模式：拖动鼠标框选要截取的区域', 'info');
                 break;
                 
             case 'coordinate':
-                document.getElementById('coordinateModeBtn').classList.add('active');
                 screenContent.classList.add('coordinate-mode');
                 xmlOverlayEnabled = false;
-                window.NotificationModule.showNotification('坐标模式：点击屏幕获取坐标', 'info');
                 break;
         }
         
         // 显示或隐藏缩放控制
         this.updateZoomControlsVisibility();
+    },
+    
+    // 更新滑块位置
+    updateSliderPosition(mode) {
+        const modeSlider = document.getElementById('modeSlider');
+        const modeOptions = document.querySelectorAll('.mode-option');
+        
+        if (!modeSlider) return;
+        
+        // 设置滑块的data-active属性来控制指示器位置
+        modeSlider.setAttribute('data-active', mode);
+        
+        // 更新选项的激活状态
+        modeOptions.forEach(option => {
+            if (option.dataset.mode === mode) {
+                option.classList.add('active');
+            } else {
+                option.classList.remove('active');
+            }
+        });
+        
+        // 为不同模式设置不同颜色
+        const sliderIndicator = document.getElementById('sliderIndicator');
+        if (sliderIndicator) {
+            sliderIndicator.className = 'slider-indicator';
+            sliderIndicator.classList.add(`mode-${mode}`);
+        }
+    },
+    
+    // 设置测试运行状态 - 禁用/启用模式切换
+    setTestRunning(isRunning) {
+        const modeOptions = document.querySelectorAll('.mode-option');
+        
+        modeOptions.forEach(option => {
+            if (isRunning) {
+                option.classList.add('disabled');
+            } else {
+                option.classList.remove('disabled');
+            }
+        });
+        
+        // 如果测试开始，强制切换到纯屏幕模式
+        if (isRunning && this.currentMode !== 'normal') {
+            this.switchMode('normal');
+        }
     },
     
     // 更新缩放控制的可见性

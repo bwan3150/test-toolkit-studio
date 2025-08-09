@@ -119,6 +119,11 @@ class TKSScriptRunner {
         this.isRunning = true;
         this.updateRunButton(true);
         
+        // 设置屏幕模式管理器为测试运行状态（自动切换到纯屏幕模式并禁用切换）
+        if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
+            window.TestcaseManagerModule.ScreenModeManager.setTestRunning(true);
+        }
+        
         try {
             // 获取项目路径
             let projectPath = '';
@@ -184,6 +189,11 @@ class TKSScriptRunner {
             this.isRunning = false;
             this.currentExecutor = null; // 清除执行器引用
             this.updateRunButton(false);
+            
+            // 恢复屏幕模式切换功能
+            if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
+                window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
+            }
         }
     }
 
@@ -203,6 +213,12 @@ class TKSScriptRunner {
             this.isRunning = false;
             this.currentExecutor = null;
             this.updateRunButton(false);
+            
+            // 恢复屏幕模式切换功能
+            if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
+                window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
+            }
+            
             window.TestcaseManagerModule.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
             window.NotificationModule.showNotification('已停止执行', 'info');
         }
