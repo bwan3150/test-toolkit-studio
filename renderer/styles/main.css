@@ -526,6 +526,7 @@ body {
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 .explorer-header {
@@ -1436,6 +1437,44 @@ body {
     background: var(--accent-primary);
 }
 
+/* Explorer 水平拖拽条 */
+.explorer-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--border-color);
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    z-index: 10;
+}
+.explorer-resizer:hover {
+    background: var(--accent-primary);
+}
+.explorer-resizer.dragging {
+    background: var(--accent-primary);
+}
+
+/* Bottom Panel 垂直拖拽条 */
+.bottom-panel-resizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--border-color);
+    cursor: row-resize;
+    transition: background-color 0.2s;
+    z-index: 10;
+}
+.bottom-panel-resizer:hover {
+    background: var(--accent-primary);
+}
+.bottom-panel-resizer.dragging {
+    background: var(--accent-primary);
+}
+
 
 .run-section {
     padding: 12px;
@@ -2230,6 +2269,7 @@ body {
     display: flex;
     flex-direction: column;
     transition: max-height 0.3s ease;
+    position: relative;
 }
 
 .ui-elements-bottom-panel.collapsed {
@@ -2296,7 +2336,8 @@ body {
 
 .elements-tabs .tab-pane {
     height: 100%;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     padding: 12px;
 }
 
@@ -2304,10 +2345,27 @@ body {
     display: none;
 }
 
+.elements-tabs .tab-pane.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 控制台tab特殊样式 */
+#consoleOutputPane {
+    padding: 0; /* 控制台自己有padding */
+}
+
+#consoleOutputPane.active {
+    display: flex;
+    flex-direction: column;
+}
+
 /* 元素列表容器 */
 .elements-list-container {
-    max-height: 200px;
+    flex: 1;
     overflow-y: auto;
+    min-height: 100px;
+    max-height: 100%;
 }
 
 .elements-list-container .element-item {
@@ -2364,9 +2422,11 @@ body {
 
 /* 元素属性容器 */
 .element-props-container {
-    max-height: 200px;
+    flex: 1;
     overflow-y: auto;
     font-size: 12px;
+    min-height: 100px;
+    max-height: 100%;
 }
 
 .element-props-container .props-section {
@@ -2440,8 +2500,13 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
     min-height: 200px;
+    /* 移除height: 100%，避免强制拉伸父容器 */
+}
+
+/* 针对locator库的empty-state，不设置最小高度 */
+.locator-list .empty-state {
+    min-height: 120px;
 }
 
 .empty-state-text {
@@ -2462,6 +2527,8 @@ body {
     color: var(--text-primary);
     white-space: pre-wrap;
     word-wrap: break-word;
+    height: 100%;
+    max-height: 100%;
 }
 
 .console-welcome {
@@ -2619,6 +2686,18 @@ body {
     padding: 8px;
 }
 
+.locator-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: visible;
+    padding: 8px 0;
+    /* 使用CSS Grid实现卡片网格布局 */
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 4px; /* 固定的网格间距 */
+    align-content: start; /* 确保内容从顶部开始，不分散 */
+}
+
 .locator-search-bar {
     margin-bottom: 8px;
 }
@@ -2638,12 +2717,9 @@ body {
     border-color: #007ACC;
 }
 
-.locator-list {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: visible;
-    padding: 8px 0; /* 增加上下内边距，为hover效果留出空间 */
-}
+/* locator-list样式已在上面定义，避免重复 */
+
+/* locator-card的margin由后面的完整定义处理 */
 
 .locator-item {
     background: #2d2d2d;
@@ -3013,7 +3089,9 @@ body {
     align-items: center;
     gap: 12px;
     user-select: none;
-    min-height: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    /* Grid布局不需要margin，gap统一处理间距 */
 }
 
 .locator-card:hover {
