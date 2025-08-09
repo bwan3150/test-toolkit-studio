@@ -13,10 +13,20 @@ function initializeDevicePage() {
     const deviceForm = document.getElementById('deviceForm');
     const newDeviceForm = document.getElementById('newDeviceForm');
     const cancelDeviceBtn = document.getElementById('cancelDeviceBtn');
+    const connectionTypeSelect = document.getElementById('connectionTypeSelect');
+    const pairDeviceBtn = document.getElementById('pairDeviceBtn');
     
     if (addDeviceBtn) {
         addDeviceBtn.addEventListener('click', () => {
             deviceForm.style.display = deviceForm.style.display === 'none' ? 'block' : 'none';
+            // 重置表单并设置默认值
+            if (deviceForm.style.display === 'block') {
+                newDeviceForm.reset();
+                delete deviceForm.dataset.mode;
+                delete deviceForm.dataset.filename;
+                deviceForm.querySelector('h3').textContent = 'Add New Device';
+                updateConnectionTypeFields();
+            }
         });
     }
     
@@ -29,6 +39,15 @@ function initializeDevicePage() {
     
     if (scanDevicesBtn) {
         scanDevicesBtn.addEventListener('click', refreshConnectedDevices);
+    }
+    
+    if (pairDeviceBtn) {
+        pairDeviceBtn.addEventListener('click', pairWirelessDevice);
+    }
+    
+    // 连接类型切换事件
+    if (connectionTypeSelect) {
+        connectionTypeSelect.addEventListener('change', updateConnectionTypeFields);
     }
     
     if (newDeviceForm) {
@@ -45,6 +64,11 @@ function initializeDevicePage() {
             
             for (const [key, value] of formData.entries()) {
                 deviceConfig[key] = value === 'true' ? true : value === 'false' ? false : value;
+            }
+            
+            // 如果是WiFi连接，将IP和端口组合为deviceId
+            if (deviceConfig.connectionType === 'wifi' && deviceConfig.ipAddress) {
+                deviceConfig.deviceId = `${deviceConfig.ipAddress}:${deviceConfig.port || 5555}`;
             }
             
             // 检查是否在编辑模式
@@ -86,13 +110,53 @@ function initializeDevicePage() {
     loadSavedDevices();
 }
 
-// 加载保存的设备
+// 更新连接类型字段显示
+function updateConnectionTypeFields() {
+    const connectionType = document.getElementById('connectionTypeSelect').value;
+    const deviceIdGroup = document.getElementById('deviceIdGroup');
+    const wifiAddressRow = document.getElementById('wifiAddressRow');
+    const wifiPairingRow = document.getElementById('wifiPairingRow');
+    const wifiHelpRow = document.getElementById('wifiHelpRow');
+    
+    if (connectionType === 'wifi') {
+        // WiFi 连接
+        if (deviceIdGroup) deviceIdGroup.parentElement.style.display = 'none';
+        if (wifiAddressRow) wifiAddressRow.style.display = 'flex';
+        if (wifiPairingRow) wifiPairingRow.style.display = 'flex';
+        if (wifiHelpRow) wifiHelpRow.style.display = 'block';
+    } else {
+        // USB 连接
+        if (deviceIdGroup) deviceIdGroup.parentElement.style.display = 'flex';
+        if (wifiAddressRow) wifiAddressRow.style.display = 'none';
+        if (wifiPairingRow) wifiPairingRow.style.display = 'none';
+        if (wifiHelpRow) wifiHelpRow.style.display = 'none';
+    }
+}
+
+// 切换高级设置显示
+function toggleAdvancedSettings() {
+    const content = document.getElementById('advancedSettingsContent');
+    const toggle = document.querySelector('.advanced-toggle');
+    const icon = toggle.querySelector('.toggle-icon');
+    
+    if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.style.transform = 'rotate(180deg)';
+    } else {
+        content.style.display = 'none';
+        icon.style.transform = 'rotate(0deg)';
+    }
+}
+
+// 加载保存的设备（统一管理有线和无线设备）
 async function loadSavedDevices() {
     const { ipcRenderer, path, fs, yaml } = getGlobals();
     if (!window.AppGlobals.currentProject) return;
     
-    const deviceGrid = document.getElementById('deviceGrid');
-    deviceGrid.innerHTML = '';
+    const savedDevicesGrid = document.getElementById('savedDevicesGrid');
+    if (!savedDevicesGrid) return;
+    
+    savedDevicesGrid.innerHTML = '';
     
     const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
     
@@ -114,19 +178,47 @@ async function loadSavedDevices() {
                     d.id === config.deviceId && d.status === 'device'
                 );
                 
+                // 判断连接类型：包含冒号或mDNS格式为无线设备
+                const connectionType = config.connectionType || 'usb';
+                const isWifi = connectionType === 'wifi' || 
+                               (config.ipAddress && config.port) || 
+                               config.deviceId?.includes(':') || 
+                               config.deviceId?.includes('._adb-tls-connect._tcp');
+                
                 const card = document.createElement('div');
                 card.className = 'device-card';
                 card.innerHTML = `
-                    <div class="device-status ${isConnected ? 'connected' : ''}" title="${isConnected ? 'Connected' : 'Not Connected'}"></div>
-                    <div class="device-name">${config.deviceName}</div>
+                    <div class="device-card-header">
+                        <div class="device-status ${isConnected ? 'connected' : ''}" title="${isConnected ? 'Connected' : 'Not Connected'}"></div>
+                        <div class="device-name">${config.deviceName}</div>
+                        <span class="connection-type-badge ${isWifi ? 'wifi' : 'usb'}">${isWifi ? 'WiFi' : 'USB'}</span>
+                    </div>
                     <div class="device-info">
-                        <span title="${config.platformName} ${config.platformVersion}">Platform: ${config.platformName} ${config.platformVersion}</span>
-                        <span title="${config.automationName}">Automation: ${config.automationName}</span>
-                        ${config.deviceId ? `<span title="${config.deviceId}">ID: ${config.deviceId}</span>` : ''}
+                        <div>${config.platformName} ${config.platformVersion}</div>
+                        ${isWifi ? 
+                            `<div class="device-id">IP: ${config.ipAddress}:${config.port || 5555}</div>` : 
+                            (config.deviceId ? `<div class="device-id">ID: ${config.deviceId}</div>` : '')
+                        }
                     </div>
                     <div class="device-actions">
+                        ${isWifi && !isConnected ? `
+                            <button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">
+                                <svg viewBox="0 0 24 24" width="14" height="14">
+                                    <path fill="currentColor" d="M8 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8z"/>
+                                </svg>
+                                Connect
+                            </button>
+                        ` : ''}
+                        ${isWifi && isConnected ? `
+                            <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">
+                                <svg viewBox="0 0 24 24" width="14" height="14">
+                                    <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                </svg>
+                                Disconnect
+                            </button>
+                        ` : ''}
                         <button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">
-                            <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align: middle; margin-right: 4px;">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
                                 <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                             </svg>
                             Edit
@@ -139,7 +231,7 @@ async function loadSavedDevices() {
                     </div>
                 `;
                 
-                deviceGrid.appendChild(card);
+                savedDevicesGrid.appendChild(card);
             }
         }
     } catch (error) {
@@ -147,17 +239,20 @@ async function loadSavedDevices() {
     }
 }
 
-// 刷新连接的设备
+// 刷新连接的设备（统一显示有线和无线设备）
 async function refreshConnectedDevices() {
     const { ipcRenderer, path, fs, yaml } = getGlobals();
     const result = await ipcRenderer.invoke('adb-devices');
-    const connectedList = document.getElementById('connectedList');
+    const connectedDevicesGrid = document.getElementById('connectedDevicesGrid');
     
-    connectedList.innerHTML = '';
+    if (!connectedDevicesGrid) return;
+    
+    connectedDevicesGrid.innerHTML = '';
     
     if (result.success && result.devices.length > 0) {
         // 获取保存的设备以检查哪些已经保存
         let savedDeviceIds = [];
+        let savedDeviceConfigs = {};
         if (window.AppGlobals.currentProject) {
             try {
                 const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
@@ -168,6 +263,7 @@ async function refreshConnectedDevices() {
                         const config = yaml.load(content);
                         if (config.deviceId) {
                             savedDeviceIds.push(config.deviceId);
+                            savedDeviceConfigs[config.deviceId] = config;
                         }
                     }
                 }
@@ -178,133 +274,113 @@ async function refreshConnectedDevices() {
         
         // 为每个连接的设备创建卡片
         for (const device of result.devices) {
+            if (device.status !== 'device') continue;
+            
             const isSaved = savedDeviceIds.includes(device.id);
+            const savedConfig = savedDeviceConfigs[device.id];
+            // 判断是否为无线设备：包含冒号或者是mDNS格式（包含._adb-tls-connect._tcp）
+            const isWifi = device.id.includes(':') || device.id.includes('._adb-tls-connect._tcp');
+            
             const item = document.createElement('div');
             item.className = 'device-card';
             
-            // 获取保存的设备名称
-            let savedDeviceName = '';
-            if (window.AppGlobals.currentProject) {
-                try {
-                    const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
-                    const files = await fs.readdir(devicesPath);
-                    for (const file of files) {
-                        if (file.endsWith('.yaml')) {
-                            const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
-                            const config = yaml.load(content);
-                            if (config.deviceId === device.id) {
-                                savedDeviceName = config.deviceName;
-                                break;
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('获取设备名称失败:', error);
-                }
-            }
-            
             // 创建卡片内容
+            const deviceName = savedConfig ? savedConfig.deviceName : '未知设备';
+            
             let cardContent = `
                 <div class="device-card-header">
-                    <div class="device-main-row">
-                        <div class="device-id-row">
-                            <div class="device-status-indicator ${device.status === 'device' ? 'connected' : ''}" title="${device.status === 'device' ? 'Connected' : 'Not Connected'}"></div>
-                            <span class="device-id">${device.id}</span>
-                        </div>
-                        <div class="device-actions-inline">
-                            ${device.status === 'device' ? (!isSaved ? `
-                                <button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${device.id}')">
-                                    <svg viewBox="0 0 24 24" width="14" height="14">
-                                        <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                    </svg>
-                                    保存
-                                </button>
-                            ` : `
-                                <span class="saved-indicator-inline">
-                                    <svg viewBox="0 0 24 24" width="14" height="14">
-                                        <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                                    </svg>
-                                    已保存
-                                </span>
-                            `) : ''}
-                        </div>
-                    </div>
-                    ${savedDeviceName ? `<div class="device-saved-label">${savedDeviceName}</div>` : ''}
+                    <div class="device-status connected" title="Connected"></div>
+                    <div class="device-name">${deviceName}</div>
+                    <span class="connection-type-badge ${isWifi ? 'wifi' : 'usb'}">${isWifi ? 'WiFi' : 'USB'}</span>
+                </div>
+                <div class="device-info">
+                    <div class="device-id">ID: ${device.id}</div>
                 </div>
             `;
             
-            // 如果设备已连接，获取并显示当前App信息
-            if (device.status === 'device') {
-                try {
-                    const appResult = await ipcRenderer.invoke('get-current-app', device.id);
-                    if (appResult.success) {
-                        cardContent += `
-                            <div class="device-card-body">
-                                <div class="app-section">
-                                    <div class="app-title">当前运行应用</div>
-                                    <div class="app-details">
-                                        <div class="app-field">
-                                            <span class="field-label">PACKAGE</span>
-                                            <div class="field-value-group">
-                                                <span class="field-value">${appResult.packageName}</span>
-                                                <button class="copy-btn" onclick="copyToClipboard('package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
-                                                    <svg viewBox="0 0 24 24" width="14" height="14">
-                                                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                    </svg>
-                                                </button>
-                                                <span id="package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.packageName}</span>
-                                            </div>
+            // 获取并显示当前App信息
+            try {
+                const appResult = await ipcRenderer.invoke('get-current-app', device.id);
+                if (appResult.success) {
+                    cardContent += `
+                        <div class="device-card-body">
+                            <div class="app-section">
+                                <div class="app-title">当前运行应用</div>
+                                <div class="app-details">
+                                    <div class="app-field">
+                                        <span class="field-label">PACKAGE</span>
+                                        <div class="field-value-group">
+                                            <span class="field-value">${appResult.packageName}</span>
+                                            <button class="copy-btn" onclick="copyToClipboard('package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
+                                                <svg viewBox="0 0 24 24" width="14" height="14">
+                                                    <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                                </svg>
+                                            </button>
+                                            <span id="package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.packageName}</span>
                                         </div>
-                                        <div class="app-field">
-                                            <span class="field-label">Activity</span>
-                                            <div class="field-value-group">
-                                                <span class="field-value">${appResult.activityName}</span>
-                                                <button class="copy-btn" onclick="copyToClipboard('activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
-                                                    <svg viewBox="0 0 24 24" width="14" height="14">
-                                                        <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                    </svg>
-                                                </button>
-                                                <span id="activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.activityName}</span>
-                                            </div>
+                                    </div>
+                                    <div class="app-field">
+                                        <span class="field-label">Activity</span>
+                                        <div class="field-value-group">
+                                            <span class="field-value">${appResult.activityName}</span>
+                                            <button class="copy-btn" onclick="copyToClipboard('activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
+                                                <svg viewBox="0 0 24 24" width="14" height="14">
+                                                    <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                                </svg>
+                                            </button>
+                                            <span id="activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.activityName}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        `;
-                    } else {
-                        cardContent += `
-                            <div class="device-card-body">
-                                <div class="app-section">
-                                    <div class="no-app-info">无法获取应用信息</div>
-                                </div>
-                            </div>
-                        `;
-                    }
-                } catch (error) {
+                        </div>
+                    `;
+                } else {
                     cardContent += `
                         <div class="device-card-body">
                             <div class="app-section">
-                                <div class="no-app-info">获取应用信息失败</div>
+                                <div class="no-app-info">无法获取应用信息</div>
                             </div>
                         </div>
                     `;
                 }
-            } else {
+            } catch (error) {
                 cardContent += `
                     <div class="device-card-body">
                         <div class="app-section">
-                            <div class="no-app-info">设备未连接</div>
+                            <div class="no-app-info">获取应用信息失败</div>
                         </div>
                     </div>
                 `;
             }
             
+            // 添加操作按钮
+            cardContent += `
+                <div class="device-actions">
+                    ${!isSaved ? `
+                        <button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${device.id}')">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            Save Config
+                        </button>
+                    ` : ''}
+                    ${isWifi ? `
+                        <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${device.id.split(':')[0]}', ${device.id.split(':')[1] || 5555})">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                            </svg>
+                            Disconnect
+                        </button>
+                    ` : ''}
+                </div>
+            `;
             
             item.innerHTML = cardContent;
-            connectedList.appendChild(item);
+            connectedDevicesGrid.appendChild(item);
         }
     } else {
-        connectedList.innerHTML = '<div class="text-muted">No devices connected</div>';
+        connectedDevicesGrid.innerHTML = '<div class="text-muted">No devices connected</div>';
     }
     
     // 同样重新加载保存的设备以更新连接状态
@@ -382,12 +458,28 @@ async function createDeviceFromConnected(deviceId) {
     
     // 预填充表单
     if (newDeviceForm) {
-        newDeviceForm.querySelector('input[name="deviceId"]').value = deviceId;
-        newDeviceForm.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
+        // 判断是否为WiFi设备
+        const isWifi = deviceId.includes(':');
+        
+        if (isWifi) {
+            const [ip, port] = deviceId.split(':');
+            newDeviceForm.querySelector('select[name="connectionType"]').value = 'wifi';
+            newDeviceForm.querySelector('input[name="ipAddress"]').value = ip;
+            newDeviceForm.querySelector('input[name="port"]').value = port || '5555';
+            newDeviceForm.querySelector('input[name="deviceName"]').value = `WiFi Device (${ip})`;
+        } else {
+            newDeviceForm.querySelector('select[name="connectionType"]').value = 'usb';
+            newDeviceForm.querySelector('input[name="deviceId"]').value = deviceId;
+            newDeviceForm.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
+        }
+        
         newDeviceForm.querySelector('input[name="platformName"]').value = 'Android';
         newDeviceForm.querySelector('input[name="automationName"]').value = 'UiAutomator2';
         newDeviceForm.querySelector('select[name="noReset"]').value = 'true';
         newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = '6000';
+        
+        // 更新表单字段显示
+        updateConnectionTypeFields();
     }
     
     // 更新表单标题
@@ -398,6 +490,7 @@ async function createDeviceFromConnected(deviceId) {
 
 // 编辑设备配置
 async function editDevice(filename) {
+    const { path, fs, yaml } = getGlobals();
     if (!window.AppGlobals.currentProject) return;
     
     try {
@@ -416,12 +509,27 @@ async function editDevice(filename) {
         // 用现有数据填充表单
         if (newDeviceForm) {
             newDeviceForm.querySelector('input[name="deviceName"]').value = config.deviceName || '';
-            newDeviceForm.querySelector('input[name="deviceId"]').value = config.deviceId || '';
+            
+            // 设置连接类型
+            const connectionType = config.connectionType || (config.ipAddress ? 'wifi' : 'usb');
+            newDeviceForm.querySelector('select[name="connectionType"]').value = connectionType;
+            
+            // 根据连接类型设置相应字段
+            if (connectionType === 'wifi') {
+                newDeviceForm.querySelector('input[name="ipAddress"]').value = config.ipAddress || '';
+                newDeviceForm.querySelector('input[name="port"]').value = config.port || '5555';
+            } else {
+                newDeviceForm.querySelector('input[name="deviceId"]').value = config.deviceId || '';
+            }
+            
             newDeviceForm.querySelector('input[name="platformName"]').value = config.platformName || 'Android';
             newDeviceForm.querySelector('input[name="platformVersion"]').value = config.platformVersion || '';
             newDeviceForm.querySelector('input[name="automationName"]').value = config.automationName || 'UiAutomator2';
             newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = config.newCommandTimeout || '6000';
             newDeviceForm.querySelector('select[name="noReset"]').value = config.noReset ? 'true' : 'false';
+            
+            // 更新表单字段显示
+            updateConnectionTypeFields();
         }
         
         // 更新表单标题
@@ -434,6 +542,7 @@ async function editDevice(filename) {
 
 // 删除设备配置
 async function deleteDevice(filename) {
+    const { path, fs } = getGlobals();
     if (!window.AppGlobals.currentProject) return;
     
     if (confirm('Are you sure you want to delete this device configuration?')) {
@@ -467,6 +576,123 @@ window.createDeviceFromConnected = createDeviceFromConnected;
 window.editDevice = editDevice;
 window.deleteDevice = deleteDevice;
 window.copyToClipboard = copyToClipboard;
+window.toggleAdvancedSettings = toggleAdvancedSettings;
+
+// 配对无线设备
+async function pairWirelessDevice() {
+    const ipAddress = document.querySelector('input[name="ipAddress"]').value;
+    const pairingPort = document.querySelector('input[name="pairingPort"]').value;
+    const pairingCode = document.querySelector('input[name="pairingCode"]').value;
+    
+    if (!ipAddress || !pairingPort || !pairingCode) {
+        window.NotificationModule.showNotification('请填写IP地址、配对端口和配对码', 'warning');
+        return;
+    }
+    
+    const { ipcRenderer } = getGlobals();
+    
+    // 显示配对中状态
+    window.NotificationModule.showNotification('正在配对设备...', 'info');
+    
+    try {
+        // 先进行配对
+        const pairResult = await ipcRenderer.invoke('adb-pair-wireless', ipAddress, pairingPort, pairingCode);
+        
+        if (pairResult.success) {
+            window.NotificationModule.showNotification('配对成功！正在连接设备...', 'success');
+            
+            // 配对成功后，自动连接到ADB端口
+            const adbPort = document.querySelector('input[name="port"]').value || 5555;
+            const connectResult = await ipcRenderer.invoke('adb-connect-wireless', ipAddress, adbPort);
+            
+            if (connectResult.success) {
+                window.NotificationModule.showNotification('设备连接成功！', 'success');
+                // 清空配对相关字段
+                document.querySelector('input[name="pairingPort"]').value = '';
+                document.querySelector('input[name="pairingCode"]').value = '';
+                // 刷新设备列表
+                await refreshConnectedDevices();
+            } else {
+                window.NotificationModule.showNotification(`连接失败: ${connectResult.error}`, 'error');
+            }
+        } else {
+            window.NotificationModule.showNotification(`配对失败: ${pairResult.error}`, 'error');
+        }
+        
+        return pairResult;
+    } catch (error) {
+        window.NotificationModule.showNotification(`配对失败: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+    }
+}
+
+// 无线设备连接功能
+async function connectWirelessDevice(ipAddress, port = 5555) {
+    if (!ipAddress) {
+        window.NotificationModule.showNotification('请输入设备IP地址', 'warning');
+        return;
+    }
+    
+    const { ipcRenderer } = getGlobals();
+    
+    // 显示连接中状态
+    window.NotificationModule.showNotification('正在连接无线设备...', 'info');
+    
+    try {
+        const result = await ipcRenderer.invoke('adb-connect-wireless', ipAddress, port);
+        
+        if (result.success) {
+            window.NotificationModule.showNotification(result.message || '连接成功', 'success');
+            // 连接成功后刷新设备列表
+            await refreshConnectedDevices();
+        } else {
+            // 如果连接失败，可能需要先配对
+            if (result.error && result.error.includes('unauthorized')) {
+                window.NotificationModule.showNotification('设备未授权，请先使用配对码进行配对', 'warning');
+            } else {
+                window.NotificationModule.showNotification(result.error || '连接失败', 'error');
+            }
+        }
+        
+        return result;
+    } catch (error) {
+        window.NotificationModule.showNotification(`连接失败: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+    }
+}
+
+// 断开无线设备连接
+async function disconnectWirelessDevice(ipAddress, port = 5555) {
+    if (!ipAddress) {
+        window.NotificationModule.showNotification('请提供设备IP地址', 'warning');
+        return;
+    }
+    
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        const result = await ipcRenderer.invoke('adb-disconnect-wireless', ipAddress, port);
+        
+        if (result.success) {
+            window.NotificationModule.showNotification(result.message, 'success');
+            // 断开连接后刷新设备列表
+            await refreshConnectedDevices();
+        } else {
+            window.NotificationModule.showNotification(result.error, 'error');
+        }
+        
+        return result;
+    } catch (error) {
+        window.NotificationModule.showNotification(`断开连接失败: ${error.message}`, 'error');
+        return { success: false, error: error.message };
+    }
+}
+
+
+
+// 全局函数
+window.connectWirelessDevice = connectWirelessDevice;
+window.disconnectWirelessDevice = disconnectWirelessDevice;
 
 // 导出函数
 window.DeviceManagerModule = {
@@ -477,5 +703,7 @@ window.DeviceManagerModule = {
     createDeviceFromConnected,
     editDevice,
     deleteDevice,
-    copyToClipboard
+    copyToClipboard,
+    connectWirelessDevice,
+    disconnectWirelessDevice
 };

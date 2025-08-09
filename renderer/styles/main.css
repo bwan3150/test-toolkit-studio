@@ -3428,3 +3428,452 @@ body {
     font-style: italic;
 }
 
+/* 无线设备管理样式 */
+.wireless-connection-form {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wireless-devices-section, .wireless-scan-section {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wireless-devices-section h3, .wireless-scan-section h3 {
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* 无线设备卡片样式 */
+.wireless-device-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.wireless-device-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.wireless-device-card.connected {
+    border-color: var(--accent-success);
+    background: rgba(76, 175, 80, 0.05);
+}
+
+.wireless-device-card .device-info {
+    flex: 1;
+}
+
+.wireless-device-card .device-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.wireless-device-card .device-address {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.wireless-device-card .device-model {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.wireless-device-card .device-status {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: inline-block;
+}
+
+.wireless-device-card .device-status.connected {
+    background: rgba(76, 175, 80, 0.1);
+    color: var(--accent-success);
+}
+
+.wireless-device-card .device-status.disconnected {
+    background: rgba(158, 158, 158, 0.1);
+    color: var(--text-secondary);
+}
+
+.wireless-device-card .device-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* 扫描结果样式 */
+.scan-results-header {
+    margin-bottom: 16px;
+}
+
+.scan-results-header h4 {
+    color: var(--text-primary);
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.scan-results-empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.scan-results-list {
+    margin-top: 16px;
+}
+
+/* 保存指示器样式 */
+.saved-indicator, .saved-indicator-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent-success);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.saved-indicator svg, .saved-indicator-inline svg {
+    fill: var(--accent-success);
+}
+
+/* 表单帮助文本样式 */
+.form-help {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 4px;
+    display: block;
+}
+
+/* 按钮加载状态 */
+.btn-icon.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 错误状态样式 */
+.error-state {
+    text-align: center;
+    padding: 20px;
+    color: var(--accent-danger);
+}
+
+.error-text {
+    font-size: 14px;
+}
+
+/* 响应式布局优化 */
+@media (max-width: 1200px) {
+    .wireless-device-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .wireless-device-card .device-actions {
+        align-self: flex-end;
+    }
+}
+
+/* 设备卡片样式 */
+.device-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.device-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.device-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    position: relative;
+    padding-right: 50px; /* 为标识留出空间 */
+}
+
+.device-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-disabled);
+    flex-shrink: 0;
+}
+
+.device-status.connected {
+    background: var(--accent-success);
+    box-shadow: 0 0 4px rgba(76, 175, 80, 0.4);
+}
+
+.device-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+
+
+/* 连接类型标识 */
+.connection-type-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.connection-type-badge.wifi {
+    background: rgba(33, 150, 243, 0.1);
+    color: #2196F3;
+}
+
+.connection-type-badge.usb {
+    background: rgba(255, 152, 0, 0.1);
+    color: #FF9800;
+}
+
+.device-info {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-bottom: 12px;
+    padding-left: 16px;
+}
+
+.device-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-disabled);
+    margin-top: 4px;
+}
+
+.device-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding-left: 16px;
+}
+
+.device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.device-sections {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.device-section {
+    margin-bottom: 32px;
+}
+
+.device-section h3 {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.device-card-body {
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    margin-top: 12px;
+}
+
+.app-section {
+    color: var(--text-secondary);
+}
+
+.app-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.app-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.app-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.field-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    font-weight: 600;
+}
+
+.field-value-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-value {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+/* 设备表单样式 */
+.device-form {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.device-form h3 {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.device-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 配对帮助信息样式 */
+.pairing-help {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.pairing-help svg {
+    flex-shrink: 0;
+    fill: var(--accent-info);
+    margin-top: 2px;
+}
+
+.pairing-help .help-content {
+    flex: 1;
+}
+
+.pairing-help strong {
+    color: var(--text-primary);
+    font-size: 12px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.pairing-help p {
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+    margin: 4px 0;
+}
+
+#wifiHelpRow {
+    margin-top: -8px;
+}
+
+/* 高级设置折叠样式 */
+.advanced-settings {
+    margin-top: 20px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+}
+
+.advanced-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+.advanced-toggle:hover {
+    color: var(--text-primary);
+}
+
+.advanced-toggle .toggle-icon {
+    transition: transform 0.3s ease;
+    fill: currentColor;
+}
+
+.advanced-content {
+    margin-top: 16px;
+    padding-top: 16px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+

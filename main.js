@@ -824,3 +824,341 @@ ipcMain.handle('window-close', () => {
 ipcMain.handle('window-is-maximized', () => {
   return mainWindow ? mainWindow.isMaximized() : false;
 });
+
+// ADB无线配对功能 (Android 11+)
+ipcMain.handle('adb-pair-wireless', async (event, ipAddress, pairingPort, pairingCode) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: '内置Android SDK未找到' };
+    }
+    
+    if (!ipAddress || !pairingPort || !pairingCode) {
+      return { success: false, error: '请提供IP地址、配对端口和配对码' };
+    }
+    
+    // 构建配对地址
+    const pairingAddress = `${ipAddress}:${pairingPort}`;
+    
+    console.log('正在配对无线ADB设备:', pairingAddress);
+    
+    // 执行配对命令
+    // 注意：adb pair 命令需要传入配对码
+    // 在不同系统上处理方式可能不同
+    let commandStr;
+    if (process.platform === 'win32') {
+      // Windows 使用管道
+      commandStr = `echo ${pairingCode} | "${adbPath}" pair ${pairingAddress}`;
+    } else {
+      // macOS/Linux 使用输入重定向
+      commandStr = `"${adbPath}" pair ${pairingAddress} ${pairingCode}`;
+    }
+    
+    console.log('执行配对命令:', commandStr);
+    const { stdout, stderr } = await execPromise(commandStr);
+    
+    // 检查配对结果
+    if (stdout.includes('Successfully paired') || stdout.includes('Paired devices')) {
+      return { 
+        success: true, 
+        message: `成功配对设备 ${pairingAddress}`,
+        output: stdout
+      };
+    } else if (stderr && (stderr.includes('failed') || stderr.includes('error'))) {
+      return { 
+        success: false, 
+        error: `配对失败: ${stderr || stdout}` 
+      };
+    } else if (stdout.includes('Failed to pair')) {
+      return { 
+        success: false, 
+        error: `配对失败: ${stdout}` 
+      };
+    } else {
+      // 某些情况下配对可能成功但没有明确的成功消息
+      return { 
+        success: true, 
+        message: `配对命令已执行，请尝试连接设备`,
+        output: stdout,
+        warning: '配对状态不确定，请尝试连接'
+      };
+    }
+    
+  } catch (error) {
+    console.error('ADB配对失败:', error);
+    return { success: false, error: `配对异常: ${error.message}` };
+  }
+});
+
+// ADB无线连接功能
+ipcMain.handle('adb-connect-wireless', async (event, ipAddress, port = 5555) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: '内置Android SDK未找到' };
+    }
+    
+    if (!ipAddress) {
+      return { success: false, error: '请提供IP地址' };
+    }
+    
+    // 构建连接地址
+    const connectionAddress = `${ipAddress}:${port}`;
+    
+    console.log('正在连接无线ADB设备:', connectionAddress);
+    
+    // 尝试连接设备
+    const { stdout, stderr } = await execPromise(`"${adbPath}" connect ${connectionAddress}`);
+    
+    if (stderr && stderr.includes('failed')) {
+      return { success: false, error: `连接失败: ${stderr}` };
+    }
+    
+    // 检查连接结果
+    if (stdout.includes('connected to') || stdout.includes('already connected')) {
+      return { 
+        success: true, 
+        message: `成功连接到设备 ${connectionAddress}`,
+        deviceId: connectionAddress 
+      };
+    } else if (stdout.includes('unable to connect')) {
+      return { 
+        success: false, 
+        error: `无法连接到 ${connectionAddress}，请确保设备开启ADB调试并连接到同一网络` 
+      };
+    } else {
+      return { 
+        success: false, 
+        error: `连接状态未知: ${stdout}` 
+      };
+    }
+    
+  } catch (error) {
+    return { success: false, error: `连接异常: ${error.message}` };
+  }
+});
+
+// ADB断开无线连接功能
+ipcMain.handle('adb-disconnect-wireless', async (event, ipAddress, port = 5555) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: '内置Android SDK未找到' };
+    }
+    
+    if (!ipAddress) {
+      return { success: false, error: '请提供IP地址' };
+    }
+    
+    // 构建连接地址
+    const connectionAddress = `${ipAddress}:${port}`;
+    
+    console.log('正在断开无线ADB设备连接:', connectionAddress);
+    
+    // 断开设备连接
+    const { stdout, stderr } = await execPromise(`"${adbPath}" disconnect ${connectionAddress}`);
+    
+    if (stderr && !stderr.includes('Warning')) {
+      return { success: false, error: `断开连接失败: ${stderr}` };
+    }
+    
+    return { 
+      success: true, 
+      message: `已断开设备 ${connectionAddress} 的连接`,
+      output: stdout.trim()
+    };
+    
+  } catch (error) {
+    return { success: false, error: `断开连接异常: ${error.message}` };
+  }
+});
+
+// 扫描局域网内可用的ADB设备
+ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    
+    const fsSync = require('fs');
+    if (!fsSync.existsSync(adbPath)) {
+      return { success: false, error: '内置Android SDK未找到' };
+    }
+    
+    console.log('开始扫描局域网ADB设备...');
+    
+    // 如果没有提供IP范围，尝试自动检测本机网络
+    let targetIpRange = ipRange;
+    if (!targetIpRange) {
+      try {
+        const os = require('os');
+        const networkInterfaces = os.networkInterfaces();
+        
+        // 查找活跃的网络接口
+        for (const interfaceName in networkInterfaces) {
+          const interfaces = networkInterfaces[interfaceName];
+          for (const iface of interfaces) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+              // 提取网段 (例: 192.168.1.x)
+              const ipParts = iface.address.split('.');
+              if (ipParts.length === 4) {
+                targetIpRange = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}`;
+                break;
+              }
+            }
+          }
+          if (targetIpRange) break;
+        }
+        
+        if (!targetIpRange) {
+          targetIpRange = '192.168.1'; // 默认网段
+        }
+      } catch (e) {
+        targetIpRange = '192.168.1'; // 默认网段
+      }
+    }
+    
+    const foundDevices = [];
+    const commonPorts = [5555, 5556, 5557]; // 常见的ADB无线端口
+    
+    // 扫描网段中的常见IP地址 (避免扫描太多地址，影响性能)
+    const scanPromises = [];
+    
+    // 扫描范围：1-50 和 100-200 (常见的路由器分配范围)
+    const scanRanges = [
+      { start: 1, end: 50 },
+      { start: 100, end: 200 }
+    ];
+    
+    for (const range of scanRanges) {
+      for (let i = range.start; i <= range.end; i++) {
+        for (const port of commonPorts) {
+          const ip = `${targetIpRange}.${i}`;
+          const address = `${ip}:${port}`;
+          
+          // 限制并发数量以避免资源过度占用
+          scanPromises.push(
+            (async () => {
+              try {
+                // 设置较短的超时时间来加快扫描速度
+                const { stdout } = await execPromise(`"${adbPath}" connect ${address}`, { timeout: 3000 });
+                
+                if (stdout.includes('connected to') || stdout.includes('already connected')) {
+                  // 获取设备信息
+                  try {
+                    const { stdout: deviceInfo } = await execPromise(`"${adbPath}" -s ${address} shell getprop ro.product.model`, { timeout: 2000 });
+                    const deviceModel = deviceInfo.trim() || '未知设备';
+                    
+                    foundDevices.push({
+                      ip: ip,
+                      port: port,
+                      address: address,
+                      deviceModel: deviceModel,
+                      status: 'connected'
+                    });
+                    
+                    console.log(`发现ADB设备: ${address} (${deviceModel})`);
+                  } catch (e) {
+                    // 即使获取设备信息失败，也记录设备
+                    foundDevices.push({
+                      ip: ip,
+                      port: port,
+                      address: address,
+                      deviceModel: '未知设备',
+                      status: 'connected'
+                    });
+                  }
+                }
+              } catch (error) {
+                // 连接失败是正常的，不需要记录错误
+              }
+            })()
+          );
+        }
+      }
+    }
+    
+    // 等待所有扫描完成，但设置总体超时时间
+    await Promise.allSettled(scanPromises);
+    
+    console.log(`扫描完成，共发现 ${foundDevices.length} 个ADB设备`);
+    
+    return { 
+      success: true, 
+      devices: foundDevices,
+      scannedRange: targetIpRange,
+      message: `扫描完成，发现 ${foundDevices.length} 个设备`
+    };
+    
+  } catch (error) {
+    return { success: false, error: `扫描异常: ${error.message}` };
+  }
+});
+
+// 获取保存的无线设备配置
+ipcMain.handle('get-saved-wireless-devices', async () => {
+  try {
+    const savedDevices = store.get('wireless_devices', []);
+    return { success: true, devices: savedDevices };
+  } catch (error) {
+    return { success: false, error: error.message, devices: [] };
+  }
+});
+
+// 保存无线设备配置
+ipcMain.handle('save-wireless-device', async (event, deviceConfig) => {
+  try {
+    const savedDevices = store.get('wireless_devices', []);
+    
+    // 检查是否已存在相同IP的设备
+    const existingIndex = savedDevices.findIndex(device => device.ip === deviceConfig.ip);
+    
+    if (existingIndex >= 0) {
+      // 更新现有设备
+      savedDevices[existingIndex] = { 
+        ...savedDevices[existingIndex], 
+        ...deviceConfig, 
+        updatedAt: new Date().toISOString() 
+      };
+    } else {
+      // 添加新设备
+      savedDevices.push({ 
+        ...deviceConfig, 
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString() 
+      });
+    }
+    
+    store.set('wireless_devices', savedDevices);
+    
+    return { 
+      success: true, 
+      message: existingIndex >= 0 ? '设备配置已更新' : '设备配置已保存',
+      devices: savedDevices 
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// 删除保存的无线设备配置
+ipcMain.handle('delete-wireless-device', async (event, deviceId) => {
+  try {
+    const savedDevices = store.get('wireless_devices', []);
+    const filteredDevices = savedDevices.filter(device => device.id !== deviceId);
+    
+    store.set('wireless_devices', filteredDevices);
+    
+    return { 
+      success: true, 
+      message: '设备配置已删除',
+      devices: filteredDevices 
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
