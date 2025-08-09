@@ -284,25 +284,30 @@ class SimpleCodeEditor {
     
     insertText(text) {
         const selection = window.getSelection();
+        if (selection.rangeCount === 0) return;
+        
         const range = selection.getRangeAt(0);
         
-        // 保存插入前的光标位置
-        const startOffset = this.getTextOffset(range.startContainer, range.startOffset);
+        // 保存插入前的光标位置（用于计算插入后的位置）
+        const beforeOffset = this.getTextOffset(range.startContainer, range.startOffset);
         
+        // 删除选中内容并插入新文本
         range.deleteContents();
         const textNode = document.createTextNode(text);
         range.insertNode(textNode);
         
-        // 计算插入后光标应该在的位置
-        const targetOffset = startOffset + text.length;
+        // 计算插入后的光标目标位置
+        const targetOffset = beforeOffset + text.length;
         
-        // 更新内容
+        // 更新编辑器状态
         this.updateValue();
         this.updateLineNumbers();
         this.applySyntaxHighlighting();
         
-        // 在语法高亮后恢复光标到正确位置
-        this.restoreCursorPosition(targetOffset);
+        // 语法高亮后恢复光标到正确位置
+        setTimeout(() => {
+            this.restoreCursorPosition(targetOffset);
+        }, 0);
         
         this.triggerChange();
     }
@@ -548,43 +553,14 @@ class SimpleCodeEditor {
     
     // 处理删除键操作
     handleDeleteKey(e) {
-        try {
-            const selection = window.getSelection();
-            if (selection.rangeCount === 0) return;
-            
-            const range = selection.getRangeAt(0);
-            
-            // 如果有选中内容，让默认删除操作处理
-            if (!range.collapsed) {
-                return; // 不阻止默认行为
-            }
-            
-            // 检查是否在图片定位器附近
-            const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
-            const text = this.getPlainText();
-            
-            // 查找附近的图片定位器
-            const nearbyLocator = this.findNearbyImageLocator(text, cursorOffset, e.key === 'Backspace');
-            
-            if (nearbyLocator) {
-                // 如果删除操作会影响图片定位器，进行特殊处理
-                e.preventDefault();
-                this.handleLocatorDeletion(nearbyLocator, cursorOffset, e.key === 'Backspace');
-            }
-            
-        } catch (error) {
-            console.warn('删除键处理失败:', error);
-        }
+        // 简化删除处理，让浏览器自然处理删除操作
+        // 移除复杂的图片定位器特殊处理，避免光标跳转问题
     }
     
     // 处理删除输入
     handleDeleteInput(e) {
-        // 抑制光标恢复，防止删除操作后光标跳转
-        this.suppressCursorRestore = true;
-        
-        setTimeout(() => {
-            this.suppressCursorRestore = false;
-        }, 100);
+        // 不抑制光标恢复，让浏览器自然处理删除操作
+        // 移除会导致光标跳转的逻辑
     }
     
     // 查找附近的图片定位器

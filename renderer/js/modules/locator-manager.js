@@ -422,15 +422,16 @@ class LocatorManager {
     // 设置拖放功能
     setupDragAndDrop() {
         // 设置编辑器为放置目标
-        document.addEventListener('DOMContentLoaded', () => {
-            const editorTextarea = document.getElementById('editorTextarea');
-            if (editorTextarea) {
-                editorTextarea.addEventListener('dragover', (e) => {
+        const setupEditor = () => {
+            // 尝试获取新的ContentEditable编辑器
+            const editorContent = document.getElementById('editorContent');
+            if (editorContent) {
+                editorContent.addEventListener('dragover', (e) => {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'copy';
                 });
 
-                editorTextarea.addEventListener('drop', (e) => {
+                editorContent.addEventListener('drop', (e) => {
                     e.preventDefault();
                     const elementName = e.dataTransfer.getData('text/plain');
                     
@@ -439,29 +440,41 @@ class LocatorManager {
                     const isImageElement = elementName && elementName.startsWith('@{') && elementName.endsWith('}');
                     
                     if (isXmlElement || isImageElement) {
-                        // 在光标位置插入文本
-                        const start = editorTextarea.selectionStart;
-                        const end = editorTextarea.selectionEnd;
-                        const text = editorTextarea.value;
-                        const before = text.substring(0, start);
-                        const after = text.substring(end);
-                        
-                        editorTextarea.value = before + elementName + after;
-                        
-                        // 设置光标位置
-                        const newPos = start + elementName.length;
-                        editorTextarea.selectionStart = newPos;
-                        editorTextarea.selectionEnd = newPos;
-                        
-                        // 触发input事件以更新编辑器
-                        editorTextarea.dispatchEvent(new Event('input'));
+                        // 使用编辑器的insertText方法插入文本
+                        if (window.editor && window.editor.insertText) {
+                            window.editor.insertText(elementName);
+                        } else {
+                            // 降级处理：直接插入到ContentEditable
+                            const selection = window.getSelection();
+                            if (selection.rangeCount > 0) {
+                                const range = selection.getRangeAt(0);
+                                range.deleteContents();
+                                const textNode = document.createTextNode(elementName);
+                                range.insertNode(textNode);
+                                range.setStartAfter(textNode);
+                                range.setEndAfter(textNode);
+                                range.collapse(true);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                            }
+                        }
                         
                         const typeText = isImageElement ? '图片定位器' : '元素引用';
                         window.NotificationModule.showNotification(`已插入${typeText}: ${elementName}`, 'success');
                     }
                 });
+            } else {
+                // 如果还没找到编辑器，延迟再试
+                setTimeout(setupEditor, 100);
             }
-        });
+        };
+        
+        // 页面加载完成后设置，或者立即尝试设置
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupEditor);
+        } else {
+            setupEditor();
+        }
     }
 
     // 设置单个元素的拖动事件
