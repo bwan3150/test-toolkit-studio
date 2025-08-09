@@ -43,6 +43,78 @@ function initializeTestcasePage() {
     
     // 加载设备
     window.DeviceManagerModule.refreshDeviceList();
+    
+    // 初始化输入焦点保护
+    initializeInputFocusProtection();
+}
+
+// 初始化输入焦点保护
+function initializeInputFocusProtection() {
+    console.log('初始化输入焦点保护...');
+    
+    // 需要保护的输入框选择器
+    const protectedInputSelectors = [
+        '#inputDialogInput',
+        '#imageAliasInput', 
+        '#locatorSearchInput',
+        '#newNameInput',
+        '.editing',
+        '[contenteditable="true"]:not(#editorContent)',
+        '.modal-dialog input',
+        '.context-menu input',
+        '.form-control'
+    ];
+    
+    // 防止编辑器在这些输入框活动时抢夺焦点
+    document.addEventListener('mousedown', (e) => {
+        const target = e.target;
+        
+        // 检查是否点击了受保护的输入框
+        const isProtectedInput = protectedInputSelectors.some(selector => {
+            try {
+                return target.matches(selector) || target.closest(selector);
+            } catch (err) {
+                return false;
+            }
+        });
+        
+        if (isProtectedInput) {
+            // 确保编辑器知道有其他输入活动
+            if (window.editorInstance) {
+                window.editorInstance.isOtherInputFocused = true;
+                window.editorInstance.suppressCursorRestore = true;
+            }
+            
+            console.log('保护输入框焦点:', target);
+        }
+    }, true);
+    
+    // 特别处理内联编辑（重命名）的完成事件
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'contenteditable') {
+                const target = mutation.target;
+                if (target.contentEditable === 'false' && target.classList.contains('editing')) {
+                    // 内联编辑结束
+                    setTimeout(() => {
+                        if (window.editorInstance) {
+                            window.editorInstance.isOtherInputFocused = false;
+                            window.editorInstance.suppressCursorRestore = false;
+                        }
+                    }, 100);
+                }
+            }
+        });
+    });
+    
+    // 开始观察DOM变化
+    observer.observe(document.body, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ['contenteditable']
+    });
+    
+    console.log('输入焦点保护已启用');
 }
 
 // 加载文件树
