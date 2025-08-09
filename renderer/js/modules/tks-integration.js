@@ -46,6 +46,20 @@ class TKSScriptRunner {
     async handleRunTest() {
         console.log('handleRunTest: 开始处理测试执行');
         
+        // 立即清除编辑器焦点和光标，防止干扰高亮显示
+        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.contentEl) {
+            console.log('handleRunTest: 清除编辑器焦点');
+            window.AppGlobals.codeEditor.contentEl.blur();
+            // 清除选择区域
+            if (window.getSelection) {
+                window.getSelection().removeAllRanges();
+            }
+            // 移除焦点到一个不可见的元素
+            if (document.body) {
+                document.body.focus();
+            }
+        }
+        
         // 获取当前活动的标签页
         const currentTab = window.AppGlobals.currentTab;
         console.log('handleRunTest: 当前标签页', currentTab);

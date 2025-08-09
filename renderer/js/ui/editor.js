@@ -205,7 +205,12 @@ class SimpleCodeEditor {
             if (this.isTestRunning) return;
             
             // 鼠标点击后稍微延迟检查，给用户时间完成操作
-            setTimeout(() => this.checkImageLocatorCursor(), 150);
+            // 添加额外检查确保不在测试即将开始的状态下触发
+            setTimeout(() => {
+                if (!this.isTestRunning) {
+                    this.checkImageLocatorCursor();
+                }
+            }, 150);
         });
         
         // 监听失去焦点，恢复所有图片显示
@@ -1357,6 +1362,37 @@ class SimpleCodeEditor {
         this.applySyntaxHighlighting();
     }
     
+    // 清除焦点和光标状态
+    clearFocusAndCursor() {
+        try {
+            console.log('编辑器: 清除焦点和光标状态');
+            
+            // 移除编辑器焦点
+            if (this.contentEl) {
+                this.contentEl.blur();
+            }
+            
+            // 清除所有选择区域
+            if (window.getSelection) {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    selection.removeAllRanges();
+                }
+            }
+            
+            // 将焦点移到body上，确保没有任何元素获得焦点
+            if (document.body) {
+                document.body.focus();
+                // 立即再次失焦，确保没有任何可见的焦点状态
+                setTimeout(() => document.body.blur(), 0);
+            }
+            
+            console.log('编辑器: 焦点和光标状态已清除');
+        } catch (error) {
+            console.warn('清除焦点和光标状态失败:', error);
+        }
+    }
+    
     destroy() {
         clearTimeout(this.saveTimeout);
         this.hideImagePreview(); // 清理图片预览
@@ -1365,10 +1401,18 @@ class SimpleCodeEditor {
     
     // 设置测试运行状态
     setTestRunning(isRunning) {
+        // 如果状态没有改变，直接返回，避免不必要的DOM操作
+        if (this.isTestRunning === isRunning) {
+            return;
+        }
+        
         this.isTestRunning = isRunning;
         
         if (isRunning) {
-            // 测试开始时禁用编辑器交互
+            // 测试开始时立即清除焦点和光标状态，防止干扰高亮
+            this.clearFocusAndCursor();
+            
+            // 禁用编辑器交互
             this.contentEl.setAttribute('contenteditable', 'false');
             this.contentEl.style.pointerEvents = 'none';
             this.contentEl.style.userSelect = 'none';
@@ -1379,19 +1423,29 @@ class SimpleCodeEditor {
             this.contentEl.style.userSelect = 'text';
         }
         
-        // 更新状态提示
-        this.updateStatusIndicator();
+        // 更新状态提示 - 使用异步调用避免干扰当前的渲染流程
+        setTimeout(() => {
+            this.updateStatusIndicator();
+        }, 0);
     }
     
     // 高亮当前执行的行
     highlightExecutingLine(lineNumber) {
         console.log(`编辑器: 高亮执行行 ${lineNumber}`);
+        
+        // 确保焦点和光标状态已清除，防止干扰高亮显示
+        this.clearFocusAndCursor();
+        
+        // 先设置执行行信息
+        this.currentExecutingLine = lineNumber;
+        this.currentErrorLine = null; // 清除错误行高亮
+        
         // 只在第一次高亮时设置测试运行状态，避免重复调用影响高亮
         if (!this.isTestRunning) {
             this.setTestRunning(true);
         }
-        this.currentExecutingLine = lineNumber;
-        this.currentErrorLine = null; // 清除错误行高亮
+        
+        // 应用执行行高亮（这应该在状态设置之后）
         this.applySyntaxHighlightingWithExecution();
     }
     
