@@ -9,6 +9,7 @@ class SimpleCodeEditor {
         this.isComposing = false; // 是否在输入法组合输入中
         this.isTestRunning = false; // 测试运行状态
         this.suppressCursorRestore = false; // 抑制光标恢复，用于防止异常跳转
+        this.forceTextMode = false; // 强制文本模式标志
         
         this.createEditor();
         this.setupEventListeners();
@@ -120,6 +121,10 @@ class SimpleCodeEditor {
             } else if (e.key === 'Backspace' || e.key === 'Delete') {
                 // 特殊处理删除键，防止光标跳转
                 this.handleDeleteKey(e);
+            } else if (e.key === '/' && (e.metaKey || e.ctrlKey)) {
+                // Cmd/Ctrl + / : 切换所有图片为文本格式
+                e.preventDefault();
+                this.toggleAllImagesToText();
             }
         });
         
@@ -175,20 +180,27 @@ class SimpleCodeEditor {
         });
         
         // 监听光标位置变化，用于图片/文本模式切换
-        this.contentEl.addEventListener('keyup', () => {
+        this.contentEl.addEventListener('keyup', (e) => {
             // 如果测试正在运行，不处理光标变化
             if (this.isTestRunning) return;
             
             // 键盘操作时隐藏预览
             this.hideImagePreview();
-            setTimeout(() => this.checkImageLocatorCursor(), 50);
+            
+            // 只在可能影响定位器显示的按键后检查光标位置
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || 
+                e.key === 'Home' || e.key === 'End' || 
+                e.key.startsWith('Arrow')) {
+                setTimeout(() => this.checkImageLocatorCursor(), 100);
+            }
         });
         
         this.contentEl.addEventListener('mouseup', () => {
             // 如果测试正在运行，不处理光标变化
             if (this.isTestRunning) return;
             
-            setTimeout(() => this.checkImageLocatorCursor(), 50);
+            // 鼠标点击后稍微延迟检查，给用户时间完成操作
+            setTimeout(() => this.checkImageLocatorCursor(), 150);
         });
         
         // 监听失去焦点，恢复所有图片显示
@@ -529,25 +541,79 @@ class SimpleCodeEditor {
     // 处理定位器删除
     handleLocatorDeletion(locator, cursorOffset, isBackspace) {
         try {
+            // 抑制光标恢复，避免在删除过程中的异常跳转
+            this.suppressCursorRestore = true;
+            
             // 如果光标在定位器内部，删除整个定位器
             const text = this.getPlainText();
             const beforeText = text.substring(0, locator.start);
             const afterText = text.substring(locator.end);
             const newText = beforeText + afterText;
             
-            // 更新内容
+            // 更新值
             this.value = newText;
-            this.contentEl.innerHTML = this.highlightSyntax(newText);
             
-            // 设置光标到定位器原来的开始位置
+            // 先更新行号
+            this.updateLineNumbers();
+            
+            // 应用语法高亮
+            this.applySyntaxHighlighting();
+            
+            // 设置光标到删除位置（定位器的开始位置）
             setTimeout(() => {
-                this.restoreCursorPosition(locator.start);
-            }, 0);
+                // 确保偏移位置有效
+                const targetOffset = Math.min(locator.start, newText.length);
+                this.setCursorToSafePosition(targetOffset);
+                this.suppressCursorRestore = false;
+            }, 50);
             
             this.triggerChange();
             
         } catch (error) {
             console.warn('定位器删除处理失败:', error);
+            this.suppressCursorRestore = false;
+        }
+    }
+    
+    // 切换所有图片定位器为文本格式
+    toggleAllImagesToText() {
+        try {
+            // 保存当前光标位置
+            const selection = window.getSelection();
+            let cursorOffset = 0;
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
+            }
+            
+            // 如果已经是强制文本模式，则切换回图片模式
+            if (this.forceTextMode) {
+                this.forceTextMode = false;
+                this.contentEl.removeAttribute('data-force-text');
+                console.log('切换回图片模式');
+            } else {
+                // 切换到强制文本模式
+                this.forceTextMode = true;
+                this.contentEl.setAttribute('data-force-text', 'true');
+                console.log('切换到文本模式');
+            }
+            
+            // 抑制光标恢复
+            this.suppressCursorRestore = true;
+            
+            // 重新应用语法高亮
+            this.applySyntaxHighlighting();
+            
+            // 恢复光标到原始位置
+            setTimeout(() => {
+                this.restoreCursorPosition(cursorOffset);
+                this.suppressCursorRestore = false;
+            }, 50);
+            
+        } catch (error) {
+            console.warn('切换图片为文本模式失败:', error);
+            this.suppressCursorRestore = false;
+            this.forceTextMode = false;
         }
     }
     
@@ -639,6 +705,11 @@ class SimpleCodeEditor {
     
     // 渲染图片定位器为实际图片
     renderImageLocator(imageName, originalText) {
+        // 如果强制文本模式，所有图片都显示为文本
+        if (this.forceTextMode) {
+            return `@{<span class="syntax-string">${imageName}</span>}`;
+        }
+        
         // 测试运行期间总是显示为图片，不检查光标位置
         if (this.isTestRunning) {
             return this.renderAsImage(imageName, originalText);
@@ -660,8 +731,9 @@ class SimpleCodeEditor {
                     const start = index;
                     const end = index + searchText.length;
                     
-                    // 如果光标在这个特定的定位器范围内，显示为文本
-                    if (cursorOffset >= start && cursorOffset <= end) {
+                    // 只有光标在定位器内部时才显示为文本（不包括边界位置）
+                    // 这样光标可以停留在图片前后而不会触发切换
+                    if (cursorOffset > start && cursorOffset < end) {
                         return `@{<span class="syntax-string">${imageName}</span>}`;
                     }
                     
@@ -1197,21 +1269,28 @@ class SimpleCodeEditor {
         // 查找所有图片定位器位置
         const imageLocatorRegex = /@\{([^}]+)\}/g;
         let match;
-        let shouldRerender = false;
+        let isInsideAnyLocator = false;
         
         while ((match = imageLocatorRegex.exec(text)) !== null) {
             const start = match.index;
             const end = match.index + match[0].length;
             
-            // 如果光标不在任何图片定位器文本内，且当前有文本形式的定位器，则恢复图片
-            if (!(cursorOffset >= start && cursorOffset <= end)) {
-                shouldRerender = true;
+            // 检查光标是否在某个定位器内部（不包括边界）
+            if (cursorOffset > start && cursorOffset < end) {
+                isInsideAnyLocator = true;
+                break;
             }
         }
         
-        if (shouldRerender) {
-            this.restoreAllImages();
+        // 只有当光标确实在定位器内部时，才需要特殊处理
+        // 如果光标在定位器外部（包括紧靠着的位置），让用户正常编辑
+        if (!isInsideAnyLocator) {
+            // 不执行恢复图片操作，允许光标停留在任何位置
+            return;
         }
+        
+        // 光标在定位器内部时，可以选择切换为文本模式便于编辑
+        // 但这里我们保持图片模式，用户可以通过点击图片来切换
     }
     
     // 恢复所有图片显示
@@ -1278,7 +1357,10 @@ class SimpleCodeEditor {
     // 高亮当前执行的行
     highlightExecutingLine(lineNumber) {
         console.log(`编辑器: 高亮执行行 ${lineNumber}`);
-        this.setTestRunning(true); // 开始测试时设置状态
+        // 只在第一次高亮时设置测试运行状态，避免重复调用影响高亮
+        if (!this.isTestRunning) {
+            this.setTestRunning(true);
+        }
         this.currentExecutingLine = lineNumber;
         this.currentErrorLine = null; // 清除错误行高亮
         this.applySyntaxHighlightingWithExecution();

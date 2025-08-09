@@ -992,12 +992,29 @@ body {
     50% { opacity: 1; }
 }
 
+/* 强制文本模式的视觉提示 */
+.editor-content[data-force-text="true"]::after {
+    content: '📝 文本模式 (Cmd/Ctrl+/ 切换)';
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    background: rgba(78, 201, 176, 0.9);
+    color: #1e1e1e;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
 /* 图片定位器样式优化 */
 .inline-image-locator {
     max-height: 20px;
     max-width: 60px;
     vertical-align: middle;
-    margin: 0 2px;
+    margin: 0 1px; /* 减少左右边距，让光标更容易定位到图片前后 */
     border-radius: 3px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     cursor: text;
@@ -1008,6 +1025,8 @@ body {
     -o-user-drag: none;
     user-drag: none;
     transition: all 0.2s ease;
+    display: inline; /* 确保是内联元素，不影响文本流 */
+    position: static; /* 不使用绝对定位，保持在文档流中 */
 }
 
 .inline-image-locator:hover {

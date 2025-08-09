@@ -331,9 +331,7 @@ class TKSScriptExecutor {
         this.currentStep = 0;
         
         // 在脚本开始执行时设置编辑器为测试运行状态
-        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
-            window.AppGlobals.codeEditor.setTestRunning(true);
-        }
+        // 注意：不在这里设置，让 highlightExecutingLine 第一次调用时设置，避免重复调用
         
         const result = {
             success: true,
