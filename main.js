@@ -61,7 +61,8 @@ function createWindow() {
       symbolColor: '#ffffff',
       height: 32
     };
-    windowOptions.frame = false;
+    // 保持frame为true以保留拖拽功能，只隐藏菜单栏
+    windowOptions.frame = true;
   }
   // Linux和其他平台
   else {
