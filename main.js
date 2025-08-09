@@ -32,14 +32,12 @@ function getBuiltInAdbPath() {
 }
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  // 根据平台配置不同的窗口选项
+  let windowOptions = {
     width: 1600,
     height: 900,
     minWidth: 1200,
     minHeight: 700,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    trafficLightPosition: { x: 15, y: 13 },  // Position for macOS traffic lights
-    frame: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -47,7 +45,31 @@ function createWindow() {
     },
     backgroundColor: '#1e1e1e',
     icon: path.join(__dirname, 'assets', 'logo', 'toolkit_logo.png')
-  });
+  };
+
+  // macOS平台配置
+  if (process.platform === 'darwin') {
+    windowOptions.titleBarStyle = 'hiddenInset';
+    windowOptions.trafficLightPosition = { x: 15, y: 13 };
+    windowOptions.frame = true;
+  }
+  // Windows平台配置
+  else if (process.platform === 'win32') {
+    windowOptions.titleBarStyle = 'hidden';
+    windowOptions.titleBarOverlay = {
+      color: '#1e1e1e',
+      symbolColor: '#ffffff',
+      height: 32
+    };
+    windowOptions.frame = false;
+  }
+  // Linux和其他平台
+  else {
+    windowOptions.titleBarStyle = 'default';
+    windowOptions.frame = true;
+  }
+
+  mainWindow = new BrowserWindow(windowOptions);
 
   // Check if user has valid token
   const token = store.get('access_token');
@@ -177,7 +199,13 @@ function createWindow() {
   ];
 
   const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+  
+  // 在Windows平台隐藏菜单栏，其他平台显示
+  if (process.platform === 'win32') {
+    Menu.setApplicationMenu(null);
+  } else {
+    Menu.setApplicationMenu(menu);
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
