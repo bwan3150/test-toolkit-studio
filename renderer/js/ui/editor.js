@@ -10,9 +10,11 @@ class SimpleCodeEditor {
         this.isTestRunning = false; // 测试运行状态
         this.suppressCursorRestore = false; // 抑制光标恢复，用于防止异常跳转
         this.forceTextMode = false; // 强制文本模式标志
+        this.isOtherInputFocused = false; // 其他输入元素是否有焦点
         
         this.createEditor();
         this.setupEventListeners();
+        this.setupFocusTracking(); // 设置焦点跟踪
     }
     
     createEditor() {
@@ -220,6 +222,66 @@ class SimpleCodeEditor {
         });
     }
     
+    // 设置焦点跟踪
+    setupFocusTracking() {
+        // 监听全局焦点事件
+        document.addEventListener('focusin', (e) => {
+            const target = e.target;
+            
+            // 检查是否是编辑器外的输入元素
+            const isExternalInput = (
+                // 输入框和文本域
+                (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') &&
+                !target.closest('#editorContent') ||
+                // 可编辑的元素（用于内联编辑）
+                (target.contentEditable === 'true' && target.id !== 'editorContent' && !target.closest('#editorContent')) ||
+                // 特定的输入元素
+                target.id === 'inputDialogInput' ||
+                target.id === 'imageAliasInput' ||
+                target.id === 'locatorSearchInput' || // Locator库搜索框
+                target.closest('.context-menu-item') ||
+                target.closest('.modal-dialog') ||
+                target.closest('.search-input') ||
+                target.closest('.editing') || // 内联编辑状态
+                target.classList.contains('editing') || // 直接检查editing类
+                target.closest('.locator-search-bar') // Locator搜索栏
+            );
+            
+            if (isExternalInput) {
+                // 标记其他输入元素获得焦点
+                this.isOtherInputFocused = true;
+                console.log('其他输入元素获得焦点:', target);
+            } else if (target === this.contentEl || target.closest('#editorContent')) {
+                // 编辑器获得焦点
+                this.isOtherInputFocused = false;
+            }
+        }, true);
+        
+        // 监听失焦事件
+        document.addEventListener('focusout', (e) => {
+            const target = e.target;
+            const relatedTarget = e.relatedTarget;
+            
+            // 如果焦点从外部输入移到编辑器，保持标志
+            if (target && (target.contentEditable === 'true' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+                if (relatedTarget === this.contentEl || (relatedTarget && relatedTarget.closest('#editorContent'))) {
+                    // 延迟检查，确保不是正常的焦点转移
+                    setTimeout(() => {
+                        const activeElement = document.activeElement;
+                        if (activeElement && (
+                            activeElement.classList.contains('editing') ||
+                            activeElement.contentEditable === 'true' ||
+                            activeElement.tagName === 'INPUT' ||
+                            activeElement.tagName === 'TEXTAREA'
+                        ) && activeElement !== this.contentEl) {
+                            this.isOtherInputFocused = true;
+                        }
+                    }, 10);
+                }
+            }
+        }, true);
+    }
+    
     insertText(text) {
         const selection = window.getSelection();
         const range = selection.getRangeAt(0);
@@ -349,9 +411,9 @@ class SimpleCodeEditor {
         // 应用语法高亮到ContentEditable
         const highlightedHtml = this.highlightSyntax(this.value);
         
-        // 保存当前光标位置（仅在非测试运行时）
+        // 保存当前光标位置（仅在非测试运行时且没有其他输入焦点时）
         let cursorOffset = 0;
-        if (!this.isTestRunning && !this.suppressCursorRestore) {
+        if (!this.isTestRunning && !this.suppressCursorRestore && !this.isOtherInputFocused) {
             const selection = window.getSelection();
             const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
             cursorOffset = range ? this.getTextOffset(range.startContainer, range.startOffset) : 0;
@@ -360,11 +422,13 @@ class SimpleCodeEditor {
         // 设置高亮内容
         this.contentEl.innerHTML = highlightedHtml;
         
-        // 恢复光标位置（仅在非测试运行时且未被抑制时）
-        if (!this.isTestRunning && !this.suppressCursorRestore && cursorOffset > 0) {
+        // 恢复光标位置（仅在非测试运行时、未被抑制时且没有其他输入焦点时）
+        if (!this.isTestRunning && !this.suppressCursorRestore && !this.isOtherInputFocused && cursorOffset > 0) {
             // 使用setTimeout确保DOM更新完成
             setTimeout(() => {
-                this.restoreCursorPosition(cursorOffset);
+                if (!this.isOtherInputFocused) {
+                    this.restoreCursorPosition(cursorOffset);
+                }
             }, 0);
         }
     }
@@ -392,7 +456,7 @@ class SimpleCodeEditor {
     
     // 恢复光标位置
     restoreCursorPosition(offset) {
-        if (offset <= 0 || this.suppressCursorRestore) return;
+        if (offset <= 0 || this.suppressCursorRestore || this.isOtherInputFocused) return;
         
         try {
             const textLength = this.getPlainText().length;

@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/ui/notifications.js');
         await loadScript('./js/ui/navigation.js');
         await loadScript('./js/ui/editor.js');
+        await loadScript('./js/ui/editor-focus-fix.js'); // 编辑器焦点修复
         await loadScript('./js/ui/settings.js');
         await loadScript('./js/ui/resizable-panels.js');
         console.log('✓ UI模块已加载');
@@ -58,6 +59,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('✓ 业务模块已加载');
         
         // 4. 加载工具模块
+        await loadScript('./js/utils/input-focus-manager.js'); // 输入焦点管理器
+        await loadScript('./js/utils/input-focus-protection.js'); // 输入框焦点保护
         await loadScript('./js/utils/keyboard-shortcuts.js');
         await loadScript('./js/utils/ipc-handlers.js');
         console.log('✓ 工具模块已加载');
