@@ -7,6 +7,8 @@ class SimpleCodeEditor {
         this.listeners = [];
         this.saveTimeout = null;
         this.isComposing = false; // 是否在输入法组合输入中
+        this.isTestRunning = false; // 测试运行状态
+        this.suppressCursorRestore = false; // 抑制光标恢复，用于防止异常跳转
         
         this.createEditor();
         this.setupEventListeners();
@@ -83,6 +85,12 @@ class SimpleCodeEditor {
         
         // 处理输入事件
         this.contentEl.addEventListener('input', (e) => {
+            // 如果测试正在运行，阻止编辑
+            if (this.isTestRunning) {
+                e.preventDefault();
+                return;
+            }
+            
             // 输入时隐藏预览
             this.hideImagePreview();
             
@@ -97,12 +105,35 @@ class SimpleCodeEditor {
         
         // 处理按键事件
         this.contentEl.addEventListener('keydown', (e) => {
+            // 如果测试正在运行，阻止所有按键操作
+            if (this.isTestRunning) {
+                e.preventDefault();
+                return;
+            }
+            
             if (e.key === 'Tab') {
                 e.preventDefault();
                 this.insertText('  '); // 插入2个空格
             } else if (e.key === 'Enter') {
                 e.preventDefault();
                 this.insertText('\n'); // 插入换行符
+            } else if (e.key === 'Backspace' || e.key === 'Delete') {
+                // 特殊处理删除键，防止光标跳转
+                this.handleDeleteKey(e);
+            }
+        });
+        
+        // 添加beforeinput事件处理，提供更好的删除控制
+        this.contentEl.addEventListener('beforeinput', (e) => {
+            if (this.isTestRunning) {
+                e.preventDefault();
+                return;
+            }
+            
+            // 对于删除类型的输入，进行特殊处理
+            if (e.inputType === 'deleteContentBackward' || 
+                e.inputType === 'deleteContentForward') {
+                this.handleDeleteInput(e);
             }
         });
         
@@ -115,6 +146,12 @@ class SimpleCodeEditor {
         
         // 处理图片定位器的点击
         this.contentEl.addEventListener('click', (e) => {
+            // 如果测试正在运行，阻止图片点击
+            if (this.isTestRunning) {
+                e.preventDefault();
+                return;
+            }
+            
             if (e.target.classList.contains('inline-image-locator')) {
                 e.preventDefault();
                 // 点击时立即隐藏预览
@@ -139,12 +176,18 @@ class SimpleCodeEditor {
         
         // 监听光标位置变化，用于图片/文本模式切换
         this.contentEl.addEventListener('keyup', () => {
+            // 如果测试正在运行，不处理光标变化
+            if (this.isTestRunning) return;
+            
             // 键盘操作时隐藏预览
             this.hideImagePreview();
             setTimeout(() => this.checkImageLocatorCursor(), 50);
         });
         
         this.contentEl.addEventListener('mouseup', () => {
+            // 如果测试正在运行，不处理光标变化
+            if (this.isTestRunning) return;
+            
             setTimeout(() => this.checkImageLocatorCursor(), 50);
         });
         
@@ -284,17 +327,23 @@ class SimpleCodeEditor {
         // 应用语法高亮到ContentEditable
         const highlightedHtml = this.highlightSyntax(this.value);
         
-        // 保存当前光标位置
-        const selection = window.getSelection();
-        const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-        const cursorOffset = range ? this.getTextOffset(range.startContainer, range.startOffset) : 0;
+        // 保存当前光标位置（仅在非测试运行时）
+        let cursorOffset = 0;
+        if (!this.isTestRunning && !this.suppressCursorRestore) {
+            const selection = window.getSelection();
+            const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+            cursorOffset = range ? this.getTextOffset(range.startContainer, range.startOffset) : 0;
+        }
         
         // 设置高亮内容
         this.contentEl.innerHTML = highlightedHtml;
         
-        // 恢复光标位置
-        if (cursorOffset > 0) {
-            this.restoreCursorPosition(cursorOffset);
+        // 恢复光标位置（仅在非测试运行时且未被抑制时）
+        if (!this.isTestRunning && !this.suppressCursorRestore && cursorOffset > 0) {
+            // 使用setTimeout确保DOM更新完成
+            setTimeout(() => {
+                this.restoreCursorPosition(cursorOffset);
+            }, 0);
         }
     }
     
@@ -321,33 +370,184 @@ class SimpleCodeEditor {
     
     // 恢复光标位置
     restoreCursorPosition(offset) {
-        if (offset <= 0) return;
+        if (offset <= 0 || this.suppressCursorRestore) return;
         
-        const walker = document.createTreeWalker(
-            this.contentEl,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-        
-        let currentOffset = 0;
-        let currentNode;
-        
-        while (currentNode = walker.nextNode()) {
-            const nodeLength = currentNode.textContent.length;
-            if (currentOffset + nodeLength >= offset) {
-                // 找到目标节点
+        try {
+            const textLength = this.getPlainText().length;
+            
+            // 如果偏移超出文本长度，将光标设置到文本末尾
+            if (offset > textLength) {
+                offset = textLength;
+            }
+            
+            const walker = document.createTreeWalker(
+                this.contentEl,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+            
+            let currentOffset = 0;
+            let currentNode;
+            let lastValidNode = null;
+            
+            while (currentNode = walker.nextNode()) {
+                lastValidNode = currentNode; // 记录最后一个有效节点
+                const nodeLength = currentNode.textContent.length;
+                
+                if (currentOffset + nodeLength >= offset) {
+                    // 找到目标节点
+                    const range = document.createRange();
+                    const selection = window.getSelection();
+                    
+                    const targetOffset = Math.min(offset - currentOffset, nodeLength);
+                    
+                    // 确保偏移值在有效范围内
+                    const safeOffset = Math.max(0, Math.min(targetOffset, nodeLength));
+                    
+                    range.setStart(currentNode, safeOffset);
+                    range.collapse(true);
+                    
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    
+                    return;
+                }
+                currentOffset += nodeLength;
+            }
+            
+            // 如果没有找到合适的位置，将光标设置到最后一个文本节点的末尾
+            if (lastValidNode) {
                 const range = document.createRange();
                 const selection = window.getSelection();
                 
-                range.setStart(currentNode, offset - currentOffset);
+                range.setStart(lastValidNode, lastValidNode.textContent.length);
                 range.collapse(true);
                 
                 selection.removeAllRanges();
                 selection.addRange(range);
-                return;
             }
-            currentOffset += nodeLength;
+            
+        } catch (error) {
+            console.warn('光标位置恢复失败:', error);
+            // 如果恢复失败，尝试一个更安全的方法
+            this.setCursorToSafePosition(offset);
+        }
+    }
+    
+    // 安全地设置光标位置
+    setCursorToSafePosition(preferredOffset = 0) {
+        try {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            
+            // 首先尝试设置到内容开始
+            if (this.contentEl.firstChild) {
+                if (this.contentEl.firstChild.nodeType === Node.TEXT_NODE) {
+                    const textLength = this.contentEl.firstChild.textContent.length;
+                    const safeOffset = Math.min(preferredOffset, textLength);
+                    range.setStart(this.contentEl.firstChild, safeOffset);
+                } else {
+                    range.setStartBefore(this.contentEl.firstChild);
+                }
+                range.collapse(true);
+                
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        } catch (error) {
+            console.warn('设置安全光标位置失败:', error);
+        }
+    }
+    
+    // 处理删除键操作
+    handleDeleteKey(e) {
+        try {
+            const selection = window.getSelection();
+            if (selection.rangeCount === 0) return;
+            
+            const range = selection.getRangeAt(0);
+            
+            // 如果有选中内容，让默认删除操作处理
+            if (!range.collapsed) {
+                return; // 不阻止默认行为
+            }
+            
+            // 检查是否在图片定位器附近
+            const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
+            const text = this.getPlainText();
+            
+            // 查找附近的图片定位器
+            const nearbyLocator = this.findNearbyImageLocator(text, cursorOffset, e.key === 'Backspace');
+            
+            if (nearbyLocator) {
+                // 如果删除操作会影响图片定位器，进行特殊处理
+                e.preventDefault();
+                this.handleLocatorDeletion(nearbyLocator, cursorOffset, e.key === 'Backspace');
+            }
+            
+        } catch (error) {
+            console.warn('删除键处理失败:', error);
+        }
+    }
+    
+    // 处理删除输入
+    handleDeleteInput(e) {
+        // 抑制光标恢复，防止删除操作后光标跳转
+        this.suppressCursorRestore = true;
+        
+        setTimeout(() => {
+            this.suppressCursorRestore = false;
+        }, 100);
+    }
+    
+    // 查找附近的图片定位器
+    findNearbyImageLocator(text, cursorOffset, isBackspace) {
+        const imageLocatorRegex = /@\{([^}]+)\}/g;
+        let match;
+        
+        while ((match = imageLocatorRegex.exec(text)) !== null) {
+            const start = match.index;
+            const end = match.index + match[0].length;
+            
+            if (isBackspace) {
+                // Backspace: 检查光标是否在定位器内部或紧接着定位器后面
+                if (cursorOffset > start && cursorOffset <= end) {
+                    return { start, end, name: match[1], fullMatch: match[0] };
+                }
+            } else {
+                // Delete: 检查光标是否在定位器内部或紧接着定位器前面
+                if (cursorOffset >= start && cursorOffset < end) {
+                    return { start, end, name: match[1], fullMatch: match[0] };
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    // 处理定位器删除
+    handleLocatorDeletion(locator, cursorOffset, isBackspace) {
+        try {
+            // 如果光标在定位器内部，删除整个定位器
+            const text = this.getPlainText();
+            const beforeText = text.substring(0, locator.start);
+            const afterText = text.substring(locator.end);
+            const newText = beforeText + afterText;
+            
+            // 更新内容
+            this.value = newText;
+            this.contentEl.innerHTML = this.highlightSyntax(newText);
+            
+            // 设置光标到定位器原来的开始位置
+            setTimeout(() => {
+                this.restoreCursorPosition(locator.start);
+            }, 0);
+            
+            this.triggerChange();
+            
+        } catch (error) {
+            console.warn('定位器删除处理失败:', error);
         }
     }
     
@@ -439,31 +639,46 @@ class SimpleCodeEditor {
     
     // 渲染图片定位器为实际图片
     renderImageLocator(imageName, originalText) {
-        // 使用ContentEditable的光标检测来判断是否正在编辑这个定位器
-        const selection = window.getSelection();
-        if (selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
-            const text = this.getPlainText();
-            
-            // 查找所有与此图片名匹配的定位器位置
-            const searchText = `@{${imageName}}`;
-            let index = text.indexOf(searchText);
-            
-            while (index !== -1) {
-                const start = index;
-                const end = index + searchText.length;
-                
-                // 如果光标在这个特定的定位器范围内，显示为文本
-                if (cursorOffset >= start && cursorOffset <= end) {
-                    return `@{<span class="syntax-string">${imageName}</span>}`;
-                }
-                
-                // 查找下一个同名的定位器
-                index = text.indexOf(searchText, end);
-            }
+        // 测试运行期间总是显示为图片，不检查光标位置
+        if (this.isTestRunning) {
+            return this.renderAsImage(imageName, originalText);
         }
         
+        // 使用ContentEditable的光标检测来判断是否正在编辑这个定位器
+        try {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const cursorOffset = this.getTextOffset(range.startContainer, range.startOffset);
+                const text = this.getPlainText();
+                
+                // 查找所有与此图片名匹配的定位器位置
+                const searchText = `@{${imageName}}`;
+                let index = text.indexOf(searchText);
+                
+                while (index !== -1) {
+                    const start = index;
+                    const end = index + searchText.length;
+                    
+                    // 如果光标在这个特定的定位器范围内，显示为文本
+                    if (cursorOffset >= start && cursorOffset <= end) {
+                        return `@{<span class="syntax-string">${imageName}</span>}`;
+                    }
+                    
+                    // 查找下一个同名的定位器
+                    index = text.indexOf(searchText, end);
+                }
+            }
+        } catch (error) {
+            console.warn('光标位置检测失败，默认渲染为图片:', error);
+            return this.renderAsImage(imageName, originalText);
+        }
+        
+        return this.renderAsImage(imageName, originalText);
+    }
+    
+    // 将定位器渲染为图片的通用方法
+    renderAsImage(imageName, originalText) {
         // 获取当前项目路径
         const projectPath = window.AppGlobals.currentProject;
         if (!projectPath) {
@@ -484,7 +699,7 @@ class SimpleCodeEditor {
                     
                     // 直接渲染为内联图片，失败时显示原始文本
                     const fallbackText = originalText || `@{${imageName}}`;
-                    return `<img class="inline-image-locator" src="file://${imagePath}" alt="${imageName}" data-name="${imageName}" onerror="this.outerHTML='<span class=&quot;syntax-string&quot;>${fallbackText.replace(/"/g, '&quot;')}</span>';">`;
+                    return `<img class="inline-image-locator" src="file://${imagePath}" alt="${imageName}" data-name="${imageName}" draggable="false" onerror="this.outerHTML='<span class=&quot;syntax-string&quot;>${fallbackText.replace(/"/g, '&quot;')}</span>';">`;
                 }
             }
         } catch (error) {
@@ -779,7 +994,23 @@ class SimpleCodeEditor {
     }
     
     focus() {
-        this.contentEl.focus();
+        if (!this.isTestRunning) {
+            this.contentEl.focus();
+        }
+    }
+    
+    // 设置光标到内容末尾
+    setCursorToEnd() {
+        try {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(this.contentEl);
+            range.collapse(false); // false表示折叠到末尾
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } catch (error) {
+            console.warn('设置光标到末尾失败:', error);
+        }
     }
     
     // 处理图片定位器点击
@@ -787,24 +1018,80 @@ class SimpleCodeEditor {
         const imageName = imageElement.dataset.name;
         if (!imageName) return;
         
-        // 将图片替换为文本形式，并设置光标
-        const textToInsert = `@{${imageName}}`;
+        // 抑制光标恢复，防止异常跳转
+        this.suppressCursorRestore = true;
         
-        // 创建文本节点替换图片
-        const textNode = document.createTextNode(textToInsert);
-        imageElement.parentNode.replaceChild(textNode, imageElement);
+        try {
+            // 计算图片在文本中的精确位置
+            const imagePosition = this.getImagePositionInText(imageElement, imageName);
+            
+            // 将图片替换为文本形式
+            const textToInsert = `@{${imageName}}`;
+            const textNode = document.createTextNode(textToInsert);
+            imageElement.parentNode.replaceChild(textNode, imageElement);
+            
+            // 更新内容值
+            this.updateValue();
+            
+            // 设置光标到文本开始位置（这样用户可以选择整个定位器）
+            const range = document.createRange();
+            const selection = window.getSelection();
+            
+            range.setStart(textNode, 0);
+            range.setEnd(textNode, textToInsert.length);
+            
+            selection.removeAllRanges();
+            selection.addRange(range);
+            
+            
+        } catch (error) {
+            console.warn('图片定位器点击处理失败:', error);
+        }
         
-        // 设置光标到文本末尾
-        const range = document.createRange();
-        const selection = window.getSelection();
-        
-        range.setStart(textNode, textToInsert.length);
-        range.collapse(true);
-        
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        this.updateValue();
+        // 延迟恢复光标恢复功能
+        setTimeout(() => {
+            this.suppressCursorRestore = false;
+        }, 200);
+    }
+    
+    // 计算图片在文本中的位置
+    getImagePositionInText(imageElement, imageName) {
+        try {
+            const textContent = this.getPlainText();
+            const searchText = `@{${imageName}}`;
+            
+            // 通过DOM位置大概估算在文本中的位置
+            let walker = document.createTreeWalker(
+                this.contentEl,
+                NodeFilter.SHOW_ALL,
+                null,
+                false
+            );
+            
+            let position = 0;
+            let currentNode;
+            
+            while (currentNode = walker.nextNode()) {
+                if (currentNode === imageElement) {
+                    return position;
+                }
+                if (currentNode.nodeType === Node.TEXT_NODE) {
+                    position += currentNode.textContent.length;
+                } else if (currentNode.nodeType === Node.ELEMENT_NODE && 
+                          currentNode.classList && 
+                          currentNode.classList.contains('inline-image-locator')) {
+                    const imgName = currentNode.dataset.name;
+                    if (imgName) {
+                        position += `@{${imgName}}`.length;
+                    }
+                }
+            }
+            
+            return position;
+        } catch (error) {
+            console.warn('计算图片位置失败:', error);
+            return 0;
+        }
     }
     
     // 显示图片预览
@@ -971,9 +1258,27 @@ class SimpleCodeEditor {
         this.listeners = [];
     }
     
+    // 设置测试运行状态
+    setTestRunning(isRunning) {
+        this.isTestRunning = isRunning;
+        
+        if (isRunning) {
+            // 测试开始时禁用编辑器交互
+            this.contentEl.setAttribute('contenteditable', 'false');
+            this.contentEl.style.pointerEvents = 'none';
+            this.contentEl.style.userSelect = 'none';
+        } else {
+            // 测试结束时恢复编辑器交互
+            this.contentEl.setAttribute('contenteditable', 'true');
+            this.contentEl.style.pointerEvents = 'auto';
+            this.contentEl.style.userSelect = 'text';
+        }
+    }
+    
     // 高亮当前执行的行
     highlightExecutingLine(lineNumber) {
         console.log(`编辑器: 高亮执行行 ${lineNumber}`);
+        this.setTestRunning(true); // 开始测试时设置状态
         this.currentExecutingLine = lineNumber;
         this.currentErrorLine = null; // 清除错误行高亮
         this.applySyntaxHighlightingWithExecution();
@@ -985,11 +1290,13 @@ class SimpleCodeEditor {
         this.currentErrorLine = lineNumber;
         this.currentExecutingLine = null; // 清除执行行高亮
         this.applySyntaxHighlightingWithExecution();
+        // 错误时保持测试运行状态，防止用户干预
     }
     
     // 清除执行行高亮
     clearExecutionHighlight() {
         console.log('编辑器: 清除执行行高亮');
+        this.setTestRunning(false); // 测试结束时恢复编辑状态
         this.currentExecutingLine = null;
         this.currentErrorLine = null;
         this.applySyntaxHighlighting();
@@ -1076,7 +1383,8 @@ function initializeSimpleEditor() {
         updateFontSettings(fontFamily, fontSize) { editorInstance.updateFontSettings(fontFamily, fontSize); },
         highlightExecutingLine(lineNumber) { editorInstance.highlightExecutingLine(lineNumber); },
         highlightErrorLine(lineNumber) { editorInstance.highlightErrorLine(lineNumber); },
-        clearExecutionHighlight() { editorInstance.clearExecutionHighlight(); }
+        clearExecutionHighlight() { editorInstance.clearExecutionHighlight(); },
+        setTestRunning(isRunning) { editorInstance.setTestRunning(isRunning); }
     });
     
     console.log('New Simple Editor initialized successfully');

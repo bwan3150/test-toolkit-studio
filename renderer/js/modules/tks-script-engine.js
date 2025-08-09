@@ -66,7 +66,8 @@ class TKSScriptParser {
      * @returns {Object} 解析后的脚本对象
      */
     parse(content) {
-        const lines = content.split('\n').map(line => line.trim());
+        const originalLines = content.split('\n');
+        const lines = originalLines.map(line => line.trim());
         const script = {
             caseId: '',
             scriptName: '',
@@ -84,8 +85,9 @@ class TKSScriptParser {
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
+            const originalLine = originalLines[i]; // 保留原始行以便准确计算行号
             
-            // 跳过空行和注释
+            // 跳过空行和注释（但仍要计算正确的行号）
             if (!line || line.startsWith('#')) continue;
 
             // 解析用例ID
@@ -123,7 +125,7 @@ class TKSScriptParser {
 
             // 解析步骤
             if (currentSection === 'steps') {
-                const step = this.parseStep(line, i + 1);
+                const step = this.parseStep(line, i + 1); // i + 1 是正确的1基行号
                 if (step) {
                     script.steps.push(step);
                 }
@@ -328,6 +330,11 @@ class TKSScriptExecutor {
         this.isRunning = true;
         this.currentStep = 0;
         
+        // 在脚本开始执行时设置编辑器为测试运行状态
+        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
+            window.AppGlobals.codeEditor.setTestRunning(true);
+        }
+        
         const result = {
             success: true,
             caseId: script.caseId,
@@ -386,12 +393,18 @@ class TKSScriptExecutor {
         result.endTime = new Date().toISOString();
         this.isRunning = false;
         
-        // 只有在成功完成时才清除编辑器执行行高亮
-        if (result.success && window.AppGlobals.codeEditor) {
-            console.log('脚本成功完成，清除编辑器执行行高亮');
-            window.AppGlobals.codeEditor.clearExecutionHighlight();
-        } else if (!result.success) {
-            console.log('脚本执行失败，保持错误行高亮');
+        // 脚本执行结束后恢复编辑器状态
+        if (window.AppGlobals.codeEditor) {
+            if (result.success) {
+                console.log('脚本成功完成，清除编辑器执行行高亮');
+                window.AppGlobals.codeEditor.clearExecutionHighlight();
+            } else {
+                console.log('脚本执行失败，保持错误行高亮但恢复编辑状态');
+                // 失败时也要恢复编辑状态，让用户可以修改代码
+                if (window.AppGlobals.codeEditor.setTestRunning) {
+                    window.AppGlobals.codeEditor.setTestRunning(false);
+                }
+            }
         }
         
         // 脚本执行完成后进行最终UI刷新，显示结果状态
@@ -1090,6 +1103,16 @@ class TKSScriptExecutor {
      */
     stop() {
         this.isRunning = false;
+        
+        // 停止测试时恢复编辑器交互状态
+        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
+            window.AppGlobals.codeEditor.setTestRunning(false);
+        }
+        
+        // 清除高亮状态
+        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.clearExecutionHighlight) {
+            window.AppGlobals.codeEditor.clearExecutionHighlight();
+        }
     }
 
     /**

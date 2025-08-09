@@ -964,6 +964,67 @@ body {
     box-sizing: border-box;
 }
 
+/* 测试运行时编辑器禁用状态 */
+.editor-content[contenteditable="false"] {
+    background: rgba(0, 0, 0, 0.05) !important;
+    opacity: 0.8;
+    cursor: not-allowed !important;
+}
+
+.editor-content[contenteditable="false"]::before {
+    content: '⚠️ 测试运行中，请等待测试完成或点击Stop Test停止';
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    background: rgba(255, 193, 7, 0.9);
+    color: #856404;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    z-index: 100;
+    pointer-events: none;
+    animation: fadeInOut 2s ease-in-out infinite;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* 图片定位器样式优化 */
+.inline-image-locator {
+    max-height: 20px;
+    max-width: 60px;
+    vertical-align: middle;
+    margin: 0 2px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: text;
+    user-select: none; /* 防止选中拖动 */
+    -webkit-user-drag: none; /* 禁用拖拽 */
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+    transition: all 0.2s ease;
+}
+
+.inline-image-locator:hover {
+    border-color: rgba(78, 201, 176, 0.6);
+    box-shadow: 0 0 0 1px rgba(78, 201, 176, 0.3);
+    transform: scale(1.05);
+}
+
+/* 确保图片定位器不会被拖拽 */
+.inline-image-locator::selection {
+    background: transparent;
+}
+
+.inline-image-locator::-moz-selection {
+    background: transparent;
+}
+
 @keyframes pulse-execution {
     from {
         background: rgba(255, 193, 7, 0.15);
