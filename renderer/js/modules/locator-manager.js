@@ -484,14 +484,24 @@ class LocatorManager {
             const type = item.dataset.type || 'xml';
             e.dataTransfer.effectAllowed = 'copy';
             
-            // 根据类型设置不同的拖拽数据格式
+            // 获取locator的完整数据
+            const locatorData = this.locators[name];
+            
+            // 设置多种数据格式以支持不同的放置场景
+            // 1. 纯文本格式 - 用于文本编辑器
             if (type === 'image') {
-                // 图片类型使用特殊格式，比如 @{图片名称}
                 e.dataTransfer.setData('text/plain', `@{${name}}`);
             } else {
-                // XML元素类型使用原有格式 [元素名称]
                 e.dataTransfer.setData('text/plain', `[${name}]`);
             }
+            
+            // 2. 自定义格式 - 用于代码块编辑器的高级渲染
+            const dragData = {
+                name: name,
+                type: type,
+                data: locatorData
+            };
+            e.dataTransfer.setData('application/x-locator', JSON.stringify(dragData));
             
             item.style.opacity = '0.5';
         });

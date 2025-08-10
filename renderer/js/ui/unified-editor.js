@@ -377,16 +377,61 @@ class UnifiedScriptEditor {
                             </select>
                         `;
                     } else {
-                        commandContent += `
-                            <input class="param-hole" 
-                                   id="${paramId}"
-                                   type="${param.type === 'number' ? 'number' : 'text'}"
-                                   data-param="${param.name}"
-                                   data-command-index="${index}"
-                                   placeholder="${param.placeholder}"
-                                   title="${param.placeholder}"
-                                   value="${value}">
-                        `;
+                        // 检查参数类型是否为locator，以支持可视化渲染
+                        if (param.type === 'locator' && value) {
+                            // 检查值是否为图片引用格式 @{name}
+                            const imageMatch = value.match(/^@\{(.+)\}$/);
+                            // 检查值是否为XML元素引用格式 [name]
+                            const xmlMatch = value.match(/^\[(.+)\]$/);
+                            
+                            if (imageMatch || xmlMatch) {
+                                // 创建一个容器用于显示可视化元素
+                                commandContent += `
+                                    <div class="param-hole-container" 
+                                         data-param="${param.name}"
+                                         data-command-index="${index}"
+                                         data-type="locator">
+                                        <input class="param-hole hidden-input" 
+                                               id="${paramId}"
+                                               type="hidden"
+                                               data-param="${param.name}"
+                                               data-command-index="${index}"
+                                               value="${value}">
+                                        <div class="param-visual-element" 
+                                             id="visual-${paramId}"
+                                             data-param="${param.name}"
+                                             data-command-index="${index}">
+                                            <!-- 可视化内容将在渲染后动态添加 -->
+                                        </div>
+                                    </div>
+                                `;
+                            } else {
+                                // 普通文本输入框
+                                commandContent += `
+                                    <input class="param-hole" 
+                                           id="${paramId}"
+                                           type="text"
+                                           data-param="${param.name}"
+                                           data-command-index="${index}"
+                                           data-param-type="locator"
+                                           placeholder="${param.placeholder}"
+                                           title="${param.placeholder}"
+                                           value="${value}">
+                                `;
+                            }
+                        } else {
+                            // 非locator类型的普通输入框
+                            commandContent += `
+                                <input class="param-hole" 
+                                       id="${paramId}"
+                                       type="${param.type === 'number' ? 'number' : 'text'}"
+                                       data-param="${param.name}"
+                                       data-command-index="${index}"
+                                       placeholder="${param.placeholder}"
+                                       title="${param.placeholder}"
+                                       value="${value}">
+                            `;
+                        }
                     }
                 });
             }
@@ -433,6 +478,126 @@ class UnifiedScriptEditor {
         } else {
             this.blocksContainer.innerHTML = blocksHtml + finalInsertButton;
         }
+        
+        // 渲染完成后，处理可视化元素
+        this.renderVisualElements();
+        
+        // 为locator类型的输入框添加拖放支持
+        this.setupLocatorInputDragDrop();
+    }
+    
+    // 渲染可视化元素
+    renderVisualElements() {
+        const visualElements = this.blocksContainer.querySelectorAll('.param-visual-element');
+        visualElements.forEach(element => {
+            const commandIndex = parseInt(element.dataset.commandIndex);
+            const paramName = element.dataset.param;
+            const command = this.script.getCommands()[commandIndex];
+            
+            if (command && command.params[paramName]) {
+                const value = command.params[paramName];
+                const imageMatch = value.match(/^@\{(.+)\}$/);
+                const xmlMatch = value.match(/^\[(.+)\]$/);
+                
+                if (imageMatch) {
+                    // 渲染图片元素
+                    const imageName = imageMatch[1];
+                    // 获取项目路径
+                    const { path: PathModule } = window.AppGlobals;
+                    const projectPath = window.AppGlobals.currentProject;
+                    const imagePath = projectPath ? PathModule.join(projectPath, 'locator/img', `${imageName}.png`) : '';
+                    
+                    element.innerHTML = `
+                        <div class="visual-image-card">
+                            <img src="${imagePath}" alt="${imageName}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <div class="image-fallback" style="display:none;">
+                                <svg width="24" height="24" viewBox="0 0 24 24">
+                                    <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                                </svg>
+                            </div>
+                            <span class="visual-name">${imageName}</span>
+                            <button class="visual-remove" data-command-index="${commandIndex}" data-param="${paramName}">×</button>
+                        </div>
+                    `;
+                } else if (xmlMatch) {
+                    // 渲染XML元素卡片
+                    const elementName = xmlMatch[1];
+                    element.innerHTML = `
+                        <div class="visual-xml-card">
+                            <svg width="20" height="20" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
+                            </svg>
+                            <span class="visual-name">${elementName}</span>
+                            <button class="visual-remove" data-command-index="${commandIndex}" data-param="${paramName}">×</button>
+                        </div>
+                    `;
+                }
+            }
+        });
+        
+        // 为移除按钮添加事件监听
+        this.blocksContainer.querySelectorAll('.visual-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const commandIndex = parseInt(btn.dataset.commandIndex);
+                const paramName = btn.dataset.param;
+                
+                // 清空参数值
+                const command = this.script.getCommands()[commandIndex];
+                if (command) {
+                    command.params[paramName] = '';
+                    this.renderBlocks();
+                    this.setupBlockModeListeners();
+                    this.triggerChange();
+                }
+            });
+        });
+    }
+    
+    // 为locator类型的输入框添加拖放支持
+    setupLocatorInputDragDrop() {
+        const locatorInputs = this.blocksContainer.querySelectorAll('input[data-param-type="locator"], .param-hole-container[data-type="locator"]');
+        
+        locatorInputs.forEach(element => {
+            // 如果是容器，需要找到实际的输入元素
+            const isContainer = element.classList.contains('param-hole-container');
+            const dropTarget = isContainer ? element : element;
+            
+            dropTarget.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                dropTarget.classList.add('drag-over');
+            });
+            
+            dropTarget.addEventListener('dragleave', (e) => {
+                dropTarget.classList.remove('drag-over');
+            });
+            
+            dropTarget.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropTarget.classList.remove('drag-over');
+                
+                const commandIndex = parseInt(element.dataset.commandIndex);
+                const paramName = element.dataset.param;
+                
+                // 尝试获取自定义格式的数据
+                const locatorDataStr = e.dataTransfer.getData('application/x-locator');
+                const textData = e.dataTransfer.getData('text/plain');
+                
+                if (textData) {
+                    // 更新参数值
+                    const command = this.script.getCommands()[commandIndex];
+                    if (command) {
+                        command.params[paramName] = textData;
+                        
+                        // 重新渲染块以显示可视化元素
+                        this.renderBlocks();
+                        this.setupBlockModeListeners();
+                        this.triggerChange();
+                    }
+                }
+            });
+        });
     }
     
     setupTextModeListeners() {
@@ -462,14 +627,45 @@ class UnifiedScriptEditor {
                 document.execCommand('insertText', false, '\n');
             }
         });
+        
+        // 添加拖放支持
+        this.textContentEl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+        
+        this.textContentEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            
+            // 获取拖拽的文本数据
+            const text = e.dataTransfer.getData('text/plain');
+            if (text) {
+                // 在光标位置插入文本
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    range.deleteContents();
+                    const textNode = document.createTextNode(text);
+                    range.insertNode(textNode);
+                    
+                    // 移动光标到插入文本的末尾
+                    range.setStartAfter(textNode);
+                    range.setEndAfter(textNode);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    
+                    // 更新脚本模型
+                    const tksCode = this.textContentEl.textContent || '';
+                    this.script.fromTKSCode(tksCode);
+                    this.updateLineNumbers();
+                    this.triggerChange();
+                }
+            }
+        });
     }
     
     setupBlockModeListeners() {
-        // 为了彻底避免重复绑定，标记是否已经设置过监听器
-        if (this.blockListenersSetup) {
-            return; // 如果已经设置过，直接返回
-        }
-        this.blockListenersSetup = true;
+        // 不再使用全局标记，因为每次重新渲染后都需要重新绑定事件
         
         // 点击事件处理器
         this.container.addEventListener('click', (e) => {

@@ -403,6 +403,116 @@
     font-size: 11px;
 }
 
+/* 可视化元素容器样式 */
+.param-hole-container {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 4px;
+    position: relative;
+}
+
+.param-hole-container.drag-over {
+    outline: 2px dashed rgba(0, 123, 255, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.param-hole.drag-over {
+    outline: 2px dashed rgba(0, 123, 255, 0.5);
+    outline-offset: 2px;
+}
+
+.hidden-input {
+    display: none !important;
+}
+
+.param-visual-element {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* 图片元素卡片样式 */
+.visual-image-card {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    gap: 4px;
+    position: relative;
+    max-width: 150px;
+}
+
+.visual-image-card img {
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 2px;
+}
+
+.visual-image-card .image-fallback {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+}
+
+/* XML元素卡片样式 */
+.visual-xml-card {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    gap: 4px;
+    position: relative;
+}
+
+.visual-xml-card svg {
+    flex-shrink: 0;
+}
+
+/* 可视化元素名称 */
+.visual-name {
+    color: #333;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 移除按钮 */
+.visual-remove {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    color: #ff4444;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    margin-left: 4px;
+    padding: 0;
+    line-height: 1;
+}
+
+.visual-remove:hover {
+    background: rgba(255, 0, 0, 0.3);
+    transform: scale(1.1);
+}
+
 .workspace-block.command-block .block-delete {
     background: rgba(255, 255, 255, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.3);
