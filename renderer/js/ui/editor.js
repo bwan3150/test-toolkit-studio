@@ -44,7 +44,11 @@ function initializeSimpleEditor() {
                 editorInstance.clearExecutionHighlight();
             }
         },
-        setTestRunning(isRunning) { editorInstance.setTestRunning(isRunning); }
+        setTestRunning(isRunning, clearHighlight = false) { 
+            if (editorInstance && editorInstance.setTestRunning) {
+                editorInstance.setTestRunning(isRunning, clearHighlight);
+            }
+        }
     });
     
     console.log('Unified Editor initialized successfully');

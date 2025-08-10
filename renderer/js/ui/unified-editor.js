@@ -9,6 +9,7 @@ class UnifiedScriptEditor {
         this.listeners = [];
         this.saveTimeout = null;
         this.isTestRunning = false;
+        this.currentHighlightedLine = null; // 跟踪当前高亮的行号
         
         // 块定义
         this.blockDefinitions = {
@@ -862,9 +863,17 @@ class UnifiedScriptEditor {
         this.listeners.push({ type: event, callback });
     }
     
-    setTestRunning(isRunning) {
-        console.log('设置测试运行状态:', isRunning, '当前模式:', this.currentMode);
+    setTestRunning(isRunning, clearHighlight = false) {
+        console.log('设置测试运行状态:', isRunning, '清除高亮:', clearHighlight, '当前模式:', this.currentMode);
         this.isTestRunning = isRunning;
+        
+        // 只有在明确要求清除高亮时才清除（成功完成时）
+        if (!isRunning && clearHighlight) {
+            console.log('测试成功结束，清除所有高亮');
+            this.clearExecutionHighlight();
+        } else if (!isRunning) {
+            console.log('测试结束但保持错误高亮（如果有）');
+        }
         
         // 更新状态指示器
         this.updateStatusIndicator();
@@ -969,10 +978,41 @@ class UnifiedScriptEditor {
     
     // 行高亮功能
     highlightExecutingLine(tksOriginalLineNumber) {
-        console.log('收到高亮请求 - TKS原始行号:', tksOriginalLineNumber, '当前模式:', this.currentMode);
+        console.log('=== 高亮请求开始 ===');
+        console.log('TKS原始行号:', tksOriginalLineNumber);
+        console.log('当前模式:', this.currentMode);
+        console.log('上一次高亮行号:', this.currentHighlightedLine);
+        console.log('测试运行状态:', this.isTestRunning);
         
-        // 清除之前的高亮
-        this.clearExecutionHighlight();
+        // 只有在切换到不同行时才清除之前的高亮
+        if (this.currentHighlightedLine !== tksOriginalLineNumber) {
+            console.log('✓ 切换到新行，清除之前的高亮');
+            console.log('从行', this.currentHighlightedLine, '切换到行', tksOriginalLineNumber);
+            this.clearExecutionHighlight();
+            this.currentHighlightedLine = tksOriginalLineNumber;
+        } else {
+            console.log('✓ 同一行重复高亮请求，检查高亮是否仍然存在');
+            
+            // 检查当前高亮是否仍然存在
+            let highlightExists = false;
+            if (this.currentMode === 'text') {
+                const existingHighlights = this.container.querySelectorAll('.line-highlight.executing');
+                highlightExists = existingHighlights.length > 0;
+                console.log('文本模式 - 现有执行高亮数量:', existingHighlights.length);
+            } else if (this.currentMode === 'block') {
+                const existingBlockHighlights = this.container.querySelectorAll('.workspace-block.highlighted.executing');
+                highlightExists = existingBlockHighlights.length > 0;
+                console.log('块模式 - 现有执行高亮数量:', existingBlockHighlights.length);
+            }
+            
+            if (highlightExists) {
+                console.log('✓ 高亮仍然存在，跳过重新创建');
+                console.log('=== 高亮请求结束（跳过）===');
+                return;
+            } else {
+                console.log('✗ 高亮丢失，重新创建');
+            }
+        }
         
         if (this.currentMode === 'text' && this.textContentEl) {
             // 文本模式：将TKS原始行号转换为显示行号
@@ -980,9 +1020,11 @@ class UnifiedScriptEditor {
             console.log('文本模式 - 计算显示行号:', displayLineNumber);
             if (displayLineNumber > 0) {
                 this.addLineHighlight(displayLineNumber, 'executing');
-                console.log('文本模式高亮执行行:', displayLineNumber, '(TKS原始行号:', tksOriginalLineNumber, ')');
+                console.log('✓ 文本模式高亮已创建 - 显示行号:', displayLineNumber, '(TKS原始行号:', tksOriginalLineNumber, ')');
+                console.log('=== 高亮请求结束（文本模式完成）===');
             } else {
-                console.warn('无效的显示行号:', displayLineNumber);
+                console.warn('✗ 无效的显示行号:', displayLineNumber);
+                console.log('=== 高亮请求结束（文本模式失败）===');
             }
         } else if (this.currentMode === 'block') {
             // 块模式：将TKS原始行号转换为命令索引
@@ -1000,9 +1042,11 @@ class UnifiedScriptEditor {
                     // 命令索引转换为1基索引进行高亮
                     const blockIndex = commandIndex + 1;
                     this.highlightExecutingBlock(blockIndex, 'executing');
-                    console.log('块模式高亮执行块:', blockIndex, '(命令索引:', commandIndex, ')');
+                    console.log('✓ 块模式高亮已创建 - 块索引:', blockIndex, '(命令索引:', commandIndex, ')');
+                    console.log('=== 高亮请求结束（块模式完成）===');
                 } else {
-                    console.warn('TKS行号不是命令行:', tksOriginalLineNumber);
+                    console.warn('✗ TKS行号不是命令行:', tksOriginalLineNumber);
+                    console.log('=== 高亮请求结束（块模式失败）===');
                 }
             } else {
                 console.warn('TKS行号超出范围:', tksOriginalLineNumber);
@@ -1016,21 +1060,53 @@ class UnifiedScriptEditor {
         }
     }
     
-    highlightErrorLine(lineNumber) {
-        // 清除之前的高亮
-        this.clearExecutionHighlight();
+    highlightErrorLine(tksOriginalLineNumber) {
+        console.log('收到错误高亮请求 - TKS原始行号:', tksOriginalLineNumber, '当前模式:', this.currentMode);
+        
+        // 不清除之前的高亮，直接转换为错误高亮
         
         if (this.currentMode === 'text' && this.textContentEl) {
-            // 文本模式：计算实际的显示行号（从步骤开始）
-            const displayLineNumber = this.calculateDisplayLineNumber(lineNumber);
+            // 文本模式：将TKS原始行号转换为显示行号
+            const displayLineNumber = this.calculateDisplayLineNumber(tksOriginalLineNumber);
+            console.log('文本模式 - 计算错误显示行号:', displayLineNumber);
             if (displayLineNumber > 0) {
+                // 先清除执行高亮，然后添加错误高亮
+                this.clearExecutionHighlight();
                 this.addLineHighlight(displayLineNumber, 'error');
-                console.log('文本模式高亮错误行:', displayLineNumber, '(原始行号:', lineNumber, ')');
+                console.log('文本模式高亮错误行:', displayLineNumber, '(TKS原始行号:', tksOriginalLineNumber, ')');
+            } else {
+                console.warn('无效的错误显示行号:', displayLineNumber);
             }
         } else if (this.currentMode === 'block') {
-            // 块模式：高亮对应的块
-            this.highlightExecutingBlock(lineNumber, 'error');
-            console.log('块模式高亮错误块:', lineNumber);
+            // 块模式：将TKS原始行号转换为命令索引
+            if (!this.script.originalLines || !this.script.lineToCommandMap) {
+                console.warn('缺少行号映射数据');
+                return;
+            }
+            
+            const originalLineIndex = tksOriginalLineNumber - 1;
+            if (originalLineIndex >= 0 && originalLineIndex < this.script.lineToCommandMap.length) {
+                const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+                console.log('块模式 - TKS错误行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
+                
+                if (commandIndex !== null) {
+                    // 先清除执行高亮，然后添加错误高亮
+                    this.clearExecutionHighlight();
+                    const blockIndex = commandIndex + 1;
+                    this.highlightExecutingBlock(blockIndex, 'error');
+                    console.log('块模式高亮错误块:', blockIndex, '(命令索引:', commandIndex, ')');
+                } else {
+                    console.warn('TKS错误行号不是命令行:', tksOriginalLineNumber);
+                }
+            } else {
+                console.warn('TKS错误行号超出范围:', tksOriginalLineNumber);
+            }
+        } else {
+            console.warn('错误高亮条件不满足:', {
+                currentMode: this.currentMode,
+                hasTextContentEl: !!this.textContentEl,
+                hasBlocksContainer: !!this.blocksContainer
+            });
         }
     }
     
@@ -1109,6 +1185,7 @@ class UnifiedScriptEditor {
     
     clearExecutionHighlight() {
         console.log('清除执行高亮');
+        this.currentHighlightedLine = null; // 重置当前高亮行号
         
         // 文本模式：清除行高亮
         if (this.currentMode === 'text') {
