@@ -44,8 +44,7 @@ function initializeProjectPage() {
                 window.AppGlobals.codeEditor.placeholder = '在Project页面选择测试项并创建Case后, 在左侧文件树点击对应Case下的.tks自动化脚本开始编辑';
             }
             
-            // 清除当前项目路径
-            document.getElementById('currentProjectPath').textContent = 'No project loaded';
+            // 移除了对currentProjectPath的更新，因为现在使用固定的"Testcase"标题
             
             // 清空状态栏
             if (window.StatusBarModule) {
@@ -144,7 +143,7 @@ async function loadProject(projectPath) {
     try {
         const workareaResult = await ipcRenderer.invoke('init-project-workarea', projectPath);
         if (workareaResult.success) {
-            console.log('项目工作区已初始化:', workareaResult.path);
+            // console.log('项目工作区已初始化:', workareaResult.path); // 已禁用以减少日志
         } else {
             console.warn('工作区初始化失败:', workareaResult.error);
         }
@@ -157,7 +156,7 @@ async function loadProject(projectPath) {
     
     // 更新UI
     document.getElementById('projectPath').textContent = projectPath;
-    document.getElementById('currentProjectPath').textContent = projectPath;
+    // 移除了对currentProjectPath的更新，因为现在使用固定的"Testcase"标题
     document.getElementById('projectInfo').style.display = 'block';
     document.getElementById('welcomeScreen').style.display = 'none';
     
@@ -673,7 +672,7 @@ async function updateTestcaseMap(rowIndex, caseName) {
         // 保存映射
         await fs.writeFile(mapPath, JSON.stringify(mapping, null, 2));
         
-        console.log('更新testcase映射:', rowIndex, '->', caseName);
+        // console.log('更新testcase映射:', rowIndex, '->', caseName); // 已禁用以减少日志
         
     } catch (error) {
         console.error('更新testcase映射失败:', error);

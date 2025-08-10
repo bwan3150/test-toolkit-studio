@@ -27,7 +27,7 @@ class StatusBarManager {
         setTimeout(() => {
             const globals = getGlobals();
             if (globals && globals.currentProject) {
-                console.log('StatusBar: Force updating with project:', globals.currentProject);
+                // console.log('StatusBar: Force updating with project:', globals.currentProject); // 已禁用以减少日志
                 this.updateProjectPath(globals.currentProject);
             }
         }, 1000);
@@ -35,20 +35,20 @@ class StatusBarManager {
         // 监听项目变化
         this.watchProjectChanges();
         
-        console.log('StatusBar initialized, current project:', getGlobals()?.currentProject);
+        // console.log('StatusBar initialized, current project:', getGlobals()?.currentProject); // 已禁用以减少日志
     }
 
     // 更新项目路径显示
     updateProjectPath(projectPath = null) {
         if (!this.currentProjectElement) {
-            console.log('StatusBar: currentProjectElement not found');
+            // console.log('StatusBar: currentProjectElement not found'); // 已禁用以减少日志
             return;
         }
 
         const globals = getGlobals();
         const currentPath = projectPath || (globals && globals.currentProject);
         
-        console.log('StatusBar: updating path', { projectPath, currentPath, globals: globals?.currentProject });
+        // console.log('StatusBar: updating path', { projectPath, currentPath, globals: globals?.currentProject }); // 已禁用以减少日志
         
         if (currentPath) {
             // 只显示项目文件夹名称和上级目录
@@ -71,12 +71,12 @@ class StatusBarManager {
             // 存储完整路径用于复制
             this.currentProjectElement.parentElement.dataset.fullPath = currentPath;
             
-            console.log('StatusBar: Updated to:', displayText);
+            // console.log('StatusBar: Updated to:', displayText); // 已禁用以减少日志
         } else {
             this.currentProjectElement.textContent = 'No project opened';
             this.currentProjectElement.parentElement.title = '';
             this.currentProjectElement.parentElement.dataset.fullPath = '';
-            console.log('StatusBar: No project found, showing default text');
+            // console.log('StatusBar: No project found, showing default text'); // 已禁用以减少日志
         }
     }
 

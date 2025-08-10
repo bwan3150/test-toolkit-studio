@@ -27,15 +27,18 @@ function loadScript(src) {
 
 // 应用初始化
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('开始应用初始化...');
+    // console.log('开始应用初始化...'); // 已禁用以减少日志
     
     try {
         // 加载所有模块
-        console.log('正在加载模块...');
+        // console.log('正在加载模块...'); // 已禁用以减少日志
         
-        // 1. 首先加载核心模块（全局变量）
+        // 0. 首先加载日志控制系统（完全禁用用户控制台日志）
+        await loadScript('./js/utils/log-control.js');
+        
+        // 1. 然后加载核心模块（全局变量）
         await loadScript('./js/core/globals.js');
-        console.log('✓ 核心模块已加载');
+        // console.log('✓ 核心模块已加载'); // 已禁用以减少日志
         
         // 2. 加载UI模块
         await loadScript('./js/ui/notifications.js');
@@ -44,7 +47,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/ui/settings.js');
         await loadScript('./js/ui/resizable-panels.js');
         await loadScript('./js/ui/status-bar.js');
-        console.log('✓ UI模块已加载');
+        // console.log('✓ UI模块已加载'); // 已禁用以减少日志
         
         // 3. 加载业务功能模块
         await loadScript('./js/modules/project-manager.js');
@@ -57,18 +60,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 4. 加载TKS脚本引擎模块
         await loadScript('./js/modules/tks-script-engine.js');
         await loadScript('./js/modules/tks-integration.js');
-        console.log('✓ 业务模块已加载');
+        // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
         await loadScript('./js/utils/keyboard-shortcuts.js');
         await loadScript('./js/utils/ipc-handlers.js');
-        console.log('✓ 工具模块已加载');
+        // console.log('✓ 工具模块已加载'); // 已禁用以减少日志
         
         // 等待短暂时间确保所有模块都已完全初始化
         await new Promise(resolve => setTimeout(resolve, 200));
         
         // 检查模块是否正确加载
-        console.log('检查模块加载状态...');
+        // console.log('检查模块加载状态...'); // 已禁用以减少日志
         const requiredModules = [
             'NavigationModule', 'EditorModule', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
@@ -80,22 +83,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!window[moduleName]) {
                 throw new Error(`模块 ${moduleName} 未正确加载`);
             }
-            console.log(`✓ ${moduleName} 已加载`);
+            // console.log(`✓ ${moduleName} 已加载`); // 已禁用以减少日志
         }
         
         // 初始化所有功能
-        console.log('正在初始化各功能模块...');
+        // console.log('正在初始化各功能模块...'); // 已禁用以减少日志
         
         // 初始化UI组件
         try {
             window.NavigationModule.initializeNavigation();
-            console.log('✓ 导航模块已初始化');
+            // console.log('✓ 导航模块已初始化'); // 已禁用以减少日志
             
             window.EditorModule.initializeSimpleEditor();
-            console.log('✓ 编辑器模块已初始化');
+            // console.log('✓ 编辑器模块已初始化'); // 已禁用以减少日志
             
             window.ResizablePanelsModule.initializeResizablePanels();
-            console.log('✓ 面板模块已初始化');
+            // console.log('✓ 面板模块已初始化'); // 已禁用以减少日志
         } catch (error) {
             console.error('UI组件初始化失败:', error);
             throw error;
@@ -104,28 +107,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 初始化业务功能
         try {
             window.ProjectManagerModule.initializeProjectPage();
-            console.log('✓ 项目管理模块已初始化');
+            // console.log('✓ 项目管理模块已初始化'); // 已禁用以减少日志
             
             window.TestcaseManagerModule.initializeTestcasePage();
-            console.log('✓ 测试用例模块已初始化');
+            // console.log('✓ 测试用例模块已初始化'); // 已禁用以减少日志
             
             window.DeviceManagerModule.initializeDevicePage();
-            console.log('✓ 设备管理模块已初始化');
+            // console.log('✓ 设备管理模块已初始化'); // 已禁用以减少日志
             
             window.LogManagerModule.initializeLogPage();
-            console.log('✓ 日志管理模块已初始化');
+            // console.log('✓ 日志管理模块已初始化'); // 已禁用以减少日志
             
             window.SettingsModule.initializeSettingsPage();
-            console.log('✓ 设置模块已初始化');
+            // console.log('✓ 设置模块已初始化'); // 已禁用以减少日志
             
             // 初始化TKS集成模块
             window.TKSIntegrationModule.initializeTKSIntegration();
-            console.log('✓ TKS脚本引擎已初始化');
+            // console.log('✓ TKS脚本引擎已初始化'); // 已禁用以减少日志
             
             // 初始化Locator管理器
             if (window.LocatorManager) {
                 window.LocatorManager.initialize();
-                console.log('✓ Locator管理器已初始化');
+                // console.log('✓ Locator管理器已初始化'); // 已禁用以减少日志
             }
         } catch (error) {
             console.error('业务功能初始化失败:', error);
@@ -135,10 +138,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 初始化工具功能
         try {
             window.KeyboardShortcutsModule.initializeKeyboardShortcuts();
-            console.log('✓ 快捷键模块已初始化');
+            // console.log('✓ 快捷键模块已初始化'); // 已禁用以减少日志
             
             window.IpcHandlersModule.initializeIpcHandlers();
-            console.log('✓ IPC处理模块已初始化');
+            // console.log('✓ IPC处理模块已初始化'); // 已禁用以减少日志
         } catch (error) {
             console.error('工具功能初始化失败:', error);
             throw error;
@@ -146,19 +149,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 加载用户信息
         await window.SettingsModule.loadUserInfo();
-        console.log('✓ 用户信息已加载');
+        // console.log('✓ 用户信息已加载'); // 已禁用以减少日志
         
         // 加载项目历史而不是自动加载最后一个项目
         await window.ProjectManagerModule.loadProjectHistory();
-        console.log('✓ 项目历史已加载');
+        // console.log('✓ 项目历史已加载'); // 已禁用以减少日志
         
         // 最后初始化状态栏，确保能获取到正确的项目信息
         if (window.StatusBarModule) {
             window.StatusBarModule.init();
-            console.log('✓ 状态栏已初始化');
+            // console.log('✓ 状态栏已初始化'); // 已禁用以减少日志
         }
         
-        console.log('应用初始化完成！');
+        // console.log('✅ Test Toolkit Studio 已就绪'); // 完全禁用所有日志
         
         // 显示应用加载成功的通知
         window.NotificationModule.showNotification('应用已成功加载', 'success');

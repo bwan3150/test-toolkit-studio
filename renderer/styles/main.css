@@ -537,6 +537,15 @@ body {
     color: var(--text-secondary);
 }
 
+/* 统一Testcase页面标题样式 */
+.project-path-bar h2 {
+    font-family: var(--font-family); /* 使用标准字体而不是等宽字体 */
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0;
+}
+
 .device-selector {
     display: flex;
     align-items: center;

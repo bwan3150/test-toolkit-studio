@@ -365,11 +365,11 @@ class TKSScriptExecutor {
                 }
 
                 this.currentStep++;
-                console.log(`执行步骤 ${this.currentStep}: ${step.raw}`);
+                // console.log(`执行步骤 ${this.currentStep}: ${step.raw}`); // 已禁用以减少日志
                 
                 // 高亮当前执行的行
                 if (step.lineNumber && window.AppGlobals.codeEditor) {
-                    console.log(`高亮执行行: ${step.lineNumber}`);
+                    // console.log(`高亮执行行: ${step.lineNumber}`); // 已禁用以减少日志
                     window.AppGlobals.codeEditor.highlightExecutingLine(step.lineNumber);
                 }
                 
@@ -384,7 +384,7 @@ class TKSScriptExecutor {
                     result.error = stepResult.error;
                     // 出错时高亮错误行（保持红色高亮）
                     if (step.lineNumber && window.AppGlobals.codeEditor) {
-                        console.log(`高亮错误行: ${step.lineNumber}`);
+                        // console.log(`高亮错误行: ${step.lineNumber}`); // 已禁用以减少日志
                         window.AppGlobals.codeEditor.highlightErrorLine(step.lineNumber);
                     }
                     break;
@@ -403,10 +403,10 @@ class TKSScriptExecutor {
         // 脚本执行结束后恢复编辑器状态
         if (window.AppGlobals.codeEditor) {
             if (result.success) {
-                console.log('脚本成功完成，清除编辑器执行行高亮');
+                // console.log('脚本成功完成，清除编辑器执行行高亮'); // 已禁用以减少日志
                 window.AppGlobals.codeEditor.clearExecutionHighlight();
             } else {
-                console.log('脚本执行失败，保持错误行高亮但恢复编辑状态');
+                // console.log('脚本执行失败，保持错误行高亮但恢复编辑状态'); // 已禁用以减少日志
                 // 失败时也要恢复编辑状态，让用户可以修改代码
                 if (window.AppGlobals.codeEditor.setTestRunning) {
                     window.AppGlobals.codeEditor.setTestRunning(false);
@@ -416,7 +416,7 @@ class TKSScriptExecutor {
         
         // 脚本执行完成后进行最终UI刷新，显示结果状态
         try {
-            console.log('TKS执行器: 执行完成，进行最终UI刷新...');
+            // console.log('TKS执行器: 执行完成，进行最终UI刷新...'); // 已禁用以减少日志
             await this.refreshUIForStep();
         } catch (error) {
             console.warn('TKS执行器: 最终UI刷新失败:', error);
@@ -465,7 +465,7 @@ class TKSScriptExecutor {
             if (!this.currentElements || this.currentElements.length === 0) {
                 console.warn(`步骤${this.currentStep}: 未能获取到UI元素`);
             } else {
-                console.log(`步骤${this.currentStep}: 已获取到 ${this.currentElements.length} 个UI元素`);
+                // console.log(`步骤${this.currentStep}: 已获取到 ${this.currentElements.length} 个UI元素`); // 已禁用以减少日志
             }
         } catch (error) {
             console.error(`步骤${this.currentStep}: UI刷新失败:`, error);
@@ -536,7 +536,7 @@ class TKSScriptExecutor {
         
         try {
             // 1. 获取设备截图和UI树，自动保存到workarea
-            console.log(`TKS执行器: 获取设备截图和UI树...`);
+            // console.log(`TKS执行器: 获取设备截图和UI树...`); // 已禁用以减少日志
             const projectPath = this.projectPath;
             const screenshotResult = await ipcRenderer.invoke('adb-screenshot', this.deviceId, projectPath);
             
@@ -549,7 +549,7 @@ class TKSScriptExecutor {
                     const placeholder = document.querySelector('.screen-placeholder');
                     if (placeholder) placeholder.style.display = 'none';
                 }
-                console.log(`TKS执行器: 截图已更新到前端显示`);
+                // console.log(`TKS执行器: 截图已更新到前端显示`); // 已禁用以减少日志
             }
             
             // 3. 获取UI树并解析元素
@@ -561,21 +561,21 @@ class TKSScriptExecutor {
                     parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
                 }
                 
-                console.log(`TKS执行器: XML长度: ${uiDumpResult.xml.length}`);
-                console.log(`TKS执行器: XML前200字符:`, uiDumpResult.xml.substring(0, 200));
+                // console.log(`TKS执行器: XML长度: ${uiDumpResult.xml.length}`); // 已禁用以减少日志  
+                // console.log(`TKS执行器: XML前200字符:`, uiDumpResult.xml.substring(0, 200)); // 已禁用以减少日志
                 
                 const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
-                console.log(`TKS执行器: 优化后的树:`, optimizedTree ? '成功' : '失败');
+                // console.log(`TKS执行器: 优化后的树:`, optimizedTree ? '成功' : '失败'); // 已禁用以减少日志
                 
                 // 如果优化失败，传递原始XML作为回退
                 const elements = parser.extractUIElements(optimizedTree, uiDumpResult.xml);
-                console.log(`TKS执行器: 提取到 ${elements.length} 个元素`);
+                // console.log(`TKS执行器: 提取到 ${elements.length} 个元素`); // 已禁用以减少日志
                 
                 // 4. 更新实例状态
                 this.currentElements = elements;
                 this.currentUITree = uiDumpResult.xml;
                 
-                console.log(`TKS执行器: UI树已更新，共解析 ${elements.length} 个元素`);
+                // console.log(`TKS执行器: UI树已更新，共解析 ${elements.length} 个元素`); // 已禁用以减少日志
                 
                 // 5. 保存UI树到workarea（如果没有被截图接口保存的话）
                 if (projectPath && window.AppGlobals.fs && window.AppGlobals.path) {
@@ -588,7 +588,7 @@ class TKSScriptExecutor {
                         await fs.mkdir(workareaDir, { recursive: true });
                         // 保存UI树
                         await fs.writeFile(xmlPath, uiDumpResult.xml, 'utf8');
-                        console.log(`TKS执行器: UI树已保存到 ${xmlPath}`);
+                        // console.log(`TKS执行器: UI树已保存到 ${xmlPath}`); // 已禁用以减少日志
                     } catch (error) {
                         console.warn(`TKS执行器: 保存UI树到workarea失败:`, error);
                     }
@@ -649,8 +649,8 @@ class TKSScriptExecutor {
 
         const command = `am start -n ${appPackage}/${appActivity}`;
         
-        console.log(`启动命令: ${command}`);
-        console.log(`包名: ${appPackage}, Activity: ${appActivity}`);
+        // console.log(`启动命令: ${command}`); // 已禁用以减少日志
+        // console.log(`包名: ${appPackage}, Activity: ${appActivity}`); // 已禁用以减少日志
         
         const result = await this.runAdbCommand(command);
         if (!result.success) {
@@ -1215,7 +1215,7 @@ class TKSScriptExecutor {
         if (!result.success) {
             console.error(`ADB命令执行失败: ${command}`, result.error);
         } else {
-            console.log(`ADB命令执行成功: ${command}`);
+            // console.log(`ADB命令执行成功: ${command}`); // 已禁用以减少日志
         }
         
         return result;
@@ -1245,7 +1245,7 @@ class TKSScriptExecutor {
 
         try {
             await tksFs.writeFile(resultPath, JSON.stringify(result, null, 2));
-            console.log(`执行结果已保存到: ${resultPath}`);
+            // console.log(`执行结果已保存到: ${resultPath}`); // 已禁用以减少日志
         } catch (error) {
             console.error('保存执行结果失败:', error);
         }

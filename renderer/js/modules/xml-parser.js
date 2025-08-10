@@ -173,7 +173,7 @@ class XMLParser {
             // 清理XML字符串（移除可能的控制字符）
             const cleanedXml = xmlString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '').trim();
             
-            console.log('清理后的XML前100字符:', cleanedXml.substring(0, 100));
+            // console.log('清理后的XML前100字符:', cleanedXml.substring(0, 100)); // 已禁用以减少日志
             
             const parser = new DOMParser();
             const doc = parser.parseFromString(cleanedXml, 'text/xml');
@@ -191,12 +191,12 @@ class XMLParser {
                 return null;
             }
             
-            console.log('XML解析成功，根元素:', root.nodeName);
-            console.log('根元素属性数:', root.attributes ? root.attributes.length : 0);
-            console.log('根元素子节点数:', root.children ? root.children.length : 0);
+            // console.log('XML解析成功，根元素:', root.nodeName); // 已禁用以减少日志
+            // console.log('根元素属性数:', root.attributes ? root.attributes.length : 0); // 已禁用以减少日志
+            // console.log('根元素子节点数:', root.children ? root.children.length : 0); // 已禁用以减少日志
             
             const optimizedRoot = this._optimizeNode(root);
-            console.log('优化后的树:', optimizedRoot ? '成功' : '失败');
+            // console.log('优化后的树:', optimizedRoot ? '成功' : '失败'); // 已禁用以减少日志
             
             return optimizedRoot;
         } catch (error) {
@@ -372,14 +372,14 @@ class XMLParser {
         }
         // 如果没有优化树但有原始XML，使用原始XML进行回退解析
         else if (rawXmlString) {
-            console.log('优化树为空，使用原始XML进行回退解析');
+            // console.log('优化树为空，使用原始XML进行回退解析'); // 已禁用以减少日志
             try {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(rawXmlString, 'text/xml');
                 const root = doc.documentElement;
                 
                 if (root && root.nodeName === 'hierarchy') {
-                    console.log('原始XML解析成功，开始提取元素');
+                    // console.log('原始XML解析成功，开始提取元素'); // 已禁用以减少日志
                     this._extractElementsFromRawXML(root, elements);
                 } else {
                     console.error('原始XML根节点无效');
@@ -394,13 +394,13 @@ class XMLParser {
             element.index = index;
         });
         
-        console.log(`最终提取到 ${elements.length} 个UI元素`);
+        // console.log(`最终提取到 ${elements.length} 个UI元素`); // 已禁用以减少日志
         return elements;
     }
     
     // 从原始XML直接提取元素（备用方案）
     _extractElementsFromRawXML(hierarchyNode, elements) {
-        console.log('开始简化提取，hierarchy子节点数:', hierarchyNode.children ? hierarchyNode.children.length : 0);
+        // console.log('开始简化提取，hierarchy子节点数:', hierarchyNode.children ? hierarchyNode.children.length : 0); // 已禁用以减少日志
         
         const traverse = (node) => {
             if (node.nodeType === Node.ELEMENT_NODE && node.nodeName === 'node') {
@@ -411,18 +411,18 @@ class XMLParser {
                 const hasContentDesc = node.getAttribute('content-desc')?.trim();
                 const hasHint = node.getAttribute('hint')?.trim();
                 
-                // 调试：显示每个检查的节点信息
-                if (clickable || focusable || hasText || hasContentDesc || hasHint) {
-                    console.log('找到候选元素:', {
-                        className: node.getAttribute('class'),
-                        clickable,
-                        focusable,
-                        text: hasText,
-                        contentDesc: hasContentDesc,
-                        hint: hasHint,
-                        bounds: node.getAttribute('bounds')
-                    });
-                }
+                // 调试：显示每个检查的节点信息 (已禁用以减少日志)
+                // if (clickable || focusable || hasText || hasContentDesc || hasHint) {
+                //     console.log('找到候选元素:', {
+                //         className: node.getAttribute('class'),
+                //         clickable,
+                //         focusable,
+                //         text: hasText,
+                //         contentDesc: hasContentDesc,
+                //         hint: hasHint,
+                //         bounds: node.getAttribute('bounds')
+                //     });
+                // }
                 
                 // 更宽松的条件：任何有文本、可点击、可聚焦的元素都包含
                 if (clickable || focusable || hasText || hasContentDesc || hasHint) {
@@ -449,7 +449,7 @@ class XMLParser {
                         
                         if (element.isVisible) {
                             elements.push(element);
-                            console.log(`添加元素[${elements.length - 1}]: ${element.toAiText()}`);
+                            // console.log(`添加元素[${elements.length - 1}]: ${element.toAiText()}`); // 已禁用以减少日志
                         }
                     }
                 }

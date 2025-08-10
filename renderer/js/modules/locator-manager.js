@@ -62,7 +62,7 @@ class LocatorManager {
     async loadLocators() {
         const projectPath = window.AppGlobals.currentProject;
         if (!projectPath) {
-            console.log('没有打开的项目');
+            // console.log('没有打开的项目'); // 已禁用以减少日志
             this.updateLocatorList({});
             return;
         }
@@ -72,7 +72,7 @@ class LocatorManager {
             // 更改为项目级别的locator路径
             const projectPath = window.AppGlobals.currentProject;
             if (!projectPath) {
-                console.log('没有打开的项目');
+                // console.log('没有打开的项目'); // 已禁用以减少日志
                 this.updateLocatorList({});
                 return;
             }

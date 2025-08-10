@@ -1405,7 +1405,7 @@ class SimpleCodeEditor {
     // 清除焦点和光标状态
     clearFocusAndCursor() {
         try {
-            console.log('编辑器: 清除焦点和光标状态');
+            // console.log('编辑器: 清除焦点和光标状态'); // 已禁用以减少日志
             
             // 移除编辑器焦点
             if (this.contentEl) {
@@ -1427,7 +1427,7 @@ class SimpleCodeEditor {
                 setTimeout(() => document.body.blur(), 0);
             }
             
-            console.log('编辑器: 焦点和光标状态已清除');
+            // console.log('编辑器: 焦点和光标状态已清除'); // 已禁用以减少日志
         } catch (error) {
             console.warn('清除焦点和光标状态失败:', error);
         }
@@ -1471,7 +1471,7 @@ class SimpleCodeEditor {
     
     // 高亮当前执行的行
     highlightExecutingLine(lineNumber) {
-        console.log(`编辑器: 高亮执行行 ${lineNumber}`);
+        // console.log(`编辑器: 高亮执行行 ${lineNumber}`); // 已禁用以减少日志
         
         // 确保焦点和光标状态已清除，防止干扰高亮显示
         this.clearFocusAndCursor();
@@ -1491,7 +1491,7 @@ class SimpleCodeEditor {
     
     // 高亮错误行
     highlightErrorLine(lineNumber) {
-        console.log(`编辑器: 高亮错误行 ${lineNumber}`);
+        // console.log(`编辑器: 高亮错误行 ${lineNumber}`); // 已禁用以减少日志
         this.currentErrorLine = lineNumber;
         this.currentExecutingLine = null; // 清除执行行高亮
         this.applySyntaxHighlightingWithExecution();
@@ -1500,7 +1500,7 @@ class SimpleCodeEditor {
     
     // 清除执行行高亮
     clearExecutionHighlight() {
-        console.log('编辑器: 清除执行行高亮');
+        // console.log('编辑器: 清除执行行高亮'); // 已禁用以减少日志
         this.setTestRunning(false); // 测试结束时恢复编辑状态
         this.currentExecutingLine = null;
         this.currentErrorLine = null;
