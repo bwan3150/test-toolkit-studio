@@ -47,6 +47,11 @@ function initializeProjectPage() {
             // 清除当前项目路径
             document.getElementById('currentProjectPath').textContent = 'No project loaded';
             
+            // 清空状态栏
+            if (window.StatusBarModule) {
+                window.StatusBarModule.updateProjectPath(null);
+            }
+            
             window.NotificationModule.showNotification('Closed project', 'info');
         });
     }
@@ -155,6 +160,11 @@ async function loadProject(projectPath) {
     document.getElementById('currentProjectPath').textContent = projectPath;
     document.getElementById('projectInfo').style.display = 'block';
     document.getElementById('welcomeScreen').style.display = 'none';
+    
+    // 更新状态栏
+    if (window.StatusBarModule) {
+        window.StatusBarModule.updateProjectPath(projectPath);
+    }
     
     // 清除之前的测试用例列表
     const testcaseList = document.getElementById('testcaseList');

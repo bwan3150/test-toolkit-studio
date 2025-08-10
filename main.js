@@ -49,9 +49,11 @@ function createWindow() {
 
   // macOS平台配置
   if (process.platform === 'darwin') {
-    windowOptions.titleBarStyle = 'hiddenInset';
+    windowOptions.titleBarStyle = 'hidden';
     windowOptions.trafficLightPosition = { x: 15, y: 13 };
     windowOptions.frame = true;
+    // 确保背景色与CSS一致
+    windowOptions.backgroundColor = '#1e1e1e';
   }
   // Windows平台配置  
   else if (process.platform === 'win32') {

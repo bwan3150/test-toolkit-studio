@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/ui/editor.js');
         await loadScript('./js/ui/settings.js');
         await loadScript('./js/ui/resizable-panels.js');
+        await loadScript('./js/ui/status-bar.js');
         console.log('✓ UI模块已加载');
         
         // 3. 加载业务功能模块
@@ -69,7 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 检查模块是否正确加载
         console.log('检查模块加载状态...');
         const requiredModules = [
-            'NavigationModule', 'EditorModule', 'ResizablePanelsModule',
+            'NavigationModule', 'EditorModule', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
             'LogManagerModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
@@ -150,6 +151,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 加载项目历史而不是自动加载最后一个项目
         await window.ProjectManagerModule.loadProjectHistory();
         console.log('✓ 项目历史已加载');
+        
+        // 最后初始化状态栏，确保能获取到正确的项目信息
+        if (window.StatusBarModule) {
+            window.StatusBarModule.init();
+            console.log('✓ 状态栏已初始化');
+        }
         
         console.log('应用初始化完成！');
         

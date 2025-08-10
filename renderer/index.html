@@ -43,8 +43,10 @@
     </div>
     
     <div class="app-container">
-        <!-- Sidebar Navigation -->
-        <nav class="sidebar">
+        <!-- Main App Content -->
+        <div class="app-main">
+            <!-- Sidebar Navigation -->
+            <nav class="sidebar">
             <div class="sidebar-header">
             <img src="../assets/logo/toolkit_no_focus_logo.png" alt="TT" class="logo-small">
                 <img src="../assets/logo/toolkit_logo.png" alt="Test Toolkit Studio" class="logo-large">
@@ -698,6 +700,22 @@
                 </div>
             </div>
         </main>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <div class="status-item" id="currentProjectStatus">
+                    <svg class="status-icon" viewBox="0 0 24 24">
+                        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                    </svg>
+                    <span id="statusBarProjectPath">No project opened</span>
+                </div>
+            </div>
+            <div class="status-right">
+                <!-- 预留右侧状态项 -->
+            </div>
+        </div>
     </div>
 
     <!-- Custom Input Dialog -->

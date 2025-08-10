@@ -3,21 +3,38 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
     margin: 0;
     padding: 0;
     overflow: hidden;
+    background-color: var(--bg-primary);
+}
+
+/* Ensure no extra space on macOS */
+.platform-darwin body {
+    position: fixed;
+    width: 100%;
+    top: 0;
+    left: 0;
 }
 
 /* Title bar area - always on top, only for dragging */
 .titlebar-area {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: 38px; /* Increased height for better dragging area */
+    height: 28px; /* Adjusted height for macOS */
     background: transparent;
     -webkit-app-region: drag;
     z-index: 10000;
+    pointer-events: none; /* Allow clicks to pass through to content */
+}
+
+/* Enable dragging only in the drag region */
+.titlebar-area {
+    pointer-events: auto;
 }
 
 /* Exclude sidebar area from dragging */
@@ -26,27 +43,48 @@ body {
     position: absolute;
     top: 0;
     left: 0;
-    width: 260px; /* Width to cover expanded sidebar */
+    width: 80px; /* Adjusted to cover collapsed sidebar */
     height: 100%;
     -webkit-app-region: no-drag;
 }
 
-/* Windows and Linux don't need the custom title bar */
+/* Hide title bar area on all platforms except when needed for dragging */
 .platform-win32 .titlebar-area,
 .platform-linux .titlebar-area {
     display: none;
 }
 
-.app-container {
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
+/* On macOS, keep titlebar for dragging but make it smaller */
+.platform-darwin .titlebar-area {
+    height: 28px;
 }
 
-/* Add padding only on macOS to account for title bar */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+    background-color: var(--bg-primary);
+}
+
+.app-main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* macOS specific adjustments */
 .platform-darwin .app-container {
-    padding-top: 38px;
-    height: calc(100vh - 38px);
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    box-sizing: border-box;
+}
+
+/* Remove any extra top spacing on macOS page headers */
+.platform-darwin .page-header {
+    margin-top: 0;
 }
 
 /* Sidebar Navigation */
@@ -202,6 +240,7 @@ body {
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    min-height: 0; /* 确保flex正确工作 */
 }
 
 /* Pages */
@@ -4078,5 +4117,76 @@ body {
 
 .btn-danger:hover {
     background: #d32f2f;
+}
+
+/* Status Bar - 类似VSCode的底部状态栏 */
+.status-bar {
+    height: 22px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 0 8px;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+    position: relative;
+    z-index: 100;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.status-left,
+.status-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 0 6px;
+    height: 20px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.status-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 项目路径特殊样式 */
+#currentProjectStatus {
+    user-select: none;
+}
+
+#currentProjectStatus:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+#currentProjectStatus:active {
+    background: var(--bg-active);
+    color: white;
+}
+
+.status-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+#currentProjectPath {
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
