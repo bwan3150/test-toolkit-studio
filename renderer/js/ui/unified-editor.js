@@ -968,26 +968,45 @@ class UnifiedScriptEditor {
     }
     
     // 行高亮功能
-    highlightExecutingLine(lineNumber) {
-        console.log('收到高亮请求:', lineNumber, '当前模式:', this.currentMode);
+    highlightExecutingLine(tksOriginalLineNumber) {
+        console.log('收到高亮请求 - TKS原始行号:', tksOriginalLineNumber, '当前模式:', this.currentMode);
         
         // 清除之前的高亮
         this.clearExecutionHighlight();
         
         if (this.currentMode === 'text' && this.textContentEl) {
-            // 文本模式：计算实际的显示行号（从步骤开始）
-            const displayLineNumber = this.calculateDisplayLineNumber(lineNumber);
-            console.log('计算显示行号:', displayLineNumber);
+            // 文本模式：将TKS原始行号转换为显示行号
+            const displayLineNumber = this.calculateDisplayLineNumber(tksOriginalLineNumber);
+            console.log('文本模式 - 计算显示行号:', displayLineNumber);
             if (displayLineNumber > 0) {
                 this.addLineHighlight(displayLineNumber, 'executing');
-                console.log('文本模式高亮执行行:', displayLineNumber, '(原始行号:', lineNumber, ')');
+                console.log('文本模式高亮执行行:', displayLineNumber, '(TKS原始行号:', tksOriginalLineNumber, ')');
             } else {
                 console.warn('无效的显示行号:', displayLineNumber);
             }
         } else if (this.currentMode === 'block') {
-            // 块模式：高亮对应的块
-            this.highlightExecutingBlock(lineNumber, 'executing');
-            console.log('块模式高亮执行块:', lineNumber);
+            // 块模式：将TKS原始行号转换为命令索引
+            if (!this.script.originalLines || !this.script.lineToCommandMap) {
+                console.warn('缺少行号映射数据');
+                return;
+            }
+            
+            const originalLineIndex = tksOriginalLineNumber - 1;
+            if (originalLineIndex >= 0 && originalLineIndex < this.script.lineToCommandMap.length) {
+                const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+                console.log('块模式 - TKS行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
+                
+                if (commandIndex !== null) {
+                    // 命令索引转换为1基索引进行高亮
+                    const blockIndex = commandIndex + 1;
+                    this.highlightExecutingBlock(blockIndex, 'executing');
+                    console.log('块模式高亮执行块:', blockIndex, '(命令索引:', commandIndex, ')');
+                } else {
+                    console.warn('TKS行号不是命令行:', tksOriginalLineNumber);
+                }
+            } else {
+                console.warn('TKS行号超出范围:', tksOriginalLineNumber);
+            }
         } else {
             console.warn('高亮条件不满足:', {
                 currentMode: this.currentMode,
@@ -1015,53 +1034,77 @@ class UnifiedScriptEditor {
         }
     }
     
-    // 计算显示行号：将TKS引擎的行号转换为编辑器中显示的行号
-    calculateDisplayLineNumber(tksLineNumber) {
-        if (!this.textContentEl) {
-            console.warn('textContentEl不存在');
-            return 0;
+    // 计算显示行号：将TKS引擎的原始行号转换为编辑器中显示的行号
+    calculateDisplayLineNumber(tksOriginalLineNumber) {
+        console.log('计算显示行号 - TKS引擎原始行号:', tksOriginalLineNumber);
+        console.log('脚本模型信息:', {
+            originalLines: this.script.originalLines ? this.script.originalLines.length : '无',
+            commands: this.script.commands.length,
+            mapping: this.script.lineToCommandMap ? this.script.lineToCommandMap.length : '无'
+        });
+        
+        if (!this.textContentEl || !this.script.originalLines) {
+            console.warn('缺少必要的数据');
+            return -1;
         }
         
-        const lines = this.textContentEl.textContent.split('\n');
-        console.log('总行数:', lines.length);
-        console.log('前几行内容:', lines.slice(0, 10));
+        // TKS引擎报告的是基于原始文本的行号(1基索引)，需要转换为0基索引
+        const originalLineIndex = tksOriginalLineNumber - 1;
         
+        // 检查原始行号是否有效
+        if (originalLineIndex < 0 || originalLineIndex >= this.script.originalLines.length) {
+            console.warn('TKS原始行号超出范围:', tksOriginalLineNumber, '有效范围: 1-' + this.script.originalLines.length);
+            return -1;
+        }
+        
+        // 从映射中查找对应的命令索引
+        const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+        console.log('原始行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
+        
+        if (commandIndex === null) {
+            console.warn('原始行号不是命令行:', tksOriginalLineNumber);
+            return -1;
+        }
+        
+        // 现在需要在显示的文本中找到这个命令对应的行
+        const lines = this.textContentEl.textContent.split('\n');
         let stepsStartLine = -1;
         
         // 找到"步骤:"行
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].trim() === '步骤:') {
-                stepsStartLine = i + 1; // 步骤下的第一行
-                console.log('找到步骤行，起始行:', stepsStartLine);
+                stepsStartLine = i + 1;
                 break;
             }
         }
         
         if (stepsStartLine === -1) {
-            console.warn('未找到"步骤:"行，使用原始行号');
-            return tksLineNumber;
+            console.warn('未找到步骤行');
+            return -1;
         }
         
-        // 计算实际的命令行（跳过空行和注释）
-        let commandCount = 0;
-        let targetDisplayLine = -1;
-        
+        // 在步骤区域中找到第N个命令行
+        let foundCommandCount = 0;
         for (let i = stepsStartLine; i < lines.length; i++) {
             const line = lines[i].trim();
-            console.log(`行${i+1}: "${line}"`);
-            if (line && !line.startsWith('#')) { // 非空行且非注释
-                commandCount++;
-                console.log('命令计数:', commandCount, '目标:', tksLineNumber);
-                if (commandCount === tksLineNumber) {
-                    targetDisplayLine = i + 1; // 转换为1基索引
-                    console.log('找到目标行:', targetDisplayLine);
-                    break;
-                }
+            if (!line || line.startsWith('#') || 
+                line.startsWith('用例:') || line.startsWith('脚本名:') ||
+                line === '详情:' || line === '步骤:' ||
+                line.includes('appPackage:') || line.includes('appActivity:')) {
+                continue;
             }
+            
+            // 这是一个命令行
+            if (foundCommandCount === commandIndex) {
+                const displayLine = i + 1;
+                console.log('找到显示行号:', displayLine, '(原始行号:', tksOriginalLineNumber, '命令索引:', commandIndex, ')');
+                return displayLine;
+            }
+            foundCommandCount++;
         }
         
-        console.log('最终计算结果 - TKS行号:', tksLineNumber, '显示行号:', targetDisplayLine);
-        return targetDisplayLine;
+        console.warn('未找到对应的显示行号');
+        return -1;
     }
     
     clearExecutionHighlight() {
@@ -1299,9 +1342,12 @@ class ScriptModel {
     
     fromTKSCode(tksCode) {
         this.commands = [];
-        const lines = tksCode.split('\n');
+        this.originalLines = tksCode.split('\n'); // 保留原始行
+        this.lineToCommandMap = []; // 行号到命令的映射
         
-        lines.forEach(line => {
+        let commandIndex = 0;
+        
+        this.originalLines.forEach((line, lineIndex) => {
             const trimmed = line.trim();
             
             // 跳过头部信息
@@ -1309,13 +1355,24 @@ class ScriptModel {
                 trimmed.startsWith('用例:') || trimmed.startsWith('脚本名:') ||
                 trimmed === '详情:' || trimmed === '步骤:' ||
                 trimmed.includes('appPackage:') || trimmed.includes('appActivity:')) {
+                this.lineToCommandMap.push(null); // 非命令行
                 return;
             }
             
             const command = this.parseTKSLine(trimmed);
             if (command) {
                 this.commands.push(command);
+                this.lineToCommandMap.push(commandIndex); // 映射到命令索引
+                commandIndex++;
+            } else {
+                this.lineToCommandMap.push(null); // 无效命令行
             }
+        });
+        
+        console.log('脚本解析完成:', {
+            totalLines: this.originalLines.length,
+            commands: this.commands.length,
+            lineMapping: this.lineToCommandMap
         });
     }
     

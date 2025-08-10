@@ -64,13 +64,13 @@ class TKSScriptRunner {
         const currentTab = window.AppGlobals.currentTab;
         console.log('handleRunTest: 详细调试信息', {
             'window.AppGlobals存在': !!window.AppGlobals,
+            'openTabs数量': window.AppGlobals.openTabs ? window.AppGlobals.openTabs.length : '无openTabs',
+            'openTabs内容': window.AppGlobals.openTabs ? window.AppGlobals.openTabs.map(t => ({id: t.id, name: t.name, path: t.path})) : '无openTabs',
             'currentTab': currentTab,
             'currentTab类型': typeof currentTab,
             'currentTab是否为null': currentTab === null,
             'currentTab是否为undefined': currentTab === undefined,
-            'currentTab.path': currentTab ? currentTab.path : '无currentTab',
-            'currentTab.name': currentTab ? currentTab.name : '无currentTab',
-            'currentTab.content': currentTab ? (currentTab.content ? '有内容' : '无内容') : '无currentTab'
+            'currentTab完整对象': currentTab
         });
         
         if (!currentTab) {
