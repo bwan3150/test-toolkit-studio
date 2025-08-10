@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/modules/testcase-manager.js');
         await loadScript('./js/modules/device-manager.js');
         await loadScript('./js/modules/locator-manager.js');
+        await loadScript('./js/modules/log-manager.js');
         
         // 4. 加载TKS脚本引擎模块
         await loadScript('./js/modules/tks-script-engine.js');
@@ -70,7 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const requiredModules = [
             'NavigationModule', 'EditorModule', 'ResizablePanelsModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
-            'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
+            'LogManagerModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
         ];
         
@@ -109,6 +110,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             window.DeviceManagerModule.initializeDevicePage();
             console.log('✓ 设备管理模块已初始化');
+            
+            window.LogManagerModule.initializeLogPage();
+            console.log('✓ 日志管理模块已初始化');
             
             window.SettingsModule.initializeSettingsPage();
             console.log('✓ 设置模块已初始化');

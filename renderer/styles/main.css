@@ -3877,3 +3877,206 @@ body {
     }
 }
 
+/* Log Page Styles */
+.log-controls {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.control-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.control-row:last-child {
+    margin-bottom: 0;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-group label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.control-select {
+    min-width: 150px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.control-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.filter-input-group {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 200px;
+}
+
+.control-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.control-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* 移除了旧的filter-help样式，现在使用独立的输入框 */
+
+.log-viewer {
+    flex: 1;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-container {
+    flex: 1;
+    overflow-y: auto;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.log-entry {
+    display: flex;
+    padding: 2px 8px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    align-items: baseline;
+    white-space: nowrap;
+}
+
+.log-entry:hover {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+.log-timestamp {
+    color: var(--text-muted);
+    margin-right: 8px;
+    font-size: 11px;
+}
+
+.log-pid {
+    color: var(--text-secondary);
+    margin-right: 8px;
+    min-width: 50px;
+    font-size: 11px;
+}
+
+.log-level {
+    font-weight: 600;
+    margin-right: 8px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.log-level-verbose {
+    color: #666;
+}
+
+.log-level-debug {
+    color: #2196F3;
+}
+
+.log-level-info {
+    color: #4CAF50;
+}
+
+.log-level-warn {
+    color: #FF9800;
+}
+
+.log-level-error {
+    color: #F44336;
+}
+
+.log-level-assert {
+    color: #9C27B0;
+}
+
+.log-tag {
+    color: var(--primary-color);
+    margin-right: 8px;
+    min-width: 100px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-message {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Log entry level colors */
+.log-verbose {
+    opacity: 0.8;
+}
+
+.log-debug {
+    color: #2196F3;
+}
+
+.log-info {
+    color: inherit;
+}
+
+.log-warn {
+    background: rgba(255, 152, 0, 0.05);
+}
+
+.log-error {
+    background: rgba(244, 67, 54, 0.05);
+}
+
+.log-assert {
+    background: rgba(156, 39, 176, 0.05);
+}
+
+/* Button states */
+#followLogBtn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-danger {
+    background: #F44336;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #d32f2f;
+}
+

@@ -18,6 +18,10 @@ function initializeNavigation() {
             // 页面特定的动作
             if (targetPage === 'device') {
                 window.DeviceManagerModule.refreshConnectedDevices();
+            } else if (targetPage === 'log') {
+                if (window.LogManagerModule) {
+                    window.LogManagerModule.refreshDeviceList();
+                }
             } else if (targetPage === 'settings') {
                 window.SettingsModule.checkSDKStatus();
             }

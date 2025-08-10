@@ -1162,3 +1162,165 @@ ipcMain.handle('delete-wireless-device', async (event, deviceId) => {
     return { success: false, error: error.message };
   }
 });
+
+// ==================== Log (Logcat) 相关功能 ====================
+
+const { spawn } = require('child_process');
+let logcatProcesses = new Map(); // 存储正在运行的logcat进程
+
+// 获取已连接的设备列表（用于Log页面）
+ipcMain.handle('get-connected-devices', async () => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    const { stdout } = await execPromise(`"${adbPath}" devices -l`);
+    
+    const devices = [];
+    const lines = stdout.split('\n');
+    
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line && !line.startsWith('*')) {
+        const parts = line.split(/\s+/);
+        if (parts.length >= 2 && parts[1] === 'device') {
+          const deviceId = parts[0];
+          
+          // 获取设备型号
+          let model = 'Unknown';
+          const modelMatch = line.match(/model:([^\s]+)/);
+          if (modelMatch) {
+            model = modelMatch[1];
+          } else {
+            // 尝试使用getprop获取型号
+            try {
+              const { stdout: modelStdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell getprop ro.product.model`);
+              model = modelStdout.trim() || 'Unknown';
+            } catch (e) {
+              // 忽略错误
+            }
+          }
+          
+          devices.push({
+            id: deviceId,
+            model: model,
+            type: deviceId.includes(':') ? 'wireless' : 'usb'
+          });
+        }
+      }
+    }
+    
+    return devices;
+  } catch (error) {
+    console.error('Failed to get devices:', error);
+    return [];
+  }
+});
+
+// 获取设备上的进程列表
+ipcMain.handle('get-device-processes', async (event, deviceId) => {
+  try {
+    const adbPath = getBuiltInAdbPath();
+    const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell ps`);
+    
+    const processes = [];
+    const lines = stdout.split('\n');
+    
+    // 解析ps输出
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line) {
+        const parts = line.split(/\s+/);
+        if (parts.length >= 9) {
+          const pid = parts[1];
+          const name = parts[parts.length - 1];
+          
+          // 过滤掉系统进程，只显示应用进程
+          if (name.includes('.') && !name.startsWith('[')) {
+            processes.push({
+              pid: pid,
+              name: name
+            });
+          }
+        }
+      }
+    }
+    
+    // 按进程名排序
+    processes.sort((a, b) => a.name.localeCompare(b.name));
+    
+    return processes;
+  } catch (error) {
+    console.error('Failed to get processes:', error);
+    return [];
+  }
+});
+
+// 启动logcat
+ipcMain.handle('start-logcat', async (event, options) => {
+  try {
+    const { device, format = 'threadtime' } = options;
+    const adbPath = getBuiltInAdbPath();
+    
+    // 如果该设备已有logcat进程在运行，先停止它
+    if (logcatProcesses.has(device)) {
+      const oldProcess = logcatProcesses.get(device);
+      oldProcess.kill();
+      logcatProcesses.delete(device);
+    }
+    
+    // 启动新的logcat进程
+    const args = ['-s', device, 'logcat', '-v', format];
+    const logcatProcess = spawn(adbPath, args);
+    
+    // 存储进程
+    logcatProcesses.set(device, logcatProcess);
+    
+    // 监听输出
+    logcatProcess.stdout.on('data', (data) => {
+      mainWindow.webContents.send('logcat-data', data.toString());
+    });
+    
+    logcatProcess.stderr.on('data', (data) => {
+      console.error('Logcat error:', data.toString());
+    });
+    
+    logcatProcess.on('close', (code) => {
+      console.log(`Logcat process exited with code ${code}`);
+      logcatProcesses.delete(device);
+    });
+    
+    return { success: true, pid: logcatProcess.pid };
+  } catch (error) {
+    console.error('Failed to start logcat:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 停止logcat
+ipcMain.handle('stop-logcat', async (event, processId) => {
+  try {
+    // 遍历所有logcat进程
+    for (const [device, process] of logcatProcesses) {
+      if (process.pid === processId) {
+        process.kill();
+        logcatProcesses.delete(device);
+        return { success: true };
+      }
+    }
+    
+    return { success: false, error: 'Process not found' };
+  } catch (error) {
+    console.error('Failed to stop logcat:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 显示保存对话框（用于导出日志）
+ipcMain.handle('show-save-dialog', async (event, options) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, options);
+    return result;
+  } catch (error) {
+    console.error('Failed to show save dialog:', error);
+    return { canceled: true };
+  }
+});
