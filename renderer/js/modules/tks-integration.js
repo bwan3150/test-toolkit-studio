@@ -135,7 +135,7 @@ class TKSScriptRunner {
         
         try {
             // 获取项目路径
-            let projectPath = window.AppGlobals.currentProject || '';
+            let projectPath = window.AppGlobals.getCurrentProjectPath();
             
             console.log('项目路径调试信息:', {
                 'window.AppGlobals.currentProject': window.AppGlobals.currentProject,
@@ -145,33 +145,22 @@ class TKSScriptRunner {
             });
             
             if (!projectPath) {
-                // 尝试从状态栏获取项目路径
-                console.log('没有项目路径，尝试从状态栏获取');
+                // 详细调试信息，找出为什么获取不到项目路径
+                console.error('❌ 无法获取项目路径 - 详细调试信息:');
+                console.error('- window.AppGlobals:', !!window.AppGlobals);
+                console.error('- window.AppGlobals.currentProject:', window.AppGlobals?.currentProject);
+                console.error('- typeof window.AppGlobals.currentProject:', typeof window.AppGlobals?.currentProject);
+                
+                // 检查状态栏显示的项目路径作为参考
                 const statusBarElement = document.getElementById('statusBarProjectPath');
-                if (statusBarElement && statusBarElement.parentElement.dataset.fullPath) {
-                    projectPath = statusBarElement.parentElement.dataset.fullPath;
-                    console.log('从状态栏获取的项目路径:', projectPath);
+                if (statusBarElement) {
+                    console.error('- 状态栏显示内容:', statusBarElement.textContent);
+                    console.error('- 状态栏存储的完整路径:', statusBarElement.parentElement.dataset.fullPath);
+                } else {
+                    console.error('- 状态栏元素不存在');
                 }
                 
-                if (!projectPath) {
-                    // 如果状态栏也没有项目路径，使用当前脚本所在目录作为临时项目根目录
-                    console.log('状态栏也没有项目路径，尝试从脚本路径推断');
-                    if (scriptPath && pathModule) {
-                        // 如果有脚本路径，向上找到最近的目录作为项目根目录
-                        projectPath = pathModule.dirname(scriptPath);
-                        // 如果脚本在cases子目录中，向上到项目根目录
-                        if (projectPath.includes('cases')) {
-                            const parts = projectPath.split(pathModule.sep);
-                            const casesIndex = parts.lastIndexOf('cases');
-                            if (casesIndex > 0) {
-                                projectPath = parts.slice(0, casesIndex).join(pathModule.sep);
-                            }
-                        }
-                        console.log('从脚本路径推断的项目路径:', projectPath);
-                    } else {
-                        throw new Error('无法确定项目路径，请先打开一个项目或保存脚本文件');
-                    }
-                }
+                throw new Error('无法获取项目路径。请确保已打开一个项目（Project页面 -> Open Project或Create Project）');
             }
 
             window.TestcaseManagerModule.ConsoleManager.addLog('开始执行TKS脚本...', 'info');

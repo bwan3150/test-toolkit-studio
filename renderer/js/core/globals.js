@@ -36,12 +36,29 @@ window.AppGlobals = {
     deviceScreenInterval,
     
     // 设置器函数
-    setCurrentProject: (project) => { currentProject = project; window.AppGlobals.currentProject = project; },
+    setCurrentProject: (project) => { 
+        currentProject = project; 
+        window.AppGlobals.currentProject = project; 
+        console.log('✅ 项目路径已更新:', project);
+        // 同时更新状态栏显示
+        if (window.StatusBarModule) {
+            window.StatusBarModule.updateProjectPath(project);
+        }
+    },
     setCurrentCase: (testCase) => { currentCase = testCase; window.AppGlobals.currentCase = testCase; },
     setCurrentTab: (tab) => { currentTab = tab; window.AppGlobals.currentTab = tab; },
     setCodeEditor: (editor) => { codeEditor = editor; window.AppGlobals.codeEditor = editor; },
     setLineNumbers: (ln) => { lineNumbers = ln; window.AppGlobals.lineNumbers = ln; },
     setSyntaxHighlight: (sh) => { syntaxHighlight = sh; window.AppGlobals.syntaxHighlight = sh; },
     setOpenTabs: (tabs) => { openTabs = tabs; window.AppGlobals.openTabs = tabs; },
-    setDeviceScreenInterval: (interval) => { deviceScreenInterval = interval; window.AppGlobals.deviceScreenInterval = interval; }
+    setDeviceScreenInterval: (interval) => { deviceScreenInterval = interval; window.AppGlobals.deviceScreenInterval = interval; },
+    
+    // 统一的项目路径获取函数
+    getCurrentProjectPath: () => {
+        const projectPath = window.AppGlobals.currentProject;
+        if (!projectPath) {
+            console.warn('⚠️  当前没有打开的项目，请先在Project页面打开或创建一个项目');
+        }
+        return projectPath;
+    }
 };

@@ -46,10 +46,7 @@ function initializeProjectPage() {
             
             // 移除了对currentProjectPath的更新，因为现在使用固定的"Testcase"标题
             
-            // 清空状态栏
-            if (window.StatusBarModule) {
-                window.StatusBarModule.updateProjectPath(null);
-            }
+            // 状态栏会通过 setCurrentProject 自动更新
             
             window.NotificationModule.showNotification('Closed project', 'info');
         });
@@ -160,10 +157,7 @@ async function loadProject(projectPath) {
     document.getElementById('projectInfo').style.display = 'block';
     document.getElementById('welcomeScreen').style.display = 'none';
     
-    // 更新状态栏
-    if (window.StatusBarModule) {
-        window.StatusBarModule.updateProjectPath(projectPath);
-    }
+    // 状态栏会通过 setCurrentProject 自动更新
     
     // 清除之前的测试用例列表
     const testcaseList = document.getElementById('testcaseList');
