@@ -62,7 +62,16 @@ class TKSScriptRunner {
         
         // 获取当前活动的标签页
         const currentTab = window.AppGlobals.currentTab;
-        console.log('handleRunTest: 当前标签页', currentTab);
+        console.log('handleRunTest: 详细调试信息', {
+            'window.AppGlobals存在': !!window.AppGlobals,
+            'currentTab': currentTab,
+            'currentTab类型': typeof currentTab,
+            'currentTab是否为null': currentTab === null,
+            'currentTab是否为undefined': currentTab === undefined,
+            'currentTab.path': currentTab ? currentTab.path : '无currentTab',
+            'currentTab.name': currentTab ? currentTab.name : '无currentTab',
+            'currentTab.content': currentTab ? (currentTab.content ? '有内容' : '无内容') : '无currentTab'
+        });
         
         if (!currentTab) {
             console.log('handleRunTest: 没有活动标签页');
@@ -138,24 +147,43 @@ class TKSScriptRunner {
                 this.currentExecutor = new window.TKSScriptModule.Executor(projectPath, deviceId);
                 
                 // 从脚本路径推断case文件夹
-                const { path } = window.AppGlobals;
-                const scriptPath = currentTab.path;
-                const pathParts = scriptPath.split(path.sep);
-                const caseIndex = pathParts.indexOf('cases');
-                let caseFolder = '';
+                console.log('调试信息:', {
+                    'window.AppGlobals': window.AppGlobals,
+                    'window.AppGlobals.path': window.AppGlobals ? window.AppGlobals.path : 'undefined',
+                    'currentTab': currentTab,
+                    'currentTab.path': currentTab ? currentTab.path : 'undefined'
+                });
                 
-                if (caseIndex !== -1 && caseIndex < pathParts.length - 2) {
-                    caseFolder = pathParts[caseIndex + 1]; // case_001, case_002 etc.
-                    console.log('推断的case文件夹:', caseFolder);
-                    this.currentExecutor.setCurrentCase(caseFolder);
+                const pathModule = window.AppGlobals ? window.AppGlobals.path : null;
+                const scriptPath = currentTab ? currentTab.path : null;
+                
+                if (pathModule && scriptPath) {
+                    const pathParts = scriptPath.split(pathModule.sep);
+                    const caseIndex = pathParts.indexOf('cases');
+                    let caseFolder = '';
+                    
+                    if (caseIndex !== -1 && caseIndex < pathParts.length - 2) {
+                        caseFolder = pathParts[caseIndex + 1]; // case_001, case_002 etc.
+                        console.log('推断的case文件夹:', caseFolder);
+                        this.currentExecutor.setCurrentCase(caseFolder);
+                    } else {
+                        console.warn('无法推断case文件夹，locator引用可能无法工作');
+                    }
+                    
+                    // 设置脚本物理文件名（去掉.tks扩展名）
+                    const fileName = pathModule.basename(scriptPath, '.tks');
+                    this.currentExecutor.setScriptFileName(fileName);
+                    console.log('设置脚本文件名:', fileName);
                 } else {
-                    console.warn('无法推断case文件夹，locator引用可能无法工作');
+                    console.error('缺少必要的路径信息:', { pathModule, scriptPath });
+                    // 使用默认值继续执行
+                    if (scriptPath) {
+                        // 简单的文件名提取，不依赖path模块
+                        const fileName = scriptPath.split(/[/\\]/).pop().replace('.tks', '');
+                        this.currentExecutor.setScriptFileName(fileName);
+                        console.log('使用简单方式设置脚本文件名:', fileName);
+                    }
                 }
-                
-                // 设置脚本物理文件名（去掉.tks扩展名）
-                const fileName = path.basename(scriptPath, '.tks');
-                this.currentExecutor.setScriptFileName(fileName);
-                console.log('设置脚本文件名:', fileName);
                 
                 // 解析脚本
                 const parser = new window.TKSScriptModule.Parser();

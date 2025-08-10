@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 2. 加载UI模块
         await loadScript('./js/ui/notifications.js');
         await loadScript('./js/ui/navigation.js');
+        // block-editor.js 已经在 index.html 中加载
         await loadScript('./js/ui/editor.js');
         await loadScript('./js/ui/settings.js');
         await loadScript('./js/ui/resizable-panels.js');
