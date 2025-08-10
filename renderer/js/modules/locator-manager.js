@@ -421,60 +421,9 @@ class LocatorManager {
 
     // 设置拖放功能
     setupDragAndDrop() {
-        // 设置编辑器为放置目标
-        const setupEditor = () => {
-            // 尝试获取新的ContentEditable编辑器
-            const editorContent = document.getElementById('editorContent');
-            if (editorContent) {
-                editorContent.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'copy';
-                });
-
-                editorContent.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    const elementName = e.dataTransfer.getData('text/plain');
-                    
-                    // 检查是否为有效的定位器引用（XML元素[name]或图片@{name}）
-                    const isXmlElement = elementName && elementName.startsWith('[') && elementName.endsWith(']');
-                    const isImageElement = elementName && elementName.startsWith('@{') && elementName.endsWith('}');
-                    
-                    if (isXmlElement || isImageElement) {
-                        // 使用编辑器的insertText方法插入文本
-                        if (window.editor && window.editor.insertText) {
-                            window.editor.insertText(elementName);
-                        } else {
-                            // 降级处理：直接插入到ContentEditable
-                            const selection = window.getSelection();
-                            if (selection.rangeCount > 0) {
-                                const range = selection.getRangeAt(0);
-                                range.deleteContents();
-                                const textNode = document.createTextNode(elementName);
-                                range.insertNode(textNode);
-                                range.setStartAfter(textNode);
-                                range.setEndAfter(textNode);
-                                range.collapse(true);
-                                selection.removeAllRanges();
-                                selection.addRange(range);
-                            }
-                        }
-                        
-                        const typeText = isImageElement ? '图片定位器' : '元素引用';
-                        window.NotificationModule.showNotification(`已插入${typeText}: ${elementName}`, 'success');
-                    }
-                });
-            } else {
-                // 如果还没找到编辑器，延迟再试
-                setTimeout(setupEditor, 100);
-            }
-        };
-        
-        // 页面加载完成后设置，或者立即尝试设置
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', setupEditor);
-        } else {
-            setupEditor();
-        }
+        // 注意：现在的拖放处理已经在 unified-editor.js 中完成
+        // 这里不再需要重复设置，避免冲突
+        console.log('LocatorManager: 拖放功能初始化（由unified-editor.js处理）');
     }
 
     // 设置单个元素的拖动事件

@@ -489,6 +489,7 @@ class UnifiedScriptEditor {
     // 渲染可视化元素
     renderVisualElements() {
         const visualElements = this.blocksContainer.querySelectorAll('.param-visual-element');
+        
         visualElements.forEach(element => {
             const commandIndex = parseInt(element.dataset.commandIndex);
             const paramName = element.dataset.param;
@@ -496,6 +497,7 @@ class UnifiedScriptEditor {
             
             if (command && command.params[paramName]) {
                 const value = command.params[paramName];
+                
                 const imageMatch = value.match(/^@\{(.+)\}$/);
                 const xmlMatch = value.match(/^\[(.+)\]$/);
                 
@@ -525,7 +527,7 @@ class UnifiedScriptEditor {
                     element.innerHTML = `
                         <div class="visual-xml-card">
                             <svg width="20" height="20" viewBox="0 0 24 24">
-                                <path fill="currentColor" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
+                                <path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
                             </svg>
                             <span class="visual-name">${elementName}</span>
                             <button class="visual-remove" data-command-index="${commandIndex}" data-param="${paramName}">×</button>
@@ -565,16 +567,19 @@ class UnifiedScriptEditor {
             
             dropTarget.addEventListener('dragover', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 e.dataTransfer.dropEffect = 'copy';
                 dropTarget.classList.add('drag-over');
             });
             
             dropTarget.addEventListener('dragleave', (e) => {
+                e.stopPropagation();
                 dropTarget.classList.remove('drag-over');
             });
             
             dropTarget.addEventListener('drop', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 dropTarget.classList.remove('drag-over');
                 
                 const commandIndex = parseInt(element.dataset.commandIndex);
@@ -601,7 +606,12 @@ class UnifiedScriptEditor {
     }
     
     setupTextModeListeners() {
-        if (!this.textContentEl) return;
+        // 获取文本内容元素
+        this.textContentEl = document.getElementById('textContent');
+        if (!this.textContentEl) {
+            console.warn('textContent元素未找到');
+            return;
+        }
         
         this.textContentEl.addEventListener('input', () => {
             if (this.isTestRunning) return;
@@ -631,34 +641,67 @@ class UnifiedScriptEditor {
         // 添加拖放支持
         this.textContentEl.addEventListener('dragover', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             e.dataTransfer.dropEffect = 'copy';
         });
         
         this.textContentEl.addEventListener('drop', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             
             // 获取拖拽的文本数据
             const text = e.dataTransfer.getData('text/plain');
+            
             if (text) {
-                // 在光标位置插入文本
-                const selection = window.getSelection();
-                if (selection.rangeCount > 0) {
-                    const range = selection.getRangeAt(0);
-                    range.deleteContents();
-                    const textNode = document.createTextNode(text);
-                    range.insertNode(textNode);
-                    
-                    // 移动光标到插入文本的末尾
-                    range.setStartAfter(textNode);
-                    range.setEndAfter(textNode);
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                    
-                    // 更新脚本模型
-                    const tksCode = this.textContentEl.textContent || '';
-                    this.script.fromTKSCode(tksCode);
-                    this.updateLineNumbers();
-                    this.triggerChange();
+                // 根据鼠标位置创建插入点
+                const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+                if (range) {
+                    // 确保插入点在文本编辑器内
+                    if (this.textContentEl.contains(range.startContainer)) {
+                        // 清除当前选区并设置新位置
+                        const selection = window.getSelection();
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                        
+                        // 插入文本
+                        range.deleteContents();
+                        const textNode = document.createTextNode(text);
+                        range.insertNode(textNode);
+                        
+                        // 移动光标到插入文本的末尾
+                        range.setStartAfter(textNode);
+                        range.setEndAfter(textNode);
+                        range.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                        
+                        // 更新脚本模型
+                        const tksCode = this.textContentEl.textContent || '';
+                        this.script.fromTKSCode(tksCode);
+                        this.updateLineNumbers();
+                        this.triggerChange();
+                    }
+                } else {
+                    // 降级方案：使用当前光标位置
+                    const selection = window.getSelection();
+                    if (selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
+                        range.deleteContents();
+                        const textNode = document.createTextNode(text);
+                        range.insertNode(textNode);
+                        
+                        // 移动光标到插入文本的末尾
+                        range.setStartAfter(textNode);
+                        range.setEndAfter(textNode);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                        
+                        // 更新脚本模型
+                        const tksCode = this.textContentEl.textContent || '';
+                        this.script.fromTKSCode(tksCode);
+                        this.updateLineNumbers();
+                        this.triggerChange();
+                    }
                 }
             }
         });
