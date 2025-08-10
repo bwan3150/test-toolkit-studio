@@ -377,6 +377,17 @@ ipcMain.handle('write-file', async (event, filepath, content) => {
   }
 });
 
+// 保存文件处理器（用于编辑器保存功能）
+ipcMain.handle('save-file', async (event, filepath, content) => {
+  try {
+    await fs.writeFile(filepath, content, 'utf-8');
+    return { success: true };
+  } catch (error) {
+    console.error('保存文件失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('create-project-structure', async (event, projectPath) => {
   try {
     // Create directory structure

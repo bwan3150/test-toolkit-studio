@@ -187,14 +187,42 @@ class UnifiedScriptEditor {
     
     switchToTextMode() {
         console.log('切换到文本模式');
+        
+        // 保存当前高亮状态
+        const savedHighlightLine = this.currentHighlightedLine;
+        const wasTestRunning = this.isTestRunning;
+        
         this.currentMode = 'text';
         this.render();
+        
+        // 恢复高亮状态
+        if (savedHighlightLine !== null && wasTestRunning) {
+            console.log('恢复文本模式高亮:', savedHighlightLine);
+            // 延迟一点确保DOM已完全渲染
+            setTimeout(() => {
+                this.highlightExecutingLine(savedHighlightLine);
+            }, 50);
+        }
     }
     
     switchToBlockMode() {
         console.log('切换到块编程模式');
+        
+        // 保存当前高亮状态
+        const savedHighlightLine = this.currentHighlightedLine;
+        const wasTestRunning = this.isTestRunning;
+        
         this.currentMode = 'block';
         this.render();
+        
+        // 恢复高亮状态
+        if (savedHighlightLine !== null && wasTestRunning) {
+            console.log('恢复块模式高亮:', savedHighlightLine);
+            // 延迟一点确保DOM已完全渲染
+            setTimeout(() => {
+                this.highlightExecutingLine(savedHighlightLine);
+            }, 50);
+        }
     }
     
     render() {
