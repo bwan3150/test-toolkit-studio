@@ -15,7 +15,7 @@ class UnifiedScriptEditor {
         this.blockDefinitions = {
             application: {
                 color: '#c586c0',
-                icon: '▶',
+                icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C5.36,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M13,3H11V13H13"/></svg>',
                 commands: [
                     { 
                         type: 'launch', 
@@ -39,7 +39,7 @@ class UnifiedScriptEditor {
             },
             action: {
                 color: '#569cd6',
-                icon: '👆',
+                icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 14a8 8 0 0 1-8 8"/><path d="M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1"/><path d="M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
                 commands: [
                     { 
                         type: 'click', 
@@ -110,7 +110,13 @@ class UnifiedScriptEditor {
                         params: [
                             { name: 'duration', type: 'text', placeholder: '等待时间(ms或s)', default: '1000ms' }
                         ]
-                    },
+                    }
+                ]
+            },
+            navigation: {
+                color: '#dcdcaa',
+                icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>',
+                commands: [
                     { 
                         type: 'back', 
                         label: '返回',
@@ -121,7 +127,7 @@ class UnifiedScriptEditor {
             },
             assertion: {
                 color: '#f48771',
-                icon: '✓',
+                icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/></svg>',
                 commands: [
                     { 
                         type: 'assert', 
@@ -471,7 +477,7 @@ class UnifiedScriptEditor {
                     <svg width="48" height="48" viewBox="0 0 48 48" opacity="0.3">
                         <path fill="currentColor" d="M38 8H10c-2.21 0-4 1.79-4 4v24c0 2.21 1.79 4 4 4h28c2.21 0 4-1.79 4-4V12c0-2.21-1.79-4-4-4z"/>
                     </svg>
-                    <p>点击下方按钮开始添加命令块</p>
+                    <p>在左侧Explorer中点击脚本后开始编辑</p>
                 </div>
                 ${finalInsertButton}
             `;
@@ -1154,7 +1160,8 @@ class UnifiedScriptEditor {
             application: '应用控制',
             action: '动作操作', 
             input: '输入操作',
-            control: '流程控制',
+            control: '时间控制',
+            navigation: '导航操作',
             assertion: '断言验证'
         };
         return names[key] || key;
