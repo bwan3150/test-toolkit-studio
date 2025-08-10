@@ -984,14 +984,31 @@ class UnifiedScriptEditor {
         console.log('上一次高亮行号:', this.currentHighlightedLine);
         console.log('测试运行状态:', this.isTestRunning);
         
-        // 只有在切换到不同行时才清除之前的高亮
+        // 先检查这是否是一个有效的命令行
+        let isValidCommandLine = false;
+        if (this.script.originalLines && this.script.lineToCommandMap) {
+            const originalLineIndex = tksOriginalLineNumber - 1;
+            if (originalLineIndex >= 0 && originalLineIndex < this.script.lineToCommandMap.length) {
+                isValidCommandLine = this.script.lineToCommandMap[originalLineIndex] !== null;
+            }
+        }
+        
+        if (!isValidCommandLine) {
+            console.log('✓ 非命令行请求，保持当前高亮连续性');
+            const originalLineIndex = tksOriginalLineNumber - 1;
+            console.log('行内容:', this.script.originalLines ? `"${this.script.originalLines[originalLineIndex]}"` : '无法获取');
+            console.log('=== 高亮请求结束（非命令行，保持当前高亮）===');
+            return;
+        }
+        
+        // 只有在切换到不同的有效命令行时才清除之前的高亮
         if (this.currentHighlightedLine !== tksOriginalLineNumber) {
-            console.log('✓ 切换到新行，清除之前的高亮');
+            console.log('✓ 切换到新的命令行，清除之前的高亮');
             console.log('从行', this.currentHighlightedLine, '切换到行', tksOriginalLineNumber);
             this.clearExecutionHighlight();
             this.currentHighlightedLine = tksOriginalLineNumber;
         } else {
-            console.log('✓ 同一行重复高亮请求，检查高亮是否仍然存在');
+            console.log('✓ 同一命令行重复高亮请求，检查高亮是否仍然存在');
             
             // 检查当前高亮是否仍然存在
             let highlightExists = false;
@@ -1023,34 +1040,20 @@ class UnifiedScriptEditor {
                 console.log('✓ 文本模式高亮已创建 - 显示行号:', displayLineNumber, '(TKS原始行号:', tksOriginalLineNumber, ')');
                 console.log('=== 高亮请求结束（文本模式完成）===');
             } else {
-                console.warn('✗ 无效的显示行号:', displayLineNumber);
+                console.error('✗ 有效命令行但显示行号计算失败:', displayLineNumber);
                 console.log('=== 高亮请求结束（文本模式失败）===');
             }
         } else if (this.currentMode === 'block') {
-            // 块模式：将TKS原始行号转换为命令索引
-            if (!this.script.originalLines || !this.script.lineToCommandMap) {
-                console.warn('缺少行号映射数据');
-                return;
-            }
-            
+            // 块模式：将TKS原始行号转换为命令索引（已确认是有效命令行）
             const originalLineIndex = tksOriginalLineNumber - 1;
-            if (originalLineIndex >= 0 && originalLineIndex < this.script.lineToCommandMap.length) {
-                const commandIndex = this.script.lineToCommandMap[originalLineIndex];
-                console.log('块模式 - TKS行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
-                
-                if (commandIndex !== null) {
-                    // 命令索引转换为1基索引进行高亮
-                    const blockIndex = commandIndex + 1;
-                    this.highlightExecutingBlock(blockIndex, 'executing');
-                    console.log('✓ 块模式高亮已创建 - 块索引:', blockIndex, '(命令索引:', commandIndex, ')');
-                    console.log('=== 高亮请求结束（块模式完成）===');
-                } else {
-                    console.warn('✗ TKS行号不是命令行:', tksOriginalLineNumber);
-                    console.log('=== 高亮请求结束（块模式失败）===');
-                }
-            } else {
-                console.warn('TKS行号超出范围:', tksOriginalLineNumber);
-            }
+            const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+            console.log('块模式 - TKS行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
+            
+            // 命令索引转换为1基索引进行高亮
+            const blockIndex = commandIndex + 1;
+            this.highlightExecutingBlock(blockIndex, 'executing');
+            console.log('✓ 块模式高亮已创建 - 块索引:', blockIndex, '(命令索引:', commandIndex, ')');
+            console.log('=== 高亮请求结束（块模式完成）===');
         } else {
             console.warn('高亮条件不满足:', {
                 currentMode: this.currentMode,
