@@ -465,11 +465,26 @@ class UnifiedScriptEditor {
     }
     
     setupBlockModeListeners() {
-        // 点击事件
+        // 为了彻底避免重复绑定，标记是否已经设置过监听器
+        if (this.blockListenersSetup) {
+            return; // 如果已经设置过，直接返回
+        }
+        this.blockListenersSetup = true;
+        
+        // 点击事件处理器
         this.container.addEventListener('click', (e) => {
             if (e.target.classList.contains('block-delete')) {
+                e.preventDefault();
+                e.stopPropagation();
                 const index = parseInt(e.target.dataset.index);
-                this.removeCommand(index);
+                console.log(`删除命令块，索引: ${index}, 当前命令数量: ${this.script.getCommands().length}`);
+                
+                // 验证索引有效性
+                if (index >= 0 && index < this.script.getCommands().length) {
+                    this.removeCommand(index);
+                } else {
+                    console.warn(`无效的删除索引: ${index}`);
+                }
             } else if (e.target.classList.contains('block-insert-btn') || e.target.closest('.block-insert-btn')) {
                 const insertArea = e.target.closest('.block-insert-area');
                 const insertIndex = parseInt(insertArea.dataset.insertIndex);
@@ -558,8 +573,12 @@ class UnifiedScriptEditor {
         
         // 右键菜单
         this.container.addEventListener('contextmenu', (e) => {
+            console.log('右键菜单事件触发');
             const block = e.target.closest('.workspace-block.command-block');
+            console.log('找到的块元素:', !!block);
             if (block) {
+                console.log('块索引:', block.dataset.index);
+                console.log('测试运行状态:', this.isTestRunning);
                 e.preventDefault();
                 this.showContextMenu(e.clientX, e.clientY, parseInt(block.dataset.index));
             }
@@ -586,7 +605,7 @@ class UnifiedScriptEditor {
         
         // 点击其他地方关闭菜单
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.command-menu') && !e.target.closest('.block-insert-btn')) {
+            if (!e.target.closest('.command-menu') && !e.target.closest('.block-insert-btn') && !e.target.closest('.temp-insert')) {
                 this.hideCommandMenu();
             }
             if (!e.target.closest('.context-menu')) {
@@ -597,8 +616,15 @@ class UnifiedScriptEditor {
     
     // 显示命令选择菜单
     showCommandMenu(insertArea, insertIndex) {
+        console.log(`showCommandMenu 被调用，插入位置: ${insertIndex}, 插入区域存在: ${!!insertArea}`);
+        
         if (this.isTestRunning) {
             console.log('测试运行中，无法显示命令菜单');
+            return;
+        }
+        
+        if (!insertArea) {
+            console.error('插入区域不存在，无法显示命令菜单');
             return;
         }
         
@@ -618,6 +644,8 @@ class UnifiedScriptEditor {
             });
         });
         
+        console.log(`创建了 ${menuItems.length} 个菜单项`);
+        
         const menuHtml = `
             <div class="command-menu" id="commandMenu">
                 ${menuItems.join('')}
@@ -625,8 +653,19 @@ class UnifiedScriptEditor {
         `;
         
         // 插入菜单到插入区域
+        console.log('将菜单HTML插入到插入区域');
         insertArea.insertAdjacentHTML('beforeend', menuHtml);
         this.currentMenu = insertArea.querySelector('.command-menu');
+        
+        if (this.currentMenu) {
+            console.log('菜单元素创建成功，菜单项数量:', this.currentMenu.querySelectorAll('.command-menu-item').length);
+            // 确保菜单可见
+            this.currentMenu.style.display = 'block';
+            this.currentMenu.style.visibility = 'visible';
+            console.log('菜单样式:', window.getComputedStyle(this.currentMenu).display, window.getComputedStyle(this.currentMenu).visibility);
+        } else {
+            console.error('菜单元素创建失败');
+        }
         
         // 绑定菜单项点击事件
         this.currentMenu.addEventListener('click', (e) => {
@@ -707,6 +746,8 @@ class UnifiedScriptEditor {
     
     // 显示右键菜单
     showContextMenu(x, y, blockIndex) {
+        console.log(`显示右键菜单，位置: (${x}, ${y}), 块索引: ${blockIndex}`);
+        
         // 移除现有菜单
         this.hideContextMenu();
         
@@ -722,19 +763,34 @@ class UnifiedScriptEditor {
         document.body.insertAdjacentHTML('beforeend', menuHtml);
         this.currentContextMenu = document.getElementById('blockContextMenu');
         
+        console.log('右键菜单DOM元素已创建:', !!this.currentContextMenu);
+        if (this.currentContextMenu) {
+            console.log('菜单位置:', this.currentContextMenu.style.left, this.currentContextMenu.style.top);
+            console.log('菜单尺寸:', this.currentContextMenu.offsetWidth, 'x', this.currentContextMenu.offsetHeight);
+        }
+        
         // 绑定菜单项点击事件
         this.currentContextMenu.addEventListener('click', (e) => {
+            console.log('右键菜单项被点击');
+            e.preventDefault();
+            e.stopPropagation(); // 防止事件冒泡到document，导致菜单立即隐藏
+            
             const menuItem = e.target.closest('.context-menu-item');
             if (menuItem) {
                 const action = menuItem.dataset.action;
                 const index = parseInt(menuItem.dataset.index);
+                console.log(`菜单项动作: ${action}, 索引: ${index}`);
                 
                 if (action === 'insert-below') {
                     // 显示命令选择菜单在指定块下方
-                    this.showInsertMenuAtBlock(index + 1);
+                    console.log(`尝试在块 ${index} 下方插入命令（插入位置: ${index + 1}）`);
+                    this.hideContextMenu(); // 先隐藏右键菜单
+                    
+                    // 使用 setTimeout 延迟执行，避免立即被全局点击事件隐藏
+                    setTimeout(() => {
+                        this.showInsertMenuAtBlock(index + 1);
+                    }, 50);
                 }
-                
-                this.hideContextMenu();
             }
         });
         
@@ -754,11 +810,16 @@ class UnifiedScriptEditor {
     
     // 在指定块下方显示插入菜单
     showInsertMenuAtBlock(insertIndex) {
+        console.log(`showInsertMenuAtBlock 被调用，插入位置: ${insertIndex}`);
+        
         const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block');
+        console.log(`找到 ${blocks.length} 个命令块`);
+        
         let targetBlock = null;
         
         if (insertIndex > 0 && insertIndex - 1 < blocks.length) {
             targetBlock = blocks[insertIndex - 1];
+            console.log(`目标块索引: ${insertIndex - 1}, 找到目标块:`, !!targetBlock);
         }
         
         // 创建临时插入区域
@@ -773,30 +834,54 @@ class UnifiedScriptEditor {
             </button>
         `;
         
+        console.log('临时插入区域已创建');
+        
         // 插入临时区域
         if (targetBlock) {
             targetBlock.insertAdjacentElement('afterend', tempInsertArea);
+            console.log('临时区域已插入到目标块后面');
         } else {
             this.blocksContainer.insertBefore(tempInsertArea, this.blocksContainer.firstChild);
+            console.log('临时区域已插入到容器开头');
         }
         
+        // 验证临时区域是否成功插入到DOM
+        console.log('临时区域是否在DOM中:', document.contains(tempInsertArea));
+        console.log('临时区域的父元素:', tempInsertArea.parentElement);
+        console.log('临时区域位置:', tempInsertArea.getBoundingClientRect());
+        
         // 立即显示菜单
+        console.log('准备显示命令菜单');
         this.showCommandMenu(tempInsertArea, insertIndex);
         
         // 菜单关闭时移除临时区域
         const originalHideMenu = this.hideCommandMenu.bind(this);
         this.hideCommandMenu = () => {
             originalHideMenu();
-            if (tempInsertArea.parentNode) {
+            
+            // 移除临时插入区域
+            if (tempInsertArea && tempInsertArea.parentNode) {
+                console.log('移除临时插入区域');
                 tempInsertArea.remove();
             }
-            // 恢复原始方法
+            
+            // 恢复原来的 hideCommandMenu 方法
             this.hideCommandMenu = originalHideMenu;
         };
     }
     
     removeCommand(index) {
+        console.log(`开始删除命令，索引: ${index}`);
+        const commandsBefore = this.script.getCommands().length;
+        console.log(`删除前命令数量: ${commandsBefore}`);
+        console.log('删除前的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
+        
         this.script.removeCommand(index);
+        
+        const commandsAfter = this.script.getCommands().length;
+        console.log(`删除后命令数量: ${commandsAfter}`);
+        console.log('删除后的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
+        
         this.renderBlocks();
         this.triggerChange();
     }
@@ -1697,7 +1782,17 @@ ${commandLines}`;
     }
     
     removeCommand(index) {
+        console.log(`ScriptModel.removeCommand: 尝试删除索引 ${index}`);
+        console.log(`当前commands数组长度: ${this.commands.length}`);
+        
+        if (index < 0 || index >= this.commands.length) {
+            console.error(`索引无效: ${index}, 数组长度: ${this.commands.length}`);
+            return;
+        }
+        
+        console.log(`删除的命令: ${JSON.stringify(this.commands[index])}`);
         this.commands.splice(index, 1);
+        console.log(`删除后数组长度: ${this.commands.length}`);
     }
     
     clearCommands() {
