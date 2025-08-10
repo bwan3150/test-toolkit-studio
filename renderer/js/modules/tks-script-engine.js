@@ -320,6 +320,11 @@ class TKSScriptParser {
  */
 class TKSScriptExecutor {
     constructor(projectPath, deviceId = null) {
+        if (!projectPath || typeof projectPath !== 'string') {
+            console.error('TKSScriptExecutor: 无效的项目路径:', projectPath);
+            throw new Error('TKS执行器需要有效的项目路径');
+        }
+        
         this.projectPath = projectPath;
         this.deviceId = deviceId;
         this.isRunning = false;

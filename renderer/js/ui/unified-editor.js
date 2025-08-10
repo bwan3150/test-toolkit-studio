@@ -22,14 +22,18 @@ class UnifiedScriptEditor {
                         label: '启动', 
                         tksCommand: '启动',
                         params: [
-                            { name: 'app', type: 'text', placeholder: '应用包名', default: '' }
+                            { name: 'package', type: 'text', placeholder: '应用包名', default: 'com.example.app' },
+                            { name: 'activity', type: 'text', placeholder: 'Activity名', default: '.MainActivity' }
                         ]
                     },
                     { 
                         type: 'close', 
                         label: '关闭',
                         tksCommand: '关闭',
-                        params: []
+                        params: [
+                            { name: 'package', type: 'text', placeholder: '应用包名', default: 'com.example.app' },
+                            { name: 'activity', type: 'text', placeholder: 'Activity名', default: '.MainActivity' }
+                        ]
                     }
                 ]
             },
@@ -593,7 +597,10 @@ class UnifiedScriptEditor {
     
     // 显示命令选择菜单
     showCommandMenu(insertArea, insertIndex) {
-        if (this.isTestRunning) return;
+        if (this.isTestRunning) {
+            console.log('测试运行中，无法显示命令菜单');
+            return;
+        }
         
         // 隐藏现有菜单
         this.hideCommandMenu();
@@ -1518,7 +1525,12 @@ class ScriptModel {
             // 根据命令类型分配参数
             switch (type) {
                 case 'launch':
-                    command.params.app = paramValues[0] || '';
+                    command.params.package = paramValues[0] || '';
+                    command.params.activity = paramValues[1] || '';
+                    break;
+                case 'close':
+                    command.params.package = paramValues[0] || '';
+                    command.params.activity = paramValues[1] || '';
                     break;
                 case 'click':
                 case 'clear':
@@ -1630,7 +1642,12 @@ ${commandLines}`;
         
         switch (command.type) {
             case 'launch':
-                if (command.params.app) params.push(command.params.app);
+                if (command.params.package) params.push(command.params.package);
+                if (command.params.activity) params.push(command.params.activity);
+                break;
+            case 'close':
+                if (command.params.package) params.push(command.params.package);
+                if (command.params.activity) params.push(command.params.activity);
                 break;
             case 'click':
             case 'clear':

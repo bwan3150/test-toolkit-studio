@@ -135,9 +135,43 @@ class TKSScriptRunner {
         
         try {
             // 获取项目路径
-            let projectPath = '';
-            if (scriptPath && window.AppGlobals.currentProject) {
-                projectPath = window.AppGlobals.currentProject;
+            let projectPath = window.AppGlobals.currentProject || '';
+            
+            console.log('项目路径调试信息:', {
+                'window.AppGlobals.currentProject': window.AppGlobals.currentProject,
+                'projectPath': projectPath,
+                'scriptPath': scriptPath,
+                'typeof projectPath': typeof projectPath
+            });
+            
+            if (!projectPath) {
+                // 尝试从状态栏获取项目路径
+                console.log('没有项目路径，尝试从状态栏获取');
+                const statusBarElement = document.getElementById('statusBarProjectPath');
+                if (statusBarElement && statusBarElement.parentElement.dataset.fullPath) {
+                    projectPath = statusBarElement.parentElement.dataset.fullPath;
+                    console.log('从状态栏获取的项目路径:', projectPath);
+                }
+                
+                if (!projectPath) {
+                    // 如果状态栏也没有项目路径，使用当前脚本所在目录作为临时项目根目录
+                    console.log('状态栏也没有项目路径，尝试从脚本路径推断');
+                    if (scriptPath && pathModule) {
+                        // 如果有脚本路径，向上找到最近的目录作为项目根目录
+                        projectPath = pathModule.dirname(scriptPath);
+                        // 如果脚本在cases子目录中，向上到项目根目录
+                        if (projectPath.includes('cases')) {
+                            const parts = projectPath.split(pathModule.sep);
+                            const casesIndex = parts.lastIndexOf('cases');
+                            if (casesIndex > 0) {
+                                projectPath = parts.slice(0, casesIndex).join(pathModule.sep);
+                            }
+                        }
+                        console.log('从脚本路径推断的项目路径:', projectPath);
+                    } else {
+                        throw new Error('无法确定项目路径，请先打开一个项目或保存脚本文件');
+                    }
+                }
             }
 
             window.TestcaseManagerModule.ConsoleManager.addLog('开始执行TKS脚本...', 'info');
@@ -155,7 +189,19 @@ class TKSScriptRunner {
                 });
                 
                 const pathModule = window.AppGlobals ? window.AppGlobals.path : null;
-                const scriptPath = currentTab ? currentTab.path : null;
+                let scriptPath = currentTab ? currentTab.path : null;
+                
+                // 如果没有路径，这可能是一个临时脚本，创建一个临时路径
+                if (!scriptPath && currentTab && currentTab.name) {
+                    console.log('检测到临时脚本，创建临时路径');
+                    // 获取当前项目路径
+                    const currentProject = window.AppGlobals.currentProject;
+                    if (currentProject && pathModule) {
+                        // 创建临时路径：项目/cases/temp/脚本名
+                        scriptPath = pathModule.join(currentProject, 'cases', 'temp', currentTab.name);
+                        console.log('生成临时脚本路径:', scriptPath);
+                    }
+                }
                 
                 if (pathModule && scriptPath) {
                     const pathParts = scriptPath.split(pathModule.sep);
