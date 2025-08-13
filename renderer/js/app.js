@@ -5,7 +5,7 @@
 // 1. core/globals.js - 全局变量和依赖项
 // 2. ui/notifications.js - 通知系统
 // 3. ui/navigation.js - 导航管理
-// 4. ui/editor.js - 编辑器功能
+// 4. ui/editor-manager.js - 编辑器管理功能
 // 5. ui/settings.js - 设置页面
 // 6. ui/resizable-panels.js - 可调整面板
 // 7. modules/project-manager.js - 项目管理
@@ -43,8 +43,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 2. 加载UI模块
         await loadScript('./js/ui/notifications.js');
         await loadScript('./js/ui/navigation.js');
-        // block-editor.js 已经在 index.html 中加载
-        await loadScript('./js/ui/editor.js');
+        // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
+        // 初始化编辑器管理器
+        window.initializeEditorManager();
         await loadScript('./js/ui/settings.js');
         await loadScript('./js/ui/resizable-panels.js');
         await loadScript('./js/ui/status-bar.js');
@@ -74,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 检查模块是否正确加载
         // console.log('检查模块加载状态...'); // 已禁用以减少日志
         const requiredModules = [
-            'NavigationModule', 'EditorModule', 'ResizablePanelsModule', 'StatusBarModule',
+            'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
             'LogManagerModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
@@ -95,7 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.NavigationModule.initializeNavigation();
             // console.log('✓ 导航模块已初始化'); // 已禁用以减少日志
             
-            window.EditorModule.initializeSimpleEditor();
+            // EditorManager已在HTML加载时初始化
             // console.log('✓ 编辑器模块已初始化'); // 已禁用以减少日志
             
             window.ResizablePanelsModule.initializeResizablePanels();

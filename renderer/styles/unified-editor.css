@@ -1,4 +1,19 @@
-/* 统一脚本编辑器样式 */
+/* 编辑器标签样式 */
+
+/* 编辑器工作空间 */
+.editor-workspace {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+}
+
+.editor-tab-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
 
 .unified-editor {
     display: flex;

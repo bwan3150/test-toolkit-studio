@@ -1,7 +1,7 @@
-// 统一脚本编辑器 - 支持文本和块两种渲染模式
-// 基于统一的数据模型，可以在两种模式间无缝切换
+// 编辑器标签 - 单个标签的编辑器实例
+// 支持文本和块两种渲染模式，基于统一的数据模型
 
-class UnifiedScriptEditor {
+class EditorTab {
     constructor(container) {
         this.container = container;
         this.currentMode = 'block'; // 'text' 或 'block'
@@ -146,12 +146,12 @@ class UnifiedScriptEditor {
     }
     
     init() {
-        console.log('UnifiedScriptEditor 初始化中...');
+        console.log('EditorTab 初始化中...');
         this.createEditor();
         this.setupEventListeners();
         // 默认渲染为块模式
         this.render();
-        console.log('UnifiedScriptEditor 初始化完成，当前模式:', this.currentMode);
+        console.log('EditorTab 初始化完成，当前模式:', this.currentMode);
     }
     
     createEditor() {
@@ -257,13 +257,13 @@ class UnifiedScriptEditor {
         `;
         
         // 在编辑器范围内创建状态指示器
-        const simpleEditor = document.getElementById('simpleEditor');
-        if (simpleEditor) {
+        const editorContainer = this.container;
+        if (editorContainer) {
             // 移除之前的状态指示器
             this.removeStatusIndicator();
             
             // 确保编辑器容器有相对定位
-            simpleEditor.style.position = 'relative';
+            editorContainer.style.position = 'relative';
             
             // 创建新的状态指示器，直接添加到文本编辑器视图中
             const statusIndicator = document.createElement('div');
@@ -302,7 +302,7 @@ class UnifiedScriptEditor {
                 console.error('找不到文本编辑器视图');
             }
         } else {
-            console.error('找不到 simpleEditor 容器');
+            console.error('找不到编辑器容器');
         }
         
         this.textContentEl = this.editorContainer.querySelector('#textContent');
@@ -1199,8 +1199,8 @@ class UnifiedScriptEditor {
         // 自动保存
         clearTimeout(this.saveTimeout);
         this.saveTimeout = setTimeout(() => {
-            if (window.EditorModule && window.EditorModule.saveCurrentFile) {
-                window.EditorModule.saveCurrentFile();
+            if (window.EditorManager && window.EditorManager.saveCurrentFile) {
+                window.EditorManager.saveCurrentFile();
             }
         }, 1000);
     }
@@ -1219,6 +1219,36 @@ class UnifiedScriptEditor {
         // 实现占位符逻辑
     }
     
+    insertText(text) {
+        if (this.currentMode === 'text' && this.textContentEl) {
+            // 在光标位置插入文本
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const textNode = document.createTextNode(text);
+                range.insertNode(textNode);
+                
+                // 移动光标到插入文本的末尾
+                range.setStartAfter(textNode);
+                range.setEndAfter(textNode);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                
+                // 更新脚本模型
+                const tksCode = this.textContentEl.textContent || '';
+                this.script.fromTKSCode(tksCode);
+                this.updateLineNumbers();
+                this.triggerChange();
+            } else {
+                // 如果没有选区，追加到末尾
+                this.textContentEl.textContent += text;
+                this.script.fromTKSCode(this.textContentEl.textContent);
+                this.updateLineNumbers();
+                this.triggerChange();
+            }
+        }
+    }
+    
     focus() {
         if (this.currentMode === 'text' && this.textContentEl) {
             this.textContentEl.focus();
@@ -1227,6 +1257,24 @@ class UnifiedScriptEditor {
     
     on(event, callback) {
         this.listeners.push({ type: event, callback });
+    }
+    
+    // 更新字体设置
+    updateFontSettings(fontFamily, fontSize) {
+        if (this.textContentEl) {
+            this.textContentEl.style.fontFamily = fontFamily;
+            this.textContentEl.style.fontSize = fontSize + 'px';
+        }
+        if (this.lineNumbersEl) {
+            this.lineNumbersEl.style.fontFamily = fontFamily;
+            this.lineNumbersEl.style.fontSize = fontSize + 'px';
+        }
+        // 更新CSS变量
+        const root = document.documentElement;
+        if (fontFamily !== 'var(--font-mono)') {
+            root.style.setProperty('--font-mono', fontFamily);
+        }
+        root.style.setProperty('--font-size-editor', fontSize + 'px');
     }
     
     setTestRunning(isRunning, clearHighlight = false) {
@@ -1310,8 +1358,8 @@ class UnifiedScriptEditor {
     }
     
     createRunningIndicator() {
-        const simpleEditor = document.getElementById('simpleEditor');
-        if (simpleEditor) {
+        const editorContainer = this.container;
+        if (editorContainer) {
             const statusIndicator = document.createElement('div');
             statusIndicator.className = 'editor-status-indicator running';
             statusIndicator.id = 'editorStatusIndicator';
@@ -2053,4 +2101,4 @@ ${commandLines}`;
 }
 
 // 导出到全局
-window.UnifiedScriptEditor = UnifiedScriptEditor;
+window.EditorTab = EditorTab;

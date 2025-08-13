@@ -80,9 +80,10 @@ function initializeInputFocusProtection() {
         
         if (isProtectedInput) {
             // 确保编辑器知道有其他输入活动
-            if (window.editorInstance) {
-                window.editorInstance.isOtherInputFocused = true;
-                window.editorInstance.suppressCursorRestore = true;
+            const activeEditor = window.EditorManager?.getActiveEditor();
+            if (activeEditor) {
+                activeEditor.isOtherInputFocused = true;
+                activeEditor.suppressCursorRestore = true;
             }
             
             console.log('保护输入框焦点:', target);
@@ -97,9 +98,10 @@ function initializeInputFocusProtection() {
                 if (target.contentEditable === 'false' && target.classList.contains('editing')) {
                     // 内联编辑结束
                     setTimeout(() => {
-                        if (window.editorInstance) {
-                            window.editorInstance.isOtherInputFocused = false;
-                            window.editorInstance.suppressCursorRestore = false;
+                        const activeEditor = window.EditorManager?.getActiveEditor();
+                        if (activeEditor) {
+                            activeEditor.isOtherInputFocused = false;
+                            activeEditor.suppressCursorRestore = false;
                         }
                     }, 100);
                 }
@@ -863,7 +865,7 @@ function closeTabByPath(targetPath) {
     const tabs = window.AppGlobals.openTabs;
     const tab = tabs.find(t => t.path === targetPath);
     if (tab) {
-        window.EditorModule.closeTab(tab.id);
+        window.EditorManager.closeTab(tab.id);
     }
 }
 
@@ -872,7 +874,7 @@ function closeTabsByCasePath(casePath) {
     const tabs = window.AppGlobals.openTabs.slice(); // 创建副本避免修改时的问题
     tabs.forEach(tab => {
         if (tab.path.includes(casePath)) {
-            window.EditorModule.closeTab(tab.id);
+            window.EditorManager.closeTab(tab.id);
         }
     });
 }
@@ -1034,7 +1036,7 @@ async function openFile(filePath) {
         // 检查是否已经打开
         const existingTab = window.AppGlobals.openTabs.find(tab => tab.path === filePath);
         if (existingTab) {
-            window.EditorModule.selectTab(existingTab.id);
+            window.EditorManager.selectTab(existingTab.id);
             return;
         }
         
@@ -1048,8 +1050,8 @@ async function openFile(filePath) {
         };
         
         window.AppGlobals.openTabs.push(tab);
-        window.EditorModule.createTab(tab);
-        window.EditorModule.selectTab(tabId);
+        window.EditorManager.createTab(tab);
+        window.EditorManager.selectTab(tabId);
         
         console.log('Opening file:', fileName, 'Content length:', result.content.length);
     } else {
@@ -1732,9 +1734,9 @@ window.insertElementReference = function(index, action) {
     
     // 获取当前活动的编辑器并插入文本
     const activeTab = document.querySelector('.tab.active');
-    if (activeTab && window.EditorModule) {
+    if (activeTab && window.EditorManager) {
         const tabId = activeTab.id;
-        const editor = window.EditorModule.getEditor(tabId);
+        const editor = window.EditorManager.getEditor(tabId);
         if (editor) {
             editor.insertText(scriptText + '\n');
             window.NotificationModule.showNotification(`已插入: ${scriptText}`, 'success');
