@@ -121,7 +121,7 @@ class LocatorManager {
                 return false;
             }
 
-            // 构建locator对象
+            // 构建locator对象 - 增强元素信息以支持多重匹配策略
             const locatorData = {
                 type: 'xml', // 统一添加类型字段
                 className: element.className,
@@ -133,9 +133,21 @@ class LocatorManager {
                 clickable: element.clickable,
                 focusable: element.focusable,
                 scrollable: element.scrollable,
+                enabled: element.enabled,
+                selected: element.selected,
+                checkable: element.checkable,
+                checked: element.checked,
                 xpath: element.xpath || undefined,
                 addedAt: new Date().toISOString(),
-                description: element.toAiText()
+                description: element.toAiText(),
+                // 添加元素的中心坐标作为回退方案
+                centerX: element.centerX,
+                centerY: element.centerY,
+                // 添加元素尺寸信息
+                width: element.width,
+                height: element.height,
+                // 添加匹配策略优先级提示
+                matchStrategy: this.determineMatchStrategy(element)
             };
 
             // 添加到locators对象
@@ -695,6 +707,31 @@ window.LocatorManager = {
                 }
             }
         });
+    }
+    
+    /**
+     * 确定元素的最佳匹配策略
+     * @param {Object} element - UI元素对象
+     * @returns {string} 推荐的匹配策略
+     */
+    determineMatchStrategy(element) {
+        // 优先级从高到低排序
+        if (element.resourceId && element.resourceId.trim()) {
+            return 'resourceId'; // 最稳定的匹配方式
+        }
+        if (element.contentDesc && element.contentDesc.trim()) {
+            return 'contentDesc'; // 次优选择
+        }
+        if (element.text && element.text.trim()) {
+            return 'text'; // 文本匹配
+        }
+        if (element.className && element.className.trim()) {
+            return 'className'; // 类名匹配
+        }
+        if (element.xpath && element.xpath.trim()) {
+            return 'xpath'; // XPath匹配
+        }
+        return 'coordinate'; // 最后回退到坐标匹配
     }
 };
 

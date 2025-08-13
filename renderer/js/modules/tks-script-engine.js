@@ -1109,34 +1109,72 @@ class TKSScriptExecutor {
             return await this.findElementByImage(definition);
         }
         
-        // XML元素匹配的原有逻辑
-        if (!this.currentElements) return null;
-
-        for (const element of this.currentElements) {
-            let matches = true;
-
-            // 检查各种属性
-            if (definition.text && element.text !== definition.text) {
-                matches = false;
-            }
-            if (definition.resourceId && !element.resourceId.includes(definition.resourceId)) {
-                matches = false;
-            }
-            if (definition.className && !element.className.includes(definition.className)) {
-                matches = false;
-            }
-            if (definition.contentDesc && element.contentDesc !== definition.contentDesc) {
-                matches = false;
-            }
-            if (definition.xpath && element.xpath !== definition.xpath) {
-                matches = false;
-            }
-
-            if (matches) {
-                return element;
+        // 确保有当前UI元素数据，如果没有则刷新获取
+        if (!this.currentElements) {
+            console.log('当前无UI元素数据，正在刷新获取...');
+            await this.getCurrentUIElements();
+            if (!this.currentElements) {
+                console.error('无法获取当前UI元素数据');
+                return null;
             }
         }
 
+        // XML元素匹配 - 使用多重策略，从最精确到最宽松
+        console.log(`查找XML元素，共${this.currentElements.length}个候选元素`);
+        
+        // 策略1: 精确匹配 (最高优先级)
+        const exactMatch = this.findByExactMatch(definition);
+        if (exactMatch) {
+            console.log('通过精确匹配找到元素');
+            return exactMatch;
+        }
+        
+        // 策略2: 基于resourceId的匹配 (高优先级)
+        if (definition.resourceId) {
+            const idMatch = this.findByResourceId(definition.resourceId);
+            if (idMatch) {
+                console.log('通过resourceId匹配找到元素');
+                return idMatch;
+            }
+        }
+        
+        // 策略3: 基于内容描述的匹配 (中优先级)
+        if (definition.contentDesc) {
+            const descMatch = this.findByContentDesc(definition.contentDesc);
+            if (descMatch) {
+                console.log('通过contentDesc匹配找到元素');
+                return descMatch;
+            }
+        }
+        
+        // 策略4: 基于文本内容的匹配 (中优先级)
+        if (definition.text) {
+            const textMatch = this.findByText(definition.text);
+            if (textMatch) {
+                console.log('通过text匹配找到元素');
+                return textMatch;
+            }
+        }
+        
+        // 策略5: 基于类名和位置的模糊匹配 (低优先级)
+        if (definition.className && definition.bounds) {
+            const fuzzyMatch = this.findByClassAndPosition(definition.className, definition.bounds);
+            if (fuzzyMatch) {
+                console.log('通过类名和位置模糊匹配找到元素');
+                return fuzzyMatch;
+            }
+        }
+        
+        // 策略6: 仅基于类名的匹配 (最低优先级)
+        if (definition.className) {
+            const classMatch = this.findByClassName(definition.className);
+            if (classMatch) {
+                console.log('通过className匹配找到元素');
+                return classMatch;
+            }
+        }
+
+        console.log('所有匹配策略都未找到元素');
         return null;
     }
 
@@ -1327,6 +1365,126 @@ class TKSScriptExecutor {
      */
     setScriptFileName(fileName) {
         this.scriptFileName = fileName;
+    }
+    
+    // ===== 新增的多重元素匹配策略方法 =====
+    
+    /**
+     * 精确匹配 - 所有保存的属性必须完全匹配
+     */
+    findByExactMatch(definition) {
+        return this.currentElements.find(element => {
+            return (
+                (!definition.text || element.text === definition.text) &&
+                (!definition.resourceId || element.resourceId === definition.resourceId) &&
+                (!definition.className || element.className === definition.className) &&
+                (!definition.contentDesc || element.contentDesc === definition.contentDesc) &&
+                (!definition.xpath || element.xpath === definition.xpath)
+            );
+        });
+    }
+    
+    /**
+     * 基于resourceId匹配 - 最稳定的定位方式
+     */
+    findByResourceId(resourceId) {
+        return this.currentElements.find(element => {
+            return element.resourceId && (
+                element.resourceId === resourceId ||
+                element.resourceId.includes(resourceId) ||
+                resourceId.includes(element.resourceId)
+            );
+        });
+    }
+    
+    /**
+     * 基于内容描述匹配
+     */
+    findByContentDesc(contentDesc) {
+        return this.currentElements.find(element => {
+            return element.contentDesc && (
+                element.contentDesc === contentDesc ||
+                element.contentDesc.includes(contentDesc) ||
+                contentDesc.includes(element.contentDesc)
+            );
+        });
+    }
+    
+    /**
+     * 基于文本内容匹配
+     */
+    findByText(text) {
+        return this.currentElements.find(element => {
+            return element.text && (
+                element.text === text ||
+                element.text.includes(text) ||
+                text.includes(element.text)
+            );
+        });
+    }
+    
+    /**
+     * 基于类名匹配
+     */
+    findByClassName(className) {
+        // 先尝试完全匹配
+        let match = this.currentElements.find(element => element.className === className);
+        if (match) return match;
+        
+        // 再尝试包含匹配
+        return this.currentElements.find(element => {
+            return element.className && (
+                element.className.includes(className) ||
+                className.includes(element.className)
+            );
+        });
+    }
+    
+    /**
+     * 基于类名和位置的模糊匹配 - 用于处理页面滑动后的元素定位
+     */
+    findByClassAndPosition(className, originalBounds, tolerance = 100) {
+        // 计算原始元素的中心点
+        const originalCenterX = (originalBounds[0] + originalBounds[2]) / 2;
+        const originalCenterY = (originalBounds[1] + originalBounds[3]) / 2;
+        
+        // 查找同类型的元素
+        const sameClassElements = this.currentElements.filter(element => {
+            return element.className && (
+                element.className === className ||
+                element.className.includes(className) ||
+                className.includes(element.className)
+            );
+        });
+        
+        if (sameClassElements.length === 0) return null;
+        
+        // 如果只有一个同类型元素，直接返回
+        if (sameClassElements.length === 1) {
+            return sameClassElements[0];
+        }
+        
+        // 多个同类型元素时，选择位置最接近的
+        let bestMatch = null;
+        let minDistance = Infinity;
+        
+        for (const element of sameClassElements) {
+            const centerX = (element.bounds[0] + element.bounds[2]) / 2;
+            const centerY = (element.bounds[1] + element.bounds[3]) / 2;
+            
+            const distance = Math.sqrt(
+                Math.pow(centerX - originalCenterX, 2) + 
+                Math.pow(centerY - originalCenterY, 2)
+            );
+            
+            // 在容差范围内选择最近的
+            if (distance < minDistance && distance <= tolerance) {
+                minDistance = distance;
+                bestMatch = element;
+            }
+        }
+        
+        return bestMatch;
     }
 }
 
