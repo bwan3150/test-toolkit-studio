@@ -437,11 +437,13 @@ class LocatorManager {
             const locatorData = this.locators[name];
             
             // 设置多种数据格式以支持不同的放置场景
-            // 1. 纯文本格式 - 用于文本编辑器
+            // 1. 纯文本格式 - 用于文本编辑器（新TKS语法）
             if (type === 'image') {
+                // 图片元素：@{图片名称}
                 e.dataTransfer.setData('text/plain', `@{${name}}`);
             } else {
-                e.dataTransfer.setData('text/plain', `[${name}]`);
+                // XML元素：{XML元素名称}
+                e.dataTransfer.setData('text/plain', `{${name}}`);
             }
             
             // 2. 自定义格式 - 用于代码块编辑器的高级渲染

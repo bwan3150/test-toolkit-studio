@@ -644,16 +644,17 @@ async function createNewScript(casePath, caseName) {
             // 文件不存在，可以创建
         }
         
-        // 创建默认脚本内容
+        // 创建默认脚本内容（新TKS语法）
         const defaultContent = `用例: ${caseName}
 脚本名: ${scriptName.replace('.tks', '')}
 详情: 
     appPackage: com.example.app
     appActivity: .MainActivity
 步骤:
-    点击 [190,220]
-    等待 2s
-    断言 [示例元素, 存在]
+    启动 [com.example.app, .MainActivity]
+    等待 [2000]
+    点击 [{按钮}]
+    断言 [{元素}, 存在]
 `;
         
         await fs.writeFile(scriptPath, defaultContent);
@@ -1722,13 +1723,13 @@ window.insertElementReference = function(index, action) {
     let scriptText = '';
     switch (action) {
         case 'click':
-            scriptText = `    点击 [${index}]`;
+            scriptText = `点击 [{${element.elementName || element.text || '元素'}}]`;
             break;
         case 'input':
-            scriptText = `    输入 [${index}] "文本内容"`;
+            scriptText = `输入 [{${element.elementName || element.text || '元素'}}, 文本内容]`;
             break;
         case 'assert':
-            scriptText = `    断言 [${index}, 存在]`;
+            scriptText = `断言 [{${element.elementName || element.text || '元素'}}, 存在]`;
             break;
     }
     
@@ -2674,8 +2675,8 @@ const ScreenModeManager = {
             coordinateMarker.style.left = screenX + 'px';
             coordinateMarker.style.top = screenY + 'px';
             
-            // 更新坐标标签
-            const coordText = `${deviceCoords.x},${deviceCoords.y}`;
+            // 更新坐标标签（新TKS语法格式）
+            const coordText = `{${deviceCoords.x},${deviceCoords.y}}`;
             coordinateLabel.textContent = coordText;
             
             // 复制到剪贴板

@@ -1420,14 +1420,14 @@ class TKSScriptManager {
     appPackage: com.example.app
     appActivity: com.example.app.MainActivity
 步骤:
-    启动 [com.example.app]
-    等待 [3s]
-    点击 [登录按钮]
-    输入 [用户名输入框, "testuser"]
-    输入 [密码输入框, "password123"]
-    点击 [确认按钮]
-    等待 [主页面]
-    断言 [欢迎文本, 存在]
+    启动 [com.example.app, .MainActivity]
+    等待 [3000]
+    点击 [{登录按钮}]
+    输入 [{用户名输入框}, testuser]
+    输入 [{密码输入框}, password123]
+    点击 [{确认按钮}]
+    等待 [2000]
+    断言 [{欢迎文本}, 存在]
     返回
     关闭 [com.example.app]
 `;

@@ -126,6 +126,17 @@
     color: #4ec9b0;
 }
 
+/* 新TKS语法高亮 */
+.syntax-coordinate {
+    color: #d16969;
+    font-weight: 500;
+}
+
+.syntax-xml-element {
+    color: #9cdcfe;
+    font-weight: 500;
+}
+
 /* 行高亮样式 */
 .line-highlight {
     position: absolute;

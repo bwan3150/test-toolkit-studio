@@ -590,16 +590,17 @@ async function createTestCase(record, index) {
             'utf-8'
         );
         
-        // 创建样例脚本 - 使用新的 .tks 格式
+        // 创建样例脚本 - 使用新的 TKS 语法
         const sampleScript = `用例: ${caseName}
 脚本名: script_001
 详情: 
     appPackage: ${record.appPackage || 'com.example.app'}
     appActivity: ${record.appActivity || '.MainActivity'}
 步骤:
-    点击 [190,220]
-    等待 2s
-    断言 [示例元素, 存在]
+    启动 [${record.appPackage || 'com.example.app'}, ${record.appActivity || '.MainActivity'}]
+    等待 [2000]
+    点击 [{200,400}]
+    断言 [{示例元素}, 存在]
 `;
         
         await fs.writeFile(

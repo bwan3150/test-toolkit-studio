@@ -22,8 +22,8 @@ class EditorTab {
                         label: '启动', 
                         tksCommand: '启动',
                         params: [
-                            { name: 'package', type: 'text', placeholder: '应用包名', default: 'com.example.app' },
-                            { name: 'activity', type: 'text', placeholder: 'Activity名', default: '.MainActivity' }
+                            { name: 'package', type: 'text', placeholder: '包名', default: 'com.example.test_toolkit' },
+                            { name: 'activity', type: 'text', placeholder: 'Activity名字', default: '.MainActivity' }
                         ]
                     },
                     { 
@@ -31,8 +31,8 @@ class EditorTab {
                         label: '关闭',
                         tksCommand: '关闭',
                         params: [
-                            { name: 'package', type: 'text', placeholder: '应用包名', default: 'com.example.app' },
-                            { name: 'activity', type: 'text', placeholder: 'Activity名', default: '.MainActivity' }
+                            { name: 'package', type: 'text', placeholder: '包名', default: 'com.example.app' },
+                            { name: 'activity', type: 'text', placeholder: 'Activity名字', default: '.MainActivity' }
                         ]
                     }
                 ]
@@ -46,7 +46,7 @@ class EditorTab {
                         label: '点击',
                         tksCommand: '点击',
                         params: [
-                            { name: 'target', type: 'locator', placeholder: '@{元素名}或坐标', default: '' }
+                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' }
                         ]
                     },
                     { 
@@ -54,8 +54,8 @@ class EditorTab {
                         label: '按压',
                         tksCommand: '按压',
                         params: [
-                            { name: 'target', type: 'locator', placeholder: '@{元素名}或坐标', default: '' },
-                            { name: 'duration', type: 'number', placeholder: '持续时间(ms)', default: '1000' }
+                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
+                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
                         ]
                     },
                     { 
@@ -63,9 +63,30 @@ class EditorTab {
                         label: '滑动',
                         tksCommand: '滑动',
                         params: [
-                            { name: 'from', type: 'coordinate', placeholder: '起始坐标 x,y', default: '' },
-                            { name: 'to', type: 'coordinate', placeholder: '结束坐标 x,y', default: '' },
-                            { name: 'duration', type: 'number', placeholder: '持续时间(ms)', default: '500' }
+                            { name: 'startPoint', type: 'coordinate', placeholder: '起点坐标', default: '{200,400}' },
+                            { name: 'endPoint', type: 'coordinate', placeholder: '终点坐标', default: '{300,600}' },
+                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
+                        ]
+                    },
+                    { 
+                        type: 'drag', 
+                        label: '拖动',
+                        tksCommand: '拖动',
+                        params: [
+                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
+                            { name: 'endPoint', type: 'coordinate', placeholder: '终点坐标', default: '{500,800}' },
+                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
+                        ]
+                    },
+                    { 
+                        type: 'directional_drag', 
+                        label: '定向拖动',
+                        tksCommand: '定向拖动',
+                        params: [
+                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
+                            { name: 'direction', type: 'select', placeholder: '方向', default: 'up', options: ['up', 'down', 'left', 'right'] },
+                            { name: 'distance', type: 'number', placeholder: '拖动距离', default: '300' },
+                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
                         ]
                     }
                 ]
@@ -79,8 +100,8 @@ class EditorTab {
                         label: '输入',
                         tksCommand: '输入',
                         params: [
-                            { name: 'target', type: 'locator', placeholder: '@{输入框}或坐标', default: '' },
-                            { name: 'text', type: 'text', placeholder: '输入内容', default: '' }
+                            { name: 'target', type: 'element', placeholder: '坐标/XML元素', default: '' },
+                            { name: 'text', type: 'text', placeholder: '输入的文本内容', default: '' }
                         ]
                     },
                     { 
@@ -88,7 +109,7 @@ class EditorTab {
                         label: '清理',
                         tksCommand: '清理',
                         params: [
-                            { name: 'target', type: 'locator', placeholder: '@{输入框}或坐标', default: '' }
+                            { name: 'target', type: 'element', placeholder: '坐标/XML元素', default: '' }
                         ]
                     },
                     { 
@@ -108,15 +129,9 @@ class EditorTab {
                         label: '等待',
                         tksCommand: '等待',
                         params: [
-                            { name: 'duration', type: 'text', placeholder: '等待时间(ms或s)', default: '1000ms' }
+                            { name: 'duration', type: 'number', placeholder: '等待时长/ms', default: '1000' }
                         ]
-                    }
-                ]
-            },
-            navigation: {
-                color: '#dcdcaa',
-                icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>',
-                commands: [
+                    },
                     { 
                         type: 'back', 
                         label: '返回',
@@ -134,8 +149,24 @@ class EditorTab {
                         label: '断言',
                         tksCommand: '断言',
                         params: [
-                            { name: 'target', type: 'locator', placeholder: '@{元素名}', default: '' },
+                            { name: 'target', type: 'element', placeholder: 'XML/图片元素', default: '' },
                             { name: 'condition', type: 'select', options: ['存在', '不存在', '可见', '不可见'], default: '存在' }
+                        ]
+                    }
+                ]
+            },
+            text: {
+                color: '#9cdcfe',
+                icon: '📖',
+                commands: [
+                    { 
+                        type: 'read', 
+                        label: '读取',
+                        tksCommand: '读取',
+                        params: [
+                            { name: 'target', type: 'element', placeholder: '坐标/XML元素', default: '' },
+                            { name: 'leftRight', type: 'number', placeholder: '左右扩展', default: '' },
+                            { name: 'upDown', type: 'number', placeholder: '上下扩展', default: '' }
                         ]
                     }
                 ]
@@ -1168,13 +1199,20 @@ class EditorTab {
     }
     
     highlightTKSSyntax(text) {
-        // 简化的语法高亮
+        // 新TKS语法高亮
         return text
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
-            .replace(/(启动|关闭|点击|按压|滑动|输入|清理|隐藏键盘|返回|等待|断言)/g, '<span class="syntax-action">$1</span>')
+            // 高亮命令名
+            .replace(/(启动|关闭|点击|按压|滑动|拖动|定向拖动|输入|清理|隐藏键盘|返回|等待|断言|读取)/g, '<span class="syntax-action">$1</span>')
+            // 高亮图片元素 @{图片名称}
             .replace(/@\{([^}]+)\}/g, '@{<span class="syntax-string">$1</span>}')
+            // 高亮坐标 {x,y}
+            .replace(/\{(\d+\s*,\s*\d+)\}/g, '{<span class="syntax-coordinate">$1</span>}')
+            // 高亮XML元素 {元素名称}
+            .replace(/\{([^}]+)\}/g, '{<span class="syntax-xml-element">$1</span>}')
+            // 高亮参数列表
             .replace(/\[([^\]]+)\]/g, '[<span class="syntax-param">$1</span>]');
     }
     
@@ -1871,6 +1909,7 @@ class ScriptModel {
     }
     
     parseTKSLine(line) {
+        // 新TKS语法解析: 命令名 [参数1, 参数2, ...]
         const match = line.match(/^(\S+)(?:\s+\[(.*?)\])?$/);
         if (!match) return null;
         
@@ -1884,12 +1923,15 @@ class ScriptModel {
             '点击': 'click',
             '按压': 'press',
             '滑动': 'swipe',
+            '拖动': 'drag',
+            '定向拖动': 'directional_drag',
             '输入': 'input',
             '清理': 'clear',
             '隐藏键盘': 'hide_keyboard',
             '等待': 'wait',
             '返回': 'back',
-            '断言': 'assert'
+            '断言': 'assert',
+            '读取': 'read'
         };
         
         const type = typeMap[commandName];
@@ -1901,34 +1943,69 @@ class ScriptModel {
         if (params) {
             const paramValues = this.parseParams(params);
             
-            // 根据命令类型分配参数
+            // 根据新TKS语法规则分配参数
             switch (type) {
                 case 'launch':
+                    // 启动 [包名, Activity名字]
                     command.params.package = paramValues[0] || '';
                     command.params.activity = paramValues[1] || '';
                     break;
                 case 'close':
+                    // 关闭 [包名, Activity名字]
                     command.params.package = paramValues[0] || '';
                     command.params.activity = paramValues[1] || '';
                     break;
                 case 'click':
-                case 'clear':
+                    // 点击 [坐标/XML/图片元素]
                     command.params.target = paramValues[0] || '';
                     break;
                 case 'press':
+                    // 按压 [坐标/XML/图片元素, 持续时长/ms]
                     command.params.target = paramValues[0] || '';
                     command.params.duration = paramValues[1] || '1000';
                     break;
+                case 'swipe':
+                    // 滑动 [起点坐标, 终点坐标, 持续时长/ms]
+                    command.params.startPoint = paramValues[0] || '';
+                    command.params.endPoint = paramValues[1] || '';
+                    command.params.duration = paramValues[2] || '1000';
+                    break;
+                case 'drag':
+                    // 拖动 [起点, 终点坐标, 持续时长]
+                    command.params.target = paramValues[0] || '';
+                    command.params.endPoint = paramValues[1] || '';
+                    command.params.duration = paramValues[2] || '1000';
+                    break;
+                case 'directional_drag':
+                    // 定向拖动 [元素, 方向, 距离, 持续时长]
+                    command.params.target = paramValues[0] || '';
+                    command.params.direction = paramValues[1] || 'up';
+                    command.params.distance = paramValues[2] || '300';
+                    command.params.duration = paramValues[3] || '1000';
+                    break;
                 case 'input':
+                    // 输入 [坐标/XML元素, 文本内容]
                     command.params.target = paramValues[0] || '';
                     command.params.text = paramValues[1] || '';
                     break;
+                case 'clear':
+                    // 清理 [坐标/XML元素]
+                    command.params.target = paramValues[0] || '';
+                    break;
                 case 'wait':
-                    command.params.duration = paramValues[0] || '1000ms';
+                    // 等待 [等待时长/ms]
+                    command.params.duration = paramValues[0] || '1000';
                     break;
                 case 'assert':
+                    // 断言 [XML/图片元素, 存在/不存在/可见/不可见]
                     command.params.target = paramValues[0] || '';
                     command.params.condition = paramValues[1] || '存在';
+                    break;
+                case 'read':
+                    // 读取 [坐标/XML元素, 左右扩展, 上下扩展] 或 读取 [XML元素]
+                    command.params.target = paramValues[0] || '';
+                    command.params.leftRight = paramValues[1] || '';
+                    command.params.upDown = paramValues[2] || '';
                     break;
             }
         }
@@ -1941,18 +2018,27 @@ class ScriptModel {
         
         const parts = [];
         let current = '';
-        let depth = 0;
+        let braceDepth = 0;
+        let inString = false;
         
         for (let i = 0; i < paramsStr.length; i++) {
             const char = paramsStr[i];
+            const nextChar = paramsStr[i + 1];
             
-            if (char === '@' && paramsStr[i + 1] === '{') {
-                depth++;
-            } else if (char === '}' && depth > 0) {
-                depth--;
+            // 处理花括号嵌套 (坐标、XML元素、图片元素)
+            if (char === '{') {
+                braceDepth++;
+            } else if (char === '}') {
+                braceDepth--;
             }
             
-            if (char === ',' && depth === 0) {
+            // 检测字符串内容 (简单处理，假设没有嵌套引号)
+            if (char === '"' || char === "'") {
+                inString = !inString;
+            }
+            
+            // 只在非嵌套状态下分割参数
+            if (char === ',' && braceDepth === 0 && !inString) {
                 parts.push(current.trim());
                 current = '';
             } else {
@@ -1975,8 +2061,10 @@ class ScriptModel {
     appPackage: com.example.app
     appActivity: .MainActivity
 步骤:
-    启动 [com.example.app]
-    等待 [1000ms]`;
+    启动 [com.example.app, .MainActivity]
+    等待 [2000]
+    点击 [{示例按钮}]
+    断言 [{示例元素}, 存在]`;
         }
         
         const commandLines = this.commands.map(command => {
@@ -2006,12 +2094,15 @@ ${commandLines}`;
             'click': '点击',
             'press': '按压',
             'swipe': '滑动',
+            'drag': '拖动',
+            'directional_drag': '定向拖动',
             'input': '输入',
             'clear': '清理',
             'hide_keyboard': '隐藏键盘',
             'wait': '等待',
             'back': '返回',
-            'assert': '断言'
+            'assert': '断言',
+            'read': '读取'
         };
         return nameMap[type] || type;
     }
@@ -2021,31 +2112,77 @@ ${commandLines}`;
         
         switch (command.type) {
             case 'launch':
+                // 启动 [包名, Activity名字]
                 if (command.params.package) params.push(command.params.package);
                 if (command.params.activity) params.push(command.params.activity);
                 break;
             case 'close':
+                // 关闭 [包名, Activity名字]
                 if (command.params.package) params.push(command.params.package);
                 if (command.params.activity) params.push(command.params.activity);
                 break;
             case 'click':
             case 'clear':
+                // 点击/清理 [坐标/XML/图片元素]
                 if (command.params.target) params.push(command.params.target);
                 break;
             case 'press':
+                // 按压 [坐标/XML/图片元素, 持续时长/ms]
                 if (command.params.target) params.push(command.params.target);
-                if (command.params.duration) params.push(command.params.duration);
+                if (command.params.duration && command.params.duration !== '1000') {
+                    params.push(command.params.duration);
+                }
+                break;
+            case 'swipe':
+                // 滑动 [起点坐标, 终点坐标, 持续时长/ms]
+                if (command.params.startPoint) params.push(command.params.startPoint);
+                if (command.params.endPoint) params.push(command.params.endPoint);
+                if (command.params.duration && command.params.duration !== '1000') {
+                    params.push(command.params.duration);
+                }
+                break;
+            case 'drag':
+                // 拖动 [起点, 终点坐标, 持续时长]
+                if (command.params.target) params.push(command.params.target);
+                if (command.params.endPoint) params.push(command.params.endPoint);
+                if (command.params.duration && command.params.duration !== '1000') {
+                    params.push(command.params.duration);
+                }
+                break;
+            case 'directional_drag':
+                // 定向拖动 [元素, 方向, 距离, 持续时长]
+                if (command.params.target) params.push(command.params.target);
+                if (command.params.direction) params.push(command.params.direction);
+                if (command.params.distance) params.push(command.params.distance);
+                if (command.params.duration && command.params.duration !== '1000') {
+                    params.push(command.params.duration);
+                }
                 break;
             case 'input':
+                // 输入 [坐标/XML元素, 文本内容]
                 if (command.params.target) params.push(command.params.target);
                 if (command.params.text) params.push(command.params.text);
                 break;
             case 'wait':
-                if (command.params.duration) params.push(command.params.duration);
+                // 等待 [等待时长/ms]
+                if (command.params.duration && command.params.duration !== '1000') {
+                    params.push(command.params.duration);
+                }
                 break;
             case 'assert':
+                // 断言 [XML/图片元素, 存在/不存在/可见/不可见]
                 if (command.params.target) params.push(command.params.target);
-                if (command.params.condition) params.push(command.params.condition);
+                if (command.params.condition) {
+                    params.push(command.params.condition);
+                } else {
+                    params.push('存在'); // 默认条件
+                }
+                break;
+            case 'read':
+                // 读取 [坐标/XML元素, 左右扩展, 上下扩展] 或 读取 [XML元素]
+                if (command.params.target) params.push(command.params.target);
+                if (command.params.leftRight) params.push(command.params.leftRight);
+                if (command.params.upDown) params.push(command.params.upDown);
                 break;
         }
         
