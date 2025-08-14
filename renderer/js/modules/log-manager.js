@@ -16,6 +16,7 @@ class LogManager {
         this.filters = {
             level: 'verbose', // verbose, debug, info, warn, error, assert
             tag: '',
+            tags: [], // 支持多个tag过滤
             package: '',
             text: ''
         };
@@ -43,6 +44,42 @@ class LogManager {
         await this.refreshDeviceList();
     }
 
+    // 解析快速过滤语法
+    parseQuickFilter(filterString) {
+        const filters = {
+            package: '',
+            tags: [],
+            text: ''
+        };
+        
+        if (!filterString) return filters;
+        
+        // 解析 package:xxx tag:xxx text:xxx 格式
+        const packageMatch = filterString.match(/package:([^\s]+)/i);
+        if (packageMatch) {
+            filters.package = packageMatch[1];
+        }
+        
+        // 解析多个tag
+        const tagMatches = filterString.matchAll(/tag:([^\s]+)/gi);
+        for (const match of tagMatches) {
+            filters.tags.push(match[1]);
+        }
+        
+        // 解析text
+        const textMatch = filterString.match(/text:([^\s]+)/i);
+        if (textMatch) {
+            filters.text = textMatch[1];
+        }
+        
+        // 如果没有任何关键字，将整个字符串作为text搜索
+        if (!packageMatch && !filters.tags.length && !textMatch) {
+            filters.text = filterString.trim();
+        }
+        
+        return filters;
+    }
+
     // 设置事件监听器
     setupEventListeners() {
         // 设备选择
@@ -58,6 +95,9 @@ class LogManager {
         if (packageInput) {
             packageInput.addEventListener('input', (e) => {
                 this.filters.package = e.target.value;
+                // 清空Quick Filter，因为用户正在使用独立输入框
+                const quickFilterInput = document.getElementById('logQuickFilterInput');
+                if (quickFilterInput) quickFilterInput.value = '';
                 this.applyFilters();
             });
         }
@@ -67,6 +107,12 @@ class LogManager {
         if (tagInput) {
             tagInput.addEventListener('input', (e) => {
                 this.filters.tag = e.target.value;
+                // 处理多个tag（用逗号分隔）
+                const tags = e.target.value.split(',').map(t => t.trim()).filter(t => t);
+                this.filters.tags = tags;
+                // 清空Quick Filter，因为用户正在使用独立输入框
+                const quickFilterInput = document.getElementById('logQuickFilterInput');
+                if (quickFilterInput) quickFilterInput.value = '';
                 this.applyFilters();
             });
         }
@@ -76,6 +122,9 @@ class LogManager {
         if (textInput) {
             textInput.addEventListener('input', (e) => {
                 this.filters.text = e.target.value;
+                // 清空Quick Filter，因为用户正在使用独立输入框
+                const quickFilterInput = document.getElementById('logQuickFilterInput');
+                if (quickFilterInput) quickFilterInput.value = '';
                 this.applyFilters();
             });
         }
@@ -89,7 +138,18 @@ class LogManager {
             });
         }
 
-        // 移除了旧的过滤器输入框，现在使用单独的输入框
+        // 快速过滤输入框 - 输入即生效
+        const quickFilterInput = document.getElementById('logQuickFilterInput');
+        if (quickFilterInput) {
+            // 使用防抖处理输入事件
+            let debounceTimer = null;
+            quickFilterInput.addEventListener('input', (e) => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    this.applyQuickFilter(e.target.value, false); // false表示不更新其他输入框
+                }, 300); // 300ms防抖
+            });
+        }
 
         // 清空按钮
         const clearBtn = document.getElementById('clearLogBtn');
@@ -221,11 +281,13 @@ class LogManager {
 
     // 处理日志数据
     handleLogData(data) {
+        console.log('接收到日志数据:', data); // 调试信息
         const lines = data.split('\n');
         lines.forEach(line => {
             if (line.trim()) {
                 const logEntry = this.parseLogLine(line);
                 if (logEntry) {
+                    console.log('解析的日志条目:', logEntry); // 调试信息
                     this.addLogEntry(logEntry);
                 }
             }
@@ -278,7 +340,10 @@ class LogManager {
 
         // 如果条目通过过滤器，添加到显示
         if (this.shouldShowEntry(entry)) {
+            console.log('添加日志到视图:', entry); // 调试信息
             this.appendLogToView(entry);
+        } else {
+            console.log('日志被过滤:', entry); // 调试信息
         }
     }
 
@@ -289,9 +354,18 @@ class LogManager {
             return false;
         }
 
-        // 检查标签过滤
+        // 检查标签过滤（支持单个tag或多个tags）
         if (this.filters.tag && !entry.tag.toLowerCase().includes(this.filters.tag.toLowerCase())) {
             return false;
+        }
+        
+        // 检查多个tags（所有tags都必须匹配）
+        if (this.filters.tags && this.filters.tags.length > 0) {
+            for (const tag of this.filters.tags) {
+                if (!entry.tag.toLowerCase().includes(tag.toLowerCase())) {
+                    return false;
+                }
+            }
         }
 
         // 检查包名过滤（在tag或message中搜索）
@@ -312,7 +386,11 @@ class LogManager {
     // 添加日志到视图
     appendLogToView(entry) {
         const logContainer = document.getElementById('logContainer');
-        if (!logContainer) return;
+        if (!logContainer) {
+            console.error('找不到logContainer元素！');
+            return;
+        }
+        console.log('logContainer找到，准备添加日志');
 
         const logElement = document.createElement('div');
         logElement.className = `log-entry log-${entry.level}`;
@@ -364,7 +442,35 @@ class LogManager {
         }
     }
 
-    // 移除了旧的过滤器解析方法，现在使用独立的输入框
+    // 应用快速过滤
+    applyQuickFilter(filterString, updateOtherInputs = true) {
+        const parsed = this.parseQuickFilter(filterString);
+        
+        // 如果Quick Filter为空，不覆盖独立输入框的值
+        if (!filterString.trim()) {
+            // Quick Filter清空时，保持使用独立输入框的值
+            return;
+        }
+        
+        // 更新过滤器
+        this.filters.package = parsed.package;
+        this.filters.tags = parsed.tags;
+        this.filters.text = parsed.text;
+        
+        // 可选：同时更新独立输入框的值（保持同步）
+        if (updateOtherInputs) {
+            const packageInput = document.getElementById('logPackageInput');
+            const tagInput = document.getElementById('logTagInput');
+            const textInput = document.getElementById('logTextInput');
+            
+            if (packageInput) packageInput.value = parsed.package;
+            if (tagInput) tagInput.value = parsed.tags.join(', ');
+            if (textInput) textInput.value = parsed.text;
+        }
+        
+        // 应用过滤
+        this.applyFilters();
+    }
 
     // 应用过滤器
     applyFilters() {

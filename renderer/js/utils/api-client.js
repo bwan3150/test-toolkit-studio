@@ -6,7 +6,9 @@
 // 3. 统一错误处理
 // 4. 请求拦截和响应拦截
 
-const { ipcRenderer } = require('electron');
+// 从全局获取ipcRenderer，避免重复声明
+const getGlobals = () => window.AppGlobals;
+const getIpcRenderer = () => getGlobals().ipcRenderer;
 
 // API客户端类
 class ApiClient {
@@ -19,7 +21,7 @@ class ApiClient {
     // 初始化基础URL
     async initialize() {
         try {
-            this.baseURL = await ipcRenderer.invoke('store-get', 'base_url');
+            this.baseURL = await getIpcRenderer().invoke('store-get', 'base_url');
             return this.baseURL;
         } catch (error) {
             console.error('初始化API客户端失败:', error);
@@ -30,7 +32,7 @@ class ApiClient {
     // 获取访问token
     async getAccessToken() {
         try {
-            return await ipcRenderer.invoke('store-get', 'access_token');
+            return await getIpcRenderer().invoke('store-get', 'access_token');
         } catch (error) {
             console.error('获取访问token失败:', error);
             return null;
@@ -40,7 +42,7 @@ class ApiClient {
     // 检查token是否过期
     async isTokenExpired() {
         try {
-            const tokenExpiry = await ipcRenderer.invoke('store-get', 'token_expiry');
+            const tokenExpiry = await getIpcRenderer().invoke('store-get', 'token_expiry');
             if (!tokenExpiry) return true;
             
             const now = new Date();
@@ -64,7 +66,7 @@ class ApiClient {
             }
 
             this.isRefreshing = true;
-            this.refreshPromise = ipcRenderer.invoke('refresh-token');
+            this.refreshPromise = getIpcRenderer().invoke('refresh-token');
             
             const result = await this.refreshPromise;
             
@@ -91,7 +93,7 @@ class ApiClient {
     async handleAuthFailure() {
         try {
             // 清除本地token
-            await ipcRenderer.invoke('logout');
+            await getIpcRenderer().invoke('logout');
             
             // 显示通知
             if (window.NotificationModule) {
@@ -102,7 +104,7 @@ class ApiClient {
             }
             
             // 跳转到登录页面
-            await ipcRenderer.invoke('navigate-to-login');
+            await getIpcRenderer().invoke('navigate-to-login');
         } catch (error) {
             console.error('处理认证失败时出错:', error);
         }
