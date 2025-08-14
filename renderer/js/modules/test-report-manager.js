@@ -423,49 +423,63 @@
         }
     }
     
-    // Draw fixed indicator
+    // Draw fixed indicator with simpler style
     function drawFixedIndicator(ctx, severity, x, y) {
         const labels = {
             critical: 'Critical',
-            high: 'High',
+            high: 'High', 
             moderate: 'Moderate',
             low: 'Low',
             info: 'Info'
         };
         
         const text = labels[severity] || severity;
-        const padding = 8;
         
+        ctx.save();
+        
+        // Modern badge style (like GitHub labels)
         ctx.font = '11px var(--font-family)';
-        const textWidth = ctx.measureText(text).width;
+        const metrics = ctx.measureText(text);
+        const textWidth = metrics.width;
         
-        // Calculate box dimensions
-        const boxWidth = textWidth + padding * 3 + 8; // padding + dot size + spacing
-        const boxHeight = 24;
-        const radius = 3;
+        // Badge dimensions
+        const badgeHeight = 22;
+        const badgePadding = 8;
+        const badgeWidth = textWidth + badgePadding * 2;
+        const borderRadius = 4;
         
-        // Draw indicator background
-        ctx.fillStyle = 'rgba(45, 45, 48, 0.9)';
-        ctx.strokeStyle = SEVERITY_COLORS[severity];
-        ctx.lineWidth = 1.5;
+        // Background with gradient effect
+        const gradient = ctx.createLinearGradient(x, y, x, y + badgeHeight);
+        const baseColor = SEVERITY_COLORS[severity];
+        gradient.addColorStop(0, baseColor);
+        gradient.addColorStop(1, baseColor + 'dd'); // Slightly darker at bottom
         
-        // Simple rounded rectangle
+        // Draw badge background
+        ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.roundRect(x, y, boxWidth, boxHeight, radius);
+        ctx.roundRect(x, y, badgeWidth, badgeHeight, borderRadius);
         ctx.fill();
+        
+        // Add subtle inner shadow effect
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = 0.5;
         ctx.stroke();
         
-        // Draw colored dot
-        ctx.fillStyle = SEVERITY_COLORS[severity];
-        ctx.beginPath();
-        ctx.arc(x + padding + 4, y + boxHeight / 2, 3, 0, Math.PI * 2);
-        ctx.fill();
+        // Draw text (white with shadow for contrast)
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 1;
+        ctx.shadowOffsetY = 1;
         
-        // Draw text (properly aligned)
-        ctx.fillStyle = '#cccccc';
+        // Center text both horizontally and vertically
+        const textX = x + badgeWidth / 2;
+        const textY = y + badgeHeight / 2;
+        
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(text, x + padding + 12, y + boxHeight / 2);
-        ctx.textBaseline = 'alphabetic'; // Reset to default
+        ctx.fillText(text, textX, textY);
+        
+        ctx.restore();
     }
     
     // Refresh report data
