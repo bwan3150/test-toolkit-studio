@@ -10,6 +10,7 @@ class EditorTab {
         this.saveTimeout = null;
         this.isTestRunning = false;
         this.currentHighlightedLine = null; // 跟踪当前高亮的行号
+        this.uniqueId = `editor-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`; // 生成唯一ID
         
         // 块定义
         this.blockDefinitions = {
@@ -186,16 +187,17 @@ class EditorTab {
     }
     
     createEditor() {
+        const containerId = `${this.uniqueId}-container`;
         this.container.innerHTML = `
             <div class="unified-editor">
                 <!-- 统一的内容容器 -->
-                <div class="editor-content-container" id="editorContainer">
+                <div class="editor-content-container" id="${containerId}">
                     <!-- 内容将根据模式动态渲染 -->
                 </div>
             </div>
         `;
         
-        this.editorContainer = document.getElementById('editorContainer');
+        this.editorContainer = this.container.querySelector(`#${containerId}`);
     }
     
     setupEventListeners() {
@@ -278,11 +280,14 @@ class EditorTab {
         console.log('渲染文本模式...');
         const tksCode = this.script.toTKSCode();
         
+        const lineNumbersId = `${this.uniqueId}-lines`;
+        const textContentId = `${this.uniqueId}-text`;
+        
         this.editorContainer.innerHTML = `
             <div class="text-editor-view">
                 <div class="text-editor-wrapper">
-                    <div class="line-numbers" id="lineNumbers"></div>
-                    <div class="text-content" id="textContent" contenteditable="true">${this.highlightTKSSyntax(tksCode)}</div>
+                    <div class="line-numbers" id="${lineNumbersId}"></div>
+                    <div class="text-content" id="${textContentId}" contenteditable="true">${this.highlightTKSSyntax(tksCode)}</div>
                 </div>
             </div>
         `;
@@ -336,8 +341,8 @@ class EditorTab {
             console.error('找不到编辑器容器');
         }
         
-        this.textContentEl = this.editorContainer.querySelector('#textContent');
-        this.lineNumbersEl = this.editorContainer.querySelector('#lineNumbers');
+        this.textContentEl = this.editorContainer.querySelector('.text-content');
+        this.lineNumbersEl = this.editorContainer.querySelector('.line-numbers');
         
         console.log('文本模式DOM元素:', {
             textContentEl: this.textContentEl,
@@ -353,10 +358,12 @@ class EditorTab {
     }
     
     renderBlockMode() {
+        const blocksContainerId = `${this.uniqueId}-blocks`;
+        
         this.editorContainer.innerHTML = `
             <div class="block-editor-view">
                 <div class="blocks-workspace">
-                    <div class="blocks-container" id="blocksContainer"></div>
+                    <div class="blocks-container" id="${blocksContainerId}"></div>
                 </div>
             </div>
         `;
@@ -364,7 +371,7 @@ class EditorTab {
         // 在块模式下，移除状态指示器
         this.removeStatusIndicator();
         
-        this.blocksContainer = this.editorContainer.querySelector('#blocksContainer');
+        this.blocksContainer = this.editorContainer.querySelector('.blocks-container');
         
         console.log('块编辑器DOM元素:', {
             editorContainer: this.editorContainer,
@@ -644,7 +651,7 @@ class EditorTab {
     
     setupTextModeListeners() {
         // 获取文本内容元素
-        this.textContentEl = document.getElementById('textContent');
+        this.textContentEl = this.editorContainer.querySelector('.text-content');
         if (!this.textContentEl) {
             console.warn('textContent元素未找到');
             return;
@@ -1036,8 +1043,15 @@ class EditorTab {
             </div>
         `;
         
-        document.body.insertAdjacentHTML('beforeend', menuHtml);
-        this.currentContextMenu = document.getElementById('blockContextMenu');
+        // 移除旧的菜单
+        if (this.currentContextMenu) {
+            this.currentContextMenu.remove();
+        }
+        
+        const menuId = `${this.uniqueId}-context-menu`;
+        const updatedMenuHtml = menuHtml.replace('id="blockContextMenu"', `id="${menuId}"`);
+        document.body.insertAdjacentHTML('beforeend', updatedMenuHtml);
+        this.currentContextMenu = document.querySelector(`#${menuId}`);
         
         console.log('右键菜单DOM元素已创建:', !!this.currentContextMenu);
         if (this.currentContextMenu) {
