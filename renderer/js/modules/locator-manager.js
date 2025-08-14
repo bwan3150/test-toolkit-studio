@@ -707,7 +707,7 @@ window.LocatorManager = {
                 }
             }
         });
-    }
+    },
     
     /**
      * 确定元素的最佳匹配策略

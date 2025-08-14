@@ -16,6 +16,7 @@ const store = new Store();
 
 let mainWindow;
 let isAuthenticated = false;
+let tokenCheckInterval = null;
 
 // Helper function to get built-in ADB path
 function getBuiltInAdbPath() {
@@ -73,11 +74,24 @@ function createWindow() {
   // Check if user has valid token
   const token = store.get('access_token');
   const tokenExpiry = store.get('token_expiry');
+  const refreshToken = store.get('refresh_token');
   
-  if (token && tokenExpiry && new Date(tokenExpiry) > new Date()) {
+  // 检查token是否存在且未过期（给5分钟缓冲时间）
+  const bufferTime = 5 * 60 * 1000; // 5分钟
+  const isTokenValid = token && tokenExpiry && 
+    new Date(new Date(tokenExpiry).getTime() - bufferTime) > new Date();
+  
+  if (isTokenValid) {
     isAuthenticated = true;
     mainWindow.loadFile('renderer/index.html');
+    // 启动定期token检查
+    startTokenCheck();
+  } else if (refreshToken) {
+    // 有refresh token，尝试自动刷新
+    console.log('Token即将过期或已过期，尝试自动刷新...');
+    tryRefreshTokenOnStartup();
   } else {
+    // 没有有效token，显示登录页面
     mainWindow.loadFile('renderer/login.html');
   }
 
@@ -211,6 +225,124 @@ function createWindow() {
   });
 }
 
+// 启动时尝试刷新token
+async function tryRefreshTokenOnStartup() {
+  try {
+    const result = await refreshTokenInternal();
+    
+    if (result.success) {
+      console.log('启动时token刷新成功');
+      isAuthenticated = true;
+      mainWindow.loadFile('renderer/index.html');
+      // 启动定期token检查
+      startTokenCheck();
+    } else {
+      console.log('启动时token刷新失败，跳转到登录页面');
+      mainWindow.loadFile('renderer/login.html');
+    }
+  } catch (error) {
+    console.error('启动时token刷新异常:', error);
+    mainWindow.loadFile('renderer/login.html');
+  }
+}
+
+// 内部token刷新函数（避免重复代码）
+async function refreshTokenInternal() {
+  try {
+    const axios = require('axios');
+    const refreshToken = store.get('refresh_token');
+    const baseUrl = store.get('base_url');
+    
+    if (!refreshToken || !baseUrl) {
+      return { success: false, error: '缺少refresh token或base URL' };
+    }
+    
+    const response = await axios.post(`${baseUrl}/api/auth/refresh`, 
+      { refresh_token: refreshToken },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    const data = response.data;
+    
+    // 更新tokens
+    store.set('access_token', data.access_token);
+    store.set('refresh_token', data.refresh_token);
+    store.set('token_expiry', new Date(Date.now() + data.expires_in * 1000).toISOString());
+    
+    return { success: true, data };
+  } catch (error) {
+    console.error('刷新token失败:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+// 启动定期token检查
+function startTokenCheck() {
+  // 清除之前的检查间隔
+  if (tokenCheckInterval) {
+    clearInterval(tokenCheckInterval);
+  }
+  
+  // 每10分钟检查一次token状态
+  tokenCheckInterval = setInterval(async () => {
+    try {
+      if (!isAuthenticated) {
+        return;
+      }
+      
+      const tokenExpiry = store.get('token_expiry');
+      if (!tokenExpiry) {
+        console.log('没有token过期时间，停止定期检查');
+        stopTokenCheck();
+        return;
+      }
+      
+      const now = new Date();
+      const expiry = new Date(tokenExpiry);
+      const bufferTime = 5 * 60 * 1000; // 5分钟缓冲
+      
+      // 如果token将在5分钟内过期，尝试刷新
+      if (now.getTime() > (expiry.getTime() - bufferTime)) {
+        console.log('定期检查发现token即将过期，正在刷新...');
+        
+        const result = await refreshTokenInternal();
+        if (result.success) {
+          console.log('定期token刷新成功');
+          // 通知渲染进程token已刷新
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('token-refreshed');
+          }
+        } else {
+          console.log('定期token刷新失败，将跳转到登录页面');
+          isAuthenticated = false;
+          stopTokenCheck();
+          
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.loadFile('renderer/login.html');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('定期token检查异常:', error);
+    }
+  }, 10 * 60 * 1000); // 10分钟
+  
+  console.log('已启动定期token检查（每10分钟）');
+}
+
+// 停止定期token检查
+function stopTokenCheck() {
+  if (tokenCheckInterval) {
+    clearInterval(tokenCheckInterval);
+    tokenCheckInterval = null;
+    console.log('已停止定期token检查');
+  }
+}
+
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
@@ -249,6 +381,8 @@ ipcMain.handle('login', async (event, credentials) => {
     store.set('token_expiry', new Date(Date.now() + data.expires_in * 1000).toISOString());
     
     isAuthenticated = true;
+    // 启动定期token检查
+    startTokenCheck();
     return { success: true, data };
   } catch (error) {
     return { success: false, error: error.message };
@@ -256,31 +390,7 @@ ipcMain.handle('login', async (event, credentials) => {
 });
 
 ipcMain.handle('refresh-token', async () => {
-  try {
-    const axios = require('axios');
-    const refreshToken = store.get('refresh_token');
-    const baseUrl = store.get('base_url');
-    
-    const response = await axios.post(`${baseUrl}/api/auth/refresh`, 
-      { refresh_token: refreshToken },
-      {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-    
-    const data = response.data;
-    
-    // Update tokens
-    store.set('access_token', data.access_token);
-    store.set('refresh_token', data.refresh_token);
-    store.set('token_expiry', new Date(Date.now() + data.expires_in * 1000).toISOString());
-    
-    return { success: true, data };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
+  return await refreshTokenInternal();
 });
 
 ipcMain.handle('logout', async () => {
@@ -288,6 +398,8 @@ ipcMain.handle('logout', async () => {
   store.delete('refresh_token');
   store.delete('token_expiry');
   isAuthenticated = false;
+  // 停止定期token检查
+  stopTokenCheck();
   return { success: true };
 });
 

@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
+        await loadScript('./js/utils/api-client.js');
         await loadScript('./js/utils/keyboard-shortcuts.js');
         await loadScript('./js/utils/ipc-handlers.js');
         // console.log('✓ 工具模块已加载'); // 已禁用以减少日志
@@ -79,10 +80,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
             'LogManagerModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
+            // ApiClient 是可选的，稍后单独检查
         ];
         
         for (const moduleName of requiredModules) {
             if (!window[moduleName]) {
+                console.error(`模块 ${moduleName} 未正确加载`);
+                console.log('当前可用的window属性:', Object.keys(window).filter(key => key.includes('Module') || key.includes('Client')));
                 throw new Error(`模块 ${moduleName} 未正确加载`);
             }
             // console.log(`✓ ${moduleName} 已加载`); // 已禁用以减少日志
@@ -139,6 +143,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 初始化工具功能
         try {
+            // 初始化API客户端（如果已加载）
+            if (window.ApiClient) {
+                await window.ApiClient.initialize();
+                // console.log('✓ API客户端已初始化'); // 已禁用以减少日志
+            } else {
+                console.warn('ApiClient模块未加载，跳过初始化');
+            }
+            
             window.KeyboardShortcutsModule.initializeKeyboardShortcuts();
             // console.log('✓ 快捷键模块已初始化'); // 已禁用以减少日志
             

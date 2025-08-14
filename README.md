@@ -21,12 +21,12 @@ test-toolkit-studio/
 │   ├── index.html      # 四合一主界面
 │   ├── login.html      # 登录页
 │   ├── styles/         # css
-│   │   ├── common.css  
-│   │   ├── login.css   
-│   │   └── main.css    
+│   │   ├── common.css
+│   │   ├── login.css
+│   │   └── main.css
 │   └── js/             # JS逻辑
-│       ├── login.js    
-│       └── app.js      
+│       ├── login.js
+│       └── app.js
 ├── assets/             # 静态资源
 └── resouces/           # Android SDK等环境资源
 ```
@@ -38,15 +38,15 @@ test-toolkit-studio/
 ```
 project_root/
 ├── cases/              # 测试用例文件夹
-│   └── case_001/       
+│   └── case_001/
 │       ├── config.json # 此用例配置
 │       ├── result/     # 此用例下脚本运行log结果存放处
 │       └── script/     # 测试脚本
 │           └── script_001.yaml
 ├── devices/            # 设备配置
 ├── locator/            # 元素定位材料
-│   ├── element.json    # xml 元素定位信息 
-│   └── img/            # 裁切截图 图像识别元素定位信息 
+│   ├── element.json    # xml 元素定位信息
+│   └── img/            # 裁切截图 图像识别元素定位信息
 ├── testcase_map.json   # 用例映射表
 ├── testcase_sheet.csv  # 用例总表
 └── workarea/           # 当前工作区
@@ -68,130 +68,25 @@ project_root/
 
 ## Toolkit script
 
-本项目使用自定义自动化测试脚本语言
+本项目使用自定义自动化测试脚本语言, 对应脚本文件后缀为`.tks`
 
-### 语法
-1. 点击: 
-
-    -   [元素]
-    -   [坐标]
-    -   [裁切图片]
-2. 按压: 
-
-    -   [元素, 时间]
-    -   [坐标, 时间]
-    -   [裁切图片, 时间]
-3. 滑动: 
-
-    -   [元素/裁切图片, 坐标A] (将某元素拖动到A)
-    -   [坐标, 坐标] (从坐标A到B进行滑动)
-4. 定向滑动:
-
-    -   [元素/裁切图片, 方向, 距离] (将某元素向着上下左右拖动多少距离)
-    -   [坐标, 方向, 距离] (从坐标开始, 向着上下左右滑动多少距离)
-5. 输入: 
-    -   [输入框元素/输入框截图] (向输入框输入文字内容)
-6. 清理: 
-    -   [输入框元素/输入框截图] (清理输入框内容)
-7. 隐藏键盘: 
-    -   无参数
-8. 返回: 
-    -   无参数
-9. 等待: 
-
-    -   [时长]
-    -   [元素/裁切图片] (等到某元素或图片出现在屏幕中)
-10. 断言: 
-    -   [元素/裁切图片, 是否存在/期望文字/数字范围/颜色, 区域(可选)]
-11. 启动:
-    -   [App包名, App主进程名]
-12. 关闭:
-    -   [App包名, App主进程名]
-
-
-
-
-### 举例
-
-TKS 脚本基础语法示例：
-
-```tks
-用例: basic_example
-脚本名: basic_test
-详情: 
-    appPackage: com.example.app
-步骤:
-    # 应用管理
-    启动 com.example.app
-    关闭 com.example.app
-    
-    # 点击操作
-    点击 [按钮]
-    点击 100,200
-    
-    # 长按操作
-    按压 [元素, 1000]
-    按压 [300,400, 2000]
-    
-    # 滑动操作
-    滑动 [元素1, 元素2]
-    滑动 [100,100, 200,200]
-    
-    # 定向滑动
-    定向滑动 [元素, 上, 100]
-    定向滑动 [100,100, 下, 200]
-    
-    # 文本操作
-    输入 [输入框, "文本内容"]
-    清理 [输入框]
-    
-    # 系统操作
-    隐藏键盘
-    返回
-    
-    # 等待操作
-    等待 3s
-    等待 [元素]
-    
-    # 断言验证
-    断言 [元素, 存在]
-    断言 [元素, 不存在]
-    断言 [元素, "文本内容"]
-```
-
-#### locator配置
-
-```json
-{
-    "登录按钮": {
-        "resourceId": "com.konec.smarthome:id/login_button",
-        "text": "登录"
-    },
-    "用户名输入框": {
-        "resourceId": "com.konec.smarthome:id/username_input",
-        "className": "android.widget.EditText"
-    },
-    "设备列表": {
-        "resourceId": "com.konec.smarthome:id/device_list",
-        "className": "androidx.recyclerview.widget.RecyclerView"
-    }
-}
-```
-
-
+语法规范可以参考[Toolkit Script语法规范v1.0.0](./The_ToolkitScript_Reference.md)
 
 ## 常见问题
 
 ### ADB未找到
+
 设置页面, 使用SDK和ADB自检功能检查内建立环境
 
 ### 设备未检测到
+
 1. 开启手机开发者选项
 2. 开启USB调试
 3. USB连接设备
 4. 授权调试请求
 
 ### 无法获取设备屏幕
+
 1. 检查设备是否正确连接
 2. 重新插拔USB线
 3. 扫描全部设备
