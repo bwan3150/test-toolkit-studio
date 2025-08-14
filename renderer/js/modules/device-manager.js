@@ -896,7 +896,7 @@ async function connectWithPairingCode() {
         window.NotificationModule.showNotification('Connecting with pairing code...', 'info');
         
         // 使用配对码连接
-        const pairResult = await ipcRenderer.invoke('pair-wireless-device', deviceIp, pairingPortNum, pairingCode);
+        const pairResult = await ipcRenderer.invoke('adb-pair-wireless', deviceIp, pairingPortNum, pairingCode);
         
         if (!pairResult.success) {
             window.NotificationModule.showNotification(`Pairing failed: ${pairResult.error}`, 'error');
@@ -906,7 +906,7 @@ async function connectWithPairingCode() {
         window.NotificationModule.showNotification('Device paired successfully!', 'success');
         
         // 连接到设备
-        const connectResult = await ipcRenderer.invoke('connect-wireless-device', deviceIp, adbPortNum);
+        const connectResult = await ipcRenderer.invoke('adb-connect-wireless', deviceIp, adbPortNum);
         
         if (connectResult.success) {
             window.NotificationModule.showNotification('Device connected successfully!', 'success');
@@ -1035,14 +1035,19 @@ async function generateQRCode() {
 function displayQRCode(dataURL, serviceName, pairingCode, expiryTime, localIP, pairingPort) {
     const qrDisplay = document.getElementById('qrDisplay');
     const qrCanvas = document.getElementById('qrCanvas');
-    const qrPlaceholder = qrDisplay.querySelector('.qr-placeholder');
     const qrInfo = document.getElementById('qrInfo');
     const generateBtn = document.getElementById('generateQrBtn');
     const refreshBtn = document.getElementById('refreshQrBtn');
-    const timerEl = document.getElementById('qrTimer');
+    
+    if (!qrDisplay || !qrCanvas || !qrInfo) {
+        console.error('QR code display elements not found');
+        return;
+    }
+    
+    const qrPlaceholder = qrDisplay.querySelector('.qr-placeholder');
     
     // 隐藏占位符，显示QR码
-    qrPlaceholder.style.display = 'none';
+    if (qrPlaceholder) qrPlaceholder.style.display = 'none';
     qrCanvas.style.display = 'block';
     
     // 设置QR码图片
@@ -1058,32 +1063,28 @@ function displayQRCode(dataURL, serviceName, pairingCode, expiryTime, localIP, p
     // 更新配对信息显示
     const qrInfoHTML = `
         <div class="info-item">
-            <label>配对码:</label>
+            <label>Pairing Code:</label>
             <span class="highlight-code">${pairingCode}</span>
         </div>
         <div class="info-item">
-            <label>配对端口:</label>
+            <label>Pairing Port:</label>
             <span class="highlight-code">${pairingPort}</span>
         </div>
         <div class="info-item">
-            <label>本机IP:</label>
+            <label>Local IP:</label>
             <span>${localIP}</span>
         </div>
         <div class="info-item">
-            <label>服务名:</label>
-            <span>${serviceName}</span>
-        </div>
-        <div class="manual-pairing-tip">
-            <strong>手动配对：</strong>在手机"无线调试"→"使用配对码配对设备"中输入配对码 <strong>${pairingCode}</strong> 和端口 <strong>${pairingPort}</strong>
+            <label>Service Name:</label>
+            <span class="highlight-code">${serviceName}</span>
         </div>
     `;
     qrInfo.innerHTML = qrInfoHTML;
     qrInfo.style.display = 'block';
     
     // 切换按钮状态
-    generateBtn.style.display = 'none';
-    refreshBtn.style.display = 'block';
-    timerEl.style.display = 'block';
+    if (generateBtn) generateBtn.style.display = 'none';
+    if (refreshBtn) refreshBtn.style.display = 'block';
     
     // 启动倒计时
     qrExpiryTime = expiryTime;
@@ -1122,21 +1123,24 @@ function startQRTimer() {
 function resetQRDisplay() {
     const qrDisplay = document.getElementById('qrDisplay');
     const qrCanvas = document.getElementById('qrCanvas');
-    const qrPlaceholder = qrDisplay.querySelector('.qr-placeholder');
     const qrInfo = document.getElementById('qrInfo');
     const generateBtn = document.getElementById('generateQrBtn');
     const refreshBtn = document.getElementById('refreshQrBtn');
-    const timerEl = document.getElementById('qrTimer');
+    
+    if (qrDisplay) {
+        const qrPlaceholder = qrDisplay.querySelector('.qr-placeholder');
+        if (qrPlaceholder) {
+            qrPlaceholder.style.display = 'block';
+        }
+    }
     
     // 显示占位符，隐藏QR码
-    qrPlaceholder.style.display = 'block';
-    qrCanvas.style.display = 'none';
-    qrInfo.style.display = 'none';
+    if (qrCanvas) qrCanvas.style.display = 'none';
+    if (qrInfo) qrInfo.style.display = 'none';
     
     // 重置按钮状态
-    generateBtn.style.display = 'block';
-    refreshBtn.style.display = 'none';
-    timerEl.style.display = 'none';
+    if (generateBtn) generateBtn.style.display = 'block';
+    if (refreshBtn) refreshBtn.style.display = 'none';
     
     // 清理倒计时
     if (qrTimer) {
