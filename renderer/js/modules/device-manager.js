@@ -14,7 +14,18 @@ function initializeDevicePage() {
     const newDeviceForm = document.getElementById('newDeviceForm');
     const cancelDeviceBtn = document.getElementById('cancelDeviceBtn');
     const connectionTypeSelect = document.getElementById('connectionTypeSelect');
-    const pairDeviceBtn = document.getElementById('pairDeviceBtn');
+    
+    // 连接向导相关元素
+    const connectDeviceBtn = document.getElementById('connectDeviceBtn');
+    const connectionGuideModal = document.getElementById('connectionGuideModal');
+    const closeGuideBtn = document.getElementById('closeGuideBtn');
+    
+    // 配对相关元素
+    const generateQrBtn = document.getElementById('generateQrBtn');
+    const refreshQrBtn = document.getElementById('refreshQrBtn');
+    const connectWithPairingCodeBtn = document.getElementById('connectWithPairingCodeBtn');
+    const showPairingCodeBtn = document.getElementById('showPairingCodeBtn');
+    const showQrCodeBtn = document.getElementById('showQrCodeBtn');
     
     if (addDeviceBtn) {
         addDeviceBtn.addEventListener('click', () => {
@@ -41,14 +52,60 @@ function initializeDevicePage() {
         scanDevicesBtn.addEventListener('click', refreshConnectedDevices);
     }
     
-    if (pairDeviceBtn) {
-        pairDeviceBtn.addEventListener('click', pairWirelessDevice);
-    }
-    
     // 连接类型切换事件
     if (connectionTypeSelect) {
         connectionTypeSelect.addEventListener('change', updateConnectionTypeFields);
     }
+    
+    // 连接设备向导
+    if (connectDeviceBtn) {
+        connectDeviceBtn.addEventListener('click', showConnectionGuide);
+    }
+    
+    if (closeGuideBtn) {
+        closeGuideBtn.addEventListener('click', hideConnectionGuide);
+    }
+    
+    // 点击模态框外部关闭
+    if (connectionGuideModal) {
+        connectionGuideModal.addEventListener('click', (e) => {
+            if (e.target === connectionGuideModal) {
+                hideConnectionGuide();
+            }
+        });
+    }
+    
+    // 配对方式选择
+    if (showPairingCodeBtn) {
+        showPairingCodeBtn.addEventListener('click', () => showPairingMethod('code'));
+    }
+    
+    if (showQrCodeBtn) {
+        showQrCodeBtn.addEventListener('click', () => showPairingMethod('qr'));
+    }
+    
+    // 配对码连接
+    if (connectWithPairingCodeBtn) {
+        connectWithPairingCodeBtn.addEventListener('click', connectWithPairingCode);
+    }
+    
+    // QR码生成
+    if (generateQrBtn) {
+        generateQrBtn.addEventListener('click', generateQRCode);
+    }
+    
+    if (refreshQrBtn) {
+        refreshQrBtn.addEventListener('click', generateQRCode);
+    }
+    
+    // 连接方式切换
+    initializeMethodSwitcher();
+    
+    // 连接向导标签页切换
+    initializeConnectionTabs();
+    
+    // IP地址同步
+    initializeIpSync();
     
     if (newDeviceForm) {
         newDeviceForm.addEventListener('submit', async (e) => {
@@ -108,6 +165,22 @@ function initializeDevicePage() {
     
     // 加载保存的设备
     loadSavedDevices();
+    
+    // 监听配对成功事件
+    const { ipcRenderer } = getGlobals();
+    ipcRenderer.on('pairing-success', (event, data) => {
+        console.log('收到配对成功事件:', data);
+        window.NotificationModule.showNotification(
+            `配对成功！来自设备: ${data.remoteAddress}`, 
+            'success'
+        );
+        
+        // 重置QR码显示
+        setTimeout(() => {
+            resetQRDisplay();
+            refreshConnectedDevices();
+        }, 2000);
+    });
 }
 
 // 更新连接类型字段显示
@@ -115,21 +188,18 @@ function updateConnectionTypeFields() {
     const connectionType = document.getElementById('connectionTypeSelect').value;
     const deviceIdGroup = document.getElementById('deviceIdGroup');
     const wifiAddressRow = document.getElementById('wifiAddressRow');
-    const wifiPairingRow = document.getElementById('wifiPairingRow');
-    const wifiHelpRow = document.getElementById('wifiHelpRow');
+    const connectionHelpRow = document.getElementById('connectionHelpRow');
     
     if (connectionType === 'wifi') {
         // WiFi 连接
         if (deviceIdGroup) deviceIdGroup.parentElement.style.display = 'none';
         if (wifiAddressRow) wifiAddressRow.style.display = 'flex';
-        if (wifiPairingRow) wifiPairingRow.style.display = 'flex';
-        if (wifiHelpRow) wifiHelpRow.style.display = 'block';
+        if (connectionHelpRow) connectionHelpRow.style.display = 'flex';
     } else {
         // USB 连接
         if (deviceIdGroup) deviceIdGroup.parentElement.style.display = 'flex';
         if (wifiAddressRow) wifiAddressRow.style.display = 'none';
-        if (wifiPairingRow) wifiPairingRow.style.display = 'none';
-        if (wifiHelpRow) wifiHelpRow.style.display = 'none';
+        if (connectionHelpRow) connectionHelpRow.style.display = 'none';
     }
 }
 
@@ -578,53 +648,7 @@ window.deleteDevice = deleteDevice;
 window.copyToClipboard = copyToClipboard;
 window.toggleAdvancedSettings = toggleAdvancedSettings;
 
-// 配对无线设备
-async function pairWirelessDevice() {
-    const ipAddress = document.querySelector('input[name="ipAddress"]').value;
-    const pairingPort = document.querySelector('input[name="pairingPort"]').value;
-    const pairingCode = document.querySelector('input[name="pairingCode"]').value;
-    
-    if (!ipAddress || !pairingPort || !pairingCode) {
-        window.NotificationModule.showNotification('请填写IP地址、配对端口和配对码', 'warning');
-        return;
-    }
-    
-    const { ipcRenderer } = getGlobals();
-    
-    // 显示配对中状态
-    window.NotificationModule.showNotification('正在配对设备...', 'info');
-    
-    try {
-        // 先进行配对
-        const pairResult = await ipcRenderer.invoke('adb-pair-wireless', ipAddress, pairingPort, pairingCode);
-        
-        if (pairResult.success) {
-            window.NotificationModule.showNotification('配对成功！正在连接设备...', 'success');
-            
-            // 配对成功后，自动连接到ADB端口
-            const adbPort = document.querySelector('input[name="port"]').value || 5555;
-            const connectResult = await ipcRenderer.invoke('adb-connect-wireless', ipAddress, adbPort);
-            
-            if (connectResult.success) {
-                window.NotificationModule.showNotification('设备连接成功！', 'success');
-                // 清空配对相关字段
-                document.querySelector('input[name="pairingPort"]').value = '';
-                document.querySelector('input[name="pairingCode"]').value = '';
-                // 刷新设备列表
-                await refreshConnectedDevices();
-            } else {
-                window.NotificationModule.showNotification(`连接失败: ${connectResult.error}`, 'error');
-            }
-        } else {
-            window.NotificationModule.showNotification(`配对失败: ${pairResult.error}`, 'error');
-        }
-        
-        return pairResult;
-    } catch (error) {
-        window.NotificationModule.showNotification(`配对失败: ${error.message}`, 'error');
-        return { success: false, error: error.message };
-    }
-}
+// 已移除 pairWirelessDevice 函数，现在使用连接向导进行配对
 
 // 无线设备连接功能
 async function connectWirelessDevice(ipAddress, port = 5555) {
@@ -690,9 +714,484 @@ async function disconnectWirelessDevice(ipAddress, port = 5555) {
 
 
 
+// ==================== 连接向导功能 ====================
+
+// 显示连接向导
+function showConnectionGuide() {
+    const modal = document.getElementById('connectionGuideModal');
+    const deviceForm = document.getElementById('deviceForm');
+    
+    // 隐藏添加设备表单
+    if (deviceForm) {
+        deviceForm.style.display = 'none';
+    }
+    
+    // 显示连接向导模态框
+    if (modal) {
+        modal.style.display = 'flex';
+        
+        // 重置到USB连接指导
+        showConnectionMethod('usb');
+        
+        // 重置配对状态
+        resetPairingStatus();
+    }
+}
+
+// 隐藏连接向导
+function hideConnectionGuide() {
+    const modal = document.getElementById('connectionGuideModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    
+    // 重置配对状态
+    resetPairingStatus();
+}
+
+// 初始化连接方式切换器
+function initializeMethodSwitcher() {
+    const methodBtns = document.querySelectorAll('.method-btn');
+    const methodContents = document.querySelectorAll('.method-content');
+    
+    methodBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const method = btn.dataset.method;
+            
+            // 切换按钮状态
+            methodBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // 切换内容显示
+            methodContents.forEach(content => {
+                if (content.id === method + 'Method') {
+                    content.classList.add('active');
+                } else {
+                    content.classList.remove('active');
+                }
+            });
+            
+            // 重置配对状态
+            resetPairingStatus();
+        });
+    });
+}
+
+// 初始化连接向导标签页切换
+function initializeConnectionTabs() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabName = btn.dataset.tab;
+            
+            // 切换按钮状态
+            tabButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // 切换内容显示
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+                if (content.id === tabName + 'Tab') {
+                    content.classList.add('active');
+                }
+            });
+            
+            // 重置配对状态
+            resetPairingStatus();
+        });
+    });
+}
+
+// 显示连接方法
+function showConnectionMethod(method) {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    // 切换按钮状态
+    tabButtons.forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.tab === method) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // 切换内容显示
+    tabContents.forEach(content => {
+        content.classList.remove('active');
+        if (content.id === method + 'Tab') {
+            content.classList.add('active');
+        }
+    });
+}
+
+// 初始化IP地址同步
+function initializeIpSync() {
+    const deviceIpInput = document.getElementById('deviceIpInput');
+    const deviceIpInput2 = document.getElementById('deviceIpInput2');
+    
+    if (deviceIpInput && deviceIpInput2) {
+        deviceIpInput.addEventListener('input', (e) => {
+            deviceIpInput2.value = e.target.value;
+        });
+        
+        // 初始化时也同步一次
+        deviceIpInput2.value = deviceIpInput.value;
+    }
+}
+
+// 显示配对方式
+function showPairingMethod(method) {
+    const codeSection = document.getElementById('pairingCodeSection');
+    const qrSection = document.getElementById('qrCodeSection');
+    const showCodeBtn = document.getElementById('showPairingCodeBtn');
+    const showQrBtn = document.getElementById('showQrCodeBtn');
+    
+    if (method === 'code') {
+        codeSection.style.display = 'block';
+        qrSection.style.display = 'none';
+        showCodeBtn.classList.add('active');
+        showQrBtn.classList.remove('active');
+    } else {
+        codeSection.style.display = 'none';
+        qrSection.style.display = 'block';
+        showCodeBtn.classList.remove('active');
+        showQrBtn.classList.add('active');
+    }
+}
+
+// 使用配对码连接设备
+async function connectWithPairingCode() {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        // 获取用户输入的信息
+        const deviceIp = document.getElementById('deviceIpInput').value.trim();
+        const adbPort = document.getElementById('deviceAdbPortInput').value.trim();
+        const pairingPort = document.getElementById('devicePairingPortInput').value.trim();
+        const pairingCode = document.getElementById('devicePairingCodeInput').value.trim();
+        
+        // 验证输入
+        if (!deviceIp || !adbPort || !pairingPort || !pairingCode) {
+            window.NotificationModule.showNotification('Please fill in all fields', 'warning');
+            return;
+        }
+        
+        // 验证IP地址格式
+        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        if (!ipRegex.test(deviceIp)) {
+            window.NotificationModule.showNotification('Invalid IP address format', 'error');
+            return;
+        }
+        
+        // 验证端口号
+        const adbPortNum = parseInt(adbPort);
+        const pairingPortNum = parseInt(pairingPort);
+        if (isNaN(adbPortNum) || isNaN(pairingPortNum) || adbPortNum < 1 || adbPortNum > 65535 || pairingPortNum < 1 || pairingPortNum > 65535) {
+            window.NotificationModule.showNotification('Invalid port number (must be 1-65535)', 'error');
+            return;
+        }
+        
+        window.NotificationModule.showNotification('Connecting with pairing code...', 'info');
+        
+        // 使用配对码连接
+        const pairResult = await ipcRenderer.invoke('pair-wireless-device', deviceIp, pairingPortNum, pairingCode);
+        
+        if (!pairResult.success) {
+            window.NotificationModule.showNotification(`Pairing failed: ${pairResult.error}`, 'error');
+            return;
+        }
+        
+        window.NotificationModule.showNotification('Device paired successfully!', 'success');
+        
+        // 连接到设备
+        const connectResult = await ipcRenderer.invoke('connect-wireless-device', deviceIp, adbPortNum);
+        
+        if (connectResult.success) {
+            window.NotificationModule.showNotification('Device connected successfully!', 'success');
+            
+            // 刷新设备列表
+            await refreshConnectedDevices();
+            
+            // 清空输入框
+            document.getElementById('deviceIpInput').value = '';
+            document.getElementById('deviceIpInput2').value = '';
+            document.getElementById('deviceAdbPortInput').value = '';
+            document.getElementById('devicePairingPortInput').value = '';
+            document.getElementById('devicePairingCodeInput').value = '';
+            
+            // 关闭弹窗
+            hideConnectionGuide();
+        } else {
+            window.NotificationModule.showNotification(`Connection failed: ${connectResult.error}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('Pairing with code failed:', error);
+        window.NotificationModule.showNotification(`Pairing failed: ${error.message}`, 'error');
+    }
+}
+
+// 重置配对状态
+function resetPairingStatus() {
+    // 清空配对码输入框
+    const pairingInputs = ['deviceIpInput', 'deviceIpInput2', 'deviceAdbPortInput', 'devicePairingPortInput', 'devicePairingCodeInput'];
+    pairingInputs.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.value = '';
+        }
+    });
+    
+    // 重置QR码显示
+    resetQRDisplay();
+    
+    // 隐藏配对区域
+    const codeSection = document.getElementById('pairingCodeSection');
+    const qrSection = document.getElementById('qrCodeSection');
+    if (codeSection) codeSection.style.display = 'none';
+    if (qrSection) qrSection.style.display = 'none';
+    
+    // 重置按钮状态
+    const showCodeBtn = document.getElementById('showPairingCodeBtn');
+    const showQrBtn = document.getElementById('showQrCodeBtn');
+    if (showCodeBtn) showCodeBtn.classList.remove('active');
+    if (showQrBtn) showQrBtn.classList.remove('active');
+}
+
+// ==================== QR码配对功能 ====================
+
+let qrTimer = null;
+let qrExpiryTime = null;
+
+// 切换QR码区域显示
+function toggleQrSection() {
+    const toggleBtn = document.getElementById('toggleQrSectionBtn');
+    const qrSection = document.getElementById('qrPairingSection');
+    const icon = toggleBtn.querySelector('.btn-icon');
+    
+    if (qrSection.style.display === 'none') {
+        qrSection.style.display = 'block';
+        toggleBtn.textContent = '收起';
+        toggleBtn.appendChild(icon);
+        toggleBtn.classList.add('expanded');
+    } else {
+        qrSection.style.display = 'none';
+        toggleBtn.textContent = '展开';
+        toggleBtn.appendChild(icon);
+        toggleBtn.classList.remove('expanded');
+    }
+}
+
+// 生成QR码
+async function generateQRCode() {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        // 显示加载状态
+        window.NotificationModule.showNotification('正在生成QR码...', 'info');
+        
+        // 生成配对数据
+        const pairingDataResult = await ipcRenderer.invoke('generate-qr-pairing-data');
+        
+        if (!pairingDataResult.success) {
+            window.NotificationModule.showNotification(`生成配对数据失败: ${pairingDataResult.error}`, 'error');
+            return;
+        }
+        
+        const { serviceName, pairingCode, qrData, expiryTime, localIP, pairingPort, adbPort } = pairingDataResult;
+        
+        // 生成QR码图片
+        const qrResult = await ipcRenderer.invoke('generate-qr-code', qrData, { width: 200 });
+        
+        if (!qrResult.success) {
+            window.NotificationModule.showNotification(`生成QR码失败: ${qrResult.error}`, 'error');
+            return;
+        }
+        
+        // 显示QR码
+        displayQRCode(qrResult.dataURL, serviceName, pairingCode, expiryTime, localIP, pairingPort);
+        
+        // 启动配对服务
+        const serviceResult = await ipcRenderer.invoke('start-adb-pairing-service', serviceName, pairingCode, localIP, pairingPort);
+        
+        if (serviceResult.success) {
+            window.NotificationModule.showNotification('QR码生成成功，请在设备上扫描', 'success');
+            
+            // 开始检查配对状态
+            startPairingStatusCheck();
+        } else {
+            window.NotificationModule.showNotification(`启动配对服务失败: ${serviceResult.error}`, 'warning');
+        }
+        
+    } catch (error) {
+        console.error('生成QR码失败:', error);
+        window.NotificationModule.showNotification(`生成QR码失败: ${error.message}`, 'error');
+    }
+}
+
+// 显示QR码
+function displayQRCode(dataURL, serviceName, pairingCode, expiryTime, localIP, pairingPort) {
+    const qrDisplay = document.getElementById('qrDisplay');
+    const qrCanvas = document.getElementById('qrCanvas');
+    const qrPlaceholder = qrDisplay.querySelector('.qr-placeholder');
+    const qrInfo = document.getElementById('qrInfo');
+    const generateBtn = document.getElementById('generateQrBtn');
+    const refreshBtn = document.getElementById('refreshQrBtn');
+    const timerEl = document.getElementById('qrTimer');
+    
+    // 隐藏占位符，显示QR码
+    qrPlaceholder.style.display = 'none';
+    qrCanvas.style.display = 'block';
+    
+    // 设置QR码图片
+    const img = new Image();
+    img.onload = function() {
+        const ctx = qrCanvas.getContext('2d');
+        qrCanvas.width = img.width;
+        qrCanvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+    };
+    img.src = dataURL;
+    
+    // 更新配对信息显示
+    const qrInfoHTML = `
+        <div class="info-item">
+            <label>配对码:</label>
+            <span class="highlight-code">${pairingCode}</span>
+        </div>
+        <div class="info-item">
+            <label>配对端口:</label>
+            <span class="highlight-code">${pairingPort}</span>
+        </div>
+        <div class="info-item">
+            <label>本机IP:</label>
+            <span>${localIP}</span>
+        </div>
+        <div class="info-item">
+            <label>服务名:</label>
+            <span>${serviceName}</span>
+        </div>
+        <div class="manual-pairing-tip">
+            <strong>手动配对：</strong>在手机"无线调试"→"使用配对码配对设备"中输入配对码 <strong>${pairingCode}</strong> 和端口 <strong>${pairingPort}</strong>
+        </div>
+    `;
+    qrInfo.innerHTML = qrInfoHTML;
+    qrInfo.style.display = 'block';
+    
+    // 切换按钮状态
+    generateBtn.style.display = 'none';
+    refreshBtn.style.display = 'block';
+    timerEl.style.display = 'block';
+    
+    // 启动倒计时
+    qrExpiryTime = expiryTime;
+    startQRTimer();
+}
+
+// 启动QR码倒计时
+function startQRTimer() {
+    if (qrTimer) {
+        clearInterval(qrTimer);
+    }
+    
+    qrTimer = setInterval(() => {
+        const now = Date.now();
+        const timeLeft = qrExpiryTime - now;
+        
+        if (timeLeft <= 0) {
+            // 过期
+            clearInterval(qrTimer);
+            resetQRDisplay();
+            window.NotificationModule.showNotification('QR码已过期，请重新生成', 'warning');
+            return;
+        }
+        
+        // 更新倒计时显示
+        const minutes = Math.floor(timeLeft / 60000);
+        const seconds = Math.floor((timeLeft % 60000) / 1000);
+        const timerValue = document.getElementById('timerValue');
+        if (timerValue) {
+            timerValue.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+// 重置QR码显示
+function resetQRDisplay() {
+    const qrDisplay = document.getElementById('qrDisplay');
+    const qrCanvas = document.getElementById('qrCanvas');
+    const qrPlaceholder = qrDisplay.querySelector('.qr-placeholder');
+    const qrInfo = document.getElementById('qrInfo');
+    const generateBtn = document.getElementById('generateQrBtn');
+    const refreshBtn = document.getElementById('refreshQrBtn');
+    const timerEl = document.getElementById('qrTimer');
+    
+    // 显示占位符，隐藏QR码
+    qrPlaceholder.style.display = 'block';
+    qrCanvas.style.display = 'none';
+    qrInfo.style.display = 'none';
+    
+    // 重置按钮状态
+    generateBtn.style.display = 'block';
+    refreshBtn.style.display = 'none';
+    timerEl.style.display = 'none';
+    
+    // 清理倒计时
+    if (qrTimer) {
+        clearInterval(qrTimer);
+        qrTimer = null;
+    }
+}
+
+// 检查配对状态
+async function startPairingStatusCheck() {
+    const { ipcRenderer } = getGlobals();
+    let checkCount = 0;
+    const maxChecks = 60; // 最多检查5分钟
+    
+    const checkInterval = setInterval(async () => {
+        checkCount++;
+        
+        try {
+            const statusResult = await ipcRenderer.invoke('check-pairing-status');
+            
+            if (statusResult.success && statusResult.hasNewDevices) {
+                // 发现新设备，配对可能成功
+                clearInterval(checkInterval);
+                window.NotificationModule.showNotification('检测到新设备连接，配对可能成功！', 'success');
+                
+                // 刷新设备列表
+                await refreshConnectedDevices();
+                
+                // 重置QR码显示
+                resetQRDisplay();
+                return;
+            }
+            
+            if (checkCount >= maxChecks) {
+                // 检查超时
+                clearInterval(checkInterval);
+                console.log('配对状态检查超时');
+            }
+        } catch (error) {
+            console.error('检查配对状态失败:', error);
+        }
+    }, 5000); // 每5秒检查一次
+}
+
 // 全局函数
 window.connectWirelessDevice = connectWirelessDevice;
 window.disconnectWirelessDevice = disconnectWirelessDevice;
+window.showConnectionGuide = showConnectionGuide;
+window.hideConnectionGuide = hideConnectionGuide;
+window.showConnectionMethod = showConnectionMethod;
+window.initializeConnectionTabs = initializeConnectionTabs;
+window.initializeIpSync = initializeIpSync;
+window.showPairingMethod = showPairingMethod;
+window.connectWithPairingCode = connectWithPairingCode;
+window.generateQRCode = generateQRCode;
 
 // 导出函数
 window.DeviceManagerModule = {
@@ -705,5 +1204,13 @@ window.DeviceManagerModule = {
     deleteDevice,
     copyToClipboard,
     connectWirelessDevice,
-    disconnectWirelessDevice
+    disconnectWirelessDevice,
+    showConnectionGuide,
+    hideConnectionGuide,
+    showConnectionMethod,
+    initializeConnectionTabs,
+    initializeIpSync,
+    showPairingMethod,
+    connectWithPairingCode,
+    generateQRCode
 };

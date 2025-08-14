@@ -356,17 +356,23 @@
                 <div class="page-header">
                     <h2>Device Management</h2>
                     <div class="header-actions">
-                        <button class="btn btn-primary" id="addDeviceBtn">
-                            <svg class="btn-icon" viewBox="0 0 24 24">
+                        <button class="jb-btn jb-btn-primary" id="connectDeviceBtn">
+                            <svg class="jb-btn-icon" viewBox="0 0 24 24">
+                                <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                            </svg>
+                            Connect Device
+                        </button>
+                        <button class="jb-btn jb-btn-secondary" id="addDeviceBtn">
+                            <svg class="jb-btn-icon" viewBox="0 0 24 24">
                                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                             </svg>
-                            Add Device
+                            Add Config
                         </button>
-                        <button class="btn btn-secondary" id="scanDevicesBtn">
-                            <svg class="btn-icon" viewBox="0 0 24 24">
+                        <button class="jb-btn jb-btn-default" id="scanDevicesBtn">
+                            <svg class="jb-btn-icon" viewBox="0 0 24 24">
                                 <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                             </svg>
-                            Scan Connected
+                            Refresh
                         </button>
                     </div>
                 </div>
@@ -411,37 +417,15 @@
                                 </div>
                             </div>
                             
-                            <!-- WiFi 配对信息 -->
-                            <div class="form-row" id="wifiPairingRow" style="display: none;">
-                                <div class="form-group">
-                                    <label>Pairing Port</label>
-                                    <input type="number" name="pairingPort" min="1" max="65535" placeholder="e.g., 37691">
-                                </div>
-                                <div class="form-group">
-                                    <label>Pairing Code</label>
-                                    <input type="text" name="pairingCode" placeholder="e.g., 123456">
-                                </div>
-                                <div class="form-group">
-                                    <button type="button" class="btn btn-secondary" id="pairDeviceBtn" style="margin-top: 20px;">
-                                        <svg class="btn-icon" viewBox="0 0 24 24">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                                        </svg>
-                                        Pair
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <!-- WiFi 配对帮助 -->
-                            <div class="form-row" id="wifiHelpRow" style="display: none;">
-                                <div class="pairing-help">
+                            <!-- 连接提示 -->
+                            <div class="form-row" id="connectionHelpRow" style="display: none;">
+                                <div class="connection-help">
                                     <svg viewBox="0 0 24 24" width="16" height="16">
                                         <path fill="currentColor" d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
                                     </svg>
                                     <div class="help-content">
-                                        <strong>配对说明：</strong>
-                                        <p>1. 在设备设置 → 开发者选项 → 无线调试 → 使用配对码配对</p>
-                                        <p>2. 设备会显示配对端口和6位配对码</p>
-                                        <p>3. 配对成功后，可以直接使用IP地址和ADB端口连接</p>
+                                        <strong>无线连接说明：</strong>
+                                        <p>如需首次配对无线设备，请点击上方的"Connect Device"按钮使用连接向导</p>
                                     </div>
                                 </div>
                             </div>
@@ -498,8 +482,221 @@
                         </form>
                     </div>
                     
-                    <!-- 统一的设备管理区域 -->
+                    <!-- 连接设备引导弹窗 -->
+                    <div class="modal-overlay" id="connectionGuideModal" style="display: none;">
+                        <div class="modal-dialog">
+                            <button class="modal-close-btn" id="closeGuideBtn">
+                                <svg viewBox="0 0 24 24" width="16" height="16">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                </svg>
+                            </button>
+                        
+                            <div class="modal-body">
+                                <div class="connection-tabs">
+                                    <div class="tab-list">
+                                        <button class="tab-button active" data-tab="usb">
+                                            <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16">
+                                                <path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2S4.8 7.79 4.8 9c0 .85.5 1.56 1.2 1.93V11H9v2H6v3h3v2.07c-.7.37-1.2 1.08-1.2 1.93 0 1.21.99 2.2 2.2 2.2s2.2-.99 2.2-2.2c0-.85-.5-1.56-1.2-1.93V16h3v-3h3v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2s-2.2.99-2.2 2.2c0 .85.5 1.56 1.2 1.93V13h-3V7z"/>
+                                            </svg>
+                                            USB Connection
+                                        </button>
+                                        <button class="tab-button" data-tab="wireless">
+                                            <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16">
+                                                <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.07 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                                            </svg>
+                                            Wireless Connection
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- USB连接教程 -->
+                                <div class="tab-content active" id="usbTab">
+                                    <div class="instruction-panel">
+                                        <div class="instruction-header">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" class="header-icon">
+                                                <path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2S4.8 7.79 4.8 9c0 .85.5 1.56 1.2 1.93V11H9v2H6v3h3v2.07c-.7.37-1.2 1.08-1.2 1.93 0 1.21.99 2.2 2.2 2.2s2.2-.99 2.2-2.2c0-.85-.5-1.56-1.2-1.93V16h3v-3h3v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2s-2.2.99-2.2 2.2c0 .85.5 1.56 1.2 1.93V13h-3V7z"/>
+                                            </svg>
+                                            USB Connection Setup
+                                        </div>
+                                        <div class="instruction-list">
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">1</div>
+                                                <div class="instruction-text">
+                                                    <strong>Enable Developer Options</strong>
+                                                    <span>Settings → About Phone → Tap "Build Number" 7 times</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">2</div>
+                                                <div class="instruction-text">
+                                                    <strong>Enable USB Debugging</strong>
+                                                    <span>Settings → Developer Options → Enable "USB Debugging"</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">3</div>
+                                                <div class="instruction-text">
+                                                    <strong>Connect Device</strong>
+                                                    <span>Connect phone to computer via USB cable, allow USB debugging on device</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">4</div>
+                                                <div class="instruction-text">
+                                                    <strong>Verify Connection</strong>
+                                                    <span>Click "Refresh" to check if device appears in the list</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 无线连接教程 -->
+                                <div class="tab-content" id="wirelessTab">
+                                    <div class="instruction-panel">
+                                        <div class="instruction-header">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" class="header-icon">
+                                                <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.07 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                                            </svg>
+                                            Wireless Connection Setup
+                                        </div>
+                                        <div class="instruction-list">
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">1</div>
+                                                <div class="instruction-text">
+                                                    <strong>Enable Developer Options</strong>
+                                                    <span>Settings → About Phone → Tap "Build Number" 7 times</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">2</div>
+                                                <div class="instruction-text">
+                                                    <strong>Enable USB Debugging</strong>
+                                                    <span>Settings → Developer Options → Enable "USB Debugging"</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">3</div>
+                                                <div class="instruction-text">
+                                                    <strong>Network Requirement</strong>
+                                                    <span>Ensure phone and computer are on the same WiFi network</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">4</div>
+                                                <div class="instruction-text">
+                                                    <strong>Enable Wireless Debugging</strong>
+                                                    <span>Settings → Developer Options → Enable "Wireless Debugging"</span>
+                                                </div>
+                                            </div>
+                                            <div class="instruction-item">
+                                                <div class="instruction-step">5</div>
+                                                <div class="instruction-text">
+                                                    <strong>Choose Pairing Method</strong>
+                                                    <div class="pairing-method-buttons">
+                                                        <button class="action-btn primary" id="showPairingCodeBtn">
+                                                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                                                <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                                                            </svg>
+                                                            Pairing Code
+                                                        </button>
+                                                        <button class="action-btn secondary" id="showQrCodeBtn">
+                                                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                                                <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4z"/>
+                                                            </svg>
+                                                            QR Code
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 配对码配对 -->
+                                    <div class="pairing-section" id="pairingCodeSection" style="display: none;">
+                                        <h4>Pairing Code Method</h4>
+                                        <div class="pairing-instruction">
+                                            <p>On your phone's "Wireless debugging" page, tap "Pair device with pairing code" and enter the information below:</p>
+                                        </div>
+                                        <div class="pairing-form">
+                                            <div class="form-row">
+                                                <div class="form-group flex-wide">
+                                                    <label>Device IP Address:</label>
+                                                    <input type="text" id="deviceIpInput" placeholder="e.g., 192.168.1.100" class="pairing-input">
+                                                </div>
+                                                <div class="form-group flex-narrow">
+                                                    <label>ADB Port:</label>
+                                                    <input type="text" id="deviceAdbPortInput" placeholder="e.g., 5555" class="pairing-input">
+                                                </div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Pairing Code:</label>
+                                                <input type="text" id="devicePairingCodeInput" placeholder="e.g., 123456" class="pairing-input">
+                                            </div>
+                                            <div class="form-row">
+                                                <div class="form-group flex-wide">
+                                                    <label>Device IP Address:</label>
+                                                    <input type="text" id="deviceIpInput2" placeholder="e.g., 192.168.1.100" class="pairing-input" readonly>
+                                                </div>
+                                                <div class="form-group flex-narrow">
+                                                    <label>Pairing Port:</label>
+                                                    <input type="text" id="devicePairingPortInput" placeholder="e.g., 37829" class="pairing-input">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="pairing-actions">
+                                            <button class="action-btn primary" id="connectWithPairingCodeBtn">
+                                                <svg viewBox="0 0 24 24" width="14" height="14">
+                                                    <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                                                </svg>
+                                                Connect Device
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- QR码配对 -->
+                                    <div class="pairing-section" id="qrCodeSection" style="display: none;">
+                                        <h4>QR Code Method</h4>
+                                        <div class="pairing-instruction">
+                                            <p>On your phone's "Wireless debugging" page, tap "Pair device with QR code" and scan the QR code below:</p>
+                                        </div>
+                                        <div class="qr-container">
+                                            <div class="qr-display" id="qrDisplay">
+                                                <div class="qr-placeholder">
+                                                    <svg viewBox="0 0 24 24" width="48" height="48" class="qr-icon">
+                                                        <path fill="currentColor" d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm8 4h2v2h-2v-2zm0-2h2v2h-2v-2zm2 0h2v2h-2v-2zm0-2h2v2h-2v-2zm2 0h2v2h-2v-2zm0-2h2v2h-2v-2zm-2 0h2v2h-2v-2zm0-2h2v2h-2v-2zm2 0h2v2h-2v-2z"/>
+                                                    </svg>
+                                                    <p>Click "Generate QR Code" to start pairing</p>
+                                                </div>
+                                                <canvas id="qrCanvas" style="display: none;"></canvas>
+                                            </div>
+                                            <div class="qr-actions">
+                                                <button class="action-btn primary" id="generateQrBtn">
+                                                    <svg viewBox="0 0 24 24" width="14" height="14">
+                                                        <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4z"/>
+                                                    </svg>
+                                                    Generate QR Code
+                                                </button>
+                                                <button class="action-btn secondary" id="refreshQrBtn" style="display: none;">
+                                                    <svg viewBox="0 0 24 24" width="14" height="14">
+                                                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                                    </svg>
+                                                    Regenerate
+                                                </button>
+                                            </div>
+                                            <div class="qr-info" id="qrInfo" style="display: none;">
+                                                <!-- QR码信息会动态插入这里 -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 设备管理区域 -->
                     <div class="device-sections">
+                        
                         <!-- 保存的设备 -->
                         <div class="device-section">
                             <h3>Saved Devices</h3>

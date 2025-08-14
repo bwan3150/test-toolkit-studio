@@ -21,11 +21,13 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
+    "adb-qc": "^1.0.4",
     "axios": "^1.6.2",
     "csv-parse": "^5.5.3",
     "electron-store": "^8.1.0",
     "jimp": "^1.6.0",
-    "js-yaml": "^4.1.0"
+    "js-yaml": "^4.1.0",
+    "qrcode": "^1.5.4"
   },
   "build": {
     "appId": "app.testtoolkit.studio",
