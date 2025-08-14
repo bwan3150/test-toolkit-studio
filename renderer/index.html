@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="styles/platform.css">
     <link rel="stylesheet" href="styles/unified-editor.css">
+    <link rel="stylesheet" href="styles/report.css">
 </head>
 <body>
     <script>
@@ -72,6 +73,13 @@
                         <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
                     </svg>
                     <span class="nav-label">Device</span>
+                </div>
+                
+                <div class="nav-item" data-page="report">
+                    <svg class="nav-icon" viewBox="0 0 24 24">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                    </svg>
+                    <span class="nav-label">Test Report</span>
                 </div>
                 
                 <div class="nav-item" data-page="log">
@@ -711,6 +719,196 @@
                             <div class="device-grid" id="connectedDevicesGrid">
                                 <!-- 动态生成的连接设备信息，包括有线和无线设备 -->
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Report Page -->
+            <div class="page" id="reportPage">
+                <div class="page-header">
+                    <h2>Insights</h2>
+                    <div class="header-actions">
+                        <select id="reportProjectSelect" class="control-select">
+                            <option value="all">All projects</option>
+                            <option value="current">Current project</option>
+                        </select>
+                        <select id="reportSeverityFilter" class="control-select">
+                            <option value="all">All severities</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="low">Low</option>
+                            <option value="info">Info</option>
+                        </select>
+                        <button class="btn btn-secondary" id="moreFiltersBtn">More filters</button>
+                        <span style="margin: 0 8px; color: var(--text-secondary);">|</span>
+                        <select id="reportTimeRange" class="control-select">
+                            <option value="7">25 Mar 2025</option>
+                            <option value="30" selected>Last 30 days</option>
+                            <option value="90">Last 3 months</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="report-content">
+                    <!-- Top Stats Row -->
+                    <div class="report-stats-row">
+                        <div class="stat-box">
+                            <h4>Projects</h4>
+                            <div class="stat-value">20</div>
+                        </div>
+                        <div class="stat-box">
+                            <h4>Scans</h4>
+                            <div class="stat-value">11</div>
+                        </div>
+                        <div class="stat-box coverage">
+                            <h4>Avg. code coverage rate</h4>
+                            <div class="stat-value">80.33%</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Main Grid -->
+                    <div class="report-main-grid">
+                        <!-- Left Column - Problems by severity -->
+                        <div class="severity-card">
+                            <h3>Problems by severity</h3>
+                            <div class="donut-chart-wrapper">
+                                <div class="donut-chart-container">
+                                    <canvas id="severityChart"></canvas>
+                                    <div class="chart-center-text">
+                                        <div class="chart-center-value">3 K</div>
+                                        <div class="chart-center-label">problems</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="severity-legend">
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #db2838;"></span>
+                                    <span class="legend-label">Critical:</span>
+                                    <span class="legend-value">1897</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #f68e5f;"></span>
+                                    <span class="legend-label">High:</span>
+                                    <span class="legend-value">1613</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="legend-dot" style="background: #fbb04d;"></span>
+                                    <span class="legend-label">Moderate:</span>
+                                    <span class="legend-value">439</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Column - Problems over period -->
+                        <div class="timeline-card">
+                            <h3>Problems over period</h3>
+                            <div class="timeline-chart-container">
+                                <canvas id="timelineChart"></canvas>
+                            </div>
+                            <div class="timeline-labels">
+                                <span>26 Feb</span>
+                                <span>5 Mar</span>
+                                <span>12 Mar</span>
+                                <span>18 Mar</span>
+                                <span>25 Mar</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tables Grid -->
+                    <div class="report-tables-grid">
+                        <!-- Projects sorted by problems -->
+                        <div class="table-card">
+                            <h3>Projects sorted by number of problems ↓</h3>
+                            <table class="compact-table">
+                                <thead>
+                                    <tr>
+                                        <th>Project</th>
+                                        <th>Problems</th>
+                                        <th>Critical severity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Nest JS</td>
+                                        <td class="problem-count">1753</td>
+                                        <td class="problem-count">156</td>
+                                    </tr>
+                                    <tr>
+                                        <td>axios</td>
+                                        <td class="problem-count">1715</td>
+                                        <td class="problem-count">1578</td>
+                                    </tr>
+                                    <tr>
+                                        <td>enzyme</td>
+                                        <td class="problem-count">393</td>
+                                        <td class="problem-count">162</td>
+                                    </tr>
+                                    <tr>
+                                        <td>playwright-java</td>
+                                        <td class="problem-count">62</td>
+                                        <td class="problem-count">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td>spring-test</td>
+                                        <td class="problem-count">19</td>
+                                        <td class="problem-count">1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>FlexInspect</td>
+                                        <td class="problem-count">6</td>
+                                        <td class="problem-count">0</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Problems sorted by severity -->
+                        <div class="table-card">
+                            <h3>Problems sorted by severity ↓</h3>
+                            <table class="compact-table">
+                                <thead>
+                                    <tr>
+                                        <th>Inspection</th>
+                                        <th>Severity</th>
+                                        <th>Occurrence</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>ESLint</td>
+                                        <td><span class="severity-badge critical">Critical</span></td>
+                                        <td class="problem-count">1889</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Attempt to assign to const or readonly variable</td>
+                                        <td><span class="severity-badge critical">Critical</span></td>
+                                        <td class="problem-count">5</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Hardcoded passwords</td>
+                                        <td><span class="severity-badge critical">Critical</span></td>
+                                        <td class="problem-count">2</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Invalid properties configuration</td>
+                                        <td><span class="severity-badge critical">Critical</span></td>
+                                        <td class="problem-count">1</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Import can be shortened</td>
+                                        <td><span class="severity-badge high">High</span></td>
+                                        <td class="problem-count">583</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Unused local symbol</td>
+                                        <td><span class="severity-badge high">High</span></td>
+                                        <td class="problem-count">502</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/modules/device-manager.js');
         await loadScript('./js/modules/locator-manager.js');
         await loadScript('./js/modules/log-manager.js');
+        await loadScript('./js/modules/test-report-manager.js');
         
         // 4. 加载TKS脚本引擎模块
         await loadScript('./js/modules/tks-script-engine.js');
@@ -78,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const requiredModules = [
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
-            'LogManagerModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
+            'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
             // ApiClient 是可选的，稍后单独检查
         ];
@@ -168,6 +169,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 加载项目历史而不是自动加载最后一个项目
         await window.ProjectManagerModule.loadProjectHistory();
         // console.log('✓ 项目历史已加载'); // 已禁用以减少日志
+        
+        // 初始化测试报告模块
+        if (window.TestReportModule) {
+            window.TestReportModule.initializeReportPage();
+            // console.log('✓ 测试报告模块已初始化'); // 已禁用以减少日志
+        }
         
         // 最后初始化状态栏，确保能获取到正确的项目信息
         if (window.StatusBarModule) {

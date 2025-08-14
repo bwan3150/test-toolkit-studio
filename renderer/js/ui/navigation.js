@@ -24,6 +24,10 @@ function initializeNavigation() {
                 }
             } else if (targetPage === 'settings') {
                 window.SettingsModule.checkSDKStatus();
+            } else if (targetPage === 'report') {
+                if (window.TestReportModule) {
+                    window.TestReportModule.onPageActivated();
+                }
             }
         });
     });

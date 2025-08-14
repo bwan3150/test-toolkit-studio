@@ -1,0 +1,371 @@
+/* Test Report Page Styles - JetBrains Style */
+
+/* Report Content Container */
+.report-content {
+    padding: 16px;
+    height: calc(100vh - 100px);
+    overflow-y: auto;
+    background: var(--bg-primary);
+}
+
+/* Header Controls */
+#reportTimeRange {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    min-width: 120px;
+}
+
+/* Top Stats Row */
+.report-stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.stat-box h4 {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    font-weight: normal;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.stat-box.coverage .stat-value {
+    color: #4ec9b0;
+}
+
+/* Main Content Grid */
+.report-main-grid {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+/* Problems by Severity Card */
+.severity-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.severity-card h3 {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    font-weight: normal;
+}
+
+.donut-chart-wrapper {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin: 0 auto 16px;
+}
+
+.donut-chart-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.donut-chart-container canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.chart-center-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+}
+
+.chart-center-value {
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.chart-center-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.severity-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legend-label {
+    flex: 1;
+}
+
+.legend-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* Problems Over Time Card */
+.timeline-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.timeline-card h3 {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    font-weight: normal;
+}
+
+.timeline-chart-container {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    margin-bottom: 8px;
+}
+
+.timeline-chart-container canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+/* Tables Section */
+.report-tables-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.table-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.table-card h3 {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    font-weight: normal;
+}
+
+.compact-table {
+    width: 100%;
+    font-size: 12px;
+}
+
+.compact-table th {
+    text-align: left;
+    padding: 6px 8px;
+    color: var(--text-secondary);
+    font-weight: normal;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+}
+
+.compact-table td {
+    padding: 8px;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(60, 60, 60, 0.3);
+}
+
+.compact-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.compact-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Severity Badges */
+.severity-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.severity-badge.critical {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.severity-badge.high {
+    background: rgba(249, 115, 22, 0.2);
+    color: #f97316;
+}
+
+.severity-badge.moderate {
+    background: rgba(234, 179, 8, 0.2);
+    color: #eab308;
+}
+
+.severity-badge.low {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.severity-badge.info {
+    background: rgba(6, 182, 212, 0.2);
+    color: #06b6d4;
+}
+
+/* Problem Count */
+.problem-count {
+    text-align: right;
+    font-weight: 500;
+}
+
+/* Occurrence Count */
+.occurrence-badge {
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+/* Severity Level Colors for Timeline */
+.severity-line {
+    stroke-width: 1.5;
+    fill: none;
+    opacity: 0.8;
+}
+
+.severity-line.critical { stroke: #ef4444; }
+.severity-line.high { stroke: #f97316; }
+.severity-line.moderate { stroke: #eab308; }
+.severity-line.low { stroke: #22c55e; }
+.severity-line.info { stroke: #06b6d4; }
+
+/* Gridlines */
+.chart-gridline {
+    stroke: var(--border-color);
+    stroke-width: 0.5;
+    opacity: 0.3;
+}
+
+/* Hover Effects */
+.stat-box:hover {
+    border-color: var(--accent-primary);
+    transition: border-color 0.2s;
+}
+
+.severity-card:hover,
+.timeline-card:hover,
+.table-card:hover {
+    border-color: rgba(249, 168, 37, 0.3);
+    transition: border-color 0.2s;
+}
+
+/* Loading State */
+.report-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--bg-tertiary);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1400px) {
+    .report-main-grid {
+        grid-template-columns: 300px 1fr;
+    }
+}
+
+@media (max-width: 1200px) {
+    .report-tables-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 1000px) {
+    .report-main-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Custom scrollbar for report content */
+.report-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.report-content::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.report-content::-webkit-scrollbar-thumb {
+    background: var(--bg-hover);
+    border-radius: 4px;
+}
+
+.report-content::-webkit-scrollbar-thumb:hover {
+    background: #4a4a4c;
+}
