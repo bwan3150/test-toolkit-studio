@@ -6,9 +6,11 @@
 // 3. 统一错误处理
 // 4. 请求拦截和响应拦截
 
-// 从全局获取ipcRenderer，避免重复声明
-const getGlobals = () => window.AppGlobals;
-const getIpcRenderer = () => getGlobals().ipcRenderer;
+// 使用立即执行函数封装，避免全局作用域污染
+(function() {
+    // 从全局获取ipcRenderer，避免重复声明
+    const getGlobals = () => window.AppGlobals;
+    const getIpcRenderer = () => getGlobals().ipcRenderer;
 
 // API客户端类
 class ApiClient {
@@ -323,3 +325,5 @@ window.ApiClient = {
 };
 
 console.log('API客户端模块已加载');
+
+})(); // 立即执行函数结束

@@ -281,13 +281,11 @@ class LogManager {
 
     // 处理日志数据
     handleLogData(data) {
-        console.log('接收到日志数据:', data); // 调试信息
         const lines = data.split('\n');
         lines.forEach(line => {
             if (line.trim()) {
                 const logEntry = this.parseLogLine(line);
                 if (logEntry) {
-                    console.log('解析的日志条目:', logEntry); // 调试信息
                     this.addLogEntry(logEntry);
                 }
             }
@@ -340,10 +338,7 @@ class LogManager {
 
         // 如果条目通过过滤器，添加到显示
         if (this.shouldShowEntry(entry)) {
-            console.log('添加日志到视图:', entry); // 调试信息
             this.appendLogToView(entry);
-        } else {
-            console.log('日志被过滤:', entry); // 调试信息
         }
     }
 
@@ -386,11 +381,7 @@ class LogManager {
     // 添加日志到视图
     appendLogToView(entry) {
         const logContainer = document.getElementById('logContainer');
-        if (!logContainer) {
-            console.error('找不到logContainer元素！');
-            return;
-        }
-        console.log('logContainer找到，准备添加日志');
+        if (!logContainer) return;
 
         const logElement = document.createElement('div');
         logElement.className = `log-entry log-${entry.level}`;
