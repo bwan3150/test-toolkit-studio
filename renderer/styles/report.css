@@ -241,28 +241,28 @@
 }
 
 .severity-badge.critical {
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
+    background: rgba(229, 87, 101, 0.15);
+    color: #e55765;
 }
 
 .severity-badge.high {
-    background: rgba(249, 115, 22, 0.2);
-    color: #f97316;
+    background: rgba(240, 159, 91, 0.15);
+    color: #f09f5b;
 }
 
 .severity-badge.moderate {
-    background: rgba(234, 179, 8, 0.2);
-    color: #eab308;
+    background: rgba(244, 199, 82, 0.15);
+    color: #f4c752;
 }
 
 .severity-badge.low {
-    background: rgba(34, 197, 94, 0.2);
-    color: #22c55e;
+    background: rgba(124, 168, 43, 0.15);
+    color: #7ca82b;
 }
 
 .severity-badge.info {
-    background: rgba(6, 182, 212, 0.2);
-    color: #06b6d4;
+    background: rgba(101, 154, 210, 0.15);
+    color: #659ad2;
 }
 
 /* Problem Count */

@@ -7,13 +7,22 @@
     let currentProject = 'all';
     let currentSeverity = 'all';
     
-    // Chart colors matching JetBrains theme
+    // Chart colors matching JetBrains theme (from screenshot)
     const SEVERITY_COLORS = {
-        critical: '#db2838',
-        high: '#f68e5f', 
-        moderate: '#fbb04d',
+        critical: '#e55765',  // Soft red/pink
+        high: '#f09f5b',      // Warm orange
+        moderate: '#f4c752',  // Golden yellow
         low: '#7ca82b',
         info: '#659ad2'
+    };
+    
+    // Timeline chart gradient colors
+    const TIMELINE_COLORS = {
+        critical: 'rgba(229, 87, 101, 0.8)',   // Pink/red
+        high: 'rgba(240, 159, 91, 0.7)',       // Orange
+        moderate: 'rgba(244, 199, 82, 0.6)',   // Yellow
+        low: 'rgba(124, 168, 43, 0.5)',        // Green
+        info: 'rgba(101, 154, 210, 0.4)'       // Blue
     };
     
     // Initialize report page
@@ -75,7 +84,7 @@
         drawSeverityDonut(canvas);
     }
     
-    // Draw severity donut chart
+    // Draw severity donut chart with hover effects
     function drawSeverityDonut(canvas) {
         const ctx = canvas.getContext('2d');
         const centerX = canvas.width / 2;
@@ -83,10 +92,23 @@
         const radius = 70;
         const innerRadius = 50;
         
+        // Initialize hover state only once
+        if (canvas.hoveredSegment === undefined) {
+            canvas.hoveredSegment = null;
+            canvas.segments = [];
+            
+            // Add mouse move listener only once
+            canvas.addEventListener('mousemove', (e) => handleDonutHover(e, canvas));
+            canvas.addEventListener('mouseleave', () => {
+                canvas.hoveredSegment = null;
+                drawSeverityDonut(canvas);
+            });
+        }
+        
         const data = [
-            { value: 1897, color: SEVERITY_COLORS.critical },
-            { value: 1613, color: SEVERITY_COLORS.high },
-            { value: 439, color: SEVERITY_COLORS.moderate }
+            { value: 1897, color: SEVERITY_COLORS.critical, label: 'Critical' },
+            { value: 1613, color: SEVERITY_COLORS.high, label: 'High' },
+            { value: 439, color: SEVERITY_COLORS.moderate, label: 'Moderate' }
         ];
         
         const total = data.reduce((sum, item) => sum + item.value, 0);
@@ -95,19 +117,99 @@
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
+        // Clear and rebuild segment data
+        canvas.segments = [];
+        
         // Draw segments
-        data.forEach(item => {
+        data.forEach((item, index) => {
             const sliceAngle = (item.value / total) * 2 * Math.PI;
+            const endAngle = currentAngle + sliceAngle;
+            
+            // Store segment info for hover detection
+            canvas.segments.push({
+                startAngle: currentAngle,
+                endAngle: endAngle,
+                ...item
+            });
+            
+            // Check if this segment is hovered
+            const isHovered = canvas.hoveredSegment === index;
+            
+            ctx.save();
+            
+            if (isHovered) {
+                // Scale up slightly on hover
+                ctx.translate(centerX, centerY);
+                ctx.scale(1.05, 1.05);
+                ctx.translate(-centerX, -centerY);
+                
+                // Add shadow for depth
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = item.color;
+            }
             
             ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
-            ctx.arc(centerX, centerY, innerRadius, currentAngle + sliceAngle, currentAngle, true);
+            ctx.arc(centerX, centerY, radius, currentAngle, endAngle);
+            ctx.arc(centerX, centerY, innerRadius, endAngle, currentAngle, true);
             ctx.closePath();
             ctx.fillStyle = item.color;
             ctx.fill();
             
-            currentAngle += sliceAngle;
+            ctx.restore();
+            
+            currentAngle = endAngle;
         });
+    }
+    
+    // Handle donut hover with throttling
+    let donutHoverTimeout = null;
+    function handleDonutHover(e, canvas) {
+        // Throttle hover events to improve performance
+        if (donutHoverTimeout) return;
+        
+        donutHoverTimeout = setTimeout(() => {
+            donutHoverTimeout = null;
+        }, 16); // ~60fps
+        
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        // Calculate distance from center
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Check if within donut bounds
+        if (distance < 50 || distance > 70) {
+            if (canvas.hoveredSegment !== null) {
+                canvas.hoveredSegment = null;
+                drawSeverityDonut(canvas);
+            }
+            return;
+        }
+        
+        // Calculate angle
+        let angle = Math.atan2(dy, dx);
+        if (angle < -Math.PI / 2) angle += 2 * Math.PI;
+        
+        // Find which segment is hovered
+        let hoveredSegment = null;
+        if (canvas.segments) {
+            canvas.segments.forEach((segment, index) => {
+                if (angle >= segment.startAngle && angle <= segment.endAngle) {
+                    hoveredSegment = index;
+                }
+            });
+        }
+        
+        if (hoveredSegment !== canvas.hoveredSegment) {
+            canvas.hoveredSegment = hoveredSegment;
+            drawSeverityDonut(canvas);
+        }
     }
     
     // Initialize timeline chart
@@ -122,22 +224,39 @@
         drawTimelineChart(canvas);
     }
     
-    // Draw timeline chart
+    // Draw timeline chart with smooth gradients and hover effects
     function drawTimelineChart(canvas) {
         const ctx = canvas.getContext('2d');
         const padding = { top: 20, right: 20, bottom: 20, left: 40 };
         const chartWidth = canvas.width - padding.left - padding.right;
         const chartHeight = canvas.height - padding.top - padding.bottom;
         
+        // Initialize data and listeners only once
+        if (!canvas.isInitialized) {
+            canvas.chartData = generateTimelineData();
+            canvas.hoveredLine = null;
+            canvas.isInitialized = true;
+            
+            // Add mouse move listener only once
+            canvas.addEventListener('mousemove', (e) => handleTimelineHover(e, canvas));
+            canvas.addEventListener('mouseleave', () => {
+                canvas.hoveredLine = null;
+                drawTimelineChart(canvas);
+            });
+        }
+        
+        const data = canvas.chartData;
+        const dataPoints = data.critical.length;
+        
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Draw grid lines
-        ctx.strokeStyle = 'rgba(60, 60, 60, 0.2)';
+        // Draw subtle grid lines
+        ctx.strokeStyle = 'rgba(60, 60, 60, 0.15)';
         ctx.lineWidth = 0.5;
         
         // Horizontal grid lines
-        const ySteps = 5;
+        const ySteps = 4;
         for (let i = 0; i <= ySteps; i++) {
             const y = padding.top + (chartHeight / ySteps) * i;
             ctx.beginPath();
@@ -146,58 +265,79 @@
             ctx.stroke();
         }
         
-        // Generate sample data
-        const dataPoints = 30;
-        const data = {
-            critical: [],
-            high: [],
-            moderate: [],
-            low: []
-        };
+        // Draw stacked area chart with gradients
+        const keys = ['info', 'low', 'moderate', 'high', 'critical'];
+        const stackedData = [];
         
+        // Calculate stacked values
         for (let i = 0; i < dataPoints; i++) {
-            data.critical.push(Math.random() * 2000);
-            data.high.push(Math.random() * 1500);
-            data.moderate.push(Math.random() * 500);
-            data.low.push(Math.random() * 200);
+            let stack = 0;
+            stackedData[i] = {};
+            keys.forEach(key => {
+                stack += data[key][i];
+                stackedData[i][key] = stack;
+            });
         }
         
-        // Draw stacked area chart
-        const keys = ['critical', 'high', 'moderate', 'low'];
-        const colors = [SEVERITY_COLORS.critical, SEVERITY_COLORS.high, SEVERITY_COLORS.moderate, SEVERITY_COLORS.low];
-        
-        keys.forEach((key, keyIndex) => {
+        // Draw each layer with gradient
+        keys.reverse().forEach((key, keyIndex) => {
+            const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
+            gradient.addColorStop(0, TIMELINE_COLORS[key]);
+            gradient.addColorStop(1, TIMELINE_COLORS[key].replace(/[\d.]+\)/, '0.1)'));
+            
             ctx.beginPath();
-            ctx.fillStyle = colors[keyIndex];
-            ctx.globalAlpha = 0.6;
+            ctx.fillStyle = gradient;
             
-            // Start from bottom
-            ctx.moveTo(padding.left, padding.top + chartHeight);
-            
-            // Draw the line
-            for (let i = 0; i < dataPoints; i++) {
-                const x = padding.left + (chartWidth / (dataPoints - 1)) * i;
-                let y = 0;
-                
-                // Stack values
-                for (let j = 0; j <= keyIndex; j++) {
-                    y += data[keys[j]][i];
-                }
-                
-                const normalizedY = padding.top + chartHeight - (y / 4000) * chartHeight;
-                ctx.lineTo(x, normalizedY);
+            // Check if this line is hovered
+            const isHovered = canvas.hoveredLine === key;
+            if (isHovered) {
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = SEVERITY_COLORS[key];
+            } else if (canvas.hoveredLine && canvas.hoveredLine !== key) {
+                ctx.globalAlpha = 0.3;
+            } else {
+                ctx.globalAlpha = 0.8;
             }
             
-            // Close the path
+            // Start from bottom left
+            ctx.moveTo(padding.left, padding.top + chartHeight);
+            
+            // Draw the upper line with smooth curves
+            for (let i = 0; i < dataPoints; i++) {
+                const x = padding.left + (chartWidth / (dataPoints - 1)) * i;
+                const y = padding.top + chartHeight - (stackedData[i][key] / 4000) * chartHeight;
+                
+                if (i === 0) {
+                    ctx.lineTo(x, y);
+                } else {
+                    // Use quadratic curves for smoother lines
+                    const prevX = padding.left + (chartWidth / (dataPoints - 1)) * (i - 1);
+                    const prevY = padding.top + chartHeight - (stackedData[i - 1][key] / 4000) * chartHeight;
+                    const cpX = (prevX + x) / 2;
+                    const cpY = (prevY + y) / 2;
+                    ctx.quadraticCurveTo(prevX, prevY, cpX, cpY);
+                }
+            }
+            
+            // Draw the last point
+            const lastX = padding.left + chartWidth;
+            const lastY = padding.top + chartHeight - (stackedData[dataPoints - 1][key] / 4000) * chartHeight;
+            ctx.lineTo(lastX, lastY);
+            
+            // Complete the shape
             ctx.lineTo(canvas.width - padding.right, padding.top + chartHeight);
             ctx.closePath();
             ctx.fill();
+            
+            // Reset shadow
+            ctx.shadowBlur = 0;
         });
         
         ctx.globalAlpha = 1;
         
         // Y-axis labels
-        ctx.fillStyle = 'var(--text-secondary)';
+        ctx.fillStyle = '#6c6c6c';
         ctx.font = '10px var(--font-family)';
         ctx.textAlign = 'right';
         
@@ -206,6 +346,126 @@
             const y = padding.top + chartHeight - (chartHeight / (yLabels.length - 1)) * i;
             ctx.fillText(yLabels[i], padding.left - 5, y + 3);
         }
+        
+        // Draw hover indicator in fixed position
+        if (canvas.hoveredLine) {
+            drawFixedIndicator(ctx, canvas.hoveredLine, canvas.width - 100, 30);
+        }
+    }
+    
+    // Generate timeline data
+    function generateTimelineData() {
+        const dataPoints = 30;
+        const data = {
+            critical: [],
+            high: [],
+            moderate: [],
+            low: [],
+            info: []
+        };
+        
+        // Generate more realistic data with trends
+        for (let i = 0; i < dataPoints; i++) {
+            const trend = Math.sin(i / 5) * 0.3 + 0.7;
+            data.critical.push(Math.random() * 800 * trend + 200);
+            data.high.push(Math.random() * 600 * trend + 150);
+            data.moderate.push(Math.random() * 300 * trend + 100);
+            data.low.push(Math.random() * 150 * trend + 50);
+            data.info.push(Math.random() * 100 * trend + 30);
+        }
+        
+        return data;
+    }
+    
+    // Handle timeline hover with throttling
+    let timelineHoverTimeout = null;
+    function handleTimelineHover(e, canvas) {
+        // Throttle hover events to improve performance
+        if (timelineHoverTimeout) return;
+        
+        timelineHoverTimeout = setTimeout(() => {
+            timelineHoverTimeout = null;
+        }, 16); // ~60fps
+        
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        canvas.mousePos = { x, y };
+        
+        const padding = { top: 20, right: 20, bottom: 20, left: 40 };
+        const chartHeight = canvas.height - padding.top - padding.bottom;
+        
+        // Determine which layer is hovered
+        const relativeY = y - padding.top;
+        const value = (1 - relativeY / chartHeight) * 4000;
+        
+        let hoveredLine = null;
+        const data = canvas.chartData;
+        const dataIndex = Math.floor((x - padding.left) / ((canvas.width - padding.left - padding.right) / 29));
+        
+        if (dataIndex >= 0 && dataIndex < 30 && x >= padding.left && x <= canvas.width - padding.right) {
+            let stack = 0;
+            const keys = ['info', 'low', 'moderate', 'high', 'critical'];
+            
+            for (const key of keys) {
+                stack += data[key][dataIndex];
+                if (value <= stack) {
+                    hoveredLine = key;
+                    break;
+                }
+            }
+        }
+        
+        if (hoveredLine !== canvas.hoveredLine) {
+            canvas.hoveredLine = hoveredLine;
+            drawTimelineChart(canvas);
+        }
+    }
+    
+    // Draw fixed indicator
+    function drawFixedIndicator(ctx, severity, x, y) {
+        const labels = {
+            critical: 'Critical',
+            high: 'High',
+            moderate: 'Moderate',
+            low: 'Low',
+            info: 'Info'
+        };
+        
+        const text = labels[severity] || severity;
+        const padding = 8;
+        
+        ctx.font = '11px var(--font-family)';
+        const textWidth = ctx.measureText(text).width;
+        
+        // Calculate box dimensions
+        const boxWidth = textWidth + padding * 3 + 8; // padding + dot size + spacing
+        const boxHeight = 24;
+        const radius = 3;
+        
+        // Draw indicator background
+        ctx.fillStyle = 'rgba(45, 45, 48, 0.9)';
+        ctx.strokeStyle = SEVERITY_COLORS[severity];
+        ctx.lineWidth = 1.5;
+        
+        // Simple rounded rectangle
+        ctx.beginPath();
+        ctx.roundRect(x, y, boxWidth, boxHeight, radius);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw colored dot
+        ctx.fillStyle = SEVERITY_COLORS[severity];
+        ctx.beginPath();
+        ctx.arc(x + padding + 4, y + boxHeight / 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw text (properly aligned)
+        ctx.fillStyle = '#cccccc';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x + padding + 12, y + boxHeight / 2);
+        ctx.textBaseline = 'alphabetic'; // Reset to default
     }
     
     // Refresh report data
