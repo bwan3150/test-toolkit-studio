@@ -1755,27 +1755,56 @@ ipcMain.handle('start-logcat', async (event, options) => {
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台：简化编码处理
+        // Windows平台：智能编码检测
         try {
-          const iconv = require('iconv-lite');
+          // 首先检查原始字节数据
+          const hasHighBytes = data.some(byte => byte >= 0x80);
           
-          // 直接尝试最常用的编码：GBK（中文Windows系统默认）
-          output = iconv.decode(data, 'gbk');
-          
-          // 如果GBK解码后仍有问题，回退到UTF-8
-          if (output.includes('\ufffd') || output.length === 0) {
+          if (hasHighBytes) {
+            // 包含高位字节，可能是非ASCII字符
+            const iconv = require('iconv-lite');
+            
+            // 尝试不同编码并评估结果
+            const encodings = ['gbk', 'gb2312', 'utf8'];
+            let bestResult = null;
+            let bestScore = -1;
+            
+            for (const encoding of encodings) {
+              try {
+                const decoded = iconv.decode(data, encoding);
+                
+                // 计算解码质量分数
+                let score = 0;
+                if (!decoded.includes('\ufffd')) score += 100; // 无替换字符
+                if (decoded.match(/[\u4e00-\u9fff]/g)) score += 50; // 包含中文字符
+                if (decoded.match(/[a-zA-Z0-9]/g)) score += 20; // 包含英文数字
+                
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestResult = { encoding, decoded };
+                }
+              } catch (e) {
+                // 编码失败，跳过
+              }
+            }
+            
+            if (bestResult) {
+              output = bestResult.decoded;
+              console.log(`Windows logcat使用${bestResult.encoding}编码，质量分数:${bestScore}, 长度:${output.length}`);
+            } else {
+              // 所有编码都失败，使用原始二进制
+              output = data.toString('binary');
+              console.log('Windows logcat所有编码失败，使用binary模式');
+            }
+          } else {
+            // 纯ASCII数据，直接使用UTF-8
             output = data.toString('utf8');
           }
           
-          // 简单的调试信息
-          if (output.trim().length > 0) {
-            console.log('Windows logcat接收到数据，长度:', output.length);
-          }
-          
         } catch (error) {
-          // 错误时使用UTF-8
+          // 最终回退方案
           output = data.toString('utf8');
-          console.warn('Windows编码处理失败，使用UTF-8:', error.message);
+          console.warn('Windows编码处理异常，使用UTF-8:', error.message);
         }
       } else {
         output = data.toString('utf8');
@@ -1795,8 +1824,15 @@ ipcMain.handle('start-logcat', async (event, options) => {
         
         // Windows平台调试输出
         if (process.platform === 'win32') {
-          console.log(`Windows logcat发送${lines.length}行数据，编码正常：`, 
-                      !completeOutput.includes('\ufffd'));
+          const hasReplacementChars = completeOutput.includes('\ufffd');
+          const hasGarbledChars = /[σ╖▓σÉ»σè¿]/u.test(completeOutput);
+          
+          console.log(`Windows logcat发送${lines.length}行数据，编码状态：正常=${!hasReplacementChars && !hasGarbledChars}`);
+          
+          // 如果还有编码问题，输出原始字节样本用于诊断
+          if (hasReplacementChars || hasGarbledChars) {
+            console.log('仍有编码问题，原始样本:', completeOutput.substring(0, 100));
+          }
         }
         
         mainWindow.webContents.send('logcat-data', completeOutput);
