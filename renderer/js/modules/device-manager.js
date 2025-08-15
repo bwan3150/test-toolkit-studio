@@ -1237,19 +1237,60 @@ async function installApkToDevice(deviceId, apkPath) {
         return;
     }
     
-    // 显示安装中的提示
-    window.NotificationModule.showNotification('正在安装APK，请稍候...', 'info');
-    
     console.log('开始安装APK:', deviceId, apkPath);
     
+    // 显示loading modal
+    showApkInstallLoading('正在获取APK信息...', '分析APK文件，请稍候...');
+    
     try {
+        // 第一步：先获取APK的包名（无论是否安装成功都需要知道包名）
+        const packageInfo = await ipcRenderer.invoke('get-apk-package-name', apkPath);
+        
+        if (!packageInfo.success || !packageInfo.packageName) {
+            // 如果无法自动获取包名，询问用户手动输入
+            hideApkInstallLoading();
+            
+            // 检查是否是需要手动输入包名的平台
+            if (packageInfo.error && (packageInfo.error.includes('平台暂不支持') || packageInfo.error.includes('请手动提供包名信息'))) {
+                const manualPackageName = prompt(
+                    '无法自动获取APK包名。\n请手动输入应用的包名（例如：com.example.app）：',
+                    ''
+                );
+                
+                if (!manualPackageName || !manualPackageName.trim()) {
+                    window.NotificationModule.showNotification('取消安装：未提供包名', 'warning');
+                    return;
+                }
+                
+                // 验证包名格式
+                if (!/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(manualPackageName.trim())) {
+                    window.NotificationModule.showNotification('包名格式无效，请使用正确的包名格式（如：com.example.app）', 'error');
+                    return;
+                }
+                
+                packageName = manualPackageName.trim();
+                console.log('用户手动输入的包名:', packageName);
+            } else {
+                window.NotificationModule.showNotification(`无法读取APK包名：${packageInfo.error || '未知错误'}`, 'error');
+                return;
+            }
+        } else {
+            packageName = packageInfo.packageName;
+        }
+        
+        console.log('获取到APK包名:', packageName);
+        
+        // 更新loading状态，显示包名
+        updateApkInstallLoading('正在安装APK...', `正在安装 ${packageName}`, packageName);
+        
+        // 第二步：尝试直接安装
         const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
         console.log('收到安装结果:', result);
         
         if (result.success) {
+            // 安装成功
+            hideApkInstallLoading();
             window.NotificationModule.showNotification('APK安装成功！', 'success');
-            
-            // 刷新设备列表以更新当前应用信息
             await refreshConnectedDevices();
         } else {
             // 显示详细错误信息
@@ -1258,25 +1299,116 @@ async function installApkToDevice(deviceId, apkPath) {
             
             // 检查是否包含签名不匹配的标识
             const isSignatureMismatch = errorMsg.includes('签名不匹配') || 
-                                       (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) ||
                                        (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE'));
             
             console.log('是否签名不匹配:', isSignatureMismatch);
             
             if (isSignatureMismatch) {
-                // 显示签名冲突确认框
-                showApkInstallModal(deviceId, apkPath);
+                // 第三步：安装失败时，隐藏loading并显示确认框
+                hideApkInstallLoading();
+                showApkInstallModalWithPackage(deviceId, apkPath, packageName);
             } else {
+                // 其他错误，隐藏loading并显示错误
+                hideApkInstallLoading();
                 window.NotificationModule.showNotification(`APK安装失败: ${errorMsg}`, 'error');
             }
         }
     } catch (error) {
         console.error('安装APK失败:', error);
+        hideApkInstallLoading();
         window.NotificationModule.showNotification(`安装失败: ${error.message}`, 'error');
     }
 }
 
-// 显示APK安装确认模态框
+// APK安装Loading状态管理
+function showApkInstallLoading(title, message) {
+    const modal = document.getElementById('apkInstallLoadingModal');
+    const titleElement = document.getElementById('apkLoadingTitle');
+    const messageElement = document.getElementById('apkLoadingMessage');
+    const detailsElement = document.getElementById('apkLoadingDetails');
+    
+    if (modal && titleElement && messageElement) {
+        titleElement.textContent = title;
+        messageElement.textContent = message;
+        detailsElement.style.display = 'none'; // 初始时隐藏详情
+        modal.style.display = 'block';
+    }
+}
+
+function updateApkInstallLoading(title, message, packageName = null) {
+    const titleElement = document.getElementById('apkLoadingTitle');
+    const messageElement = document.getElementById('apkLoadingMessage');
+    const detailsElement = document.getElementById('apkLoadingDetails');
+    const packageNameElement = document.getElementById('apkPackageName');
+    
+    if (titleElement && messageElement) {
+        titleElement.textContent = title;
+        messageElement.textContent = message;
+        
+        if (packageName && detailsElement && packageNameElement) {
+            packageNameElement.textContent = packageName;
+            detailsElement.style.display = 'block';
+        }
+    }
+}
+
+function hideApkInstallLoading() {
+    const modal = document.getElementById('apkInstallLoadingModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// 显示APK安装确认模态框（带已知包名）
+function showApkInstallModalWithPackage(deviceId, apkPath, packageName) {
+    const modal = document.getElementById('apkInstallModal');
+    if (!modal) {
+        console.error('找不到APK安装模态框');
+        return;
+    }
+    
+    // 更新模态框内容，显示具体的包名信息
+    const messageElement = modal.querySelector('.modal-message');
+    if (messageElement) {
+        messageElement.innerHTML = `
+            <p><strong>安装失败：签名不匹配</strong></p>
+            <p>应用包名：<code>${packageName}</code></p>
+            <p>设备上已安装了相同包名但不同签名的应用版本。</p>
+            <p>要继续安装，需要先卸载现有版本。</p>
+        `;
+    }
+    
+    // 设置确认按钮的事件处理器
+    const confirmBtn = modal.querySelector('#confirmUninstallBtn');
+    const cancelBtn = modal.querySelector('#cancelUninstallBtn');
+    
+    if (confirmBtn) {
+        // 移除之前的事件监听器
+        confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+        const newConfirmBtn = modal.querySelector('#confirmUninstallBtn');
+        
+        newConfirmBtn.addEventListener('click', async () => {
+            modal.style.display = 'none';
+            // 使用已知的包名直接进行卸载重装
+            await uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageName);
+        });
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+        const newCancelBtn = modal.querySelector('#cancelUninstallBtn');
+        
+        newCancelBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+            // 确保loading modal也被隐藏
+            hideApkInstallLoading();
+        });
+    }
+    
+    modal.style.display = 'block';
+}
+
+// 显示APK安装确认模态框（原版，保留兼容性）
 function showApkInstallModal(deviceId, apkPath) {
     const modal = document.getElementById('apkInstallModal');
     
@@ -1348,10 +1480,16 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
             if (directInstallResult.success) {
                 window.NotificationModule.showNotification('APK安装成功！', 'success');
                 await refreshConnectedDevices();
+                return; // 安装成功，直接返回
+            } else if (directInstallResult.packageName) {
+                // 从安装错误中获取到了包名，使用该包名继续卸载重装流程
+                packageName = directInstallResult.packageName;
+                window.NotificationModule.showNotification(`从错误信息中获取到包名: ${packageName}，继续卸载重装...`, 'info');
+                // 不return，继续执行后面的卸载重装逻辑
             } else {
                 window.NotificationModule.showNotification('无法获取包名，请手动卸载原应用后重试', 'error');
+                return;
             }
-            return;
         }
         
         // 卸载应用（卸载的是与APK相同包名的已安装版本）
@@ -1376,6 +1514,49 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
         
     } catch (error) {
         console.error('卸载并重装失败:', error);
+        window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
+    }
+}
+
+// 使用已知包名进行卸载重装（简化版本，无需提取包名）
+async function uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageName) {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        console.log(`开始卸载重装流程，包名: ${packageName}`);
+        
+        // 显示卸载loading
+        showApkInstallLoading('正在卸载应用...', `正在卸载已安装的 ${packageName}`, packageName);
+        
+        // 第一步：卸载已安装的应用
+        const uninstallResult = await ipcRenderer.invoke('adb-uninstall-app', deviceId, packageName);
+        
+        if (!uninstallResult.success) {
+            // 如果卸载失败，可能是应用不存在，继续尝试安装
+            updateApkInstallLoading('准备安装...', '原应用可能不存在，尝试直接安装', packageName);
+        } else {
+            updateApkInstallLoading('卸载成功', `${packageName} 卸载成功，准备安装新版本`, packageName);
+            // 短暂延迟让用户看到成功状态
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        // 第二步：安装新的APK
+        updateApkInstallLoading('正在安装APK...', `正在安装新版本的 ${packageName}`, packageName);
+        const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
+        
+        // 隐藏loading
+        hideApkInstallLoading();
+        
+        if (installResult.success) {
+            window.NotificationModule.showNotification('APK安装成功！', 'success');
+            await refreshConnectedDevices();
+        } else {
+            window.NotificationModule.showNotification(`安装失败: ${installResult.error}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('卸载并重装失败:', error);
+        hideApkInstallLoading();
         window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
     }
 }

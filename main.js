@@ -953,16 +953,21 @@ ipcMain.handle('window-is-maximized', () => {
 // 获取APK包名（通过尝试安装获取错误信息中的包名）
 ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
   try {
+    console.log('开始获取APK包名，文件路径:', apkPath);
     const adbPath = getBuiltInAdbPath();
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
+      console.error('ADB路径不存在:', adbPath);
       return { success: false, error: '内置Android SDK未找到' };
     }
     
     if (!apkPath || !fsSync.existsSync(apkPath)) {
+      console.error('APK文件不存在:', apkPath);
       return { success: false, error: 'APK文件不存在' };
     }
+    
+    console.log('APK文件存在，开始解析包名');
     
     // 方法1：尝试通过aapt获取（如果有的话）
     const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
@@ -970,81 +975,53 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
     let aaptPath;
     
     if (app.isPackaged) {
-      aaptPath = path.join(process.resourcesPath, platform, 'android-sdk', 'build-tools', '34.0.0', aaptName);
+      aaptPath = path.join(process.resourcesPath, platform, 'android-sdk', 'build-tools', '33.0.2', aaptName);
     } else {
-      aaptPath = path.join(__dirname, 'resources', platform, 'android-sdk', 'build-tools', '34.0.0', aaptName);
+      aaptPath = path.join(__dirname, 'resources', platform, 'android-sdk', 'build-tools', '33.0.2', aaptName);
     }
+    
+    console.log('尝试使用aapt路径:', aaptPath);
+    console.log('aapt文件是否存在:', fsSync.existsSync(aaptPath));
     
     // 尝试使用aapt
     if (fsSync.existsSync(aaptPath)) {
       try {
         console.log('使用aapt获取APK包名');
-        const { stdout } = await execPromise(`"${aaptPath}" dump badging "${apkPath}" | grep package:`);
+        const aaptCommand = `"${aaptPath}" dump badging "${apkPath}"`;
+        console.log('执行aapt命令:', aaptCommand);
+        
+        const { stdout } = await execPromise(aaptCommand);
+        console.log('aapt输出前100字符:', stdout.substring(0, 100));
+        
         const packageMatch = stdout.match(/package:\s+name='([^']+)'/);
         if (packageMatch && packageMatch[1]) {
           const packageName = packageMatch[1];
           console.log('通过aapt获取到包名:', packageName);
           return { success: true, packageName };
+        } else {
+          console.log('aapt输出中未找到包名匹配');
+          return { success: false, error: 'aapt输出中未找到包名信息' };
         }
       } catch (error) {
-        console.log('aapt方法失败，尝试其他方法');
+        console.error('aapt方法失败:', error.message);
+        return { success: false, error: `aapt执行失败: ${error.message}` };
       }
-    }
-    
-    // 方法2：通过尝试安装来获取包名（从错误信息中提取）
-    // 使用一个不存在的设备ID来快速失败，但能获取包名信息
-    try {
-      console.log('尝试从APK安装信息中获取包名');
-      // 先列出设备，选择第一个设备
-      const { stdout: devicesOutput } = await execPromise(`"${adbPath}" devices`);
-      const deviceMatch = devicesOutput.match(/^([^\s]+)\s+device$/m);
-      
-      if (deviceMatch && deviceMatch[1]) {
-        const tempDeviceId = deviceMatch[1];
-        // 尝试安装（不用-r -d参数，这样如果已存在会报错并显示包名）
-        const installCommand = `"${adbPath}" -s ${tempDeviceId} install "${apkPath}"`;
-        
-        try {
-          const { stdout, stderr } = await execPromise(installCommand);
-          const output = stdout + stderr;
-          
-          // 从错误信息中提取包名
-          // 常见格式: "Package com.example.app signatures do not match"
-          // 或: "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package com.example.app signatures"
-          const packageRegex = /Package\s+([a-zA-Z0-9._]+)\s+/;
-          const match = output.match(packageRegex);
-          
-          if (match && match[1]) {
-            const packageName = match[1];
-            console.log('从安装信息中获取到包名:', packageName);
-            return { success: true, packageName };
-          }
-        } catch (installError) {
-          // 安装失败是预期的，我们只需要从错误信息中提取包名
-          const errorOutput = (installError.stdout || '') + (installError.stderr || '');
-          
-          // 多种包名提取模式
-          const packagePatterns = [
-            /Package\s+([a-zA-Z0-9._]+)\s+signatures/,  // Package com.example.app signatures
-            /Package\s+([a-zA-Z0-9._]+)\s+/,            // Package com.example.app 
-            /package:\s*([a-zA-Z0-9._]+)/,              // package: com.example.app
-            /INSTALL_FAILED_UPDATE_INCOMPATIBLE:\s*Existing\s+package\s+([a-zA-Z0-9._]+)/  // 新格式
-          ];
-          
-          for (const pattern of packagePatterns) {
-            const match = errorOutput.match(pattern);
-            if (match && match[1]) {
-              const packageName = match[1];
-              console.log('从错误信息中获取到包名:', packageName);
-              return { success: true, packageName };
-            }
-          }
-        }
+    } else {
+      console.log('aapt工具不存在');
+      let errorMsg;
+      switch (platform) {
+        case 'win32':
+          errorMsg = 'Windows平台暂不支持自动获取APK包名，请手动提供包名信息';
+          break;
+        case 'linux':
+          errorMsg = 'Linux平台暂不支持自动获取APK包名，请手动提供包名信息';
+          break;
+        default:
+          errorMsg = `aapt工具未找到，路径: ${aaptPath}`;
       }
-    } catch (error) {
-      console.log('无法通过安装方法获取包名');
+      return { success: false, error: errorMsg };
     }
-    
+    // 如果aapt方法失败，返回错误
     return { success: false, error: '无法自动获取包名' };
     
   } catch (error) {
@@ -1144,7 +1121,13 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
       if (fullOutput.includes('INSTALL_FAILED_ALREADY_EXISTS')) {
         errorMsg = '应用已存在，请卸载后重试';
       } else if (fullOutput.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) {
-        errorMsg = '签名不匹配，需要先卸载原应用';
+        // 从错误信息中提取包名
+        let packageName = 'unknown';
+        const packageMatch = fullOutput.match(/package\s+([a-zA-Z0-9._]+)/i);
+        if (packageMatch) {
+          packageName = packageMatch[1];
+        }
+        errorMsg = `签名不匹配: ${packageName} 的debug版本和release版本签名不同，需要先卸载原应用`;
       } else if (fullOutput.includes('INSTALL_FAILED_VERSION_DOWNGRADE')) {
         errorMsg = '不允许降级安装，请使用强制安装选项';
       } else if (fullOutput.includes('INSTALL_FAILED_INSUFFICIENT_STORAGE')) {
@@ -1179,18 +1162,46 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
     const errorOutput = (error.stdout || '') + (error.stderr || '') + error.message;
     console.log('完整错误输出:', errorOutput);
     
+    // 从错误信息中提取包名
+    let extractedPackageName = null;
+    const packagePatterns = [
+      /INSTALL_FAILED_UPDATE_INCOMPATIBLE:\s*Existing\s+package\s+([a-zA-Z0-9._]+)/,  // INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.example.app
+      /Existing\s+package\s+([a-zA-Z0-9._]+)\s+signatures/,  // Existing package com.example.app signatures
+      /package\s+([a-zA-Z0-9._]+)\s+signatures\s+do\s+not\s+match/,  // package com.example.app signatures do not match
+      /Package\s+([a-zA-Z0-9._]+)\s+signatures/,  // Package com.example.app signatures
+      /Package\s+([a-zA-Z0-9._]+)\s+/,            // Package com.example.app 
+      /package:\s*([a-zA-Z0-9._]+)/              // package: com.example.app
+    ];
+    
+    console.log('尝试从catch块的错误信息中提取包名:', errorOutput);
+    
+    for (const pattern of packagePatterns) {
+      const match = errorOutput.match(pattern);
+      if (match && match[1]) {
+        extractedPackageName = match[1];
+        console.log('从安装错误中提取到包名:', extractedPackageName);
+        break;
+      }
+    }
+    
     if (errorOutput.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) {
+      const errorMessage = extractedPackageName 
+        ? `签名不匹配: ${extractedPackageName} 的debug版本和release版本签名不同，需要先卸载原应用`
+        : '签名不匹配，需要先卸载原应用';
+      
       return { 
         success: false, 
-        error: '签名不匹配，需要先卸载原应用',
-        details: errorOutput
+        error: errorMessage,
+        details: errorOutput,
+        packageName: extractedPackageName  // 返回提取到的包名
       };
     }
     
     return { 
       success: false, 
       error: error.message,
-      details: errorOutput
+      details: errorOutput,
+      packageName: extractedPackageName  // 返回提取到的包名（如果有的话）
     };
   }
 });
