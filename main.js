@@ -88,7 +88,7 @@ function createWindow() {
     startTokenCheck();
   } else if (refreshToken) {
     // 有refresh token，尝试自动刷新
-    console.log('Token即将过期或已过期，尝试自动刷新...');
+    console.log('Token is about to expire or expired, trying auto refresh...');
     tryRefreshTokenOnStartup();
   } else {
     // 没有有效token，显示登录页面
@@ -231,17 +231,17 @@ async function tryRefreshTokenOnStartup() {
     const result = await refreshTokenInternal();
     
     if (result.success) {
-      console.log('启动时token刷新成功');
+      console.log('Token refresh succeeded on startup');
       isAuthenticated = true;
       mainWindow.loadFile('renderer/index.html');
       // 启动定期token检查
       startTokenCheck();
     } else {
-      console.log('启动时token刷新失败，跳转到登录页面');
+      console.log('Token refresh failed on startup, redirecting to login page');
       mainWindow.loadFile('renderer/login.html');
     }
   } catch (error) {
-    console.error('启动时token刷新异常:', error);
+    console.error('Token refresh exception on startup:', error);
     mainWindow.loadFile('renderer/login.html');
   }
 }
@@ -254,7 +254,7 @@ async function refreshTokenInternal() {
     const baseUrl = store.get('base_url');
     
     if (!refreshToken || !baseUrl) {
-      return { success: false, error: '缺少refresh token或base URL' };
+      return { success: false, error: 'Missing refresh token or base URL' };
     }
     
     const response = await axios.post(`${baseUrl}/api/auth/refresh`, 
@@ -275,7 +275,7 @@ async function refreshTokenInternal() {
     
     return { success: true, data };
   } catch (error) {
-    console.error('刷新token失败:', error.message);
+    console.error('Failed to refresh token:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -296,7 +296,7 @@ function startTokenCheck() {
       
       const tokenExpiry = store.get('token_expiry');
       if (!tokenExpiry) {
-        console.log('没有token过期时间，停止定期检查');
+        console.log('No token expiry time, stopping periodic check');
         stopTokenCheck();
         return;
       }
@@ -307,17 +307,17 @@ function startTokenCheck() {
       
       // 如果token将在5分钟内过期，尝试刷新
       if (now.getTime() > (expiry.getTime() - bufferTime)) {
-        console.log('定期检查发现token即将过期，正在刷新...');
+        console.log('Periodic check found token is about to expire, refreshing...');
         
         const result = await refreshTokenInternal();
         if (result.success) {
-          console.log('定期token刷新成功');
+          console.log('Periodic token refresh succeeded');
           // 通知渲染进程token已刷新
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('token-refreshed');
           }
         } else {
-          console.log('定期token刷新失败，将跳转到登录页面');
+          console.log('Periodic token refresh failed, redirecting to login page');
           isAuthenticated = false;
           stopTokenCheck();
           
@@ -327,11 +327,11 @@ function startTokenCheck() {
         }
       }
     } catch (error) {
-      console.error('定期token检查异常:', error);
+      console.error('Periodic token check exception:', error);
     }
   }, 10 * 60 * 1000); // 10分钟
   
-  console.log('已启动定期token检查（每10分钟）');
+  console.log('Started periodic token check (every 10 minutes)');
 }
 
 // 停止定期token检查
@@ -339,7 +339,7 @@ function stopTokenCheck() {
   if (tokenCheckInterval) {
     clearInterval(tokenCheckInterval);
     tokenCheckInterval = null;
-    console.log('已停止定期token检查');
+    console.log('Stopped periodic token check');
   }
 }
 
@@ -495,7 +495,7 @@ ipcMain.handle('save-file', async (event, filepath, content) => {
     await fs.writeFile(filepath, content, 'utf-8');
     return { success: true };
   } catch (error) {
-    console.error('保存文件失败:', error);
+    console.error('Failed to save file:', error);
     return { success: false, error: error.message };
   }
 });
@@ -623,9 +623,9 @@ ipcMain.handle('adb-screenshot', async (event, deviceId, projectPath = null) => 
           const xmlPath = path.join(workareaPath, 'current_ui_tree.xml');
           await fs.writeFile(xmlPath, xmlContent, 'utf8');
           
-          console.log('已保存截图和UI树到工作区:', workareaPath);
+          console.log('Saved screenshot and UI tree to workspace:', workareaPath);
         } catch (xmlError) {
-          console.warn('获取UI树失败，但截图保存成功:', xmlError.message);
+          console.warn('Failed to get UI tree, but screenshot saved successfully:', xmlError.message);
         }
         
         // 返回截图路径和base64数据
@@ -635,7 +635,7 @@ ipcMain.handle('adb-screenshot', async (event, deviceId, projectPath = null) => 
           screenshotPath: screenshotPath
         };
       } catch (saveError) {
-        console.warn('保存到工作区失败:', saveError.message);
+        console.warn('Failed to save to workspace:', saveError.message);
         // 不影响截图返回
       }
     }
@@ -705,7 +705,7 @@ ipcMain.handle('adb-ui-dump-enhanced', async (event, deviceId) => {
         }
       }
     } catch (sizeError) {
-      console.warn('无法获取屏幕尺寸:', sizeError.message);
+      console.warn('Cannot get screen size:', sizeError.message);
       // 使用默认尺寸
       screenSize = { width: 1080, height: 1920 };
     }
@@ -723,7 +723,7 @@ ipcMain.handle('adb-ui-dump-enhanced', async (event, deviceId) => {
         androidVersion: versionOutput.trim()
       };
     } catch (infoError) {
-      console.warn('无法获取设备信息:', infoError.message);
+      console.warn('Cannot get device info:', infoError.message);
     }
     
     return { 
@@ -747,12 +747,12 @@ ipcMain.handle('init-project-workarea', async (event, projectPath) => {
     const fsSync = require('fs');
     if (!fsSync.existsSync(workareaPath)) {
       await fs.mkdir(workareaPath, { recursive: true });
-      console.log('创建工作区目录:', workareaPath);
+      console.log('Creating workspace directory:', workareaPath);
     }
     
     return { success: true, path: workareaPath };
   } catch (error) {
-    console.error('初始化项目工作区失败:', error);
+    console.error('Failed to initialize project workspace:', error);
     return { success: false, error: error.message };
   }
 });
@@ -783,13 +783,13 @@ ipcMain.handle('adb-shell-command', async (event, command, deviceId = null) => {
     const deviceArg = deviceId ? `-s ${deviceId}` : '';
     const fullCommand = `"${adbPath}" ${deviceArg} shell ${command}`;
     
-    console.log('执行ADB Shell命令:', fullCommand);
+    console.log('Executing ADB Shell command:', fullCommand);
     
     const { stdout, stderr } = await execPromise(fullCommand);
     
     if (stderr && !stderr.includes('Warning')) {
-      // 某些ADB命令会在stderr输出警告，但仍然成功
-      console.warn('ADB命令警告:', stderr);
+      // 某些ADB命令会在stderr输出警告，但仍然Success
+      console.warn('ADB command warning:', stderr);
     }
     
     return { 
@@ -798,7 +798,7 @@ ipcMain.handle('adb-shell-command', async (event, command, deviceId = null) => {
       error: stderr
     };
   } catch (error) {
-    console.error('ADB Shell命令执行失败:', error);
+    console.error('ADB Shell command execution failed:', error);
     return { 
       success: false, 
       error: error.message,
@@ -819,7 +819,7 @@ ipcMain.handle('adb-batch-commands', async (event, commands, deviceId = null) =>
       ...result
     });
     
-    // 如果某个命令失败，停止执行
+    // 如果某个命令Failed，停止执行
     if (!result.success && command.required !== false) {
       break;
     }
@@ -835,11 +835,11 @@ ipcMain.handle('get-current-app', async (event, deviceId) => {
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!deviceId) {
-      return { success: false, error: '请提供设备ID' };
+      return { success: false, error: 'Please provide device ID' };
     }
     
     let packageName = '';
@@ -872,7 +872,7 @@ ipcMain.handle('get-current-app', async (event, deviceId) => {
       // 继续尝试其他方法
     }
     
-    // 方法2: 如果方法1失败，尝试activity activities
+    // 方法2: 如果方法1Failed，尝试activity activities
     if (!packageName) {
       try {
         const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell dumpsys activity activities`);
@@ -905,19 +905,19 @@ ipcMain.handle('get-current-app', async (event, deviceId) => {
       return { 
         success: true, 
         packageName: packageName,
-        activityName: activityName || '未获取到Activity'
+        activityName: activityName || 'Activity not found'
       };
     } else {
       return { 
         success: false, 
-        error: '无法获取当前运行的应用信息。请确保设备屏幕已解锁并且有应用正在前台运行。'
+        error: 'Cannot get current running app info. Please ensure device screen is unlocked and an app is running in foreground.'
       };
     }
     
   } catch (error) {
     return { 
       success: false,
-      error: `获取失败: ${error.message}`
+      error: `Failed to get: ${error.message}`
     };
   }
 });
@@ -953,21 +953,21 @@ ipcMain.handle('window-is-maximized', () => {
 // 获取APK包名（通过尝试安装获取错误信息中的包名）
 ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
   try {
-    console.log('开始获取APK包名，文件路径:', apkPath);
+    console.log('Starting to get APK package name, file path:', apkPath);
     const adbPath = getBuiltInAdbPath();
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      console.error('ADB路径不存在:', adbPath);
-      return { success: false, error: '内置Android SDK未找到' };
+      console.error('ADB path does not exist:', adbPath);
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!apkPath || !fsSync.existsSync(apkPath)) {
-      console.error('APK文件不存在:', apkPath);
-      return { success: false, error: 'APK文件不存在' };
+      console.error('APK file does not exist:', apkPath);
+      return { success: false, error: 'APK file does not exist' };
     }
     
-    console.log('APK文件存在，开始解析包名');
+    console.log('APK file exists, starting to parse package name');
     
     // 方法1：尝试通过aapt获取（如果有的话）
     const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
@@ -980,38 +980,38 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
       aaptPath = path.join(__dirname, 'resources', platform, 'android-sdk', 'build-tools', '33.0.2', aaptName);
     }
     
-    console.log('尝试使用aapt路径:', aaptPath);
-    console.log('aapt文件是否存在:', fsSync.existsSync(aaptPath));
+    console.log('Trying aapt path:', aaptPath);
+    console.log('Does aapt file exist:', fsSync.existsSync(aaptPath));
     
     // 尝试使用aapt
     if (fsSync.existsSync(aaptPath)) {
       try {
-        console.log('使用aapt获取APK包名');
+        console.log('Getting APK package name using aapt');
         const aaptCommand = `"${aaptPath}" dump badging "${apkPath}"`;
-        console.log('执行aapt命令:', aaptCommand);
+        console.log('Executing aapt command:', aaptCommand);
         
         const { stdout } = await execPromise(aaptCommand);
-        console.log('aapt输出前100字符:', stdout.substring(0, 100));
+        console.log('First 100 characters of aapt output:', stdout.substring(0, 100));
         
         const packageMatch = stdout.match(/package:\s+name='([^']+)'/);
         if (packageMatch && packageMatch[1]) {
           const packageName = packageMatch[1];
-          console.log('通过aapt获取到包名:', packageName);
+          console.log('Got package name through aapt:', packageName);
           return { success: true, packageName };
         } else {
-          console.log('aapt输出中未找到包名匹配');
-          return { success: false, error: 'aapt输出中未找到包名信息' };
+          console.log('No package name match found in aapt output');
+          return { success: false, error: 'No package name info found in aapt output' };
         }
       } catch (error) {
-        console.error('aapt方法失败:', error.message);
-        return { success: false, error: `aapt执行失败: ${error.message}` };
+        console.error('aapt method failed:', error.message);
+        return { success: false, error: `aapt execution failed: ${error.message}` };
       }
     } else {
-      console.log('aapt工具不存在，尝试通过安装错误获取包名');
+      console.log('aapt tool not found, trying to get package name through install error');
       
       // 如果aapt不可用，尝试通过安装错误信息获取包名
       try {
-        // 先列出设备，选择第一个设备
+        // 先列出设备，选择第一devices
         const devicesCommand = `"${adbPath}" devices`;
         const { stdout: devicesOutput } = await execPromise(devicesCommand);
         const deviceMatch = devicesOutput.match(/^([^\s]+)\s+device$/m);
@@ -1024,10 +1024,10 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
           
           try {
             await execPromise(installCommand);
-            // 如果安装成功，无法获取包名
-            return { success: false, error: '无法获取包名，请手动提供', needManualInput: true };
+            // 如果安装Success，无法获取包名
+            return { success: false, error: 'Cannot get package name, please provide manually', needManualInput: true };
           } catch (installError) {
-            // 安装失败，尝试从错误信息中提取包名
+            // 安装Failed，尝试从错误信息中提取包名
             const errorOutput = (installError.stdout || '') + (installError.stderr || '');
             
             const packagePatterns = [
@@ -1042,24 +1042,24 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
               const match = errorOutput.match(pattern);
               if (match && match[1]) {
                 const packageName = match[1];
-                console.log('从安装错误中获取到包名:', packageName);
+                console.log('Got package name from install error:', packageName);
                 return { success: true, packageName };
               }
             }
           }
         }
       } catch (error) {
-        console.log('通过安装方法获取包名失败:', error.message);
+        console.log('Failed to get package name through install method:', error.message);
       }
       
-      // 所有方法都失败，需要用户手动输入
-      return { success: false, error: '无法自动获取包名，请手动提供', needManualInput: true };
+      // 所有方法都Failed，需要用户手动输入
+      return { success: false, error: 'Cannot get package name automatically, please provide manually', needManualInput: true };
     }
-    // 如果aapt方法失败，返回错误
-    return { success: false, error: '无法自动获取包名' };
+    // 如果aapt方法Failed，返回错误
+    return { success: false, error: 'Cannot get package name automatically' };
     
   } catch (error) {
-    console.error('获取APK包名失败:', error);
+    console.error('Failed to get APK package name:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1071,32 +1071,32 @@ ipcMain.handle('adb-uninstall-app', async (event, deviceId, packageName) => {
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!deviceId || !packageName) {
-      return { success: false, error: '设备ID或包名无效' };
+      return { success: false, error: 'Invalid device ID or package name' };
     }
     
-    console.log('正在卸载应用:', packageName, '从设备:', deviceId);
+    console.log('Uninstalling app:', packageName, 'from device:', deviceId);
     
     // 执行卸载命令
     const uninstallCommand = `"${adbPath}" -s ${deviceId} uninstall ${packageName}`;
     const { stdout, stderr } = await execPromise(uninstallCommand);
     
-    if (stdout.includes('Success') || stdout.includes('成功')) {
-      console.log('应用卸载成功');
-      return { success: true, message: '应用卸载成功' };
-    } else if (stderr || stdout.includes('Failure') || stdout.includes('失败')) {
-      console.error('应用卸载失败:', stdout, stderr);
+    if (stdout.includes('Success') || stdout.includes('Success')) {
+      console.log('App uninstalled successfully');
+      return { success: true, message: 'App uninstalled successfully' };
+    } else if (stderr || stdout.includes('Failure') || stdout.includes('Failed')) {
+      console.error('Failed to uninstall app:', stdout, stderr);
       return { success: false, error: stdout + stderr };
     } else {
-      // 未知结果，可能成功
-      return { success: true, message: '卸载命令已执行' };
+      // 未知结果，可能Success
+      return { success: true, message: 'Uninstall command executed' };
     }
     
   } catch (error) {
-    console.error('卸载应用失败:', error);
+    console.error('Failed to uninstall app:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1108,19 +1108,19 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!deviceId || !apkPath) {
-      return { success: false, error: '设备ID或APK路径无效' };
+      return { success: false, error: 'Invalid device ID or APK path' };
     }
     
     // 检查APK文件是否存在
     if (!fsSync.existsSync(apkPath)) {
-      return { success: false, error: 'APK文件不存在' };
+      return { success: false, error: 'APK file does not exist' };
     }
     
-    console.log('正在安装APK到设备:', deviceId, apkPath);
+    console.log('Installing APK to device:', deviceId, apkPath);
     
     // 构建安装命令
     // -r: 替换已存在的应用
@@ -1133,7 +1133,7 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
     installFlags += ' -g'; // 授予权限
     
     const installCommand = `"${adbPath}" -s ${deviceId} install ${installFlags} "${apkPath}"`;
-    console.log('执行安装命令:', installCommand);
+    console.log('Executing install command:', installCommand);
     
     const { stdout, stderr } = await execPromise(installCommand);
     
@@ -1141,19 +1141,19 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
     const fullOutput = stdout + '\n' + stderr;
     
     // 检查安装结果
-    if (fullOutput.includes('Success') || fullOutput.includes('成功')) {
-      console.log('APK安装成功');
+    if (fullOutput.includes('Success') || fullOutput.includes('Success')) {
+      console.log('APK installed successfully');
       return { 
         success: true, 
-        message: 'APK安装成功',
+        message: 'APK installed successfully',
         output: stdout
       };
-    } else if (fullOutput.includes('Failure') || fullOutput.includes('失败') || fullOutput.includes('INSTALL_FAILED')) {
+    } else if (fullOutput.includes('Failure') || fullOutput.includes('Failed') || fullOutput.includes('INSTALL_FAILED')) {
       // 解析错误原因
-      let errorMsg = '安装失败';
+      let errorMsg = '安装Failed';
       
       if (fullOutput.includes('INSTALL_FAILED_ALREADY_EXISTS')) {
-        errorMsg = '应用已存在，请卸载后重试';
+        errorMsg = 'App already exists, please uninstall and retry';
       } else if (fullOutput.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) {
         // 从错误信息中提取包名
         let packageName = 'unknown';
@@ -1161,40 +1161,40 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
         if (packageMatch) {
           packageName = packageMatch[1];
         }
-        errorMsg = `签名不匹配: ${packageName} 的debug版本和release版本签名不同，需要先卸载原应用`;
+        errorMsg = `Signature mismatch: ${packageName} debug and release versions have different signatures, need to uninstall first`;
       } else if (fullOutput.includes('INSTALL_FAILED_VERSION_DOWNGRADE')) {
-        errorMsg = '不允许降级安装，请使用强制安装选项';
+        errorMsg = 'Downgrade not allowed, please use force install option';
       } else if (fullOutput.includes('INSTALL_FAILED_INSUFFICIENT_STORAGE')) {
-        errorMsg = '设备存储空间不足';
+        errorMsg = 'Insufficient device storage';
       } else if (fullOutput.includes('INSTALL_FAILED_INVALID_APK')) {
-        errorMsg = 'APK文件无效或损坏';
+        errorMsg = 'APK file invalid or corrupted';
       } else if (fullOutput.includes('INSTALL_PARSE_FAILED')) {
-        errorMsg = 'APK解析失败，文件可能损坏';
+        errorMsg = 'APK解析Failed，文件可能损坏';
       } else if (fullOutput.includes('INSTALL_FAILED_CPU_ABI_INCOMPATIBLE')) {
-        errorMsg = 'APK与设备CPU架构不兼容';
+        errorMsg = 'APK incompatible with device CPU architecture';
       }
       
-      console.error('APK安装失败:', fullOutput);
+      console.error('APK installation failed:', fullOutput);
       return { 
         success: false, 
         error: errorMsg,
         details: fullOutput
       };
     } else {
-      // 未知结果，可能成功
+      // 未知结果，可能Success
       return { 
         success: true, 
-        message: '安装命令已执行',
+        message: 'Install command executed',
         output: stdout
       };
     }
     
   } catch (error) {
-    console.error('安装APK失败:', error);
+    console.error('Failed to install APK:', error);
     
-    // 检查错误信息中是否包含签名不匹配
+    // 检查错误信息中是否包含Signature mismatch
     const errorOutput = (error.stdout || '') + (error.stderr || '') + error.message;
-    console.log('完整错误输出:', errorOutput);
+    console.log('Full error output:', errorOutput);
     
     // 从错误信息中提取包名
     let extractedPackageName = null;
@@ -1207,21 +1207,21 @@ ipcMain.handle('adb-install-apk', async (event, deviceId, apkPath, forceReinstal
       /package:\s*([a-zA-Z0-9._]+)/              // package: com.example.app
     ];
     
-    console.log('尝试从catch块的错误信息中提取包名:', errorOutput);
+    console.log('Trying to extract package name from error in catch block:', errorOutput);
     
     for (const pattern of packagePatterns) {
       const match = errorOutput.match(pattern);
       if (match && match[1]) {
         extractedPackageName = match[1];
-        console.log('从安装错误中提取到包名:', extractedPackageName);
+        console.log('Extracted package name from install error:', extractedPackageName);
         break;
       }
     }
     
     if (errorOutput.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) {
       const errorMessage = extractedPackageName 
-        ? `签名不匹配: ${extractedPackageName} 的debug版本和release版本签名不同，需要先卸载原应用`
-        : '签名不匹配，需要先卸载原应用';
+        ? `Signature mismatch: ${extractedPackageName} debug and release versions have different signatures, need to uninstall first`
+        : 'Signature mismatch，需要先卸载原应用';
       
       return { 
         success: false, 
@@ -1247,32 +1247,32 @@ ipcMain.handle('adb-pair-wireless', async (event, ipAddress, pairingPort, pairin
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!ipAddress || !pairingPort || !pairingCode) {
-      return { success: false, error: '请提供IP地址、配对端口和配对码' };
+      return { success: false, error: 'Please provide IP address, pairing port and pairing code' };
     }
     
     // 构建配对地址
     const pairingAddress = `${ipAddress}:${pairingPort}`;
     
-    console.log('正在配对无线ADB设备:', pairingAddress);
+    console.log('Pairing wireless ADB device:', pairingAddress);
     
     // 执行配对命令，直接使用参数传递（适用于所有平台）
     const commandStr = `"${adbPath}" pair ${pairingAddress} ${pairingCode}`;
     
-    console.log('执行配对命令:', commandStr);
+    console.log('Executing pairing command:', commandStr);
     
     let stdout, stderr;
     try {
       const result = await execPromise(commandStr);
       stdout = result.stdout;
       stderr = result.stderr;
-      console.log('配对命令输出 - stdout:', stdout);
-      console.log('配对命令输出 - stderr:', stderr);
+      console.log('Pairing command output - stdout:', stdout);
+      console.log('Pairing command output - stderr:', stderr);
     } catch (execError) {
-      console.error('配对命令执行失败:', execError);
+      console.error('Pairing command execution failed:', execError);
       
       // 如果是协议错误，提供更好的错误信息
       const errorMessage = (execError.stdout || '') + (execError.stderr || '') + execError.message;
@@ -1286,7 +1286,7 @@ ipcMain.handle('adb-pair-wireless', async (event, ipAddress, pairingPort, pairin
       
       return { 
         success: false, 
-        error: `配对失败: ${execError.message}`,
+        error: `Pairing failed: ${execError.message}`,
         details: execError
       };
     }
@@ -1295,32 +1295,32 @@ ipcMain.handle('adb-pair-wireless', async (event, ipAddress, pairingPort, pairin
     if (stdout.includes('Successfully paired') || stdout.includes('Paired devices')) {
       return { 
         success: true, 
-        message: `成功配对设备 ${pairingAddress}`,
+        message: `Successfully paired device ${pairingAddress}`,
         output: stdout
       };
     } else if (stderr && (stderr.includes('failed') || stderr.includes('error'))) {
       return { 
         success: false, 
-        error: `配对失败: ${stderr || stdout}` 
+        error: `Pairing failed: ${stderr || stdout}` 
       };
     } else if (stdout.includes('Failed to pair')) {
       return { 
         success: false, 
-        error: `配对失败: ${stdout}` 
+        error: `Pairing failed: ${stdout}` 
       };
     } else {
-      // 某些情况下配对可能成功但没有明确的成功消息
+      // 某些情况下配对可能Success但没有明确的Success消息
       return { 
         success: true, 
-        message: `配对命令已执行，请尝试连接设备`,
+        message: `Pairing command executed, please try connecting device`,
         output: stdout,
-        warning: '配对状态不确定，请尝试连接'
+        warning: 'Pairing status uncertain, please try connecting'
       };
     }
     
   } catch (error) {
-    console.error('ADB配对失败:', error);
-    return { success: false, error: `配对异常: ${error.message}` };
+    console.error('ADB pairing failed:', error);
+    return { success: false, error: `Pairing exception: ${error.message}` };
   }
 });
 
@@ -1331,46 +1331,46 @@ ipcMain.handle('adb-connect-wireless', async (event, ipAddress, port = 5555) => 
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!ipAddress) {
-      return { success: false, error: '请提供IP地址' };
+      return { success: false, error: 'Please provide IP address' };
     }
     
     // 构建连接地址
     const connectionAddress = `${ipAddress}:${port}`;
     
-    console.log('正在连接无线ADB设备:', connectionAddress);
+    console.log('Connecting to wireless ADB device:', connectionAddress);
     
     // 尝试连接设备
     const { stdout, stderr } = await execPromise(`"${adbPath}" connect ${connectionAddress}`);
     
     if (stderr && stderr.includes('failed')) {
-      return { success: false, error: `连接失败: ${stderr}` };
+      return { success: false, error: `Connection failed: ${stderr}` };
     }
     
     // 检查连接结果
     if (stdout.includes('connected to') || stdout.includes('already connected')) {
       return { 
         success: true, 
-        message: `成功连接到设备 ${connectionAddress}`,
+        message: `Successfully connected to device ${connectionAddress}`,
         deviceId: connectionAddress 
       };
     } else if (stdout.includes('unable to connect')) {
       return { 
         success: false, 
-        error: `无法连接到 ${connectionAddress}，请确保设备开启ADB调试并连接到同一网络` 
+        error: `Unable to connect to ${connectionAddress}，Please ensure device has ADB debugging enabled and is on the same network` 
       };
     } else {
       return { 
         success: false, 
-        error: `连接状态未知: ${stdout}` 
+        error: `Connection status unknown: ${stdout}` 
       };
     }
     
   } catch (error) {
-    return { success: false, error: `连接异常: ${error.message}` };
+    return { success: false, error: `Connection exception: ${error.message}` };
   }
 });
 
@@ -1381,33 +1381,33 @@ ipcMain.handle('adb-disconnect-wireless', async (event, ipAddress, port = 5555) 
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
     if (!ipAddress) {
-      return { success: false, error: '请提供IP地址' };
+      return { success: false, error: 'Please provide IP address' };
     }
     
     // 构建连接地址
     const connectionAddress = `${ipAddress}:${port}`;
     
-    console.log('正在断开无线ADB设备连接:', connectionAddress);
+    console.log('Disconnecting wireless ADB device:', connectionAddress);
     
     // 断开设备连接
     const { stdout, stderr } = await execPromise(`"${adbPath}" disconnect ${connectionAddress}`);
     
     if (stderr && !stderr.includes('Warning')) {
-      return { success: false, error: `断开连接失败: ${stderr}` };
+      return { success: false, error: `断开Connection failed: ${stderr}` };
     }
     
     return { 
       success: true, 
-      message: `已断开设备 ${connectionAddress} 的连接`,
+      message: `Disconnected device ${connectionAddress} `,
       output: stdout.trim()
     };
     
   } catch (error) {
-    return { success: false, error: `断开连接异常: ${error.message}` };
+    return { success: false, error: `断开Connection exception: ${error.message}` };
   }
 });
 
@@ -1418,10 +1418,10 @@ ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
-    console.log('开始扫描局域网ADB设备...');
+    console.log('Starting LAN ADB device scan...');
     
     // 如果没有提供IP范围，尝试自动检测本机网络
     let targetIpRange = ipRange;
@@ -1483,7 +1483,7 @@ ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
                   // 获取设备信息
                   try {
                     const { stdout: deviceInfo } = await execPromise(`"${adbPath}" -s ${address} shell getprop ro.product.model`, { timeout: 2000 });
-                    const deviceModel = deviceInfo.trim() || '未知设备';
+                    const deviceModel = deviceInfo.trim() || 'Unknown device';
                     
                     foundDevices.push({
                       ip: ip,
@@ -1493,20 +1493,20 @@ ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
                       status: 'connected'
                     });
                     
-                    console.log(`发现ADB设备: ${address} (${deviceModel})`);
+                    console.log(`Found ADB device: ${address} (${deviceModel})`);
                   } catch (e) {
-                    // 即使获取设备信息失败，也记录设备
+                    // 即使获取设备信息Failed，也记录设备
                     foundDevices.push({
                       ip: ip,
                       port: port,
                       address: address,
-                      deviceModel: '未知设备',
+                      deviceModel: 'Unknown device',
                       status: 'connected'
                     });
                   }
                 }
               } catch (error) {
-                // 连接失败是正常的，不需要记录错误
+                // 连接Failed是正常的，不需要记录错误
               }
             })()
           );
@@ -1517,17 +1517,17 @@ ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
     // 等待所有扫描完成，但设置总体超时时间
     await Promise.allSettled(scanPromises);
     
-    console.log(`扫描完成，共发现 ${foundDevices.length} 个ADB设备`);
+    console.log(`Scan complete, found ${foundDevices.length} ADB devices`);
     
     return { 
       success: true, 
       devices: foundDevices,
       scannedRange: targetIpRange,
-      message: `扫描完成，发现 ${foundDevices.length} 个设备`
+      message: `扫描完成，发现 ${foundDevices.length} devices`
     };
     
   } catch (error) {
-    return { success: false, error: `扫描异常: ${error.message}` };
+    return { success: false, error: `Scan exception: ${error.message}` };
   }
 });
 
@@ -1569,7 +1569,7 @@ ipcMain.handle('save-wireless-device', async (event, deviceConfig) => {
     
     return { 
       success: true, 
-      message: existingIndex >= 0 ? '设备配置已更新' : '设备配置已保存',
+      message: existingIndex >= 0 ? 'Device configuration updated' : 'Device configuration saved',
       devices: savedDevices 
     };
   } catch (error) {
@@ -1587,7 +1587,7 @@ ipcMain.handle('delete-wireless-device', async (event, deviceId) => {
     
     return { 
       success: true, 
-      message: '设备配置已删除',
+      message: 'Device configuration deleted',
       devices: filteredDevices 
     };
   } catch (error) {
@@ -1599,7 +1599,7 @@ ipcMain.handle('delete-wireless-device', async (event, deviceId) => {
 
 const { spawn } = require('child_process');
 let logcatProcesses = new Map(); // 存储正在运行的logcat进程
-let logcatBuffers = new Map(); // 存储每个设备的logcat数据缓冲区
+let logcatBuffers = new Map(); // 存储每devices的logcat数据缓冲区
 
 // 获取已连接的设备列表（用于Log页面）
 ipcMain.handle('get-connected-devices', async () => {
@@ -1713,15 +1713,15 @@ ipcMain.handle('start-logcat', async (event, options) => {
     if (process.platform === 'win32') {
       spawnOptions.shell = false;
       // Windows上直接执行，不需要额外的环境变量
-      console.log('Windows平台直接启动logcat，不使用cmd包装');
+      console.log('Windows: Starting logcat directly without cmd wrapper');
     }
     
-    console.log('启动logcat进程:', command, args.join(' '));
+    console.log('Starting logcat process:', command, args.join(' '));
     const logcatProcess = spawn(command, args, spawnOptions);
     
     // Windows平台进程启动调试
     if (process.platform === 'win32') {
-      console.log('Windows logcat进程PID:', logcatProcess.pid);
+      console.log('Windows logcat process PID:', logcatProcess.pid);
     }
     
     // 存储进程
@@ -1729,7 +1729,7 @@ ipcMain.handle('start-logcat', async (event, options) => {
     
     // 监听进程错误
     logcatProcess.on('error', (error) => {
-      console.error('Logcat进程启动失败:', error);
+      console.error('Failed to start Logcat process:', error);
       logcatProcesses.delete(device);
     });
     
@@ -1743,38 +1743,35 @@ ipcMain.handle('start-logcat', async (event, options) => {
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台：优先使用GBK解码（Windows默认编码）
+        // Windows平台：基于测试结果，优先使用UTF-8
         try {
-          const iconv = require('iconv-lite');
-          
-          // 先尝试GBK解码（Windows CMD默认编码）
-          const gbkOutput = iconv.decode(data, 'gbk');
+          // 直接尝试UTF-8解码（根据测试，大部分日志是UTF-8）
+          output = data.toString('utf8');
           
           // 检查是否有明显的乱码字符
-          const hasGbkError = gbkOutput.includes('\ufffd') || 
-                              /[\uFFFD\u0000-\u001F]/g.test(gbkOutput);
+          const hasUtf8Error = output.includes('\ufffd');
           
-          if (!hasGbkError) {
-            // GBK解码成功
-            output = gbkOutput;
-            console.log('Windows logcat使用GBK编码解码成功');
-          } else {
-            // GBK失败，尝试UTF-8
-            output = data.toString('utf8');
+          if (hasUtf8Error) {
+            // UTF-8有问题，尝试GBK
+            const iconv = require('iconv-lite');
+            const gbkOutput = iconv.decode(data, 'gbk');
             
-            // 如果UTF-8也有问题，使用GBK（通常GBK更可靠）
-            if (output.includes('\ufffd')) {
+            // 比较哪个更好
+            const utf8ErrorCount = (output.match(/\ufffd/g) || []).length;
+            const gbkErrorCount = (gbkOutput.match(/\ufffd/g) || []).length;
+            
+            if (gbkErrorCount < utf8ErrorCount) {
               output = gbkOutput;
-              console.log('Windows logcat回退到GBK编码');
+              console.log('Windows logcat: Using GBK encoding for this chunk');
             } else {
-              console.log('Windows logcat使用UTF-8编码');
+              console.log('Windows logcat: Using UTF-8 encoding');
             }
           }
           
         } catch (error) {
-          // 如果iconv-lite不可用，直接使用UTF-8
+          // 如果处理Failed，直接使用UTF-8
           output = data.toString('utf8');
-          console.warn('编码处理异常，使用默认UTF-8:', error.message);
+          console.warn('Encoding processing error, using default UTF-8:', error.message);
         }
       } else {
         // 非Windows平台使用UTF-8
@@ -1793,19 +1790,9 @@ ipcMain.handle('start-logcat', async (event, options) => {
       if (lines.length > 0) {
         const completeOutput = lines.join('\n') + '\n';
         
-        // Windows平台调试输出（简化）
+        // Windows平台调试输出（使用英文避免控制台编码问题）
         if (process.platform === 'win32' && lines.length > 0) {
-          // 检查第一行是否包含中文字符来验证编码
-          const hasChinese = /[\u4e00-\u9fa5]/.test(lines[0]);
-          const hasReplacementChar = lines[0].includes('\ufffd');
-          
-          if (hasChinese && !hasReplacementChar) {
-            console.log(`Windows logcat: 发送${lines.length}行，中文显示正常`);
-          } else if (hasReplacementChar) {
-            console.log(`Windows logcat: 发送${lines.length}行，仍有编码问题`);
-          } else {
-            console.log(`Windows logcat: 发送${lines.length}行`);
-          }
+          console.log(`Windows logcat: Sending ${lines.length} lines`);
         }
         
         mainWindow.webContents.send('logcat-data', completeOutput);
@@ -1823,7 +1810,7 @@ ipcMain.handle('start-logcat', async (event, options) => {
       // 清理缓冲区中残留的不完整行
       const remainingBuffer = logcatBuffers.get(device);
       if (remainingBuffer && remainingBuffer.trim()) {
-        console.log('发送缓冲区中的最后一行:', remainingBuffer);
+        console.log('Sending last line from buffer:', remainingBuffer);
         mainWindow.webContents.send('logcat-data', remainingBuffer + '\n');
       }
       
@@ -1869,7 +1856,7 @@ ipcMain.handle('show-save-dialog', async (event, options) => {
   }
 });
 
-// ==================== QR码生成功能 ====================
+// ==================== QR码生Success能 ====================
 
 // 生成QR码配对数据
 ipcMain.handle('generate-qr-pairing-data', async () => {
@@ -1895,7 +1882,7 @@ ipcMain.handle('generate-qr-pairing-data', async () => {
     if (!localIP) {
       return {
         success: false,
-        error: '无法获取本机IP地址，请确保已连接到网络'
+        error: 'Cannot get local IP address, please ensure connected to network'
       };
     }
     
@@ -1912,7 +1899,7 @@ ipcMain.handle('generate-qr-pairing-data', async () => {
     // 格式: WIFI:T:ADB;S:service_name;P:pairing_code;H:host_ip;Q:pairing_port;
     const qrData = `WIFI:T:ADB;S:${serviceName};P:${pairingCode};H:${localIP};Q:${pairingPort};`;
     
-    console.log('生成QR码配对数据:', { 
+    console.log('Generating QR code pairing data:', { 
       serviceName, 
       pairingCode, 
       localIP, 
@@ -1930,7 +1917,7 @@ ipcMain.handle('generate-qr-pairing-data', async () => {
       expiryTime: Date.now() + 5 * 60 * 1000 // 5分钟有效期
     };
   } catch (error) {
-    console.error('生成QR码配对数据失败:', error);
+    console.error('Failed to generate QR code pairing data:', error);
     return {
       success: false,
       error: error.message
@@ -1960,14 +1947,14 @@ ipcMain.handle('generate-qr-code', async (event, data, options = {}) => {
     // 生成QR码数据URL
     const qrCodeDataURL = await QRCode.toDataURL(data, qrOptions);
     
-    console.log('QR码生成成功');
+    console.log('QR code generated successfully');
     
     return {
       success: true,
       dataURL: qrCodeDataURL
     };
   } catch (error) {
-    console.error('QR码生成失败:', error);
+    console.error('Failed to generate QR code:', error);
     return {
       success: false,
       error: error.message
@@ -1982,10 +1969,10 @@ ipcMain.handle('start-adb-pairing-service', async (event, serviceName, pairingCo
     
     const fsSync = require('fs');
     if (!fsSync.existsSync(adbPath)) {
-      return { success: false, error: '内置Android SDK未找到' };
+      return { success: false, error: 'Built-in Android SDK not found' };
     }
     
-    console.log('启动ADB配对服务:', { serviceName, pairingCode, localIP, pairingPort });
+    console.log('Starting ADB pairing service:', { serviceName, pairingCode, localIP, pairingPort });
     
     // 实际上，Android的无线调试配对是通过mDNS/Bonjour服务发现和配对的
     // 对于QR码配对，Android设备会：
@@ -1996,12 +1983,12 @@ ipcMain.handle('start-adb-pairing-service', async (event, serviceName, pairingCo
     // 确保ADB服务运行
     try {
       await execPromise(`"${adbPath}" start-server`);
-      console.log('ADB服务已启动');
+      console.log('ADB service started');
     } catch (e) {
-      console.warn('启动ADB服务失败:', e.message);
+      console.warn('Failed to start ADB service:', e.message);
     }
     
-    console.log(`ADB配对服务信息:`, {
+    console.log(`ADB pairing service info:`, {
       serviceName,
       pairingCode,
       localIP,
@@ -2013,14 +2000,14 @@ ipcMain.handle('start-adb-pairing-service', async (event, serviceName, pairingCo
     
     return {
       success: true,
-      message: '配对服务已启动，请在设备上扫描QR码',
+      message: 'Pairing service started, please scan QR code on device',
       serviceName,
       pairingCode,
       localIP,
       pairingPort
     };
   } catch (error) {
-    console.error('启动ADB配对服务失败:', error);
+    console.error('Failed to start ADB pairing service:', error);
     return {
       success: false,
       error: error.message
@@ -2046,7 +2033,7 @@ ipcMain.handle('check-pairing-status', async () => {
       hasNewDevices: devices.length > 0
     };
   } catch (error) {
-    console.error('检查配对状态失败:', error);
+    console.error('Failed to check pairing status:', error);
     return {
       success: false,
       error: error.message,
