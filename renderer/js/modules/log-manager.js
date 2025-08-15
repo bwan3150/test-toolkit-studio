@@ -23,7 +23,7 @@ class LogManager {
             filterSpec: '', // logcat风格的过滤器，如 "flutter:V ActivityManager:I *:S"
             
             // Simple模式
-            level: 'I',     // 日志级别
+            level: 'V',     // 日志级别 - 改为V显示所有日志
             tag: '',        // 标签过滤
             package: '',    // 包名过滤
             
@@ -424,6 +424,7 @@ class LogManager {
 
     // 处理日志数据
     handleLogData(data) {
+        console.log('[LogManager] Received logcat data, length:', data.length);
         // 确保数据是字符串格式
         const dataStr = typeof data === 'string' ? data : data.toString('utf8');
         
@@ -443,6 +444,7 @@ class LogManager {
         }
         
         const lines = processedData.split('\n');
+        console.log('[LogManager] Processing', lines.length, 'lines');
         lines.forEach(line => {
             if (line.trim()) {
                 const logEntry = this.parseLogLine(line);
@@ -498,7 +500,10 @@ class LogManager {
             this.logBuffer.shift();
         }
 
-        // 移除了调试代码
+        // 调试输出
+        if (this.logBuffer.length % 100 === 0) {
+            console.log('[LogManager] Buffer size:', this.logBuffer.length, 'entries');
+        }
 
         // 如果条目通过过滤器，添加到显示
         if (this.shouldShowEntry(entry)) {
