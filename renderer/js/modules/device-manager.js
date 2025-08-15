@@ -447,6 +447,10 @@ async function refreshConnectedDevices() {
             `;
             
             item.innerHTML = cardContent;
+            
+            // 添加拖拽功能
+            setupDragAndDropForDevice(item, device.id);
+            
             connectedDevicesGrid.appendChild(item);
         }
     } else {
@@ -1183,6 +1187,197 @@ async function startPairingStatusCheck() {
             console.error('检查配对状态失败:', error);
         }
     }, 5000); // 每5秒检查一次
+}
+
+// 设置设备卡片的拖拽功能
+function setupDragAndDropForDevice(deviceCard, deviceId) {
+    // 防止默认拖拽行为
+    deviceCard.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deviceCard.classList.add('drag-over');
+    });
+    
+    deviceCard.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deviceCard.classList.remove('drag-over');
+    });
+    
+    deviceCard.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        deviceCard.classList.remove('drag-over');
+        
+        const files = e.dataTransfer.files;
+        
+        // 检查是否有文件
+        if (files.length === 0) {
+            return;
+        }
+        
+        // 检查是否为APK文件
+        const file = files[0];
+        if (!file.name.toLowerCase().endsWith('.apk')) {
+            window.NotificationModule.showNotification('请拖入APK文件', 'warning');
+            return;
+        }
+        
+        // 安装APK
+        await installApkToDevice(deviceId, file.path);
+    });
+}
+
+// 安装APK到设备
+async function installApkToDevice(deviceId, apkPath) {
+    const { ipcRenderer } = getGlobals();
+    
+    if (!deviceId || !apkPath) {
+        window.NotificationModule.showNotification('设备ID或APK路径无效', 'error');
+        return;
+    }
+    
+    // 显示安装中的提示
+    window.NotificationModule.showNotification('正在安装APK，请稍候...', 'info');
+    
+    console.log('开始安装APK:', deviceId, apkPath);
+    
+    try {
+        const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
+        console.log('收到安装结果:', result);
+        
+        if (result.success) {
+            window.NotificationModule.showNotification('APK安装成功！', 'success');
+            
+            // 刷新设备列表以更新当前应用信息
+            await refreshConnectedDevices();
+        } else {
+            // 显示详细错误信息
+            const errorMsg = result.error || '安装失败';
+            console.log('APK安装失败:', errorMsg);
+            
+            // 检查是否包含签名不匹配的标识
+            const isSignatureMismatch = errorMsg.includes('签名不匹配') || 
+                                       (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) ||
+                                       (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE'));
+            
+            console.log('是否签名不匹配:', isSignatureMismatch);
+            
+            if (isSignatureMismatch) {
+                // 显示签名冲突确认框
+                showApkInstallModal(deviceId, apkPath);
+            } else {
+                window.NotificationModule.showNotification(`APK安装失败: ${errorMsg}`, 'error');
+            }
+        }
+    } catch (error) {
+        console.error('安装APK失败:', error);
+        window.NotificationModule.showNotification(`安装失败: ${error.message}`, 'error');
+    }
+}
+
+// 显示APK安装确认模态框
+function showApkInstallModal(deviceId, apkPath) {
+    const modal = document.getElementById('apkInstallModal');
+    
+    if (modal) {
+        modal.style.display = 'flex';
+        
+        // 保存当前的设备ID和APK路径
+        window.pendingApkInstall = {
+            deviceId: deviceId,
+            apkPath: apkPath
+        };
+    } else {
+        // 如果模态框不存在，使用confirm作为备用
+        if (confirm('APK签名冲突，是否先卸载原应用再安装？\n\n注意：卸载会清除应用数据！')) {
+            uninstallAndReinstallApk(deviceId, apkPath);
+        }
+    }
+}
+
+// 隐藏APK安装确认模态框
+function hideApkInstallModal() {
+    const modal = document.getElementById('apkInstallModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    window.pendingApkInstall = null;
+}
+
+// 取消APK安装
+window.cancelApkInstall = function() {
+    hideApkInstallModal();
+    window.NotificationModule.showNotification('已取消安装', 'info');
+};
+
+// 确认卸载并安装
+window.confirmApkUninstall = async function() {
+    if (!window.pendingApkInstall) {
+        hideApkInstallModal();
+        return;
+    }
+    
+    const { deviceId, apkPath } = window.pendingApkInstall;
+    hideApkInstallModal();
+    
+    // 执行卸载并重新安装
+    await uninstallAndReinstallApk(deviceId, apkPath);
+};
+
+// 卸载并重新安装APK
+async function uninstallAndReinstallApk(deviceId, apkPath) {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        // 先尝试获取APK的包名
+        window.NotificationModule.showNotification('正在获取APK信息...', 'info');
+        
+        // 尝试通过aapt获取包名
+        let packageName = null;
+        const packageInfo = await ipcRenderer.invoke('get-apk-package-name', apkPath);
+        
+        if (packageInfo.success && packageInfo.packageName) {
+            packageName = packageInfo.packageName;
+        } else {
+            // 如果无法自动获取包名，尝试通过安装错误信息获取
+            window.NotificationModule.showNotification('无法自动获取包名，尝试直接安装...', 'warning');
+            
+            // 直接尝试强制安装，不卸载
+            const directInstallResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
+            if (directInstallResult.success) {
+                window.NotificationModule.showNotification('APK安装成功！', 'success');
+                await refreshConnectedDevices();
+            } else {
+                window.NotificationModule.showNotification('无法获取包名，请手动卸载原应用后重试', 'error');
+            }
+            return;
+        }
+        
+        // 卸载应用（卸载的是与APK相同包名的已安装版本）
+        window.NotificationModule.showNotification(`正在卸载已安装的 ${packageName}...`, 'info');
+        const uninstallResult = await ipcRenderer.invoke('adb-uninstall-app', deviceId, packageName);
+        
+        if (!uninstallResult.success) {
+            // 如果卸载失败，可能是应用不存在，直接尝试安装
+            window.NotificationModule.showNotification('原应用可能不存在，尝试直接安装...', 'info');
+        }
+        
+        // 安装新的APK
+        window.NotificationModule.showNotification('正在安装APK...', 'info');
+        const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
+        
+        if (installResult.success) {
+            window.NotificationModule.showNotification('APK安装成功！', 'success');
+            await refreshConnectedDevices();
+        } else {
+            window.NotificationModule.showNotification(`安装失败: ${installResult.error}`, 'error');
+        }
+        
+    } catch (error) {
+        console.error('卸载并重装失败:', error);
+        window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
+    }
 }
 
 // 全局函数

@@ -4162,6 +4162,94 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* 拖拽APK时的高亮效果 */
+.device-card.drag-over {
+    border-color: var(--accent-success);
+    background: rgba(76, 175, 80, 0.05);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.3);
+}
+
+.device-card.drag-over::after {
+    content: '拖放APK文件以安装';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-success);
+    background: var(--bg-tertiary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 2px dashed var(--accent-success);
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* APK安装模态框样式 */
+#apkInstallModal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#apkInstallModal .modal-content {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+#apkInstallModal .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#apkInstallModal .modal-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 18px;
+}
+
+#apkInstallModal .modal-body {
+    padding: 20px;
+}
+
+#apkInstallModal .modal-body p {
+    margin: 10px 0;
+    color: var(--text-secondary);
+}
+
+#apkInstallModal .modal-body .warning-text {
+    color: var(--accent-warning);
+    font-weight: 500;
+}
+
+#apkInstallModal .modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+#apkInstallModal .btn-danger {
+    background: var(--accent-error);
+    color: white;
+}
+
+#apkInstallModal .btn-danger:hover {
+    background: #c62828;
+}
+
 .device-card-header {
     display: flex;
     align-items: center;

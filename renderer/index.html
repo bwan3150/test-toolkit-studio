@@ -1130,6 +1130,23 @@
                 </div>
               </div>
             </div>
+            
+            <!-- APK安装确认对话框 -->
+            <div id="apkInstallModal" class="modal" style="display: none;">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h3>签名冲突</h3>
+                </div>
+                <div class="modal-body">
+                  <p>APK签名与已安装版本不匹配(Debug和Release版本会使用不同签名)，需先卸载原应用</p>
+                  <p class="warning-text">⚠️ 卸载会清除应用数据</p>
+                </div>
+                <div class="modal-footer">
+                  <button class="btn btn-secondary" onclick="window.cancelApkInstall()">取消</button>
+                  <button class="btn btn-primary" onclick="window.confirmApkUninstall()">卸载并重装</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Test Report Page -->
