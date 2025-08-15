@@ -1007,19 +1007,53 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
         return { success: false, error: `aapt执行失败: ${error.message}` };
       }
     } else {
-      console.log('aapt工具不存在');
-      let errorMsg;
-      switch (platform) {
-        case 'win32':
-          errorMsg = 'Windows平台暂不支持自动获取APK包名，请手动提供包名信息';
-          break;
-        case 'linux':
-          errorMsg = 'Linux平台暂不支持自动获取APK包名，请手动提供包名信息';
-          break;
-        default:
-          errorMsg = `aapt工具未找到，路径: ${aaptPath}`;
+      console.log('aapt工具不存在，尝试通过安装错误获取包名');
+      
+      // 如果aapt不可用，尝试通过安装错误信息获取包名
+      try {
+        // 先列出设备，选择第一个设备
+        const devicesCommand = `"${adbPath}" devices`;
+        const { stdout: devicesOutput } = await execPromise(devicesCommand);
+        const deviceMatch = devicesOutput.match(/^([^\s]+)\s+device$/m);
+        
+        if (deviceMatch && deviceMatch[1]) {
+          const tempDeviceId = deviceMatch[1];
+          
+          // 尝试安装（不用-r参数，这样如果已存在会报错并显示包名）
+          const installCommand = `"${adbPath}" -s ${tempDeviceId} install "${apkPath}"`;
+          
+          try {
+            await execPromise(installCommand);
+            // 如果安装成功，无法获取包名
+            return { success: false, error: '无法获取包名，请手动提供', needManualInput: true };
+          } catch (installError) {
+            // 安装失败，尝试从错误信息中提取包名
+            const errorOutput = (installError.stdout || '') + (installError.stderr || '');
+            
+            const packagePatterns = [
+              /INSTALL_FAILED_UPDATE_INCOMPATIBLE:\s*Existing\s+package\s+([a-zA-Z0-9._]+)/,
+              /Existing\s+package\s+([a-zA-Z0-9._]+)\s+signatures/,
+              /package\s+([a-zA-Z0-9._]+)\s+signatures\s+do\s+not\s+match/,
+              /Package\s+([a-zA-Z0-9._]+)\s+signatures/,
+              /package:\s*([a-zA-Z0-9._]+)/
+            ];
+            
+            for (const pattern of packagePatterns) {
+              const match = errorOutput.match(pattern);
+              if (match && match[1]) {
+                const packageName = match[1];
+                console.log('从安装错误中获取到包名:', packageName);
+                return { success: true, packageName };
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.log('通过安装方法获取包名失败:', error.message);
       }
-      return { success: false, error: errorMsg };
+      
+      // 所有方法都失败，需要用户手动输入
+      return { success: false, error: '无法自动获取包名，请手动提供', needManualInput: true };
     }
     // 如果aapt方法失败，返回错误
     return { success: false, error: '无法自动获取包名' };

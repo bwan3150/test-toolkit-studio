@@ -1240,7 +1240,7 @@ async function installApkToDevice(deviceId, apkPath) {
     console.log('开始安装APK:', deviceId, apkPath);
     
     // 显示loading modal
-    showApkInstallLoading('正在获取APK信息...', '分析APK文件，请稍候...');
+    showApkInstallLoading('正在处理APK...', '');
     
     try {
         // 第一步：先获取APK的包名（无论是否安装成功都需要知道包名）
@@ -1250,8 +1250,8 @@ async function installApkToDevice(deviceId, apkPath) {
             // 如果无法自动获取包名，询问用户手动输入
             hideApkInstallLoading();
             
-            // 检查是否是需要手动输入包名的平台
-            if (packageInfo.error && (packageInfo.error.includes('平台暂不支持') || packageInfo.error.includes('请手动提供包名信息'))) {
+            // 检查是否需要手动输入包名
+            if (packageInfo.needManualInput || (packageInfo.error && packageInfo.error.includes('请手动提供'))) {
                 const manualPackageName = prompt(
                     '无法自动获取APK包名。\n请手动输入应用的包名（例如：com.example.app）：',
                     ''
@@ -1281,7 +1281,7 @@ async function installApkToDevice(deviceId, apkPath) {
         console.log('获取到APK包名:', packageName);
         
         // 更新loading状态，显示包名
-        updateApkInstallLoading('正在安装APK...', `正在安装 ${packageName}`, packageName);
+        updateApkInstallLoading('正在安装...', '', packageName);
         
         // 第二步：尝试直接安装
         const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
@@ -1371,10 +1371,9 @@ function showApkInstallModalWithPackage(deviceId, apkPath, packageName) {
     const messageElement = modal.querySelector('.modal-message');
     if (messageElement) {
         messageElement.innerHTML = `
-            <p><strong>安装失败：签名不匹配</strong></p>
-            <p>应用包名：<code>${packageName}</code></p>
-            <p>设备上已安装了相同包名但不同签名的应用版本。</p>
-            <p>要继续安装，需要先卸载现有版本。</p>
+            <p><strong>签名不匹配</strong></p>
+            <p>应用：<code>${packageName}</code></p>
+            <p>需要先卸载现有版本才能安装。</p>
         `;
     }
     
@@ -1526,22 +1525,21 @@ async function uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageN
         console.log(`开始卸载重装流程，包名: ${packageName}`);
         
         // 显示卸载loading
-        showApkInstallLoading('正在卸载应用...', `正在卸载已安装的 ${packageName}`, packageName);
+        showApkInstallLoading('正在卸载...', '');
+        // 然后更新显示包名
+        updateApkInstallLoading('正在卸载...', '', packageName);
         
         // 第一步：卸载已安装的应用
         const uninstallResult = await ipcRenderer.invoke('adb-uninstall-app', deviceId, packageName);
         
         if (!uninstallResult.success) {
             // 如果卸载失败，可能是应用不存在，继续尝试安装
-            updateApkInstallLoading('准备安装...', '原应用可能不存在，尝试直接安装', packageName);
+            updateApkInstallLoading('准备安装...', '', packageName);
         } else {
-            updateApkInstallLoading('卸载成功', `${packageName} 卸载成功，准备安装新版本`, packageName);
-            // 短暂延迟让用户看到成功状态
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            updateApkInstallLoading('正在安装...', '', packageName);
         }
         
         // 第二步：安装新的APK
-        updateApkInstallLoading('正在安装APK...', `正在安装新版本的 ${packageName}`, packageName);
         const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
         
         // 隐藏loading
