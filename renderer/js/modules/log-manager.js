@@ -13,12 +13,13 @@ class LogManager {
         this.maxBufferSize = 10000; // 最多保存10000条日志
         this.isFollowing = true; // 是否自动滚动到最新
         this.logProcess = null; // 存储logcat进程
+        this.currentFormat = 'threadtime'; // 当前logcat格式
+        this.currentBuffer = 'main'; // 当前logcat buffer
         this.filters = {
-            level: 'verbose', // verbose, debug, info, warn, error, assert
-            tag: '',
-            tags: [], // 支持多个tag过滤
-            package: '',
-            text: ''
+            filterSpec: '', // logcat风格的过滤器，如 "flutter:V ActivityManager:I *:S"
+            search: '',     // 搜索文本
+            regex: false,   // 是否使用正则表达式
+            caseSensitive: false // 是否区分大小写
         };
         this.logLevels = {
             'V': 'verbose',
@@ -80,7 +81,7 @@ class LogManager {
         return filters;
     }
 
-    // 设置事件监听器
+    // 设置事件监听器 - Logcat风格
     setupEventListeners() {
         // 设备选择
         const deviceSelect = document.getElementById('logDeviceSelect');
@@ -90,64 +91,77 @@ class LogManager {
             });
         }
 
-        // Package输入框
-        const packageInput = document.getElementById('logPackageInput');
-        if (packageInput) {
-            packageInput.addEventListener('input', (e) => {
-                this.filters.package = e.target.value;
-                // 清空Quick Filter，因为用户正在使用独立输入框
-                const quickFilterInput = document.getElementById('logQuickFilterInput');
-                if (quickFilterInput) quickFilterInput.value = '';
+        // Filter Spec输入框
+        const filterSpecInput = document.getElementById('logFilterSpec');
+        if (filterSpecInput) {
+            filterSpecInput.addEventListener('input', (e) => {
+                this.filters.filterSpec = e.target.value;
                 this.applyFilters();
             });
         }
 
-        // Tag输入框
-        const tagInput = document.getElementById('logTagInput');
-        if (tagInput) {
-            tagInput.addEventListener('input', (e) => {
-                this.filters.tag = e.target.value;
-                // 处理多个tag（用逗号分隔）
-                const tags = e.target.value.split(',').map(t => t.trim()).filter(t => t);
-                this.filters.tags = tags;
-                // 清空Quick Filter，因为用户正在使用独立输入框
-                const quickFilterInput = document.getElementById('logQuickFilterInput');
-                if (quickFilterInput) quickFilterInput.value = '';
+        // 应用过滤器按钮
+        const applyFilterBtn = document.getElementById('applyFilterBtn');
+        if (applyFilterBtn) {
+            applyFilterBtn.addEventListener('click', () => {
                 this.applyFilters();
             });
         }
 
-        // Text输入框
-        const textInput = document.getElementById('logTextInput');
-        if (textInput) {
-            textInput.addEventListener('input', (e) => {
-                this.filters.text = e.target.value;
-                // 清空Quick Filter，因为用户正在使用独立输入框
-                const quickFilterInput = document.getElementById('logQuickFilterInput');
-                if (quickFilterInput) quickFilterInput.value = '';
-                this.applyFilters();
-            });
-        }
-
-        // 日志级别选择
-        const levelSelect = document.getElementById('logLevelSelect');
-        if (levelSelect) {
-            levelSelect.addEventListener('change', (e) => {
-                this.filters.level = e.target.value;
-                this.applyFilters();
-            });
-        }
-
-        // 快速过滤输入框 - 输入即生效
-        const quickFilterInput = document.getElementById('logQuickFilterInput');
-        if (quickFilterInput) {
-            // 使用防抖处理输入事件
+        // 搜索输入框
+        const searchInput = document.getElementById('logSearchInput');
+        if (searchInput) {
             let debounceTimer = null;
-            quickFilterInput.addEventListener('input', (e) => {
+            searchInput.addEventListener('input', (e) => {
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
-                    this.applyQuickFilter(e.target.value, false); // false表示不更新其他输入框
-                }, 300); // 300ms防抖
+                    this.filters.search = e.target.value;
+                    this.applyFilters();
+                }, 300);
+            });
+        }
+
+        // 正则表达式复选框
+        const regexCheckbox = document.getElementById('regexSearchCheckbox');
+        if (regexCheckbox) {
+            regexCheckbox.addEventListener('change', (e) => {
+                this.filters.regex = e.target.checked;
+                this.applyFilters();
+            });
+        }
+
+        // 区分大小写复选框
+        const caseSensitiveCheckbox = document.getElementById('caseSensitiveCheckbox');
+        if (caseSensitiveCheckbox) {
+            caseSensitiveCheckbox.addEventListener('change', (e) => {
+                this.filters.caseSensitive = e.target.checked;
+                this.applyFilters();
+            });
+        }
+
+        // Format选择器
+        const formatSelect = document.getElementById('logFormatSelect');
+        if (formatSelect) {
+            formatSelect.addEventListener('change', (e) => {
+                this.currentFormat = e.target.value;
+                // 重新启动logcat以使用新格式
+                if (this.logProcess) {
+                    this.stopLogcat();
+                    setTimeout(() => this.startLogcat(), 100);
+                }
+            });
+        }
+
+        // Buffer选择器
+        const bufferSelect = document.getElementById('logBufferSelect');
+        if (bufferSelect) {
+            bufferSelect.addEventListener('change', (e) => {
+                this.currentBuffer = e.target.value;
+                // 重新启动logcat以使用新buffer
+                if (this.logProcess) {
+                    this.stopLogcat();
+                    setTimeout(() => this.startLogcat(), 100);
+                }
             });
         }
 
@@ -231,7 +245,8 @@ class LogManager {
             // 启动新的logcat进程
             const result = await getGlobals().ipcRenderer.invoke('start-logcat', {
                 device: this.currentDevice,
-                format: 'threadtime' // 使用threadtime格式以获取完整信息
+                format: this.currentFormat,
+                buffer: this.currentBuffer
             });
 
             if (result.success) {
@@ -292,37 +307,38 @@ class LogManager {
         });
     }
 
-    // 解析日志行
+    // 简化的日志解析 - 直接模仿adb logcat输出
     parseLogLine(line) {
-        // Android logcat threadtime格式:
-        // 日期 时间 PID TID 优先级 标签: 消息
-        // 例如: 08-09 14:30:45.123  1234  5678 I MyApp    : This is a log message
+        // 标准logcat threadtime格式:
+        // MM-DD HH:MM:SS.mmm PID TID LEVEL TAG: MESSAGE
+        // 例如: 08-15 15:20:21.822 25800 25800 I flutter: 消息内容
+        
         const regex = /^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEA])\s+([^:]+?):\s+(.*)$/;
         const match = line.match(regex);
         
         if (match) {
             return {
                 date: match[1],
-                time: match[2],
+                time: match[2], 
                 pid: match[3],
                 tid: match[4],
-                level: this.logLevels[match[5]] || 'verbose',
+                level: match[5],
                 tag: match[6].trim(),
                 message: match[7],
                 raw: line
             };
         }
         
-        // 如果不匹配标准格式，尝试作为普通文本处理
+        // 如果不匹配，直接返回原始行
         return {
+            raw: line,
+            message: line,
             date: '',
-            time: new Date().toLocaleTimeString(),
+            time: '',
             pid: '',
             tid: '',
-            level: 'verbose',
-            tag: '',
-            message: line,
-            raw: line
+            level: 'V',
+            tag: ''
         };
     }
 
@@ -336,81 +352,119 @@ class LogManager {
             this.logBuffer.shift();
         }
 
+        // 移除了调试代码
+
         // 如果条目通过过滤器，添加到显示
         if (this.shouldShowEntry(entry)) {
             this.appendLogToView(entry);
         }
     }
 
-    // 判断是否应该显示日志条目
-    shouldShowEntry(entry) {
-        // 检查日志级别
-        if (this.levelPriority[entry.level] < this.levelPriority[this.filters.level]) {
-            return false;
-        }
-
-        // 检查标签过滤（支持单个tag或多个tags）
-        if (this.filters.tag && !entry.tag.toLowerCase().includes(this.filters.tag.toLowerCase())) {
-            return false;
-        }
+    // 解析logcat风格的过滤器
+    parseFilterSpec(filterSpec) {
+        // 解析如 "flutter:V ActivityManager:I MyApp:D *:S" 格式
+        if (!filterSpec.trim()) return null;
         
-        // 检查多个tags（所有tags都必须匹配）
-        if (this.filters.tags && this.filters.tags.length > 0) {
-            for (const tag of this.filters.tags) {
-                if (!entry.tag.toLowerCase().includes(tag.toLowerCase())) {
-                    return false;
-                }
+        const filters = [];
+        const parts = filterSpec.split(/\s+/);
+        
+        for (const part of parts) {
+            const match = part.match(/^([^:]+):([VDIWEA])$/);
+            if (match) {
+                filters.push({
+                    tag: match[1] === '*' ? null : match[1],
+                    level: match[2],
+                    isWildcard: match[1] === '*'
+                });
             }
         }
+        
+        return filters;
+    }
 
-        // 检查包名过滤（在tag或message中搜索）
-        if (this.filters.package && 
-            !entry.tag.toLowerCase().includes(this.filters.package.toLowerCase()) &&
-            !entry.message.toLowerCase().includes(this.filters.package.toLowerCase())) {
-            return false;
+    // logcat风格的过滤逻辑
+    shouldShowEntry(entry) {
+        // 检查filterSpec
+        if (this.filters.filterSpec) {
+            const parsedFilters = this.parseFilterSpec(this.filters.filterSpec);
+            if (parsedFilters && parsedFilters.length > 0) {
+                let matched = false;
+                
+                for (const filter of parsedFilters) {
+                    if (filter.isWildcard) {
+                        // *:S 表示所有其他tag的级别
+                        if (!entry.tag || this.shouldShowLevel(entry.level, filter.level)) {
+                            matched = true;
+                            break;
+                        }
+                    } else if (filter.tag && entry.tag === filter.tag) {
+                        // 特定tag的级别过滤
+                        if (this.shouldShowLevel(entry.level, filter.level)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!matched) return false;
+            }
         }
-
-        // 检查文本过滤
-        if (this.filters.text && !entry.message.toLowerCase().includes(this.filters.text.toLowerCase())) {
-            return false;
+        
+        // 检查搜索文本
+        if (this.filters.search) {
+            const searchText = this.filters.caseSensitive ? 
+                this.filters.search : this.filters.search.toLowerCase();
+            const content = this.filters.caseSensitive ? 
+                entry.raw : entry.raw.toLowerCase();
+                
+            if (this.filters.regex) {
+                try {
+                    const regex = new RegExp(searchText, this.filters.caseSensitive ? '' : 'i');
+                    if (!regex.test(entry.raw)) return false;
+                } catch (e) {
+                    // 如果正则表达式无效，使用普通文本搜索
+                    if (!content.includes(searchText)) return false;
+                }
+            } else {
+                if (!content.includes(searchText)) return false;
+            }
         }
-
+        
         return true;
     }
 
-    // 添加日志到视图
+    // 检查日志级别是否应该显示
+    shouldShowLevel(entryLevel, filterLevel) {
+        const levels = ['V', 'D', 'I', 'W', 'E', 'A'];
+        const entryIndex = levels.indexOf(entryLevel);
+        const filterIndex = levels.indexOf(filterLevel);
+        return entryIndex >= filterIndex;
+    }
+
+    // 添加日志到视图 - 原始logcat格式
     appendLogToView(entry) {
         const logContainer = document.getElementById('logContainer');
         if (!logContainer) return;
 
         const logElement = document.createElement('div');
-        logElement.className = `log-entry log-${entry.level}`;
+        logElement.className = `log-entry`;
         
-        const timestamp = document.createElement('span');
-        timestamp.className = 'log-timestamp';
-        timestamp.textContent = `${entry.date} ${entry.time}`;
+        // 直接显示原始日志行，但添加颜色
+        let formattedLine = entry.raw;
         
-        const pid = document.createElement('span');
-        pid.className = 'log-pid';
-        pid.textContent = entry.pid;
+        // 如果有解析出的级别，为级别字符添加颜色
+        if (entry.level && entry.level !== 'V') {
+            const levelChar = entry.level;
+            const colorClass = `log-level-${levelChar}`;
+            // 找到级别字符的位置并添加颜色
+            formattedLine = formattedLine.replace(
+                new RegExp(`\\b${levelChar}\\b`), 
+                `<span class="${colorClass}">${levelChar}</span>`
+            );
+        }
         
-        const tag = document.createElement('span');
-        tag.className = 'log-tag';
-        tag.textContent = entry.tag;
-        
-        const level = document.createElement('span');
-        level.className = `log-level log-level-${entry.level}`;
-        level.textContent = entry.level.charAt(0).toUpperCase();
-        
-        const message = document.createElement('span');
-        message.className = 'log-message';
-        message.textContent = entry.message;
-        
-        logElement.appendChild(timestamp);
-        logElement.appendChild(pid);
-        logElement.appendChild(level);
-        logElement.appendChild(tag);
-        logElement.appendChild(message);
+        logElement.innerHTML = formattedLine;
+        logElement.title = entry.raw; // 悬停显示完整行
         
         logContainer.appendChild(logElement);
 
@@ -468,15 +522,32 @@ class LogManager {
         const logContainer = document.getElementById('logContainer');
         if (!logContainer) return;
 
+        // 调试输出
+        console.log('应用过滤器:', this.filters);
+        console.log('缓冲区日志总数:', this.logBuffer.length);
+        
+        // 统计符合条件的日志
+        let matchCount = 0;
+        let flutterKonecCount = 0;
+
         // 清空当前显示
         logContainer.innerHTML = '';
 
         // 重新显示符合过滤条件的日志
         this.logBuffer.forEach(entry => {
+            // 统计flutter+konec的日志
+            if (entry.tag === 'flutter' && entry.package && entry.package.includes('konec')) {
+                flutterKonecCount++;
+            }
+            
             if (this.shouldShowEntry(entry)) {
+                matchCount++;
                 this.appendLogToView(entry);
             }
         });
+        
+        console.log(`过滤结果: 总共${this.logBuffer.length}条日志，符合过滤条件${matchCount}条`);
+        console.log(`其中flutter+konec日志${flutterKonecCount}条`);
     }
 
     // 清空日志
@@ -504,18 +575,12 @@ class LogManager {
                 const logContainer = document.getElementById('logContainer');
                 const logs = [];
                 
-                if (logContainer) {
-                    const entries = logContainer.querySelectorAll('.log-entry');
-                    entries.forEach(entry => {
-                        const timestamp = entry.querySelector('.log-timestamp')?.textContent || '';
-                        const pid = entry.querySelector('.log-pid')?.textContent || '';
-                        const level = entry.querySelector('.log-level')?.textContent || '';
-                        const tag = entry.querySelector('.log-tag')?.textContent || '';
-                        const message = entry.querySelector('.log-message')?.textContent || '';
-                        
-                        logs.push(`${timestamp} ${pid} ${level} ${tag}: ${message}`);
-                    });
-                }
+                // 直接导出原始logcat格式
+                this.logBuffer.forEach(entry => {
+                    if (this.shouldShowEntry(entry)) {
+                        logs.push(entry.raw);
+                    }
+                });
 
                 // 写入文件
                 await getGlobals().fs.writeFile(result.filePath, logs.join('\n'), 'utf8');

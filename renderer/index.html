@@ -1402,8 +1402,9 @@
               </div>
             </div>
 
-            <div class="log-controls">
-              <!-- 第一行：设备和日志级别 -->
+            <!-- ADB Logcat风格的控制区域 -->
+            <div class="logcat-controls">
+              <!-- 第一行：设备和基本控制 -->
               <div class="control-row">
                 <div class="control-group">
                   <label>Device:</label>
@@ -1413,66 +1414,66 @@
                 </div>
 
                 <div class="control-group">
-                  <label>Log Level:</label>
-                  <select id="logLevelSelect" class="control-select">
-                    <option value="verbose">Verbose</option>
-                    <option value="debug">Debug</option>
-                    <option value="info">Info</option>
-                    <option value="warn">Warn</option>
-                    <option value="error">Error</option>
-                    <option value="assert">Assert</option>
+                  <label>Format:</label>
+                  <select id="logFormatSelect" class="control-select">
+                    <option value="threadtime">threadtime</option>
+                    <option value="time">time</option>
+                    <option value="brief">brief</option>
+                    <option value="long">long</option>
+                    <option value="raw">raw</option>
+                  </select>
+                </div>
+
+                <div class="control-group">
+                  <label>Buffer:</label>
+                  <select id="logBufferSelect" class="control-select">
+                    <option value="main">main</option>
+                    <option value="system">system</option>
+                    <option value="radio">radio</option>
+                    <option value="events">events</option>
+                    <option value="all">all</option>
                   </select>
                 </div>
               </div>
 
-              <!-- 新增：快速过滤输入框 -->
+              <!-- 第二行：Logcat过滤器 -->
               <div class="control-row">
                 <div class="control-group filter-input-group" style="flex: 1">
-                  <label>Quick Filter:</label>
+                  <label>Filter Spec:</label>
                   <input
                     type="text"
-                    id="logQuickFilterInput"
+                    id="logFilterSpec"
                     class="control-input"
-                    placeholder="例如: package:com.example.app tag:flutter tag:TAG 或直接输入搜索文本"
-                    title="支持格式: package:xxx tag:xxx text:xxx 或直接输入文本搜索"
+                    placeholder="例如: flutter:V ActivityManager:I MyApp:D *:S"
+                    title="Logcat filter specification: TAG:LEVEL format"
                     style="flex: 1"
                   />
+                  <button id="applyFilterBtn" class="btn btn-secondary btn-sm">Apply</button>
                 </div>
               </div>
 
-              <!-- 第二行：包名过滤 -->
+              <!-- 第三行：快速搜索 -->
               <div class="control-row">
                 <div class="control-group filter-input-group">
-                  <label>Package:</label>
+                  <label>Search:</label>
                   <input
                     type="text"
-                    id="logPackageInput"
+                    id="logSearchInput"
                     class="control-input"
-                    placeholder="com.example.myapp"
-                  />
-                </div>
-              </div>
-
-              <!-- 第三行：标签和文本过滤 -->
-              <div class="control-row">
-                <div class="control-group filter-input-group">
-                  <label>Tag:</label>
-                  <input
-                    type="text"
-                    id="logTagInput"
-                    class="control-input"
-                    placeholder="ActivityManager"
+                    placeholder="Search in log content..."
                   />
                 </div>
 
-                <div class="control-group filter-input-group">
-                  <label>Text:</label>
-                  <input
-                    type="text"
-                    id="logTextInput"
-                    class="control-input"
-                    placeholder="Search in log messages"
-                  />
+                <div class="control-group">
+                  <label>
+                    <input type="checkbox" id="regexSearchCheckbox"> Regex
+                  </label>
+                </div>
+
+                <div class="control-group">
+                  <label>
+                    <input type="checkbox" id="caseSensitiveCheckbox"> Case Sensitive
+                  </label>
                 </div>
               </div>
             </div>
