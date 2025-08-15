@@ -343,7 +343,21 @@ function stopTokenCheck() {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Windows平台设置控制台编码
+  if (process.platform === 'win32') {
+    try {
+      // 设置控制台代码页为UTF-8
+      const { spawn } = require('child_process');
+      spawn('chcp', ['65001'], { stdio: 'ignore' });
+      console.log('Windows控制台编码已设置为UTF-8');
+    } catch (error) {
+      console.warn('设置Windows控制台编码失败:', error.message);
+    }
+  }
+  
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -1703,44 +1717,21 @@ ipcMain.handle('start-logcat', async (event, options) => {
     // 启动新的logcat进程
     const args = ['-s', device, 'logcat', '-v', format];
     
-    // Windows平台特殊处理 - 改进日志获取策略
+    // Windows平台特殊处理 - 简化获取策略
     if (process.platform === 'win32') {
-      // 移除时间限制，获取更多日志
-      const timeIndex = args.indexOf('-T');
-      if (timeIndex !== -1) {
-        args.splice(timeIndex, 2); // 删除-T和其参数
-      }
-      
-      // 确保获取所有缓冲区的日志
-      const bufferIndex = args.indexOf('-b');
-      if (bufferIndex === -1) {
-        args.push('-b', 'all'); // 获取所有缓冲区：main、system、radio、events等
-      }
-      
-      // 添加更详细的格式信息
-      if (format === 'threadtime') {
-        // threadtime已经是最详细的格式，但我们可以确保包含所有信息
-        args.push('*:V'); // 显示所有级别的日志，包括verbose
-      }
-      
+      // 只保留基本参数，不添加复杂选项避免编码问题
       console.log('Windows logcat命令:', 'adb', args.join(' '));
     }
     
     // 为Windows平台设置编码选项
     const spawnOptions = {
-      stdio: ['ignore', 'pipe', 'pipe'] // 明确设置stdio
+      stdio: ['ignore', 'pipe', 'pipe'], // 明确设置stdio
+      encoding: 'utf8' // 明确设置编码
     };
     
+    // Windows平台简化配置，避免环境变量冲突
     if (process.platform === 'win32') {
-      // 设置Windows环境变量以支持UTF-8
-      spawnOptions.env = { 
-        ...process.env, 
-        CHCP: '65001',           // 设置代码页为UTF-8
-        PYTHONIOENCODING: 'utf-8',
-        LC_ALL: 'en_US.UTF-8'
-      };
-      
-      // Windows下使用cmd包装adb命令以正确处理编码
+      // 保持系统原有环境，不强制修改编码设置
       spawnOptions.shell = false;
     }
     
@@ -1769,29 +1760,28 @@ ipcMain.handle('start-logcat', async (event, options) => {
     
     // 监听输出
     logcatProcess.stdout.on('data', (data) => {
-      let output = data.toString('utf8');
+      // 简化处理：直接使用原始数据，不做复杂的编码转换
+      let output;
       
-      // Windows平台额外处理字符编码
       if (process.platform === 'win32') {
+        // Windows平台尝试多种编码方式
         try {
-          // 检测是否有中文乱码特征（常见的GBK转UTF8错误）
-          const hasGarbledText = /[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(output);
+          // 首先尝试UTF-8
+          output = data.toString('utf8');
           
-          if (hasGarbledText) {
-            // 尝试使用 GBK 编码解码
+          // 如果包含明显的乱码，尝试latin1然后转换
+          if (/[\u0080-\u00FF]{2,}/.test(output)) {
+            // 尝试将latin1解释为GBK
             const iconv = require('iconv-lite');
-            if (iconv.encodingExists('gbk')) {
-              const gbkOutput = iconv.decode(data, 'gbk');
-              // 验证GBK解码结果是否包含更多中文字符
-              if (gbkOutput.match(/[\u4e00-\u9fff]/g)) {
-                output = gbkOutput;
-                console.log('Windows端logcat使用GBK编码解码成功');
-              }
-            }
+            const latin1String = data.toString('latin1');
+            output = iconv.decode(Buffer.from(latin1String, 'latin1'), 'gbk');
           }
         } catch (error) {
-          console.warn('Windows端编码转换失败，使用原始输出:', error.message);
+          // 降级到基本处理
+          output = data.toString('latin1');
         }
+      } else {
+        output = data.toString('utf8');
       }
       
       // 处理数据分片问题 - 使用缓冲区重新组装完整的日志行
@@ -1805,40 +1795,12 @@ ipcMain.handle('start-logcat', async (event, options) => {
       // 发送完整的行
       if (lines.length > 0) {
         const completeOutput = lines.join('\n') + '\n';
-        
-        // Windows平台额外调试信息
-        if (process.platform === 'win32' && completeOutput.trim()) {
-          console.log('Windows logcat处理后的完整行数:', lines.length);
-        }
-        
         mainWindow.webContents.send('logcat-data', completeOutput);
       }
     });
     
     logcatProcess.stderr.on('data', (data) => {
-      let errorOutput = data.toString('utf8');
-      
-      // Windows平台处理stderr编码
-      if (process.platform === 'win32') {
-        try {
-          const hasGarbledText = /[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(errorOutput);
-          if (hasGarbledText) {
-            const iconv = require('iconv-lite');
-            if (iconv.encodingExists('gbk')) {
-              const gbkOutput = iconv.decode(data, 'gbk');
-              if (gbkOutput.match(/[\u4e00-\u9fff]/g)) {
-                errorOutput = gbkOutput;
-              }
-            }
-          }
-        } catch (error) {
-          console.warn('Windows端stderr编码转换失败:', error.message);
-        }
-        
-        // Windows特别日志：检查是否是权限或连接问题
-        console.log('Windows logcat stderr详情:', errorOutput);
-      }
-      
+      const errorOutput = data.toString('utf8');
       console.error('Logcat error:', errorOutput);
     });
     
