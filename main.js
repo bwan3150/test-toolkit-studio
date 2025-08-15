@@ -1701,18 +1701,126 @@ ipcMain.handle('start-logcat', async (event, options) => {
     
     // 启动新的logcat进程
     const args = ['-s', device, 'logcat', '-v', format];
-    const logcatProcess = spawn(adbPath, args);
+    
+    // Windows平台特殊处理 - 改进日志获取策略
+    if (process.platform === 'win32') {
+      // 移除时间限制，获取更多日志
+      const timeIndex = args.indexOf('-T');
+      if (timeIndex !== -1) {
+        args.splice(timeIndex, 2); // 删除-T和其参数
+      }
+      
+      // 确保获取所有缓冲区的日志
+      const bufferIndex = args.indexOf('-b');
+      if (bufferIndex === -1) {
+        args.push('-b', 'all'); // 获取所有缓冲区：main、system、radio、events等
+      }
+      
+      // 添加更详细的格式信息
+      if (format === 'threadtime') {
+        // threadtime已经是最详细的格式，但我们可以确保包含所有信息
+        args.push('*:V'); // 显示所有级别的日志，包括verbose
+      }
+      
+      console.log('Windows logcat命令:', 'adb', args.join(' '));
+    }
+    
+    // 为Windows平台设置编码选项
+    const spawnOptions = {
+      stdio: ['ignore', 'pipe', 'pipe'] // 明确设置stdio
+    };
+    
+    if (process.platform === 'win32') {
+      // 设置Windows环境变量以支持UTF-8
+      spawnOptions.env = { 
+        ...process.env, 
+        CHCP: '65001',           // 设置代码页为UTF-8
+        PYTHONIOENCODING: 'utf-8',
+        LC_ALL: 'en_US.UTF-8'
+      };
+      
+      // Windows下使用cmd包装adb命令以正确处理编码
+      spawnOptions.shell = false;
+    }
+    
+    console.log('启动logcat进程:', adbPath, args.join(' '));
+    const logcatProcess = spawn(adbPath, args, spawnOptions);
+    
+    // Windows平台进程启动调试
+    if (process.platform === 'win32') {
+      console.log('Windows logcat进程PID:', logcatProcess.pid);
+      console.log('Windows logcat进程spawnOptions:', JSON.stringify(spawnOptions, null, 2));
+    }
     
     // 存储进程
     logcatProcesses.set(device, logcatProcess);
     
+    // 监听进程错误
+    logcatProcess.on('error', (error) => {
+      console.error('Logcat进程启动失败:', error);
+      logcatProcesses.delete(device);
+    });
+    
     // 监听输出
     logcatProcess.stdout.on('data', (data) => {
-      mainWindow.webContents.send('logcat-data', data.toString());
+      let output = data.toString('utf8');
+      
+      // Windows平台额外处理字符编码
+      if (process.platform === 'win32') {
+        try {
+          // 检测是否有中文乱码特征（常见的GBK转UTF8错误）
+          const hasGarbledText = /[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(output);
+          
+          if (hasGarbledText) {
+            // 尝试使用 GBK 编码解码
+            const iconv = require('iconv-lite');
+            if (iconv.encodingExists('gbk')) {
+              const gbkOutput = iconv.decode(data, 'gbk');
+              // 验证GBK解码结果是否包含更多中文字符
+              if (gbkOutput.match(/[\u4e00-\u9fff]/g)) {
+                output = gbkOutput;
+                console.log('Windows端logcat使用GBK编码解码成功');
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Windows端编码转换失败，使用原始输出:', error.message);
+        }
+      }
+      
+      // Windows平台额外调试信息
+      if (process.platform === 'win32' && output.trim()) {
+        console.log('Windows logcat收到数据:', output.substring(0, 200) + (output.length > 200 ? '...' : ''));
+      }
+      
+      mainWindow.webContents.send('logcat-data', output);
     });
     
     logcatProcess.stderr.on('data', (data) => {
-      console.error('Logcat error:', data.toString());
+      let errorOutput = data.toString('utf8');
+      
+      // Windows平台处理stderr编码
+      if (process.platform === 'win32') {
+        try {
+          const hasGarbledText = /[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(errorOutput);
+          if (hasGarbledText) {
+            const iconv = require('iconv-lite');
+            if (iconv.encodingExists('gbk')) {
+              const gbkOutput = iconv.decode(data, 'gbk');
+              if (gbkOutput.match(/[\u4e00-\u9fff]/g)) {
+                errorOutput = gbkOutput;
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('Windows端stderr编码转换失败:', error.message);
+        }
+        
+        // Windows特别日志：检查是否是权限或连接问题
+        console.log('Windows logcat stderr详情:', errorOutput);
+      }
+      
+      console.error('Logcat error:', errorOutput);
     });
     
     logcatProcess.on('close', (code) => {

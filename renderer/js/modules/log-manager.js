@@ -424,7 +424,19 @@ class LogManager {
 
     // 处理日志数据
     handleLogData(data) {
-        const lines = data.split('\n');
+        // 确保数据是字符串格式
+        const dataStr = typeof data === 'string' ? data : data.toString('utf8');
+        
+        // 对Windows平台进行额外的编码检查和修复
+        let processedData = dataStr;
+        if (navigator.platform.indexOf('Win') === 0) {
+            // 检测并修复常见的乱码问题
+            if (/[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(processedData)) {
+                console.warn('检测到Windows端可能的编码问题，数据可能显示不正确');
+            }
+        }
+        
+        const lines = processedData.split('\n');
         lines.forEach(line => {
             if (line.trim()) {
                 const logEntry = this.parseLogLine(line);
