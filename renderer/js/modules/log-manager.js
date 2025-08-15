@@ -427,12 +427,18 @@ class LogManager {
         // 确保数据是字符串格式
         const dataStr = typeof data === 'string' ? data : data.toString('utf8');
         
-        // 对Windows平台进行额外的编码检查和修复
+        // Windows平台编码验证
         let processedData = dataStr;
         if (navigator.platform.indexOf('Win') === 0) {
-            // 检测并修复常见的乱码问题
-            if (/[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(processedData)) {
-                console.warn('检测到Windows端可能的编码问题，数据可能显示不正确');
+            // 检测常见的编码问题并报告
+            const hasReplacementChar = processedData.includes('\ufffd');
+            const hasHighBytePattern = /[\x80-\xFF]{2,}/.test(processedData);
+            
+            if (hasReplacementChar || hasHighBytePattern) {
+                console.warn('检测到Windows端编码问题，原始数据长度:', dataStr.length);
+                console.warn('包含替换字符:', hasReplacementChar, '包含高位字节:', hasHighBytePattern);
+            } else {
+                console.log('Windows端logcat数据编码正常');
             }
         }
         

@@ -1709,14 +1709,19 @@ ipcMain.handle('start-logcat', async (event, options) => {
       console.log('Windows logcat命令:', 'adb', args.join(' '));
     }
     
-    // 设置spawn选项 - Windows平台使用最简配置
+    // 设置spawn选项 - Windows平台特殊处理
     const spawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe']
     };
     
-    // Windows平台不设置任何编码相关选项，避免冲突
+    // Windows平台设置正确的环境编码
     if (process.platform === 'win32') {
-      // 不设置shell、encoding等可能导致编码问题的选项
+      // 设置环境变量强制使用UTF-8输出
+      spawnOptions.env = {
+        ...process.env,
+        'LC_ALL': 'C.UTF-8',
+        'LANG': 'C.UTF-8'
+      };
     }
     
     console.log('启动logcat进程:', adbPath, args.join(' '));
@@ -1747,20 +1752,35 @@ ipcMain.handle('start-logcat', async (event, options) => {
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台：最简单的处理方式
+        // Windows平台：改进的编码处理方式
         try {
-          // 尝试直接使用UTF-8
+          // 首先检查是否需要iconv模块
+          let iconv;
+          try {
+            iconv = require('iconv-lite');
+          } catch (e) {
+            console.warn('iconv-lite模块不可用，使用默认编码处理');
+          }
+          
+          // 尝试UTF-8解码
           output = data.toString('utf8');
           
-          // 如果输出明显不正常（包含大量控制字符或高位字节），尝试其他编码
-          if (output.includes('\ufffd') || /[\x80-\xFF]{3,}/.test(output)) {
-            const iconv = require('iconv-lite');
-            // 尝试GBK
-            output = iconv.decode(data, 'gbk');
+          // 检测UTF-8解码是否成功（包含replacement characters表示解码失败）
+          if (output.includes('\ufffd') && iconv) {
+            // 尝试使用系统默认编码（通常是GBK）
+            try {
+              output = iconv.decode(data, 'gbk');
+              console.log('Windows logcat使用GBK编码解码');
+            } catch (gbkError) {
+              // GBK解码也失败，回退到Latin1
+              output = data.toString('latin1');
+              console.log('Windows logcat使用Latin1编码解码');
+            }
           }
         } catch (error) {
-          // 最终使用ASCII兼容模式
-          output = data.toString('ascii');
+          // 最终回退方案
+          output = data.toString('binary');
+          console.warn('Windows logcat编码解码失败，使用binary模式:', error.message);
         }
       } else {
         output = data.toString('utf8');
@@ -1777,6 +1797,13 @@ ipcMain.handle('start-logcat', async (event, options) => {
       // 发送完整的行
       if (lines.length > 0) {
         const completeOutput = lines.join('\n') + '\n';
+        
+        // Windows平台调试输出
+        if (process.platform === 'win32') {
+          console.log(`Windows logcat发送${lines.length}行数据，编码正常：`, 
+                      !completeOutput.includes('\ufffd'));
+        }
+        
         mainWindow.webContents.send('logcat-data', completeOutput);
       }
     });
