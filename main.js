@@ -1700,39 +1700,20 @@ ipcMain.handle('start-logcat', async (event, options) => {
       logcatProcesses.delete(device);
     }
     
-    // 启动新的logcat进程
-    let args, command;
+    // 启动新的logcat进程 - 直接调用adb，不使用cmd包装
+    const command = adbPath;
+    const args = ['-s', device, 'logcat', '-v', format];
     
-    if (process.platform === 'win32') {
-      // Windows平台：使用cmd包装确保正确的编码处理
-      command = 'cmd';
-      args = [
-        '/c', 
-        `chcp 65001 >nul && "${adbPath}" -s ${device} logcat -v ${format}`
-      ];
-      console.log('Windows logcat命令:', args.join(' '));
-    } else {
-      // 其他平台正常处理
-      command = adbPath;
-      args = ['-s', device, 'logcat', '-v', format];
-    }
-    
-    // 设置spawn选项 - Windows平台特殊处理
+    // 设置spawn选项
     const spawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe']
     };
     
-    // Windows平台简化处理，不设置复杂的编码环境
+    // Windows平台特殊处理：不使用shell，避免路径问题
     if (process.platform === 'win32') {
-      // 保持环境变量简单，避免冲突
-      spawnOptions.env = {
-        ...process.env
-      };
-      
-      // 确保不使用shell避免路径问题
       spawnOptions.shell = false;
-      
-      console.log('Windows平台使用简化配置启动logcat');
+      // Windows上直接执行，不需要额外的环境变量
+      console.log('Windows平台直接启动logcat，不使用cmd包装');
     }
     
     console.log('启动logcat进程:', command, args.join(' '));
@@ -1741,7 +1722,6 @@ ipcMain.handle('start-logcat', async (event, options) => {
     // Windows平台进程启动调试
     if (process.platform === 'win32') {
       console.log('Windows logcat进程PID:', logcatProcess.pid);
-      console.log('Windows logcat进程spawnOptions:', JSON.stringify(spawnOptions, null, 2));
     }
     
     // 存储进程
@@ -1763,34 +1743,41 @@ ipcMain.handle('start-logcat', async (event, options) => {
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台：由于cmd级别已设置UTF-8，直接使用UTF-8解码
+        // Windows平台：优先使用GBK解码（Windows默认编码）
         try {
-          output = data.toString('utf8');
+          const iconv = require('iconv-lite');
           
-          // 如果仍有明显的乱码，尝试GBK作为后备
-          if (output.includes('\ufffd') || /[Σσµφτα∩╝ë∏îΘàì∞╗╣æ╜]/u.test(output)) {
-            const iconv = require('iconv-lite');
-            const gbkOutput = iconv.decode(data, 'gbk');
+          // 先尝试GBK解码（Windows CMD默认编码）
+          const gbkOutput = iconv.decode(data, 'gbk');
+          
+          // 检查是否有明显的乱码字符
+          const hasGbkError = gbkOutput.includes('\ufffd') || 
+                              /[\uFFFD\u0000-\u001F]/g.test(gbkOutput);
+          
+          if (!hasGbkError) {
+            // GBK解码成功
+            output = gbkOutput;
+            console.log('Windows logcat使用GBK编码解码成功');
+          } else {
+            // GBK失败，尝试UTF-8
+            output = data.toString('utf8');
             
-            // 比较哪个更好
-            const utf8GarbledCount = (output.match(/\ufffd/g) || []).length;
-            const gbkGarbledCount = (gbkOutput.match(/\ufffd/g) || []).length;
-            
-            if (gbkGarbledCount < utf8GarbledCount) {
+            // 如果UTF-8也有问题，使用GBK（通常GBK更可靠）
+            if (output.includes('\ufffd')) {
               output = gbkOutput;
-              console.log('Windows logcat使用GBK编码，效果更好');
+              console.log('Windows logcat回退到GBK编码');
             } else {
               console.log('Windows logcat使用UTF-8编码');
             }
-          } else {
-            console.log('Windows logcat UTF-8编码正常，数据长度:', output.length);
           }
           
         } catch (error) {
+          // 如果iconv-lite不可用，直接使用UTF-8
           output = data.toString('utf8');
-          console.warn('Windows编码处理异常:', error.message);
+          console.warn('编码处理异常，使用默认UTF-8:', error.message);
         }
       } else {
+        // 非Windows平台使用UTF-8
         output = data.toString('utf8');
       }
       
@@ -1806,16 +1793,18 @@ ipcMain.handle('start-logcat', async (event, options) => {
       if (lines.length > 0) {
         const completeOutput = lines.join('\n') + '\n';
         
-        // Windows平台调试输出
-        if (process.platform === 'win32') {
-          const hasReplacementChars = completeOutput.includes('\ufffd');
-          const hasGarbledChars = /[σ╖▓σÉ»σè¿]/u.test(completeOutput);
+        // Windows平台调试输出（简化）
+        if (process.platform === 'win32' && lines.length > 0) {
+          // 检查第一行是否包含中文字符来验证编码
+          const hasChinese = /[\u4e00-\u9fa5]/.test(lines[0]);
+          const hasReplacementChar = lines[0].includes('\ufffd');
           
-          console.log(`Windows logcat发送${lines.length}行数据，编码状态：正常=${!hasReplacementChars && !hasGarbledChars}`);
-          
-          // 如果还有编码问题，输出原始字节样本用于诊断
-          if (hasReplacementChars || hasGarbledChars) {
-            console.log('仍有编码问题，原始样本:', completeOutput.substring(0, 100));
+          if (hasChinese && !hasReplacementChar) {
+            console.log(`Windows logcat: 发送${lines.length}行，中文显示正常`);
+          } else if (hasReplacementChar) {
+            console.log(`Windows logcat: 发送${lines.length}行，仍有编码问题`);
+          } else {
+            console.log(`Windows logcat: 发送${lines.length}行`);
           }
         }
         
