@@ -343,21 +343,7 @@ function stopTokenCheck() {
   }
 }
 
-app.whenReady().then(() => {
-  // Windows平台设置控制台编码
-  if (process.platform === 'win32') {
-    try {
-      // 设置控制台代码页为UTF-8
-      const { spawn } = require('child_process');
-      spawn('chcp', ['65001'], { stdio: 'ignore' });
-      console.log('Windows控制台编码已设置为UTF-8');
-    } catch (error) {
-      console.warn('设置Windows控制台编码失败:', error.message);
-    }
-  }
-  
-  createWindow();
-});
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -1723,16 +1709,14 @@ ipcMain.handle('start-logcat', async (event, options) => {
       console.log('Windows logcat命令:', 'adb', args.join(' '));
     }
     
-    // 为Windows平台设置编码选项
+    // 设置spawn选项 - Windows平台使用最简配置
     const spawnOptions = {
-      stdio: ['ignore', 'pipe', 'pipe'], // 明确设置stdio
-      encoding: 'utf8' // 明确设置编码
+      stdio: ['ignore', 'pipe', 'pipe']
     };
     
-    // Windows平台简化配置，避免环境变量冲突
+    // Windows平台不设置任何编码相关选项，避免冲突
     if (process.platform === 'win32') {
-      // 保持系统原有环境，不强制修改编码设置
-      spawnOptions.shell = false;
+      // 不设置shell、encoding等可能导致编码问题的选项
     }
     
     console.log('启动logcat进程:', adbPath, args.join(' '));
@@ -1760,25 +1744,23 @@ ipcMain.handle('start-logcat', async (event, options) => {
     
     // 监听输出
     logcatProcess.stdout.on('data', (data) => {
-      // 简化处理：直接使用原始数据，不做复杂的编码转换
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台尝试多种编码方式
+        // Windows平台：最简单的处理方式
         try {
-          // 首先尝试UTF-8
+          // 尝试直接使用UTF-8
           output = data.toString('utf8');
           
-          // 如果包含明显的乱码，尝试latin1然后转换
-          if (/[\u0080-\u00FF]{2,}/.test(output)) {
-            // 尝试将latin1解释为GBK
+          // 如果输出明显不正常（包含大量控制字符或高位字节），尝试其他编码
+          if (output.includes('\ufffd') || /[\x80-\xFF]{3,}/.test(output)) {
             const iconv = require('iconv-lite');
-            const latin1String = data.toString('latin1');
-            output = iconv.decode(Buffer.from(latin1String, 'latin1'), 'gbk');
+            // 尝试GBK
+            output = iconv.decode(data, 'gbk');
           }
         } catch (error) {
-          // 降级到基本处理
-          output = data.toString('latin1');
+          // 最终使用ASCII兼容模式
+          output = data.toString('ascii');
         }
       } else {
         output = data.toString('utf8');
