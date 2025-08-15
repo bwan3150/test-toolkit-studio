@@ -1259,20 +1259,37 @@ ipcMain.handle('adb-pair-wireless', async (event, ipAddress, pairingPort, pairin
     
     console.log('正在配对无线ADB设备:', pairingAddress);
     
-    // 执行配对命令
-    // 注意：adb pair 命令需要传入配对码
-    // 在不同系统上处理方式可能不同
-    let commandStr;
-    if (process.platform === 'win32') {
-      // Windows 使用管道
-      commandStr = `echo ${pairingCode} | "${adbPath}" pair ${pairingAddress}`;
-    } else {
-      // macOS/Linux 使用输入重定向
-      commandStr = `"${adbPath}" pair ${pairingAddress} ${pairingCode}`;
-    }
+    // 执行配对命令，直接使用参数传递（适用于所有平台）
+    const commandStr = `"${adbPath}" pair ${pairingAddress} ${pairingCode}`;
     
     console.log('执行配对命令:', commandStr);
-    const { stdout, stderr } = await execPromise(commandStr);
+    
+    let stdout, stderr;
+    try {
+      const result = await execPromise(commandStr);
+      stdout = result.stdout;
+      stderr = result.stderr;
+      console.log('配对命令输出 - stdout:', stdout);
+      console.log('配对命令输出 - stderr:', stderr);
+    } catch (execError) {
+      console.error('配对命令执行失败:', execError);
+      
+      // 如果是协议错误，提供更好的错误信息
+      const errorMessage = (execError.stdout || '') + (execError.stderr || '') + execError.message;
+      if (errorMessage.includes('protocol fault') || errorMessage.includes("couldn't read status message")) {
+        return {
+          success: false,
+          error: 'Windows ADB配对协议错误，请尝试以下解决方案：\n1. 重启ADB服务\n2. 确保设备和电脑在同一网络\n3. 重新生成配对码',
+          details: execError
+        };
+      }
+      
+      return { 
+        success: false, 
+        error: `配对失败: ${execError.message}`,
+        details: execError
+      };
+    }
     
     // 检查配对结果
     if (stdout.includes('Successfully paired') || stdout.includes('Paired devices')) {
