@@ -1714,28 +1714,17 @@ ipcMain.handle('start-logcat', async (event, options) => {
       stdio: ['ignore', 'pipe', 'pipe']
     };
     
-    // Windows平台设置正确的环境编码
+    // Windows平台简化处理，不设置复杂的编码环境
     if (process.platform === 'win32') {
-      // Windows平台先设置系统控制台编码为UTF-8
-      try {
-        // 同步执行chcp命令设置编码
-        require('child_process').execSync('chcp 65001', { stdio: 'ignore' });
-        console.log('Windows控制台编码已设置为UTF-8 (65001)');
-      } catch (e) {
-        console.warn('设置Windows控制台编码失败:', e.message);
-      }
-      
-      // 设置进程环境变量
+      // 保持环境变量简单，避免冲突
       spawnOptions.env = {
-        ...process.env,
-        'CHCP': '65001',
-        'LC_ALL': 'en_US.UTF-8',
-        'LANG': 'en_US.UTF-8',
-        'PYTHONIOENCODING': 'utf-8'
+        ...process.env
       };
       
-      // Windows下通过cmd执行以确保编码正确
-      spawnOptions.shell = true;
+      // 确保不使用shell避免路径问题
+      spawnOptions.shell = false;
+      
+      console.log('Windows平台使用简化配置启动logcat');
     }
     
     console.log('启动logcat进程:', adbPath, args.join(' '));
@@ -1766,39 +1755,27 @@ ipcMain.handle('start-logcat', async (event, options) => {
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台：尝试多种编码方式，找到最合适的
-        const iconv = require('iconv-lite');
-        
+        // Windows平台：简化编码处理
         try {
-          // 方法1: 直接使用UTF-8（如果chcp 65001生效了应该可以）
-          output = data.toString('utf8');
+          const iconv = require('iconv-lite');
           
-          // 检查是否包含乱码（replacement characters）
-          if (output.includes('\ufffd')) {
-            console.log('UTF-8解码失败，尝试GBK编码');
-            // 方法2: 使用GBK解码（中文Windows系统默认编码）
-            output = iconv.decode(data, 'gbk');
+          // 直接尝试最常用的编码：GBK（中文Windows系统默认）
+          output = iconv.decode(data, 'gbk');
+          
+          // 如果GBK解码后仍有问题，回退到UTF-8
+          if (output.includes('\ufffd') || output.length === 0) {
+            output = data.toString('utf8');
           }
           
-          // 再次检查是否还有问题
-          if (output.includes('\ufffd')) {
-            console.log('GBK解码也失败，尝试CP936编码');
-            // 方法3: 使用CP936（简体中文编码页）
-            output = iconv.decode(data, 'cp936');
-          }
-          
-          // 最后检查
-          if (output.includes('\ufffd')) {
-            console.log('所有编码尝试失败，使用原始二进制转换');
-            // 方法4: 使用latin1作为最后手段（保持字节完整性）
-            output = data.toString('latin1');
-          } else {
-            console.log('Windows logcat编码解码成功，数据长度:', output.length);
+          // 简单的调试信息
+          if (output.trim().length > 0) {
+            console.log('Windows logcat接收到数据，长度:', output.length);
           }
           
         } catch (error) {
-          console.error('Windows编码处理异常:', error.message);
-          output = data.toString('latin1');
+          // 错误时使用UTF-8
+          output = data.toString('utf8');
+          console.warn('Windows编码处理失败，使用UTF-8:', error.message);
         }
       } else {
         output = data.toString('utf8');
