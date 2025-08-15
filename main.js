@@ -1599,6 +1599,7 @@ ipcMain.handle('delete-wireless-device', async (event, deviceId) => {
 
 const { spawn } = require('child_process');
 let logcatProcesses = new Map(); // 存储正在运行的logcat进程
+let logcatBuffers = new Map(); // 存储每个设备的logcat数据缓冲区
 
 // 获取已连接的设备列表（用于Log页面）
 ipcMain.handle('get-connected-devices', async () => {
@@ -1761,6 +1762,11 @@ ipcMain.handle('start-logcat', async (event, options) => {
       logcatProcesses.delete(device);
     });
     
+    // 初始化该设备的缓冲区
+    if (!logcatBuffers.has(device)) {
+      logcatBuffers.set(device, '');
+    }
+    
     // 监听输出
     logcatProcess.stdout.on('data', (data) => {
       let output = data.toString('utf8');
@@ -1788,12 +1794,25 @@ ipcMain.handle('start-logcat', async (event, options) => {
         }
       }
       
-      // Windows平台额外调试信息
-      if (process.platform === 'win32' && output.trim()) {
-        console.log('Windows logcat收到数据:', output.substring(0, 200) + (output.length > 200 ? '...' : ''));
-      }
+      // 处理数据分片问题 - 使用缓冲区重新组装完整的日志行
+      const currentBuffer = logcatBuffers.get(device) + output;
+      const lines = currentBuffer.split('\n');
       
-      mainWindow.webContents.send('logcat-data', output);
+      // 保留最后一行（可能不完整）在缓冲区中
+      const incompleteLastLine = lines.pop();
+      logcatBuffers.set(device, incompleteLastLine || '');
+      
+      // 发送完整的行
+      if (lines.length > 0) {
+        const completeOutput = lines.join('\n') + '\n';
+        
+        // Windows平台额外调试信息
+        if (process.platform === 'win32' && completeOutput.trim()) {
+          console.log('Windows logcat处理后的完整行数:', lines.length);
+        }
+        
+        mainWindow.webContents.send('logcat-data', completeOutput);
+      }
     });
     
     logcatProcess.stderr.on('data', (data) => {
@@ -1825,7 +1844,16 @@ ipcMain.handle('start-logcat', async (event, options) => {
     
     logcatProcess.on('close', (code) => {
       console.log(`Logcat process exited with code ${code}`);
+      
+      // 清理缓冲区中残留的不完整行
+      const remainingBuffer = logcatBuffers.get(device);
+      if (remainingBuffer && remainingBuffer.trim()) {
+        console.log('发送缓冲区中的最后一行:', remainingBuffer);
+        mainWindow.webContents.send('logcat-data', remainingBuffer + '\n');
+      }
+      
       logcatProcesses.delete(device);
+      logcatBuffers.delete(device);
     });
     
     return { success: true, pid: logcatProcess.pid };
@@ -1843,6 +1871,7 @@ ipcMain.handle('stop-logcat', async (event, processId) => {
       if (process.pid === processId) {
         process.kill();
         logcatProcesses.delete(device);
+        logcatBuffers.delete(device); // 同时清理缓冲区
         return { success: true };
       }
     }
