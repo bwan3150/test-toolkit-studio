@@ -15,8 +15,19 @@ class LogManager {
         this.logProcess = null; // 存储logcat进程
         this.currentFormat = 'threadtime'; // 当前logcat格式
         this.currentBuffer = 'main'; // 当前logcat buffer
+        this.isFiltering = false; // 是否正在过滤
+        this.filterTimeout = null; // 过滤延时器
+        this.filterMode = 'simple'; // 'simple' 或 'expert'
         this.filters = {
+            // Expert模式
             filterSpec: '', // logcat风格的过滤器，如 "flutter:V ActivityManager:I *:S"
+            
+            // Simple模式
+            level: 'I',     // 日志级别
+            tag: '',        // 标签过滤
+            package: '',    // 包名过滤
+            
+            // 通用
             search: '',     // 搜索文本
             regex: false,   // 是否使用正则表达式
             caseSensitive: false // 是否区分大小写
@@ -81,7 +92,7 @@ class LogManager {
         return filters;
     }
 
-    // 设置事件监听器 - Logcat风格
+    // 设置事件监听器 - 支持双模式
     setupEventListeners() {
         // 设备选择
         const deviceSelect = document.getElementById('logDeviceSelect');
@@ -91,20 +102,103 @@ class LogManager {
             });
         }
 
-        // Filter Spec输入框
-        const filterSpecInput = document.getElementById('logFilterSpec');
-        if (filterSpecInput) {
-            filterSpecInput.addEventListener('input', (e) => {
-                this.filters.filterSpec = e.target.value;
-                this.applyFilters();
+        // 模式切换
+        const simpleModeRadio = document.getElementById('simpleModeRadio');
+        const expertModeRadio = document.getElementById('expertModeRadio');
+        
+        if (simpleModeRadio) {
+            simpleModeRadio.addEventListener('change', () => {
+                if (simpleModeRadio.checked) {
+                    this.switchToMode('simple');
+                }
+            });
+        }
+        
+        if (expertModeRadio) {
+            expertModeRadio.addEventListener('change', () => {
+                if (expertModeRadio.checked) {
+                    this.switchToMode('expert');
+                }
             });
         }
 
-        // 应用过滤器按钮
+        // Expert模式：Filter Spec输入框
+        const filterSpecInput = document.getElementById('logFilterSpec');
+        if (filterSpecInput) {
+            let debounceTimer = null;
+            filterSpecInput.addEventListener('input', (e) => {
+                // 显示输入框filtering状态
+                this.setInputFilteringState(filterSpecInput, true);
+                
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    this.filters.filterSpec = e.target.value;
+                    this.applyFilters();
+                    
+                    // 移除输入框filtering状态
+                    setTimeout(() => {
+                        this.setInputFilteringState(filterSpecInput, false);
+                    }, 500);
+                }, 300);
+            });
+        }
+
+        // Expert模式：应用过滤器按钮
         const applyFilterBtn = document.getElementById('applyFilterBtn');
         if (applyFilterBtn) {
             applyFilterBtn.addEventListener('click', () => {
                 this.applyFilters();
+            });
+        }
+
+        // Simple模式：日志级别选择
+        const simpleLogLevel = document.getElementById('simpleLogLevel');
+        if (simpleLogLevel) {
+            simpleLogLevel.addEventListener('change', (e) => {
+                this.filters.level = e.target.value;
+                this.applyFilters();
+            });
+        }
+
+        // Simple模式：Tag过滤
+        const simpleTagFilter = document.getElementById('simpleTagFilter');
+        if (simpleTagFilter) {
+            let debounceTimer = null;
+            simpleTagFilter.addEventListener('input', (e) => {
+                // 显示输入框filtering状态
+                this.setInputFilteringState(simpleTagFilter, true);
+                
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    this.filters.tag = e.target.value;
+                    this.applyFilters();
+                    
+                    // 移除输入框filtering状态
+                    setTimeout(() => {
+                        this.setInputFilteringState(simpleTagFilter, false);
+                    }, 500);
+                }, 300);
+            });
+        }
+
+        // Simple模式：Package过滤
+        const simplePackageFilter = document.getElementById('simplePackageFilter');
+        if (simplePackageFilter) {
+            let debounceTimer = null;
+            simplePackageFilter.addEventListener('input', (e) => {
+                // 显示输入框filtering状态
+                this.setInputFilteringState(simplePackageFilter, true);
+                
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    this.filters.package = e.target.value;
+                    this.applyFilters();
+                    
+                    // 移除输入框filtering状态
+                    setTimeout(() => {
+                        this.setInputFilteringState(simplePackageFilter, false);
+                    }, 500);
+                }, 300);
             });
         }
 
@@ -113,10 +207,18 @@ class LogManager {
         if (searchInput) {
             let debounceTimer = null;
             searchInput.addEventListener('input', (e) => {
+                // 显示输入框filtering状态
+                this.setInputFilteringState(searchInput, true);
+                
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
                     this.filters.search = e.target.value;
                     this.applyFilters();
+                    
+                    // 移除输入框filtering状态
+                    setTimeout(() => {
+                        this.setInputFilteringState(searchInput, false);
+                    }, 500);
                 }, 300);
             });
         }
@@ -200,6 +302,32 @@ class LogManager {
                 }
             });
         }
+    }
+
+    // 切换过滤模式
+    switchToMode(mode) {
+        this.filterMode = mode;
+        
+        const expertFilterRow = document.getElementById('expertFilterRow');
+        const simpleFilterRows = document.getElementById('simpleFilterRows');
+        
+        if (mode === 'expert') {
+            expertFilterRow.style.display = 'block';
+            simpleFilterRows.style.display = 'none';
+            // 清空simple模式的过滤器
+            this.filters.level = 'I';
+            this.filters.tag = '';
+            this.filters.package = '';
+        } else {
+            expertFilterRow.style.display = 'none';
+            simpleFilterRows.style.display = 'block';
+            // 清空expert模式的过滤器
+            this.filters.filterSpec = '';
+            const filterSpecInput = document.getElementById('logFilterSpec');
+            if (filterSpecInput) filterSpecInput.value = '';
+        }
+        
+        this.applyFilters();
     }
 
     // 刷新设备列表
@@ -382,35 +510,60 @@ class LogManager {
         return filters;
     }
 
-    // logcat风格的过滤逻辑
+    // 双模式过滤逻辑
     shouldShowEntry(entry) {
-        // 检查filterSpec
-        if (this.filters.filterSpec) {
-            const parsedFilters = this.parseFilterSpec(this.filters.filterSpec);
-            if (parsedFilters && parsedFilters.length > 0) {
-                let matched = false;
-                
-                for (const filter of parsedFilters) {
-                    if (filter.isWildcard) {
-                        // *:S 表示所有其他tag的级别
-                        if (!entry.tag || this.shouldShowLevel(entry.level, filter.level)) {
-                            matched = true;
-                            break;
-                        }
-                    } else if (filter.tag && entry.tag === filter.tag) {
-                        // 特定tag的级别过滤
-                        if (this.shouldShowLevel(entry.level, filter.level)) {
-                            matched = true;
-                            break;
+        if (this.filterMode === 'expert') {
+            // Expert模式：使用filterSpec
+            if (this.filters.filterSpec) {
+                const parsedFilters = this.parseFilterSpec(this.filters.filterSpec);
+                if (parsedFilters && parsedFilters.length > 0) {
+                    let matched = false;
+                    
+                    for (const filter of parsedFilters) {
+                        if (filter.isWildcard) {
+                            // *:S 表示所有其他tag的级别
+                            if (!entry.tag || this.shouldShowLevel(entry.level, filter.level)) {
+                                matched = true;
+                                break;
+                            }
+                        } else if (filter.tag && entry.tag === filter.tag) {
+                            // 特定tag的级别过滤
+                            if (this.shouldShowLevel(entry.level, filter.level)) {
+                                matched = true;
+                                break;
+                            }
                         }
                     }
+                    
+                    if (!matched) return false;
                 }
-                
-                if (!matched) return false;
+            }
+        } else {
+            // Simple模式：使用分离的过滤器
+            
+            // 检查日志级别
+            if (!this.shouldShowLevel(entry.level, this.filters.level)) {
+                return false;
+            }
+            
+            // 检查Tag过滤
+            if (this.filters.tag) {
+                const tagLower = this.filters.tag.toLowerCase();
+                if (!entry.tag.toLowerCase().includes(tagLower)) {
+                    return false;
+                }
+            }
+            
+            // 检查Package过滤（在消息中搜索包名）
+            if (this.filters.package) {
+                const packageLower = this.filters.package.toLowerCase();
+                if (!entry.raw.toLowerCase().includes(packageLower)) {
+                    return false;
+                }
             }
         }
         
-        // 检查搜索文本
+        // 通用搜索（两种模式都支持）
         if (this.filters.search) {
             const searchText = this.filters.caseSensitive ? 
                 this.filters.search : this.filters.search.toLowerCase();
@@ -517,37 +670,78 @@ class LogManager {
         this.applyFilters();
     }
 
-    // 应用过滤器
-    applyFilters() {
+    // 应用过滤器 - 异步版本
+    async applyFilters() {
+        // 清除之前的延时器
+        if (this.filterTimeout) {
+            clearTimeout(this.filterTimeout);
+        }
+        
+        // 设置新的延时器，避免频繁过滤
+        this.filterTimeout = setTimeout(async () => {
+            await this.performAsyncFiltering();
+        }, 200); // 200ms延迟
+    }
+    
+    // 执行异步过滤
+    async performAsyncFiltering() {
         const logContainer = document.getElementById('logContainer');
         if (!logContainer) return;
 
-        // 调试输出
-        console.log('应用过滤器:', this.filters);
-        console.log('缓冲区日志总数:', this.logBuffer.length);
+        // 显示loading状态
+        this.showLoadingState();
         
-        // 统计符合条件的日志
-        let matchCount = 0;
-        let flutterKonecCount = 0;
+        try {
+            // 使用setTimeout将任务分解，避免阻塞UI
+            await new Promise(resolve => {
+                setTimeout(() => {
+                    // 调试输出
+                    console.log('应用过滤器:', this.filters);
+                    console.log('缓冲区日志总数:', this.logBuffer.length);
+                    
+                    // 统计符合条件的日志
+                    let matchCount = 0;
 
-        // 清空当前显示
-        logContainer.innerHTML = '';
+                    // 清空当前显示
+                    logContainer.innerHTML = '';
 
-        // 重新显示符合过滤条件的日志
-        this.logBuffer.forEach(entry => {
-            // 统计flutter+konec的日志
-            if (entry.tag === 'flutter' && entry.package && entry.package.includes('konec')) {
-                flutterKonecCount++;
-            }
-            
+                    // 分批处理日志，避免一次性处理太多导致卡顿
+                    this.processBatchedLogs(0, 0).then((finalMatchCount) => {
+                        console.log(`过滤完成: 总共${this.logBuffer.length}条日志，符合过滤条件${finalMatchCount}条`);
+                        resolve();
+                    });
+                }, 0);
+            });
+        } finally {
+            // 隐藏loading状态
+            this.hideLoadingState();
+        }
+    }
+    
+    // 分批处理日志
+    async processBatchedLogs(startIndex, matchCount) {
+        const batchSize = 100; // 每批处理100条
+        const endIndex = Math.min(startIndex + batchSize, this.logBuffer.length);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+            const entry = this.logBuffer[i];
             if (this.shouldShowEntry(entry)) {
                 matchCount++;
                 this.appendLogToView(entry);
             }
-        });
+        }
         
-        console.log(`过滤结果: 总共${this.logBuffer.length}条日志，符合过滤条件${matchCount}条`);
-        console.log(`其中flutter+konec日志${flutterKonecCount}条`);
+        // 如果还有更多日志需要处理，继续下一批
+        if (endIndex < this.logBuffer.length) {
+            // 使用setTimeout让出控制权，避免阻塞UI
+            await new Promise(resolve => {
+                setTimeout(() => {
+                    this.processBatchedLogs(endIndex, matchCount).then(resolve);
+                }, 1);
+            });
+        }
+        
+        return matchCount;
     }
 
     // 清空日志
@@ -589,6 +783,58 @@ class LogManager {
         } catch (error) {
             console.error('Failed to export logs:', error);
             this.showNotification('Failed to export logs', 'error');
+        }
+    }
+
+    // 显示loading状态
+    showLoadingState() {
+        const logContainer = document.getElementById('logContainer');
+        if (!logContainer || this.isFiltering) return;
+        
+        this.isFiltering = true;
+        logContainer.classList.add('loading');
+        
+        // 创建loading overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'log-loading-overlay';
+        overlay.id = 'logLoadingOverlay';
+        
+        const spinner = document.createElement('div');
+        spinner.className = 'log-loading-spinner';
+        
+        const text = document.createElement('div');
+        text.className = 'log-loading-text';
+        text.textContent = `正在过滤 ${this.logBuffer.length} 条日志...`;
+        
+        overlay.appendChild(spinner);
+        overlay.appendChild(text);
+        logContainer.appendChild(overlay);
+    }
+    
+    // 隐藏loading状态
+    hideLoadingState() {
+        const logContainer = document.getElementById('logContainer');
+        const overlay = document.getElementById('logLoadingOverlay');
+        
+        if (logContainer) {
+            logContainer.classList.remove('loading');
+        }
+        
+        if (overlay) {
+            overlay.remove();
+        }
+        
+        this.isFiltering = false;
+    }
+    
+    // 为输入框添加filtering状态
+    setInputFilteringState(inputElement, isFiltering) {
+        if (!inputElement) return;
+        
+        if (isFiltering) {
+            inputElement.classList.add('filtering');
+        } else {
+            inputElement.classList.remove('filtering');
         }
     }
 

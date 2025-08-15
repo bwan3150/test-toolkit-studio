@@ -1436,8 +1436,25 @@
                 </div>
               </div>
 
-              <!-- 第二行：Logcat过滤器 -->
+              <!-- 第二行：模式切换和过滤器 -->
               <div class="control-row">
+                <div class="control-group">
+                  <label>Filter Mode:</label>
+                  <div class="filter-mode-toggle">
+                    <label class="mode-option">
+                      <input type="radio" name="filterMode" value="simple" id="simpleModeRadio" checked>
+                      <span>Simple</span>
+                    </label>
+                    <label class="mode-option">
+                      <input type="radio" name="filterMode" value="expert" id="expertModeRadio">
+                      <span>Expert</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Expert模式：Logcat Filter Spec -->
+              <div class="control-row" id="expertFilterRow" style="display: none;">
                 <div class="control-group filter-input-group" style="flex: 1">
                   <label>Filter Spec:</label>
                   <input
@@ -1449,6 +1466,43 @@
                     style="flex: 1"
                   />
                   <button id="applyFilterBtn" class="btn btn-secondary btn-sm">Apply</button>
+                </div>
+              </div>
+
+              <!-- Simple模式：分离的过滤器 -->
+              <div id="simpleFilterRows">
+                <div class="control-row">
+                  <div class="control-group">
+                    <label>Log Level:</label>
+                    <select id="simpleLogLevel" class="control-select">
+                      <option value="V">Verbose (V)</option>
+                      <option value="D">Debug (D)</option>
+                      <option value="I" selected>Info (I)</option>
+                      <option value="W">Warn (W)</option>
+                      <option value="E">Error (E)</option>
+                      <option value="A">Assert (A)</option>
+                    </select>
+                  </div>
+
+                  <div class="control-group filter-input-group">
+                    <label>Tag:</label>
+                    <input
+                      type="text"
+                      id="simpleTagFilter"
+                      class="control-input"
+                      placeholder="flutter, ActivityManager, etc."
+                    />
+                  </div>
+
+                  <div class="control-group filter-input-group">
+                    <label>Package:</label>
+                    <input
+                      type="text"
+                      id="simplePackageFilter"
+                      class="control-input"
+                      placeholder="com.example.app"
+                    />
+                  </div>
                 </div>
               </div>
 
