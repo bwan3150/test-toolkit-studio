@@ -428,16 +428,28 @@ class LogManager {
         // 确保数据是字符串格式
         const dataStr = typeof data === 'string' ? data : data.toString('utf8');
         
-        // Windows平台编码验证
+        // Windows平台编码验证和修复
         let processedData = dataStr;
         if (navigator.platform.indexOf('Win') === 0) {
-            // 检测常见的编码问题并报告
+            // 检测常见的编码问题
             const hasReplacementChar = processedData.includes('\ufffd');
             const hasHighBytePattern = /[\x80-\xFF]{2,}/.test(processedData);
             
             if (hasReplacementChar || hasHighBytePattern) {
-                console.warn('检测到Windows端编码问题，原始数据长度:', dataStr.length);
-                console.warn('包含替换字符:', hasReplacementChar, '包含高位字节:', hasHighBytePattern);
+                console.warn('检测到Windows端编码问题，尝试修复...');
+                
+                // 尝试清理和修复编码问题
+                // 1. 替换常见的乱码字符
+                processedData = processedData
+                    .replace(/\ufffd/g, '?') // 替换Unicode替换字符
+                    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // 移除控制字符
+                    .replace(/[\u0080-\u009F]/g, ''); // 移除扩展控制字符
+                    
+                // 2. 尝试修复中文乱码（GBK/GB2312转换问题）
+                // 注意：由于主进程已经处理了编码转换，这里主要是清理残留问题
+                processedData = this.cleanupEncodingIssues(processedData);
+                
+                console.log('编码修复完成');
             } else {
                 console.log('Windows端logcat数据编码正常');
             }
@@ -453,6 +465,23 @@ class LogManager {
                 }
             }
         });
+    }
+
+    // 清理编码问题
+    cleanupEncodingIssues(text) {
+        // 常见的Windows编码问题模式替换
+        return text
+            // 清理常见的GBK/UTF-8混淆字符
+            .replace(/Â|Ã|Ä|Å|À|Á|â|ã|ä|å|à|á/g, '')
+            // 清理其他非ASCII可打印字符（保留中文）
+            .replace(/[^\x20-\x7E\u4e00-\u9fa5\n\r\t]/g, function(char) {
+                // 如果是中文字符，保留
+                if (/[\u4e00-\u9fa5]/.test(char)) {
+                    return char;
+                }
+                // 否则替换为空格或问号
+                return '?';
+            });
     }
 
     // 简化的日志解析 - 直接模仿adb logcat输出
@@ -617,7 +646,7 @@ class LogManager {
         return entryIndex >= filterIndex;
     }
 
-    // 添加日志到视图 - 原始logcat格式
+    // 添加日志到视图 - 增强版支持Windows平台
     appendLogToView(entry) {
         const logContainer = document.getElementById('logContainer');
         if (!logContainer) return;
@@ -625,22 +654,28 @@ class LogManager {
         const logElement = document.createElement('div');
         logElement.className = `log-entry`;
         
-        // 直接显示原始日志行，但添加颜色
-        let formattedLine = entry.raw;
+        // 根据日志级别添加类名用于颜色标记
+        if (entry.level) {
+            logElement.className += ` log-level-${entry.level}`;
+        }
         
-        // 如果有解析出的级别，为级别字符添加颜色
-        if (entry.level && entry.level !== 'V') {
-            const levelChar = entry.level;
-            const colorClass = `log-level-${levelChar}`;
-            // 找到级别字符的位置并添加颜色
-            formattedLine = formattedLine.replace(
-                new RegExp(`\\b${levelChar}\\b`), 
-                `<span class="${colorClass}">${levelChar}</span>`
-            );
+        // 格式化日志行
+        let formattedLine = this.formatLogLine(entry);
+        
+        // Windows平台特殊处理：确保显示正确
+        if (navigator.platform.indexOf('Win') === 0) {
+            // 清理可能残留的编码问题
+            formattedLine = this.sanitizeForDisplay(formattedLine);
         }
         
         logElement.innerHTML = formattedLine;
         logElement.title = entry.raw; // 悬停显示完整行
+        
+        // 添加数据属性，便于过滤和搜索
+        logElement.dataset.level = entry.level || 'V';
+        logElement.dataset.tag = entry.tag || '';
+        logElement.dataset.pid = entry.pid || '';
+        logElement.dataset.tid = entry.tid || '';
         
         logContainer.appendChild(logElement);
 
@@ -653,6 +688,82 @@ class LogManager {
         while (logContainer.children.length > 1000) {
             logContainer.removeChild(logContainer.firstChild);
         }
+    }
+
+    // 格式化日志行显示
+    formatLogLine(entry) {
+        // 基础格式
+        let formatted = entry.raw;
+        
+        // 高亮显示关键部分
+        if (entry.level && entry.tag && entry.message) {
+            // 构建格式化的日志行
+            const parts = [];
+            
+            // 时间戳
+            if (entry.date && entry.time) {
+                parts.push(`<span class="log-timestamp">${entry.date} ${entry.time}</span>`);
+            }
+            
+            // PID/TID
+            if (entry.pid) {
+                parts.push(`<span class="log-pid">${entry.pid}</span>`);
+            }
+            if (entry.tid) {
+                parts.push(`<span class="log-tid">${entry.tid}</span>`);
+            }
+            
+            // 日志级别
+            parts.push(`<span class="log-level log-level-${entry.level}">${entry.level}</span>`);
+            
+            // Tag
+            parts.push(`<span class="log-tag">${this.escapeHtml(entry.tag)}</span>:`);
+            
+            // 消息内容
+            parts.push(`<span class="log-message">${this.escapeHtml(entry.message)}</span>`);
+            
+            formatted = parts.join(' ');
+        } else {
+            // 如果解析失败，至少转义HTML
+            formatted = this.escapeHtml(formatted);
+        }
+        
+        // 高亮搜索关键词
+        if (this.filters.search && !this.filters.regex) {
+            const searchTerm = this.filters.caseSensitive ? 
+                this.filters.search : this.filters.search.toLowerCase();
+            const regex = new RegExp(`(${this.escapeRegex(searchTerm)})`, 
+                this.filters.caseSensitive ? 'g' : 'gi');
+            formatted = formatted.replace(regex, '<mark>$1</mark>');
+        }
+        
+        return formatted;
+    }
+
+    // 清理显示内容（Windows平台）
+    sanitizeForDisplay(text) {
+        return text
+            // 移除不可见字符
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+            // 替换常见的编码错误字符
+            .replace(/[\u0080-\u009F]/g, '')
+            // 确保没有破坏HTML标签
+            .replace(/<([^>]+)>/g, function(match, p1) {
+                // 保护HTML标签不被破坏
+                return match;
+            });
+    }
+
+    // HTML转义
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // 正则表达式转义
+    escapeRegex(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     // 滚动到底部

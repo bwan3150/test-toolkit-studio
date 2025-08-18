@@ -1743,35 +1743,53 @@ ipcMain.handle('start-logcat', async (event, options) => {
       let output;
       
       if (process.platform === 'win32') {
-        // Windows平台：基于测试结果，优先使用UTF-8
+        // Windows平台：智能编码检测和转换
         try {
-          // 直接尝试UTF-8解码（根据测试，大部分日志是UTF-8）
+          // 先尝试UTF-8解码
           output = data.toString('utf8');
           
           // 检查是否有明显的乱码字符
-          const hasUtf8Error = output.includes('\ufffd');
+          const hasUtf8Error = output.includes('\ufffd') || 
+                              /[\x80-\xFF]{2,}/.test(output) || // 连续高位字节
+                              /[\xC0-\xDF][^\x80-\xBF]/.test(output); // 破损的UTF-8序列
           
           if (hasUtf8Error) {
-            // UTF-8有问题，尝试GBK
+            // UTF-8有问题，尝试GBK和GB2312
             const iconv = require('iconv-lite');
-            const gbkOutput = iconv.decode(data, 'gbk');
             
-            // 比较哪个更好
-            const utf8ErrorCount = (output.match(/\ufffd/g) || []).length;
-            const gbkErrorCount = (gbkOutput.match(/\ufffd/g) || []).length;
+            // 尝试多种编码
+            const encodings = ['gbk', 'gb2312', 'cp936', 'windows-1252'];
+            let bestOutput = output;
+            let minErrorCount = (output.match(/\ufffd/g) || []).length;
             
-            if (gbkErrorCount < utf8ErrorCount) {
-              output = gbkOutput;
-              console.log('Windows logcat: Using GBK encoding for this chunk');
-            } else {
-              console.log('Windows logcat: Using UTF-8 encoding');
+            for (const encoding of encodings) {
+              try {
+                const decoded = iconv.decode(data, encoding);
+                const errorCount = (decoded.match(/\ufffd/g) || []).length;
+                
+                // 检查是否包含中文字符（用于判断是否正确解码）
+                const hasChinese = /[\u4e00-\u9fa5]/.test(decoded);
+                
+                if (errorCount < minErrorCount || (errorCount === 0 && hasChinese)) {
+                  bestOutput = decoded;
+                  minErrorCount = errorCount;
+                  console.log(`Windows logcat: Using ${encoding} encoding`);
+                }
+              } catch (e) {
+                // 忽略不支持的编码
+              }
             }
+            
+            output = bestOutput;
           }
           
+          // 清理控制字符和非打印字符（但保留换行符和制表符）
+          output = output.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+          
         } catch (error) {
-          // 如果处理Failed，直接使用UTF-8
-          output = data.toString('utf8');
-          console.warn('Encoding processing error, using default UTF-8:', error.message);
+          // 如果处理失败，使用安全的ASCII解码
+          output = data.toString('ascii').replace(/[\x80-\xFF]/g, '?');
+          console.warn('Encoding processing error, using ASCII fallback:', error.message);
         }
       } else {
         // 非Windows平台使用UTF-8
