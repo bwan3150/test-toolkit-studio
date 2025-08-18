@@ -1243,39 +1243,44 @@ async function installApkToDevice(deviceId, apkPath) {
     showApkInstallLoading('正在处理APK...', '');
     
     try {
-        // 第一步：先获取APK的包名（无论是否安装成功都需要知道包名）
+        // 第一步：先尝试获取APK的包名
         const packageInfo = await ipcRenderer.invoke('get-apk-package-name', apkPath);
         
-        if (!packageInfo.success || !packageInfo.packageName) {
-            // 如果无法自动获取包名，询问用户手动输入
+        let packageName = null;
+        
+        if (packageInfo.success && packageInfo.packageName) {
+            // 成功获取到包名
+            packageName = packageInfo.packageName;
+            console.log('成功获取APK包名:', packageName);
+        } else if (packageInfo.needDirectInstall) {
+            // aapt不可用，直接尝试安装
+            console.log('aapt不可用，直接尝试安装APK...');
             hideApkInstallLoading();
             
-            // 检查是否需要手动输入包名
-            if (packageInfo.needManualInput || (packageInfo.error && packageInfo.error.includes('请手动提供'))) {
-                const manualPackageName = prompt(
-                    '无法自动获取APK包名。\n请手动输入应用的包名（例如：com.example.app）：',
-                    ''
-                );
-                
-                if (!manualPackageName || !manualPackageName.trim()) {
-                    window.NotificationModule.showNotification('取消安装：未提供包名', 'warning');
-                    return;
-                }
-                
-                // 验证包名格式
-                if (!/^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/.test(manualPackageName.trim())) {
-                    window.NotificationModule.showNotification('包名格式无效，请使用正确的包名格式（如：com.example.app）', 'error');
-                    return;
-                }
-                
-                packageName = manualPackageName.trim();
-                console.log('用户手动输入的包名:', packageName);
+            // 直接尝试安装，不需要包名
+            showApkInstallLoading('正在安装APK...', '');
+            const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, false);
+            
+            if (installResult.success) {
+                hideApkInstallLoading();
+                window.NotificationModule.showNotification('APK安装成功！', 'success');
+                await refreshConnectedDevices();
+                return;
+            } else if (installResult.packageName) {
+                // 从安装错误中获取到了包名
+                packageName = installResult.packageName;
+                console.log('从安装错误中获取到包名:', packageName);
+                // 继续后续流程
             } else {
-                window.NotificationModule.showNotification(`无法读取APK包名：${packageInfo.error || '未知错误'}`, 'error');
+                hideApkInstallLoading();
+                window.NotificationModule.showNotification(`安装失败: ${installResult.error || '未知错误'}`, 'error');
                 return;
             }
         } else {
-            packageName = packageInfo.packageName;
+            // 其他错误情况
+            hideApkInstallLoading();
+            window.NotificationModule.showNotification(`无法处理APK：${packageInfo.error || '未知错误'}`, 'error');
+            return;
         }
         
         console.log('获取到APK包名:', packageName);

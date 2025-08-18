@@ -1007,33 +1007,16 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
         return { success: false, error: `aapt execution failed: ${error.message}` };
       }
     } else {
-      console.log('aapt tool not found, trying to get package name through install error');
+      console.log('aapt tool not found, will try to install directly without package name');
       
-      // 如果aapt不可用，尝试通过安装错误信息获取包名
-      try {
-        // 先列出设备，选择第一devices
-        const devicesCommand = `"${adbPath}" devices`;
-        const { stdout: devicesOutput } = await execPromise(devicesCommand);
-        const deviceMatch = devicesOutput.match(/^([^\s]+)\s+device$/m);
-        
-        if (deviceMatch && deviceMatch[1]) {
-          const tempDeviceId = deviceMatch[1];
-          
-          // 尝试安装（不用-r参数，这样如果已存在会报错并显示包名）
-          const installCommand = `"${adbPath}" -s ${tempDeviceId} install "${apkPath}"`;
-          
-          try {
-            await execPromise(installCommand);
-            // 如果安装Success，无法获取包名
-            return { success: false, error: 'Cannot get package name, please provide manually', needManualInput: true };
-          } catch (installError) {
-            // 安装Failed，尝试从错误信息中提取包名
-            const errorOutput = (installError.stdout || '') + (installError.stderr || '');
-            
-            const packagePatterns = [
-              /INSTALL_FAILED_UPDATE_INCOMPATIBLE:\s*Existing\s+package\s+([a-zA-Z0-9._]+)/,
-              /Existing\s+package\s+([a-zA-Z0-9._]+)\s+signatures/,
-              /package\s+([a-zA-Z0-9._]+)\s+signatures\s+do\s+not\s+match/,
+      // 如果aapt不可用，返回特殊标记，让安装流程继续
+      // 不需要预先获取包名，直接尝试安装
+      return { 
+        success: false, 
+        error: 'aapt not available', 
+        needDirectInstall: true,
+        message: 'Will attempt direct installation without package name'
+      };
               /Package\s+([a-zA-Z0-9._]+)\s+signatures/,
               /package:\s*([a-zA-Z0-9._]+)/
             ];
