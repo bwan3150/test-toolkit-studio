@@ -470,8 +470,13 @@ class LogManager {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
-            // 跳过空行
+            // 空行处理
             if (!line.trim()) {
+                // 空行可能是日志内容的一部分
+                if (pendingLogEntry) {
+                    pendingLogEntry.multilineMessage.push('');
+                    pendingLogEntry.raw += '\n';
+                }
                 continue;
             }
             
@@ -533,8 +538,9 @@ class LogManager {
     isLogHeader(line) {
         // 检查各种日志头格式
         
-        // 格式1: 标准格式 [ MM-DD HH:MM:SS.mmm PID:TID L/TAG ]
-        if (/^\[\s*\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+\d+:\d+\s+[VDIWEFA]\//.test(line)) {
+        // 格式1: 标准long格式 [ MM-DD HH:MM:SS.mmm  PID: TID L/TAG ]
+        // 注意：PID前可能有多个空格
+        if (/^\[\s*\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+\d+:\s*\d+\s+[VDIWEFA]\//.test(line)) {
             return true;
         }
         
@@ -614,9 +620,9 @@ class LogManager {
         }
         
         // 格式2: long格式
-        // [ MM-DD HH:MM:SS.mmm PID:TID L/TAG ]
-        // MESSAGE
-        match = line.match(/^\[\s*(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+):(\d+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
+        // [ MM-DD HH:MM:SS.mmm  PID: TID L/TAG ]
+        // 注意：PID前可能有多个空格，PID和TID之间是冒号
+        match = line.match(/^\[\s*(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+):\s*(\d+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
         if (match) {
             return {
                 date: match[1],
@@ -942,44 +948,47 @@ class LogManager {
         
         // 高亮显示关键部分
         if (entry.level && entry.tag) {
-            // 构建格式化的日志行
-            const parts = [];
+            // 构建格式化的日志头
+            const headerParts = [];
             
             // 时间戳
             if (entry.date && entry.time) {
-                parts.push(`<span class="log-timestamp">${entry.date} ${entry.time}</span>`);
+                headerParts.push(`<span class="log-timestamp">${entry.date} ${entry.time}</span>`);
             }
             
-            // PID/TID
+            // PID:TID（使用冒号分隔，与logcat格式一致）
             if (entry.pid) {
-                parts.push(`<span class="log-pid">${entry.pid}</span>`);
-            }
-            if (entry.tid && entry.tid !== entry.pid) {
-                parts.push(`<span class="log-tid">${entry.tid}</span>`);
+                if (entry.tid && entry.tid !== entry.pid) {
+                    headerParts.push(`<span class="log-pid">${entry.pid}:${entry.tid}</span>`);
+                } else {
+                    headerParts.push(`<span class="log-pid">${entry.pid}</span>`);
+                }
             }
             
             // 日志级别
-            parts.push(`<span class="log-level log-level-${entry.level}">${entry.level}</span>`);
+            headerParts.push(`<span class="log-level log-level-${entry.level}">${entry.level}/${this.escapeHtml(entry.tag)}</span>`);
             
             // Package（如果有）
             if (entry.package) {
-                parts.push(`<span class="log-package">${this.escapeHtml(entry.package)}</span>`);
+                headerParts.push(`<span class="log-package">${this.escapeHtml(entry.package)}</span>`);
             }
             
-            // Tag
-            parts.push(`<span class="log-tag">${this.escapeHtml(entry.tag)}</span>:`);
+            // 构建完整的格式化内容
+            formatted = `<div class="log-header">${headerParts.join(' ')}</div>`;
             
             // 消息内容 - 处理多行
             if (entry.message) {
-                // 将多行消息转换为HTML，保留换行
-                const messageHtml = this.escapeHtml(entry.message).replace(/\n/g, '<br>');
-                parts.push(`<span class="log-message">${messageHtml}</span>`);
+                // 保留换行、空格和缩进
+                const messageHtml = this.escapeHtml(entry.message)
+                    .replace(/\n/g, '<br>')
+                    .replace(/ {2,}/g, (spaces) => '&nbsp;'.repeat(spaces.length)); // 保留多个空格
+                formatted += `<div class="log-message">${messageHtml}</div>`;
             }
-            
-            formatted = parts.join(' ');
         } else {
             // 如果解析失败，至少转义HTML并保留换行
-            formatted = this.escapeHtml(entry.raw).replace(/\n/g, '<br>');
+            formatted = this.escapeHtml(entry.raw)
+                .replace(/\n/g, '<br>')
+                .replace(/ {2,}/g, (spaces) => '&nbsp;'.repeat(spaces.length));
         }
         
         // 高亮搜索关键词
