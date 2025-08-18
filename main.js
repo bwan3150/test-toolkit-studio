@@ -1690,7 +1690,7 @@ ipcMain.handle('get-device-processes', async (event, deviceId) => {
 // 启动logcat
 ipcMain.handle('start-logcat', async (event, options) => {
   try {
-    const { device, format = 'threadtime' } = options;
+    const { device, format = 'long', buffer = 'all' } = options;
     const adbPath = getBuiltInAdbPath();
     
     // 如果该设备已有logcat进程在运行，先停止它
@@ -1700,29 +1700,36 @@ ipcMain.handle('start-logcat', async (event, options) => {
       logcatProcesses.delete(device);
     }
     
-    // 启动新的logcat进程 - 直接调用adb，不使用cmd包装
+    // 构建adb logcat命令
     const command = adbPath;
-    const args = ['-s', device, 'logcat', '-v', format];
+    let args = ['-s', device, 'logcat'];
+    
+    // 添加格式参数
+    // long格式可以显示最完整的信息
+    if (format === 'long') {
+      args.push('-v', 'long');
+    } else {
+      args.push('-v', format);
+    }
+    
+    // 添加buffer参数
+    if (buffer && buffer !== 'main') {
+      args.push('-b', buffer);
+    }
     
     // 设置spawn选项
     const spawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe']
     };
     
-    // Windows平台特殊处理：不使用shell，避免路径问题
+    // Windows平台特殊处理
     if (process.platform === 'win32') {
       spawnOptions.shell = false;
-      // Windows上直接执行，不需要额外的环境变量
-      console.log('Windows: Starting logcat directly without cmd wrapper');
+      console.log('Windows: Starting logcat with args:', args.join(' '));
     }
     
     console.log('Starting logcat process:', command, args.join(' '));
     const logcatProcess = spawn(command, args, spawnOptions);
-    
-    // Windows平台进程启动调试
-    if (process.platform === 'win32') {
-      console.log('Windows logcat process PID:', logcatProcess.pid);
-    }
     
     // 存储进程
     logcatProcesses.set(device, logcatProcess);
@@ -1742,77 +1749,50 @@ ipcMain.handle('start-logcat', async (event, options) => {
     logcatProcess.stdout.on('data', (data) => {
       let output;
       
-      if (process.platform === 'win32') {
-        // Windows平台：智能编码检测和转换
-        try {
-          // 先尝试UTF-8解码
-          output = data.toString('utf8');
-          
+      // 统一使用UTF-8编码
+      try {
+        output = data.toString('utf8');
+        
+        // Windows平台可能需要额外的编码处理
+        if (process.platform === 'win32') {
           // 检查是否有明显的乱码字符
-          const hasUtf8Error = output.includes('\ufffd') || 
-                              /[\x80-\xFF]{2,}/.test(output) || // 连续高位字节
-                              /[\xC0-\xDF][^\x80-\xBF]/.test(output); // 破损的UTF-8序列
+          const hasEncodingIssue = output.includes('\ufffd') || /[\x80-\xFF]{3,}/.test(output);
           
-          if (hasUtf8Error) {
-            // UTF-8有问题，尝试GBK和GB2312
-            const iconv = require('iconv-lite');
-            
-            // 尝试多种编码
-            const encodings = ['gbk', 'gb2312', 'cp936', 'windows-1252'];
-            let bestOutput = output;
-            let minErrorCount = (output.match(/\ufffd/g) || []).length;
-            
-            for (const encoding of encodings) {
-              try {
-                const decoded = iconv.decode(data, encoding);
-                const errorCount = (decoded.match(/\ufffd/g) || []).length;
-                
-                // 检查是否包含中文字符（用于判断是否正确解码）
-                const hasChinese = /[\u4e00-\u9fa5]/.test(decoded);
-                
-                if (errorCount < minErrorCount || (errorCount === 0 && hasChinese)) {
-                  bestOutput = decoded;
-                  minErrorCount = errorCount;
-                  console.log(`Windows logcat: Using ${encoding} encoding`);
-                }
-              } catch (e) {
-                // 忽略不支持的编码
+          if (hasEncodingIssue) {
+            console.warn('Detected encoding issue, attempting to fix...');
+            // 尝试使用iconv-lite转换
+            try {
+              const iconv = require('iconv-lite');
+              // 尝试GBK编码
+              const decoded = iconv.decode(data, 'cp936');
+              if (!decoded.includes('\ufffd')) {
+                output = decoded;
+                console.log('Successfully decoded using GBK/CP936');
               }
+            } catch (e) {
+              console.warn('iconv-lite not available or decoding failed');
             }
-            
-            output = bestOutput;
           }
           
-          // 清理控制字符和非打印字符（但保留换行符和制表符）
+          // 清理控制字符
           output = output.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-          
-        } catch (error) {
-          // 如果处理失败，使用安全的ASCII解码
-          output = data.toString('ascii').replace(/[\x80-\xFF]/g, '?');
-          console.warn('Encoding processing error, using ASCII fallback:', error.message);
         }
-      } else {
-        // 非Windows平台使用UTF-8
-        output = data.toString('utf8');
+      } catch (error) {
+        console.error('Error decoding logcat output:', error);
+        output = data.toString('ascii').replace(/[\x80-\xFF]/g, '?');
       }
       
-      // 处理数据分片问题 - 使用缓冲区重新组装完整的日志行
+      // 处理数据分片问题
       const currentBuffer = logcatBuffers.get(device) + output;
       const lines = currentBuffer.split('\n');
       
-      // 保留最后一行（可能不完整）在缓冲区中
+      // 保留最后一行（可能不完整）
       const incompleteLastLine = lines.pop();
       logcatBuffers.set(device, incompleteLastLine || '');
       
       // 发送完整的行
       if (lines.length > 0) {
         const completeOutput = lines.join('\n') + '\n';
-        
-        // Windows平台调试输出（使用英文避免控制台编码问题）
-        if (process.platform === 'win32' && lines.length > 0) {
-          console.log(`Windows logcat: Sending ${lines.length} lines`);
-        }
-        
         mainWindow.webContents.send('logcat-data', completeOutput);
       }
     });

@@ -371,10 +371,10 @@ class LogManager {
             this.stopLogcat();
 
             // 启动新的logcat进程
-            // Windows平台使用long格式以获取更多信息
+            // 统一使用long格式以获取最完整的信息
             const result = await getGlobals().ipcRenderer.invoke('start-logcat', {
                 device: this.currentDevice,
-                format: process.platform === 'win32' ? 'long' : this.currentFormat,
+                format: 'long', // 统一使用long格式
                 buffer: this.currentBuffer
             });
 
@@ -487,68 +487,68 @@ class LogManager {
 
     // 增强的日志解析 - 支持多种格式
     parseLogLine(line) {
+        // 跳过空行
+        if (!line || !line.trim()) {
+            return null;
+        }
+        
         // 调试输出（采样）
-        if (Math.random() < 0.01) {
-            console.log('[DEBUG] Parsing line:', line.substring(0, 200));
+        if (Math.random() < 0.02) {
+            console.log('[DEBUG] Parsing line:', line.substring(0, 150));
         }
         
-        // Windows平台特殊处理
-        if (process.platform === 'win32' || navigator.platform.indexOf('Win') >= 0) {
-            // Windows long格式可能有多种变体
-            
-            // 格式1: 包含包名的long格式
-            // [ YYYY-MM-DD HH:MM:SS.mmm PID-TID/Package Priority/Tag ] Message
-            let match = line.match(/^\[\s*(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)[:-](\d+)\/([^\s]+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
-            if (match) {
-                return {
-                    date: match[1],
-                    time: match[2],
-                    pid: match[3],
-                    tid: match[4],
-                    package: match[5],
-                    level: match[6],
-                    tag: match[7].trim(),
-                    message: match[8] || '',
-                    raw: line
-                };
-            }
-            
-            // 格式2: 不含包名的long格式
-            // [ MM-DD HH:MM:SS.mmm PID:TID L/TAG ] Message
-            match = line.match(/^\[\s*(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+):(\d+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
-            if (match) {
-                return {
-                    date: match[1],
-                    time: match[2],
-                    pid: match[3],
-                    tid: match[4],
-                    level: match[5],
-                    tag: match[6].trim(),
-                    message: match[7] || '',
-                    package: '',
-                    raw: line
-                };
-            }
-        }
-        
-        // 格式3: 标准threadtime格式
-        // MM-DD HH:MM:SS.mmm PID TID LEVEL TAG: MESSAGE
-        let match = line.match(/^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+([^:]+?):\s+(.*)$/);
+        // 格式1: 标准Android logcat格式
+        // MM-DD HH:MM:SS.mmm PID TID LEVEL TAG : MESSAGE
+        // 例如: 08-15 17:55:07.544 26702 26702 I flutter : TAG LOG_SERVICE 开始执行初始维护任务...
+        let match = line.match(/^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+([^\s:]+)\s*:\s*(.*)$/);
         if (match) {
-            return {
+            const result = {
                 date: match[1],
-                time: match[2], 
+                time: match[2],
                 pid: match[3],
                 tid: match[4],
                 level: match[5],
                 tag: match[6].trim(),
-                message: match[7],
+                message: match[7] || '',
+                package: '',
+                raw: line
+            };
+            
+            // 尝试从消息中提取包名（如果有的话）
+            // 例如: pn=com.konec.smarthome
+            const packageMatch = line.match(/\bpn=([a-zA-Z0-9._]+)/);
+            if (packageMatch) {
+                result.package = packageMatch[1];
+            }
+            // 或者从TAG中提取包名格式
+            // 例如: package:konec_smart_home/
+            const packageFromTag = line.match(/package:([^/\s]+)/);
+            if (packageFromTag) {
+                result.package = packageFromTag[1].replace(/_/g, '.');
+            }
+            
+            return result;
+        }
+        
+        // 格式2: long格式
+        // [ MM-DD HH:MM:SS.mmm PID:TID L/TAG ]
+        // MESSAGE
+        match = line.match(/^\[\s*(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+):(\d+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
+        if (match) {
+            return {
+                date: match[1],
+                time: match[2],
+                pid: match[3],
+                tid: match[4],
+                level: match[5],
+                tag: match[6].trim(),
+                message: match[7] || '',
                 package: '',
                 raw: line
             };
         }
         
-        // 格式4: 简化格式 (可能在某些设备上出现)
+        // 格式3: 简化格式（可能出现在某些设备上）
         // MM-DD HH:MM:SS.mmm LEVEL/TAG(PID): MESSAGE
         match = line.match(/^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+([VDIWEFA])\/([^\(]+)\((\d+)\):\s+(.*)$/);
         if (match) {
@@ -561,6 +561,50 @@ class LogManager {
                 tag: match[4].trim(),
                 message: match[6],
                 package: '',
+                raw: line
+            };
+        }
+        
+        // 格式4: 特殊格式（如你提供的日志中的一些行）
+        // scene=COMMON pn=com.konec.smarthome
+        // 或者其他非标准格式
+        if (line.includes('pn=')) {
+            const packageMatch = line.match(/pn=([a-zA-Z0-9._]+)/);
+            if (packageMatch) {
+                return {
+                    date: '',
+                    time: '',
+                    pid: '',
+                    tid: '',
+                    level: 'V',
+                    tag: 'system',
+                    message: line,
+                    package: packageMatch[1],
+                    raw: line
+                };
+            }
+        }
+        
+        // 格式5: 只有消息内容的行（可能是多行日志的续行）
+        // 例如: pre-Filtered:com.konec.smarthome # com.android.settings # ...
+        if (line.includes('pre-Filtered:') || line.includes('ThermalControllHandler:') || 
+            line.includes('setSmartCoolDown:') || line.includes('setFrameRateTarget')) {
+            // 尝试提取包名
+            let extractedPackage = '';
+            const pkgMatch = line.match(/\b([a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+)\b/);
+            if (pkgMatch) {
+                extractedPackage = pkgMatch[1];
+            }
+            
+            return {
+                date: '',
+                time: '',
+                pid: '',
+                tid: '',
+                level: 'V',
+                tag: 'system',
+                message: line,
+                package: extractedPackage,
                 raw: line
             };
         }
@@ -578,8 +622,14 @@ class LogManager {
             package: ''
         };
         
+        // 尝试提取任何可能的包名
+        const genericPackageMatch = line.match(/\b([a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+)\b/);
+        if (genericPackageMatch) {
+            result.package = genericPackageMatch[1];
+        }
+        
         // 调试输出（采样）
-        if (Math.random() < 0.01) {
+        if (Math.random() < 0.02) {
             console.log('[DEBUG] Parsed result:', result);
         }
         
@@ -588,6 +638,11 @@ class LogManager {
 
     // 添加日志条目
     addLogEntry(entry) {
+        // 跳过空条目
+        if (!entry) {
+            return;
+        }
+        
         // 添加到缓冲区
         this.logBuffer.push(entry);
         
