@@ -2024,8 +2024,44 @@ if (document.readyState === 'loading') {
 
 // 初始化底部面板显示
 function initializeBottomPanelDisplay() {
+    console.log('初始化底部面板显示...');
+    const bottomPanel = document.getElementById('uiElementsBottomPanel');
+    
+    if (!bottomPanel) {
+        console.error('uiElementsBottomPanel元素未找到');
+        return;
+    }
+    
+    // 确保底部面板初始状态是展开的（强制重置localStorage状态）
+    bottomPanel.classList.remove('collapsed');
+    
+    // 确保标签页内容可见
+    const tabContent = document.getElementById('uiElementsPanelContent');
+    if (tabContent) {
+        tabContent.style.display = 'block';
+    }
+    
+    // 确保标签页处于正确状态
+    const firstTabBtn = document.querySelector('.ui-elements-bottom-panel .tab-btn[data-tab="elements-list"]');
+    const firstTabPane = document.getElementById('elementsListPane');
+    
+    if (firstTabBtn && firstTabPane) {
+        // 激活第一个标签
+        document.querySelectorAll('.ui-elements-bottom-panel .tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.ui-elements-bottom-panel .tab-pane').forEach(pane => {
+            pane.style.display = 'none';
+            pane.classList.remove('active');
+        });
+        
+        firstTabBtn.classList.add('active');
+        firstTabPane.style.display = 'block';
+        firstTabPane.classList.add('active');
+    }
+    
     // 默认显示底部面板，并显示初始状态
     displayUIElementList([]); // 传入空数组会显示适当的空状态
+    
+    console.log('底部面板初始化完成');
 }
 
 // 设备屏幕模式管理

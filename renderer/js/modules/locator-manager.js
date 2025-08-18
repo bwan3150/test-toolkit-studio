@@ -639,6 +639,27 @@ class LocatorManager {
         });
     }
 
+    // 确定元素的最佳匹配策略
+    determineMatchStrategy(element) {
+        // 优先级从高到低排序
+        if (element.resourceId && element.resourceId.trim()) {
+            return 'resourceId'; // 最稳定的匹配方式
+        }
+        if (element.contentDesc && element.contentDesc.trim()) {
+            return 'contentDesc'; // 次优选择
+        }
+        if (element.text && element.text.trim()) {
+            return 'text'; // 文本匹配
+        }
+        if (element.className && element.className.trim()) {
+            return 'className'; // 类名匹配
+        }
+        if (element.xpath && element.xpath.trim()) {
+            return 'xpath'; // XPath匹配
+        }
+        return 'coordinate'; // 最后回退到坐标匹配
+    }
+
     // 切换到Locator库标签页
     switchToLocatorTab() {
         const locatorTab = document.getElementById('locatorLibTab');

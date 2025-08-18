@@ -28,6 +28,13 @@ function initializeNavigation() {
                 if (window.TestReportModule) {
                     window.TestReportModule.onPageActivated();
                 }
+            } else if (targetPage === 'testcase') {
+                // 确保底部面板正确初始化和显示
+                if (window.TestcaseManagerModule && window.TestcaseManagerModule.initializeBottomPanelDisplay) {
+                    setTimeout(() => {
+                        window.TestcaseManagerModule.initializeBottomPanelDisplay();
+                    }, 100);
+                }
             }
         });
     });
