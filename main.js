@@ -659,32 +659,6 @@ function registerOtherHandlers() {
     }
   });
 
-  // 选择文件对话框
-  ipcMain.handle('select-file', async (event, options = {}) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openFile'],
-      filters: options.filters || [
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    });
-
-    if (!result.canceled && result.filePaths.length > 0) {
-      return { success: true, path: result.filePaths[0] };
-    }
-    return { success: false, canceled: true };
-  });
-
-  // 选择目录对话框
-  ipcMain.handle('select-directory', async (event, options = {}) => {
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openDirectory']
-    });
-
-    if (!result.canceled && result.filePaths.length > 0) {
-      return { success: true, path: result.filePaths[0] };
-    }
-    return { success: false, canceled: true };
-  });
 }
 
 // 初始化环境

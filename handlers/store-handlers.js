@@ -1,90 +1,53 @@
 // Store相关的IPC处理器 - 用于保存和读取配置
 const { ipcMain } = require('electron');
-const path = require('path');
-const fs = require('fs');
+const Store = require('electron-store');
 
-// 简单的内存存储
-const store = new Map();
-
-// 获取存储文件路径
-function getStorePath(app) {
-  return path.join(app.getPath('userData'), 'store.json');
-}
-
-// 从文件加载存储
-function loadStore(app) {
-  try {
-    const storePath = getStorePath(app);
-    if (fs.existsSync(storePath)) {
-      const data = fs.readFileSync(storePath, 'utf8');
-      const jsonData = JSON.parse(data);
-      Object.entries(jsonData).forEach(([key, value]) => {
-        store.set(key, value);
-      });
-    }
-  } catch (error) {
-    console.error('加载存储失败:', error);
-  }
-}
-
-// 保存存储到文件
-function saveStore(app) {
-  try {
-    const storePath = getStorePath(app);
-    const jsonData = {};
-    store.forEach((value, key) => {
-      jsonData[key] = value;
-    });
-    fs.writeFileSync(storePath, JSON.stringify(jsonData, null, 2));
-  } catch (error) {
-    console.error('保存存储失败:', error);
-  }
-}
+// 初始化electron-store
+const store = new Store();
 
 // 注册存储相关的IPC处理器
 function registerStoreHandlers(app) {
-  // 初始化时加载存储
-  loadStore(app);
-
   // 获取存储值
-  ipcMain.handle('store-get', (event, key, defaultValue = null) => {
-    if (store.has(key)) {
-      return store.get(key);
-    }
-    return defaultValue;
+  ipcMain.handle('store-get', async (event, key) => {
+    return store.get(key);
   });
 
   // 设置存储值
-  ipcMain.handle('store-set', (event, key, value) => {
+  ipcMain.handle('store-set', async (event, key, value) => {
     store.set(key, value);
-    saveStore(app);
-    return { success: true };
+    return true;
   });
 
   // 删除存储值
-  ipcMain.handle('store-delete', (event, key) => {
-    const result = store.delete(key);
-    if (result) {
-      saveStore(app);
-    }
-    return { success: result };
+  ipcMain.handle('store-delete', async (event, key) => {
+    store.delete(key);
+    return true;
   });
 
   // 获取所有存储键
-  ipcMain.handle('store-keys', () => {
-    return Array.from(store.keys());
+  ipcMain.handle('store-keys', async () => {
+    return Object.keys(store.store);
   });
 
   // 清空存储
-  ipcMain.handle('store-clear', () => {
+  ipcMain.handle('store-clear', async () => {
     store.clear();
-    saveStore(app);
-    return { success: true };
+    return true;
   });
 
   // 检查键是否存在
-  ipcMain.handle('store-has', (event, key) => {
+  ipcMain.handle('store-has', async (event, key) => {
     return store.has(key);
+  });
+
+  // 获取存储大小
+  ipcMain.handle('store-size', async () => {
+    return store.size;
+  });
+
+  // 获取存储路径
+  ipcMain.handle('store-path', async () => {
+    return store.path;
   });
 }
 

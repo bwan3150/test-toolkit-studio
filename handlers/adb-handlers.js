@@ -748,7 +748,7 @@ function registerAdbHandlers(app) {
     }
   });
 
-  // 截图功能
+  // 增强版截图，同时保存到工作区并获取UI树
   ipcMain.handle('adb-screenshot', async (event, deviceId, projectPath = null) => {
     try {
       const adbPath = getBuiltInAdbPath(app);
@@ -761,46 +761,54 @@ function registerAdbHandlers(app) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      // 生成文件名
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `screenshot_${deviceId}_${timestamp}.png`;
+      const tempPath = path.join(app.getPath('temp'), 'screenshot.png');
+      const deviceArg = `-s ${deviceId}`;
       
-      let localPath;
+      // 获取截图
+      await execPromise(`"${adbPath}" ${deviceArg} exec-out screencap -p > "${tempPath}"`);
+      const imageData = fs.readFileSync(tempPath);
+      
+      // 如果提供了项目路径，保存到工作区
       if (projectPath) {
-        const screenshotDir = path.join(projectPath, 'screenshots');
-        if (!fs.existsSync(screenshotDir)) {
-          fs.mkdirSync(screenshotDir, { recursive: true });
+        try {
+          const workareaPath = path.join(projectPath, 'workarea');
+          
+          // 确保workarea目录存在
+          if (!fs.existsSync(workareaPath)) {
+            fs.mkdirSync(workareaPath, { recursive: true });
+          }
+          
+          // 保存截图到工作区
+          const screenshotPath = path.join(workareaPath, 'current_screenshot.png');
+          fs.writeFileSync(screenshotPath, imageData);
+          
+          // 同时获取UI树
+          try {
+            await execPromise(`"${adbPath}" ${deviceArg} shell uiautomator dump /sdcard/window_dump.xml`);
+            const { stdout: xmlContent } = await execPromise(`"${adbPath}" ${deviceArg} shell cat /sdcard/window_dump.xml`);
+            
+            // 保存XML到工作区
+            const xmlPath = path.join(workareaPath, 'current_ui_tree.xml');
+            fs.writeFileSync(xmlPath, xmlContent, 'utf8');
+            
+            console.log('已保存截图和UI树到workspace:', workareaPath);
+          } catch (xmlError) {
+            console.warn('获取UI树失败，但截图保存成功:', xmlError.message);
+          }
+          
+          // 返回截图路径和base64数据
+          return { 
+            success: true, 
+            data: imageData.toString('base64'),
+            screenshotPath: screenshotPath
+          };
+        } catch (saveError) {
+          console.warn('保存到workspace失败:', saveError.message);
+          // 不影响截图返回
         }
-        localPath = path.join(screenshotDir, filename);
-      } else {
-        const screenshotDir = path.join(app.getPath('userData'), 'screenshots');
-        if (!fs.existsSync(screenshotDir)) {
-          fs.mkdirSync(screenshotDir, { recursive: true });
-        }
-        localPath = path.join(screenshotDir, filename);
       }
-
-      const remotePath = '/sdcard/screenshot.png';
-
-      // 在设备上截图
-      const screenshotCommand = `"${adbPath}" -s ${deviceId} shell screencap -p ${remotePath}`;
-      await execPromise(screenshotCommand);
-
-      // 拉取截图到本地
-      const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
-      await execPromise(pullCommand);
-
-      // 删除设备上的截图
-      const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
-      await execPromise(deleteCommand);
-
-      return { 
-        success: true, 
-        message: '截图成功',
-        path: localPath,
-        filename: filename
-      };
-
+      
+      return { success: true, data: imageData.toString('base64') };
     } catch (error) {
       console.error('截图失败:', error);
       return { success: false, error: error.message };
@@ -850,26 +858,95 @@ function registerAdbHandlers(app) {
     }
   });
 
-  // 增强版UI dump
+  // 增强版UI dump，包含屏幕尺寸信息
   ipcMain.handle('adb-ui-dump-enhanced', async (event, deviceId) => {
     try {
-      // 先获取基本的UI dump
-      const basicResult = await ipcMain._events['adb-ui-dump'][0](event, deviceId);
-      if (!basicResult.success) {
-        return basicResult;
+      const adbPath = getBuiltInAdbPath(app);
+      
+      if (!fs.existsSync(adbPath)) {
+        return { success: false, error: '内置Android SDK未找到' };
       }
 
-      // 这里可以添加增强的解析逻辑
-      // 例如解析XML，提取可点击元素等
-      
-      return {
-        success: true,
-        content: basicResult.content,
-        enhanced: true
-      };
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
 
+      const deviceArg = `-s ${deviceId}`;
+      
+      // 1. 获取UI hierarchy
+      await execPromise(`"${adbPath}" ${deviceArg} shell uiautomator dump /sdcard/window_dump.xml`);
+      const { stdout: xmlContent } = await execPromise(`"${adbPath}" ${deviceArg} shell cat /sdcard/window_dump.xml`);
+      
+      // 2. 获取屏幕尺寸
+      let screenSize = null;
+      try {
+        const { stdout: sizeOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell wm size`);
+        const sizeMatch = sizeOutput.match(/Physical size: (\d+)x(\d+)/);
+        if (sizeMatch) {
+          screenSize = { 
+            width: parseInt(sizeMatch[1]), 
+            height: parseInt(sizeMatch[2]) 
+          };
+        } else {
+          // 尝试从dumpsys获取
+          const { stdout: dumpsysOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell dumpsys window displays | grep -E "Display|cur="`);
+          const displayMatch = dumpsysOutput.match(/cur=(\d+)x(\d+)/);
+          if (displayMatch) {
+            screenSize = {
+              width: parseInt(displayMatch[1]),
+              height: parseInt(displayMatch[2])
+            };
+          }
+        }
+      } catch (sizeError) {
+        console.warn('无法获取屏幕尺寸:', sizeError.message);
+        // 使用默认尺寸
+        screenSize = { width: 1080, height: 1920 };
+      }
+      
+      // 3. 获取设备信息（可选）
+      let deviceInfo = {};
+      try {
+        const { stdout: brandOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell getprop ro.product.brand`);
+        const { stdout: modelOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell getprop ro.product.model`);
+        const { stdout: versionOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell getprop ro.build.version.release`);
+        
+        deviceInfo = {
+          brand: brandOutput.trim(),
+          model: modelOutput.trim(),
+          androidVersion: versionOutput.trim()
+        };
+      } catch (infoError) {
+        console.warn('无法获取设备信息:', infoError.message);
+      }
+      
+      return { 
+        success: true, 
+        xml: xmlContent,
+        screenSize: screenSize,
+        deviceInfo: deviceInfo,
+        timestamp: Date.now()
+      };
     } catch (error) {
       console.error('Enhanced UI dump失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 初始化项目工作区
+  ipcMain.handle('init-project-workarea', async (event, projectPath) => {
+    try {
+      const workareaPath = path.join(projectPath, 'workarea');
+      
+      // 确保workarea目录存在
+      if (!fs.existsSync(workareaPath)) {
+        fs.mkdirSync(workareaPath, { recursive: true });
+        console.log('创建workspace目录:', workareaPath);
+      }
+      
+      return { success: true, path: workareaPath };
+    } catch (error) {
+      console.error('初始化项目workspace失败:', error);
       return { success: false, error: error.message };
     }
   });

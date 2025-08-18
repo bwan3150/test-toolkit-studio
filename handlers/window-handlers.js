@@ -56,6 +56,57 @@ function registerWindowHandlers(mainWindow) {
       return { canceled: true };
     }
   });
+
+  // 选择目录对话框
+  ipcMain.handle('select-directory', async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: '选择项目目录',
+        buttonLabel: '选择'
+      });
+      
+      if (!result.canceled && result.filePaths.length > 0) {
+        return result.filePaths[0];
+      }
+    } catch (error) {
+      console.error('选择目录出错:', error);
+    }
+    return null;
+  });
+
+  // 选择文件对话框
+  ipcMain.handle('select-file', async (event, filters) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: filters || [{ name: '所有文件', extensions: ['*'] }]
+    });
+    
+    if (!result.canceled) {
+      return result.filePaths[0];
+    }
+    return null;
+  });
+
+  // 读取文件
+  ipcMain.handle('read-file', async (event, filepath) => {
+    try {
+      const content = await require('fs').promises.readFile(filepath, 'utf-8');
+      return { success: true, content };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 写入文件
+  ipcMain.handle('write-file', async (event, filepath, content) => {
+    try {
+      await require('fs').promises.writeFile(filepath, content, 'utf-8');
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
 }
 
 module.exports = {

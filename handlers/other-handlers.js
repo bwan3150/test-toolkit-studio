@@ -5,31 +5,27 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
+const Store = require('electron-store');
+
+// 初始化store
+const store = new Store();
 
 // 注册其他IPC处理器
 function registerOtherHandlers(app) {
   // 获取应用版本信息
-  ipcMain.handle('get-app-version', () => {
-    return {
-      version: app.getVersion(),
-      name: app.getName(),
-      isPackaged: app.isPackaged
-    };
+  ipcMain.handle('get-app-version', async () => {
+    try {
+      const packageJson = require('../package.json');
+      return packageJson.version || 'unknown';
+    } catch (error) {
+      return 'unknown';
+    }
   });
+
 
   // 获取用户数据路径
   ipcMain.handle('get-user-data-path', () => {
     return app.getPath('userData');
-  });
-
-  // 获取用户信息
-  ipcMain.handle('get-user-info', () => {
-    return {
-      name: require('os').userInfo().username,
-      platform: process.platform,
-      arch: process.arch,
-      nodeVersion: process.version
-    };
   });
 
   // 获取连接的设备（兼容旧版本的调用）
@@ -402,87 +398,7 @@ function registerOtherHandlers(app) {
     }
   });
 
-  // 初始化项目工作区
-  ipcMain.handle('init-project-workarea', async (event, projectPath) => {
-    try {
-      if (!projectPath || typeof projectPath !== 'string') {
-        return { success: false, error: '无效的项目路径' };
-      }
 
-      if (!fs.existsSync(projectPath)) {
-        return { success: false, error: '项目路径不存在' };
-      }
-
-      // 创建工作区目录结构
-      const workareaDirs = ['testcases', 'scripts', 'reports', 'temp'];
-      for (const dir of workareaDirs) {
-        const dirPath = path.join(projectPath, dir);
-        if (!fs.existsSync(dirPath)) {
-          fs.mkdirSync(dirPath, { recursive: true });
-        }
-      }
-
-      return { 
-        success: true, 
-        message: '项目工作区已初始化',
-        path: projectPath
-      };
-
-    } catch (error) {
-      console.error('初始化项目工作区失败:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // 读取文件内容
-  ipcMain.handle('read-file', async (event, filePath) => {
-    try {
-      if (!filePath || typeof filePath !== 'string') {
-        return { success: false, error: '无效的文件路径' };
-      }
-
-      if (!fs.existsSync(filePath)) {
-        return { success: false, error: '文件不存在' };
-      }
-
-      const content = fs.readFileSync(filePath, 'utf8');
-      return { 
-        success: true, 
-        content: content,
-        path: filePath
-      };
-
-    } catch (error) {
-      console.error('读取文件失败:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // 写入文件内容
-  ipcMain.handle('write-file', async (event, filePath, content) => {
-    try {
-      if (!filePath || typeof filePath !== 'string') {
-        return { success: false, error: '无效的文件路径' };
-      }
-
-      // 确保目录存在
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      fs.writeFileSync(filePath, content, 'utf8');
-      return { 
-        success: true, 
-        message: '文件保存成功',
-        path: filePath
-      };
-
-    } catch (error) {
-      console.error('写入文件失败:', error);
-      return { success: false, error: error.message };
-    }
-  });
 
   // 检查文件/目录是否存在
   ipcMain.handle('file-exists', async (event, filePath) => {
