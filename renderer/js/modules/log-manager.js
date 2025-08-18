@@ -458,14 +458,97 @@ class LogManager {
         
         const lines = processedData.split('\n');
         console.log('[LogManager] Processing', lines.length, 'lines');
-        lines.forEach(line => {
-            if (line.trim()) {
-                const logEntry = this.parseLogLine(line);
-                if (logEntry) {
-                    this.addLogEntry(logEntry);
-                }
+        
+        // 处理多行日志
+        this.processMultilineLogs(lines);
+    }
+    
+    // 处理多行日志
+    processMultilineLogs(lines) {
+        let pendingLogEntry = null;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // 跳过空行
+            if (!line.trim()) {
+                continue;
             }
-        });
+            
+            // 检查是否是日志头部（新日志的开始）
+            if (this.isLogHeader(line)) {
+                // 如果有待处理的日志，先保存它
+                if (pendingLogEntry) {
+                    this.addLogEntry(pendingLogEntry);
+                }
+                
+                // 解析新的日志头
+                pendingLogEntry = this.parseLogLine(line);
+                
+                // 初始化消息数组（用于收集多行内容）
+                if (pendingLogEntry) {
+                    pendingLogEntry.multilineMessage = [];
+                    // 如果当前行已经包含消息，添加到数组
+                    if (pendingLogEntry.message) {
+                        pendingLogEntry.multilineMessage.push(pendingLogEntry.message);
+                    }
+                }
+            } else if (pendingLogEntry) {
+                // 这是当前日志的续行，添加到消息数组
+                pendingLogEntry.multilineMessage.push(line);
+                // 更新原始内容
+                pendingLogEntry.raw += '\n' + line;
+            } else {
+                // 没有待处理的日志头，可能是独立的消息行
+                const standaloneEntry = {
+                    date: '',
+                    time: '',
+                    pid: '',
+                    tid: '',
+                    level: 'V',
+                    tag: 'unknown',
+                    message: line,
+                    multilineMessage: [line],
+                    package: '',
+                    raw: line
+                };
+                
+                // 尝试从行中提取包名
+                const pkgMatch = line.match(/\b([a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+)\b/);
+                if (pkgMatch) {
+                    standaloneEntry.package = pkgMatch[1];
+                }
+                
+                this.addLogEntry(standaloneEntry);
+            }
+        }
+        
+        // 不要忘记最后一个待处理的日志
+        if (pendingLogEntry) {
+            this.addLogEntry(pendingLogEntry);
+        }
+    }
+    
+    // 检查是否是日志头部
+    isLogHeader(line) {
+        // 检查各种日志头格式
+        
+        // 格式1: 标准格式 [ MM-DD HH:MM:SS.mmm PID:TID L/TAG ]
+        if (/^\[\s*\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+\d+:\d+\s+[VDIWEFA]\//.test(line)) {
+            return true;
+        }
+        
+        // 格式2: 标准Android logcat格式 MM-DD HH:MM:SS.mmm PID TID LEVEL TAG
+        if (/^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+\d+\s+\d+\s+[VDIWEFA]\s+/.test(line)) {
+            return true;
+        }
+        
+        // 格式3: 简化格式 MM-DD HH:MM:SS.mmm LEVEL/TAG(PID)
+        if (/^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3}\s+[VDIWEFA]\//.test(line)) {
+            return true;
+        }
+        
+        return false;
     }
 
     // 清理编码问题
@@ -643,6 +726,12 @@ class LogManager {
             return;
         }
         
+        // 合并多行消息
+        if (entry.multilineMessage && entry.multilineMessage.length > 0) {
+            // 将多行消息合并为单个消息字符串
+            entry.message = entry.multilineMessage.join('\n');
+        }
+        
         // 添加到缓冲区
         this.logBuffer.push(entry);
         
@@ -686,6 +775,8 @@ class LogManager {
 
     // 双模式过滤逻辑
     shouldShowEntry(entry) {
+        // 对于多行日志，需要检查所有内容
+        const fullContent = entry.raw || '';
         if (this.filterMode === 'expert') {
             // Expert模式：使用filterSpec
             if (this.filters.filterSpec) {
@@ -724,13 +815,15 @@ class LogManager {
             if (this.filters.tag && this.filters.tag.trim()) {
                 const filterTag = this.filters.tag.trim().toLowerCase();
                 const entryTag = (entry.tag || '').toLowerCase();
+                const entryMessage = (entry.message || '').toLowerCase();
                 
                 // 支持多个tag（逗号分隔）
                 const filterTags = filterTag.split(',').map(t => t.trim()).filter(t => t);
                 let tagMatched = false;
                 
                 for (const ft of filterTags) {
-                    if (entryTag.includes(ft)) {
+                    // 检查tag和消息内容
+                    if (entryTag.includes(ft) || entryMessage.includes(ft)) {
                         tagMatched = true;
                         break;
                     }
@@ -845,7 +938,7 @@ class LogManager {
     // 格式化日志行显示
     formatLogLine(entry) {
         // 基础格式
-        let formatted = entry.raw;
+        let formatted = '';
         
         // 高亮显示关键部分
         if (entry.level && entry.tag) {
@@ -876,15 +969,17 @@ class LogManager {
             // Tag
             parts.push(`<span class="log-tag">${this.escapeHtml(entry.tag)}</span>:`);
             
-            // 消息内容
+            // 消息内容 - 处理多行
             if (entry.message) {
-                parts.push(`<span class="log-message">${this.escapeHtml(entry.message)}</span>`);
+                // 将多行消息转换为HTML，保留换行
+                const messageHtml = this.escapeHtml(entry.message).replace(/\n/g, '<br>');
+                parts.push(`<span class="log-message">${messageHtml}</span>`);
             }
             
             formatted = parts.join(' ');
         } else {
-            // 如果解析失败，至少转义HTML
-            formatted = this.escapeHtml(formatted);
+            // 如果解析失败，至少转义HTML并保留换行
+            formatted = this.escapeHtml(entry.raw).replace(/\n/g, '<br>');
         }
         
         // 高亮搜索关键词

@@ -4766,13 +4766,15 @@ body {
 .log-entry {
     color: var(--text-primary);
     margin: 0;
-    padding: 2px 4px;
-    white-space: pre;
+    padding: 4px 8px;
+    white-space: pre-wrap; /* 允许换行 */
     font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
     font-size: 11px;
-    line-height: 1.3;
+    line-height: 1.4;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     transition: background-color 0.1s ease;
+    display: block;
+    word-break: break-word;
 }
 
 .log-entry:hover {
@@ -4866,10 +4868,11 @@ body {
 
 .log-message {
     flex: 1;
-    white-space: nowrap; /* 不换行 */
-    overflow: hidden;
-    text-overflow: ellipsis; /* 超长显示省略号 */
+    white-space: pre-wrap; /* 允许换行并保留格式 */
+    word-break: break-word; /* 长单词换行 */
     min-width: 200px; /* 最小宽度 */
+    display: block; /* 块级元素以支持多行 */
+    line-height: 1.4; /* 适合多行文本的行高 */
 }
 
 /* Log entry level colors */
