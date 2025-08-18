@@ -4512,6 +4512,98 @@ body {
 }
 
 /* Log Page Styles */
+
+/* Windows平台日志颜色 - 增强版 */
+.platform-win32 .log-entry .log-level-V,
+.platform-win32 .log-entry .log-level-verbose {
+    color: #808080 !important;
+}
+
+.platform-win32 .log-entry .log-level-D,
+.platform-win32 .log-entry .log-level-debug {
+    color: #0000FF !important;
+}
+
+.platform-win32 .log-entry .log-level-I,
+.platform-win32 .log-entry .log-level-info {
+    color: #008000 !important;
+}
+
+.platform-win32 .log-entry .log-level-W,
+.platform-win32 .log-entry .log-level-warn {
+    color: #FFA500 !important;
+    font-weight: 500;
+}
+
+.platform-win32 .log-entry .log-level-E,
+.platform-win32 .log-entry .log-level-error {
+    color: #FF0000 !important;
+    font-weight: bold;
+}
+
+.platform-win32 .log-entry .log-level-A,
+.platform-win32 .log-entry .log-level-assert {
+    color: #FF00FF !important;
+    font-weight: bold;
+}
+
+/* Windows平台日志条目基础样式 */
+.platform-win32 .log-entry {
+    font-family: 'Consolas', 'Courier New', monospace !important;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 2px 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.platform-win32 .log-timestamp {
+    color: #666 !important;
+    margin-right: 8px;
+}
+
+.platform-win32 .log-pid,
+.platform-win32 .log-tid {
+    color: #999 !important;
+    margin-right: 4px;
+    font-size: 11px;
+}
+
+.platform-win32 .log-tag {
+    color: #0066CC !important;
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.platform-win32 .log-message {
+    color: #333 !important;
+}
+
+.platform-win32 .log-package {
+    color: #9C27B0 !important;
+    margin-right: 8px;
+    font-size: 11px;
+}
+
+/* Windows暗色主题支持 */
+@media (prefers-color-scheme: dark) {
+    .platform-win32 .log-message {
+        color: #E0E0E0 !important;
+    }
+    
+    .platform-win32 .log-timestamp {
+        color: #999 !important;
+    }
+    
+    .platform-win32 .log-tag {
+        color: #4FC3F7 !important;
+    }
+    
+    .platform-win32 .log-package {
+        color: #BA68C8 !important;
+    }
+}
+
 /* Logcat Controls - 改进的Android Studio风格 */
 .logcat-controls {
     background: var(--bg-secondary);

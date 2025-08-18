@@ -371,9 +371,10 @@ class LogManager {
             this.stopLogcat();
 
             // 启动新的logcat进程
+            // Windows平台使用long格式以获取更多信息
             const result = await getGlobals().ipcRenderer.invoke('start-logcat', {
                 device: this.currentDevice,
-                format: this.currentFormat,
+                format: process.platform === 'win32' ? 'long' : this.currentFormat,
                 buffer: this.currentBuffer
             });
 
@@ -484,15 +485,55 @@ class LogManager {
             });
     }
 
-    // 简化的日志解析 - 直接模仿adb logcat输出
+    // 增强的日志解析 - 支持多种格式
     parseLogLine(line) {
-        // 标准logcat threadtime格式:
+        // 调试输出（采样）
+        if (Math.random() < 0.01) {
+            console.log('[DEBUG] Parsing line:', line.substring(0, 200));
+        }
+        
+        // Windows平台特殊处理
+        if (process.platform === 'win32' || navigator.platform.indexOf('Win') >= 0) {
+            // Windows long格式可能有多种变体
+            
+            // 格式1: 包含包名的long格式
+            // [ YYYY-MM-DD HH:MM:SS.mmm PID-TID/Package Priority/Tag ] Message
+            let match = line.match(/^\[\s*(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)[:-](\d+)\/([^\s]+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
+            if (match) {
+                return {
+                    date: match[1],
+                    time: match[2],
+                    pid: match[3],
+                    tid: match[4],
+                    package: match[5],
+                    level: match[6],
+                    tag: match[7].trim(),
+                    message: match[8] || '',
+                    raw: line
+                };
+            }
+            
+            // 格式2: 不含包名的long格式
+            // [ MM-DD HH:MM:SS.mmm PID:TID L/TAG ] Message
+            match = line.match(/^\[\s*(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+):(\d+)\s+([VDIWEFA])\/([^\]]+)\s*\]\s*(.*)$/);
+            if (match) {
+                return {
+                    date: match[1],
+                    time: match[2],
+                    pid: match[3],
+                    tid: match[4],
+                    level: match[5],
+                    tag: match[6].trim(),
+                    message: match[7] || '',
+                    package: '',
+                    raw: line
+                };
+            }
+        }
+        
+        // 格式3: 标准threadtime格式
         // MM-DD HH:MM:SS.mmm PID TID LEVEL TAG: MESSAGE
-        // 例如: 08-15 15:20:21.822 25800 25800 I flutter: 消息内容
-        
-        const regex = /^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEA])\s+([^:]+?):\s+(.*)$/;
-        const match = line.match(regex);
-        
+        let match = line.match(/^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEFA])\s+([^:]+?):\s+(.*)$/);
         if (match) {
             return {
                 date: match[1],
@@ -502,12 +543,30 @@ class LogManager {
                 level: match[5],
                 tag: match[6].trim(),
                 message: match[7],
+                package: '',
                 raw: line
             };
         }
         
-        // 如果不匹配，直接返回原始行
-        return {
+        // 格式4: 简化格式 (可能在某些设备上出现)
+        // MM-DD HH:MM:SS.mmm LEVEL/TAG(PID): MESSAGE
+        match = line.match(/^(\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d{3})\s+([VDIWEFA])\/([^\(]+)\((\d+)\):\s+(.*)$/);
+        if (match) {
+            return {
+                date: match[1],
+                time: match[2],
+                pid: match[5],
+                tid: match[5],
+                level: match[3],
+                tag: match[4].trim(),
+                message: match[6],
+                package: '',
+                raw: line
+            };
+        }
+        
+        // 如果都不匹配，返回原始行
+        const result = {
             raw: line,
             message: line,
             date: '',
@@ -515,8 +574,16 @@ class LogManager {
             pid: '',
             tid: '',
             level: 'V',
-            tag: ''
+            tag: '',
+            package: ''
         };
+        
+        // 调试输出（采样）
+        if (Math.random() < 0.01) {
+            console.log('[DEBUG] Parsed result:', result);
+        }
+        
+        return result;
     }
 
     // 添加日志条目
@@ -598,18 +665,48 @@ class LogManager {
                 return false;
             }
             
-            // 检查Tag过滤
-            if (this.filters.tag) {
-                const tagLower = this.filters.tag.toLowerCase();
-                if (!entry.tag.toLowerCase().includes(tagLower)) {
+            // 检查Tag过滤 - 改进匹配逻辑，支持多个tag
+            if (this.filters.tag && this.filters.tag.trim()) {
+                const filterTag = this.filters.tag.trim().toLowerCase();
+                const entryTag = (entry.tag || '').toLowerCase();
+                
+                // 支持多个tag（逗号分隔）
+                const filterTags = filterTag.split(',').map(t => t.trim()).filter(t => t);
+                let tagMatched = false;
+                
+                for (const ft of filterTags) {
+                    if (entryTag.includes(ft)) {
+                        tagMatched = true;
+                        break;
+                    }
+                }
+                
+                if (!tagMatched && filterTags.length > 0) {
                     return false;
                 }
             }
             
-            // 检查Package过滤（在消息中搜索包名）
-            if (this.filters.package) {
-                const packageLower = this.filters.package.toLowerCase();
-                if (!entry.raw.toLowerCase().includes(packageLower)) {
+            // 检查Package过滤 - 优先使用解析出的package字段
+            if (this.filters.package && this.filters.package.trim()) {
+                const filterPackage = this.filters.package.trim().toLowerCase();
+                
+                // 先检查解析出的package字段
+                const entryPackage = (entry.package || '').toLowerCase();
+                let packageMatched = false;
+                
+                if (entryPackage && entryPackage.includes(filterPackage)) {
+                    packageMatched = true;
+                } else {
+                    // 如果没有package字段或不匹配，在整个日志中搜索
+                    const rawLog = (entry.raw || '').toLowerCase();
+                    const message = (entry.message || '').toLowerCase();
+                    
+                    if (rawLog.includes(filterPackage) || message.includes(filterPackage)) {
+                        packageMatched = true;
+                    }
+                }
+                
+                if (!packageMatched) {
                     return false;
                 }
             }
@@ -696,7 +793,7 @@ class LogManager {
         let formatted = entry.raw;
         
         // 高亮显示关键部分
-        if (entry.level && entry.tag && entry.message) {
+        if (entry.level && entry.tag) {
             // 构建格式化的日志行
             const parts = [];
             
@@ -709,18 +806,25 @@ class LogManager {
             if (entry.pid) {
                 parts.push(`<span class="log-pid">${entry.pid}</span>`);
             }
-            if (entry.tid) {
+            if (entry.tid && entry.tid !== entry.pid) {
                 parts.push(`<span class="log-tid">${entry.tid}</span>`);
             }
             
             // 日志级别
             parts.push(`<span class="log-level log-level-${entry.level}">${entry.level}</span>`);
             
+            // Package（如果有）
+            if (entry.package) {
+                parts.push(`<span class="log-package">${this.escapeHtml(entry.package)}</span>`);
+            }
+            
             // Tag
             parts.push(`<span class="log-tag">${this.escapeHtml(entry.tag)}</span>:`);
             
             // 消息内容
-            parts.push(`<span class="log-message">${this.escapeHtml(entry.message)}</span>`);
+            if (entry.message) {
+                parts.push(`<span class="log-message">${this.escapeHtml(entry.message)}</span>`);
+            }
             
             formatted = parts.join(' ');
         } else {
