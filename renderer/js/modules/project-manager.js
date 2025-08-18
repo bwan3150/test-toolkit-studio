@@ -78,10 +78,13 @@ function initializeProjectPage() {
         openProjectBtn.addEventListener('click', async () => {
             console.log('Open project button clicked');
             try {
-                const projectPath = await ipcRenderer.invoke('select-directory');
-                console.log('Selected path:', projectPath);
-                if (projectPath) {
-                    await openProject(projectPath);
+                const result = await ipcRenderer.invoke('select-directory');
+                console.log('Selected path result:', result);
+                if (result && result.success && result.path) {
+                    await openProject(result.path);
+                } else if (typeof result === 'string') {
+                    // 兼容旧格式
+                    await openProject(result);
                 }
             } catch (error) {
                 console.error('Error in open project:', error);
@@ -233,8 +236,22 @@ async function loadProjectHistory() {
         // 模拟加载延迟以显示loading效果
         await new Promise(resolve => setTimeout(resolve, 800));
         
-        const { ipcRenderer, path } = getGlobals();
-        const projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+        const { ipcRenderer, path, fsSync } = getGlobals();
+        let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+        
+        // 验证项目路径是否仍然有效，移除无效的项目
+        const validProjects = [];
+        for (const project of projectHistory) {
+            if (fsSync.existsSync(project.path)) {
+                validProjects.push(project);
+            }
+        }
+        
+        // 如果有无效项目被移除，更新存储
+        if (validProjects.length !== projectHistory.length) {
+            await ipcRenderer.invoke('store-set', 'project_history', validProjects);
+            projectHistory = validProjects;
+        }
         
         const welcomeContent = document.getElementById('welcomeContent');
         const recentProjects = document.getElementById('recentProjects');
@@ -337,10 +354,37 @@ function formatDate(date) {
 
 async function openProject(projectPath) {
     const { fsSync, path } = getGlobals();
+    
+    // 确保projectPath是字符串
+    if (typeof projectPath === 'object' && projectPath.path) {
+        projectPath = projectPath.path;
+    } else if (typeof projectPath !== 'string') {
+        console.error('Invalid project path:', projectPath);
+        window.NotificationModule.showNotification('无效的项目路径', 'error');
+        return;
+    }
+    
     // 检查目录是否存在
     if (!fsSync.existsSync(projectPath)) {
-        window.NotificationModule.showNotification('Project folder not found', 'error');
-        await removeFromHistory(projectPath);
+        // 询问用户是否要重新选择项目路径或从历史记录中移除
+        const choice = confirm(
+            `项目文件夹未找到:\n${projectPath}\n\n点击"确定"重新选择项目文件夹，点击"取消"从历史记录中移除该项目。`
+        );
+        
+        if (choice) {
+            // 用户选择重新选择文件夹
+            const { ipcRenderer } = getGlobals();
+            const result = await ipcRenderer.invoke('select-directory');
+            if (result.success && result.path) {
+                // 更新历史记录中的路径
+                await updateProjectPath(projectPath, result.path);
+                await loadProject(result.path);
+            }
+        } else {
+            // 用户选择从历史记录中移除
+            window.NotificationModule.showNotification('项目已从历史记录中移除', 'info');
+            await removeFromHistory(projectPath);
+        }
         return;
     }
     
@@ -681,6 +725,22 @@ async function removeFromHistory(projectPath) {
     await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
     await loadProjectHistory();
     window.NotificationModule.showNotification('Project removed from history', 'success');
+}
+
+// 更新项目路径
+async function updateProjectPath(oldPath, newPath) {
+    const { ipcRenderer } = getGlobals();
+    let projectHistory = await ipcRenderer.invoke('store-get', 'project_history') || [];
+    
+    // 找到并更新路径
+    const projectIndex = projectHistory.findIndex(p => p.path === oldPath);
+    if (projectIndex !== -1) {
+        projectHistory[projectIndex].path = newPath;
+        projectHistory[projectIndex].lastAccessed = new Date().toISOString();
+        await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
+        await loadProjectHistory();
+        window.NotificationModule.showNotification('项目路径已更新', 'success');
+    }
 }
 
 // 全局函数

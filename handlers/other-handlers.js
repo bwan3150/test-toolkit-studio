@@ -402,6 +402,138 @@ function registerOtherHandlers(app) {
     }
   });
 
+  // 初始化项目工作区
+  ipcMain.handle('init-project-workarea', async (event, projectPath) => {
+    try {
+      if (!projectPath || typeof projectPath !== 'string') {
+        return { success: false, error: '无效的项目路径' };
+      }
+
+      if (!fs.existsSync(projectPath)) {
+        return { success: false, error: '项目路径不存在' };
+      }
+
+      // 创建工作区目录结构
+      const workareaDirs = ['testcases', 'scripts', 'reports', 'temp'];
+      for (const dir of workareaDirs) {
+        const dirPath = path.join(projectPath, dir);
+        if (!fs.existsSync(dirPath)) {
+          fs.mkdirSync(dirPath, { recursive: true });
+        }
+      }
+
+      return { 
+        success: true, 
+        message: '项目工作区已初始化',
+        path: projectPath
+      };
+
+    } catch (error) {
+      console.error('初始化项目工作区失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 读取文件内容
+  ipcMain.handle('read-file', async (event, filePath) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { success: false, error: '无效的文件路径' };
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: '文件不存在' };
+      }
+
+      const content = fs.readFileSync(filePath, 'utf8');
+      return { 
+        success: true, 
+        content: content,
+        path: filePath
+      };
+
+    } catch (error) {
+      console.error('读取文件失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 写入文件内容
+  ipcMain.handle('write-file', async (event, filePath, content) => {
+    try {
+      if (!filePath || typeof filePath !== 'string') {
+        return { success: false, error: '无效的文件路径' };
+      }
+
+      // 确保目录存在
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, content, 'utf8');
+      return { 
+        success: true, 
+        message: '文件保存成功',
+        path: filePath
+      };
+
+    } catch (error) {
+      console.error('写入文件失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 检查文件/目录是否存在
+  ipcMain.handle('file-exists', async (event, filePath) => {
+    try {
+      return { 
+        success: true, 
+        exists: fs.existsSync(filePath),
+        path: filePath
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 获取目录内容
+  ipcMain.handle('read-directory', async (event, dirPath) => {
+    try {
+      if (!dirPath || typeof dirPath !== 'string') {
+        return { success: false, error: '无效的目录路径' };
+      }
+
+      if (!fs.existsSync(dirPath)) {
+        return { success: false, error: '目录不存在' };
+      }
+
+      const items = fs.readdirSync(dirPath);
+      const contents = items.map(item => {
+        const itemPath = path.join(dirPath, item);
+        const stats = fs.statSync(itemPath);
+        return {
+          name: item,
+          path: itemPath,
+          isDirectory: stats.isDirectory(),
+          isFile: stats.isFile(),
+          size: stats.size,
+          mtime: stats.mtime.toISOString()
+        };
+      });
+
+      return { 
+        success: true, 
+        contents: contents,
+        path: dirPath
+      };
+
+    } catch (error) {
+      console.error('读取目录失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 清除设备日志
   ipcMain.handle('clear-device-log', async (event, deviceId) => {
     try {

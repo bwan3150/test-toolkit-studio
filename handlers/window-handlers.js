@@ -1,5 +1,5 @@
 // 窗口相关的IPC处理器
-const { ipcMain, BrowserWindow } = require('electron');
+const { ipcMain, BrowserWindow, dialog } = require('electron');
 
 // 注册所有窗口相关的IPC处理器
 function registerWindowHandlers(mainWindow) {
@@ -44,6 +44,17 @@ function registerWindowHandlers(mainWindow) {
   ipcMain.handle('navigate-to-login', async () => {
     mainWindow.loadFile('renderer/login.html');
     return { success: true };
+  });
+
+  // 显示保存文件对话框
+  ipcMain.handle('show-save-dialog', async (event, options) => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow, options);
+      return result;
+    } catch (error) {
+      console.error('Failed to show save dialog:', error);
+      return { canceled: true };
+    }
   });
 }
 

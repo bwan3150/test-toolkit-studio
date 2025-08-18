@@ -11,6 +11,9 @@ const { registerAdbHandlers, getBuiltInAdbPath, getBuiltInScrcpyPath, getBuiltIn
 const { registerWindowHandlers } = require('./handlers/window-handlers');
 const { registerStoreHandlers } = require('./handlers/store-handlers');
 const { registerOtherHandlers: registerMiscHandlers } = require('./handlers/other-handlers');
+const { registerLogcatHandlers } = require('./handlers/logcat-handlers');
+const { registerAuthHandlers } = require('./handlers/auth-handlers');
+const { registerProjectHandlers } = require('./handlers/project-handlers');
 
 // 全局变量
 let mainWindow;
@@ -154,6 +157,15 @@ function registerAllHandlers() {
     
     console.log('注册其他处理器...');
     registerMiscHandlers(app);
+    
+    console.log('注册Logcat处理器...');
+    registerLogcatHandlers(app, mainWindow);
+    
+    console.log('注册认证处理器...');
+    registerAuthHandlers();
+    
+    console.log('注册项目处理器...');
+    registerProjectHandlers();
     
     // 注册其他IPC处理器
     registerOtherHandlers();

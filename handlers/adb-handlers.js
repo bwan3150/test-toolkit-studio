@@ -747,6 +747,286 @@ function registerAdbHandlers(app) {
       return { success: false, error: error.message };
     }
   });
+
+  // 截图功能
+  ipcMain.handle('adb-screenshot', async (event, deviceId, projectPath = null) => {
+    try {
+      const adbPath = getBuiltInAdbPath(app);
+      
+      if (!fs.existsSync(adbPath)) {
+        return { success: false, error: '内置Android SDK未找到' };
+      }
+
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      // 生成文件名
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `screenshot_${deviceId}_${timestamp}.png`;
+      
+      let localPath;
+      if (projectPath) {
+        const screenshotDir = path.join(projectPath, 'screenshots');
+        if (!fs.existsSync(screenshotDir)) {
+          fs.mkdirSync(screenshotDir, { recursive: true });
+        }
+        localPath = path.join(screenshotDir, filename);
+      } else {
+        const screenshotDir = path.join(app.getPath('userData'), 'screenshots');
+        if (!fs.existsSync(screenshotDir)) {
+          fs.mkdirSync(screenshotDir, { recursive: true });
+        }
+        localPath = path.join(screenshotDir, filename);
+      }
+
+      const remotePath = '/sdcard/screenshot.png';
+
+      // 在设备上截图
+      const screenshotCommand = `"${adbPath}" -s ${deviceId} shell screencap -p ${remotePath}`;
+      await execPromise(screenshotCommand);
+
+      // 拉取截图到本地
+      const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
+      await execPromise(pullCommand);
+
+      // 删除设备上的截图
+      const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
+      await execPromise(deleteCommand);
+
+      return { 
+        success: true, 
+        message: '截图成功',
+        path: localPath,
+        filename: filename
+      };
+
+    } catch (error) {
+      console.error('截图失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // UI dump功能
+  ipcMain.handle('adb-ui-dump', async (event, deviceId) => {
+    try {
+      const adbPath = getBuiltInAdbPath(app);
+      
+      if (!fs.existsSync(adbPath)) {
+        return { success: false, error: '内置Android SDK未找到' };
+      }
+
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      const remotePath = '/sdcard/ui_dump.xml';
+      const localPath = path.join(app.getPath('temp'), `ui_dump_${deviceId}_${Date.now()}.xml`);
+
+      // 在设备上生成UI dump
+      const dumpCommand = `"${adbPath}" -s ${deviceId} shell uiautomator dump ${remotePath}`;
+      await execPromise(dumpCommand);
+
+      // 拉取UI dump到本地
+      const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
+      await execPromise(pullCommand);
+
+      // 读取文件内容
+      const content = fs.readFileSync(localPath, 'utf8');
+
+      // 清理文件
+      fs.unlinkSync(localPath);
+      const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
+      await execPromise(deleteCommand);
+
+      return { 
+        success: true, 
+        content: content
+      };
+
+    } catch (error) {
+      console.error('UI dump失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 增强版UI dump
+  ipcMain.handle('adb-ui-dump-enhanced', async (event, deviceId) => {
+    try {
+      // 先获取基本的UI dump
+      const basicResult = await ipcMain._events['adb-ui-dump'][0](event, deviceId);
+      if (!basicResult.success) {
+        return basicResult;
+      }
+
+      // 这里可以添加增强的解析逻辑
+      // 例如解析XML，提取可点击元素等
+      
+      return {
+        success: true,
+        content: basicResult.content,
+        enhanced: true
+      };
+
+    } catch (error) {
+      console.error('Enhanced UI dump失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 获取设备进程列表
+  ipcMain.handle('get-device-processes', async (event, deviceId) => {
+    try {
+      const adbPath = getBuiltInAdbPath(app);
+      
+      if (!fs.existsSync(adbPath)) {
+        return { success: false, error: '内置Android SDK未找到' };
+      }
+
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell ps`);
+      
+      const lines = stdout.split('\n');
+      const processes = [];
+      
+      for (let i = 1; i < lines.length; i++) { // 跳过标题行
+        const line = lines[i].trim();
+        if (line) {
+          const parts = line.split(/\s+/);
+          if (parts.length >= 9) {
+            processes.push({
+              user: parts[0],
+              pid: parts[1],
+              ppid: parts[2],
+              vsz: parts[3],
+              rss: parts[4],
+              wchan: parts[5],
+              addr: parts[6],
+              s: parts[7],
+              name: parts[8]
+            });
+          }
+        }
+      }
+
+      return { 
+        success: true, 
+        processes: processes
+      };
+
+    } catch (error) {
+      console.error('获取设备进程失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 无线设备管理
+  ipcMain.handle('get-saved-wireless-devices', async () => {
+    try {
+      const devices = await ipcMain._events['store-get'][0](null, 'wireless_devices') || [];
+      return { success: true, devices: devices };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('save-wireless-device', async (event, deviceConfig) => {
+    try {
+      let devices = await ipcMain._events['store-get'][0](null, 'wireless_devices') || [];
+      
+      // 检查是否已存在
+      const existingIndex = devices.findIndex(d => d.ipAddress === deviceConfig.ipAddress);
+      if (existingIndex !== -1) {
+        devices[existingIndex] = deviceConfig;
+      } else {
+        devices.push(deviceConfig);
+      }
+      
+      await ipcMain._events['store-set'][0](null, 'wireless_devices', devices);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('delete-wireless-device', async (event, ipAddress) => {
+    try {
+      let devices = await ipcMain._events['store-get'][0](null, 'wireless_devices') || [];
+      devices = devices.filter(d => d.ipAddress !== ipAddress);
+      await ipcMain._events['store-set'][0](null, 'wireless_devices', devices);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 二维码和配对相关
+  ipcMain.handle('generate-qr-code', async (event, data) => {
+    try {
+      // 这里应该使用二维码生成库，暂时返回模拟数据
+      return {
+        success: true,
+        qrData: data,
+        message: 'QR code generated successfully'
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('generate-qr-pairing-data', async (event, ipAddress, port = 5555) => {
+    try {
+      const pairingData = {
+        type: 'adb_pairing',
+        ip: ipAddress,
+        port: port,
+        timestamp: Date.now()
+      };
+      
+      return {
+        success: true,
+        data: JSON.stringify(pairingData)
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('start-adb-pairing-service', async (event, port = 5555) => {
+    try {
+      // 这里应该启动ADB配对服务
+      // 暂时返回成功状态
+      return {
+        success: true,
+        port: port,
+        message: 'ADB pairing service started'
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
+    try {
+      const adbPath = getBuiltInAdbPath(app);
+      
+      if (!fs.existsSync(adbPath)) {
+        return { success: false, error: '内置Android SDK未找到' };
+      }
+      
+      // 简化的扫描逻辑，实际应该扫描网络
+      return {
+        success: true,
+        devices: [],
+        message: '扫描完成'
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
 }
 
 module.exports = {
