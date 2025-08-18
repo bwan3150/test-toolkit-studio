@@ -1016,30 +1016,7 @@ ipcMain.handle('get-apk-package-name', async (event, apkPath) => {
         error: 'aapt not available', 
         needDirectInstall: true,
         message: 'Will attempt direct installation without package name'
-      };
-              /Package\s+([a-zA-Z0-9._]+)\s+signatures/,
-              /package:\s*([a-zA-Z0-9._]+)/
-            ];
-            
-            for (const pattern of packagePatterns) {
-              const match = errorOutput.match(pattern);
-              if (match && match[1]) {
-                const packageName = match[1];
-                console.log('Got package name from install error:', packageName);
-                return { success: true, packageName };
-              }
-            }
-          }
-        }
-      } catch (error) {
-        console.log('Failed to get package name through install method:', error.message);
-      }
-      
-      // 所有方法都Failed，需要用户手动输入
-      return { success: false, error: 'Cannot get package name automatically, please provide manually', needManualInput: true };
     }
-    // 如果aapt方法Failed，返回错误
-    return { success: false, error: 'Cannot get package name automatically' };
     
   } catch (error) {
     console.error('Failed to get APK package name:', error);
