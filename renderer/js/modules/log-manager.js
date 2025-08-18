@@ -1185,7 +1185,7 @@ class LogManager {
         }
     }
 
-    // 导出日志
+    // 导出日志 - 导出和Log Viewer显示完全一致的内容
     async exportLogs() {
         try {
             const result = await getGlobals().ipcRenderer.invoke('show-save-dialog', {
@@ -1197,25 +1197,77 @@ class LogManager {
             });
 
             if (result.filePath) {
-                // 收集当前显示的日志
-                const logContainer = document.getElementById('logContainer');
                 const logs = [];
                 
-                // 直接导出原始logcat格式
+                // 导出和Log Viewer显示完全一致的格式化内容
                 this.logBuffer.forEach(entry => {
                     if (this.shouldShowEntry(entry)) {
-                        logs.push(entry.raw);
+                        // 使用相同的格式化函数，但生成纯文本版本
+                        const formattedLine = this.formatLogLineForExport(entry);
+                        logs.push(formattedLine);
                     }
                 });
 
                 // 写入文件
                 await getGlobals().fs.writeFile(result.filePath, logs.join('\n'), 'utf8');
-                this.showNotification('Logs exported successfully', 'success');
+                this.showNotification(`已导出 ${logs.length} 条日志`, 'success');
             }
         } catch (error) {
             console.error('Failed to export logs:', error);
             this.showNotification('Failed to export logs', 'error');
         }
+    }
+
+    // 为导出生成纯文本格式的日志行
+    formatLogLineForExport(entry) {
+        // 和formatLogLine使用相同的逻辑，但生成纯文本
+        if (entry.level && entry.tag && entry.date && entry.time) {
+            // 标准logcat格式的各个部分
+            const timestamp = `${entry.date} ${entry.time}`;
+            const pid = entry.pid || '';
+            const tid = entry.tid || entry.pid || '';
+            const level = entry.level;
+            const tag = entry.tag;
+            
+            // 消息内容处理
+            let message = '';
+            if (entry.message) {
+                // 将多行消息合并为单行，保持原始内容
+                message = entry.message
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line)
+                    .join(' ');
+                
+                // 清理可能的编码问题
+                message = this.cleanMessageForExport(message);
+            }
+            
+            // 构建固定宽度的格式化字符串（纯文本版本）
+            return `${this.padRight(timestamp, 18)}${this.padLeft(pid, 5)}${this.padLeft(tid, 5)} ${level} ${this.padRight(tag, 25)}: ${message}`;
+        } else {
+            // 如果解析失败，清理原始内容
+            const rawText = entry.raw
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line)
+                .join(' ');
+            return this.cleanMessageForExport(rawText);
+        }
+    }
+
+    // 清理消息内容用于导出
+    cleanMessageForExport(message) {
+        return message
+            // 移除不可见字符和控制字符
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+            // 替换常见的编码问题字符
+            .replace(/\ufffd/g, '?')
+            // 清理其他可能导致问题的字符
+            .replace(/[\u0080-\u009F]/g, '')
+            // 确保没有多余的空白字符
+            .replace(/\s+/g, ' ')
+            .trim();
     }
 
     // 显示loading状态
