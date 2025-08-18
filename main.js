@@ -32,7 +32,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      webSecurity: false
+      webSecurity: false,
+      devTools: false  // 彻底禁用开发者工具
     },
     icon: path.join(__dirname, 'assets', 'icon.png')
   });
@@ -55,10 +56,60 @@ function createWindow() {
     mainWindow.webContents.send('window-maximized', false);
   });
 
-  // 开发环境下打开开发者工具
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  // 多重防护：禁用开发者工具的所有访问方式
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // 禁用所有可能打开开发者工具的快捷键
+    const key = input.key.toLowerCase();
+    
+    // Windows/Linux: Ctrl+Shift+I
+    if (input.control && input.shift && key === 'i') {
+      event.preventDefault();
+      console.log('Dev tools access attempt blocked: Ctrl+Shift+I');
+      return;
+    }
+    
+    // macOS: Cmd+Option+I (meta + alt + i)
+    if (input.meta && input.alt && key === 'i') {
+      event.preventDefault();
+      console.log('Dev tools access attempt blocked: Cmd+Option+I');
+      return;
+    }
+    
+    // F12 key
+    if (key === 'f12') {
+      event.preventDefault();
+      console.log('Dev tools access attempt blocked: F12');
+      return;
+    }
+    
+    // Additional combinations that might open dev tools
+    if ((input.control && input.shift && key === 'j') || // Ctrl+Shift+J (Console)
+        (input.meta && input.alt && key === 'j') || // Cmd+Option+J (Console)
+        (input.control && input.shift && key === 'c') || // Ctrl+Shift+C (Element inspector)
+        (input.meta && input.shift && key === 'c')) { // Cmd+Shift+C (Element inspector)
+      event.preventDefault();
+      console.log(`Dev tools access attempt blocked: ${input.meta ? 'Cmd' : 'Ctrl'}+${input.shift ? 'Shift' : ''}+${input.alt ? 'Alt' : ''}+${key.toUpperCase()}`);
+      return;
+    }
+  });
+  
+  // 禁用右键菜单（防止通过右键菜单打开开发者工具）
+  mainWindow.webContents.on('context-menu', (event) => {
+    event.preventDefault();
+    console.log('Right-click context menu blocked');
+  });
+  
+  // 最后防线：即使开发者工具被意外打开，也立即关闭
+  mainWindow.webContents.on('devtools-opened', () => {
+    console.log('Dev tools opened, force closing...');
+    mainWindow.webContents.closeDevTools();
+  });
+  
+  // 监听并阻止开发者工具相关的事件
+  mainWindow.webContents.on('devtools-focus', () => {
+    console.log('Dev tools focus blocked');
+    mainWindow.focus();
+  });
 }
 
 // 清理子进程
