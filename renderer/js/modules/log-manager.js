@@ -948,47 +948,53 @@ class LogManager {
         
         // 高亮显示关键部分
         if (entry.level && entry.tag) {
-            // 构建格式化的日志头
-            const headerParts = [];
+            // 构建格式化的日志行 - 所有内容在一行
+            const parts = [];
             
             // 时间戳
             if (entry.date && entry.time) {
-                headerParts.push(`<span class="log-timestamp">${entry.date} ${entry.time}</span>`);
+                parts.push(`<span class="log-timestamp">${entry.date} ${entry.time}</span>`);
             }
             
             // PID:TID（使用冒号分隔，与logcat格式一致）
             if (entry.pid) {
                 if (entry.tid && entry.tid !== entry.pid) {
-                    headerParts.push(`<span class="log-pid">${entry.pid}:${entry.tid}</span>`);
+                    parts.push(`<span class="log-pid">${entry.pid}:${entry.tid}</span>`);
                 } else {
-                    headerParts.push(`<span class="log-pid">${entry.pid}</span>`);
+                    parts.push(`<span class="log-pid">${entry.pid}</span>`);
                 }
             }
             
-            // 日志级别
-            headerParts.push(`<span class="log-level log-level-${entry.level}">${entry.level}/${this.escapeHtml(entry.tag)}</span>`);
+            // 日志级别/标签
+            parts.push(`<span class="log-level log-level-${entry.level}">${entry.level}/${this.escapeHtml(entry.tag)}</span>`);
             
             // Package（如果有）
             if (entry.package) {
-                headerParts.push(`<span class="log-package">${this.escapeHtml(entry.package)}</span>`);
+                parts.push(`<span class="log-package">${this.escapeHtml(entry.package)}</span>`);
             }
             
-            // 构建完整的格式化内容
-            formatted = `<div class="log-header">${headerParts.join(' ')}</div>`;
-            
-            // 消息内容 - 处理多行
+            // 消息内容 - 在同一行显示，但处理多行内容
             if (entry.message) {
-                // 保留换行、空格和缩进
-                const messageHtml = this.escapeHtml(entry.message)
-                    .replace(/\n/g, '<br>')
-                    .replace(/ {2,}/g, (spaces) => '&nbsp;'.repeat(spaces.length)); // 保留多个空格
-                formatted += `<div class="log-message">${messageHtml}</div>`;
+                // 将多行消息合并为单行，用空格分隔多行内容，保持日志的连续性
+                const messageText = entry.message
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line)
+                    .join(' ');
+                    
+                parts.push(`<span class="log-message">${this.escapeHtml(messageText)}</span>`);
             }
+            
+            formatted = parts.join(' ');
         } else {
-            // 如果解析失败，至少转义HTML并保留换行
-            formatted = this.escapeHtml(entry.raw)
-                .replace(/\n/g, '<br>')
-                .replace(/ {2,}/g, (spaces) => '&nbsp;'.repeat(spaces.length));
+            // 如果解析失败，至少转义HTML
+            // 将多行合并为单行，用空格分隔保持连续性
+            const rawText = entry.raw
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line)
+                .join(' ');
+            formatted = this.escapeHtml(rawText);
         }
         
         // 高亮搜索关键词
