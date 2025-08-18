@@ -334,16 +334,32 @@ class LogManager {
     async refreshDeviceList() {
         try {
             const { ipcRenderer } = getGlobals();
-            const devices = await ipcRenderer.invoke('get-connected-devices');
+            const result = await ipcRenderer.invoke('get-connected-devices');
             const deviceSelect = document.getElementById('logDeviceSelect');
             
             if (deviceSelect) {
                 deviceSelect.innerHTML = '<option value="">Select a device</option>';
                 
+                // 检查返回结果格式
+                let devices = [];
+                if (result && result.success && Array.isArray(result.devices)) {
+                    devices = result.devices;
+                } else if (Array.isArray(result)) {
+                    devices = result;
+                } else {
+                    console.warn('Unexpected device list format:', result);
+                    return;
+                }
+                
                 // 尝试获取用户保存的设备配置
                 let savedDevices = [];
                 try {
-                    savedDevices = await ipcRenderer.invoke('get-saved-devices') || [];
+                    const savedResult = await ipcRenderer.invoke('get-saved-devices');
+                    if (savedResult && savedResult.success && Array.isArray(savedResult.devices)) {
+                        savedDevices = savedResult.devices;
+                    } else if (Array.isArray(savedResult)) {
+                        savedDevices = savedResult;
+                    }
                 } catch (e) {
                     console.log('无法获取保存的设备配置，使用默认显示方式');
                     savedDevices = [];
