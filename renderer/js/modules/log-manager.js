@@ -330,7 +330,7 @@ class LogManager {
         this.applyFilters();
     }
 
-    // 刷新设备列表
+    // 刷新设备列表 - 优先显示用户保存的设备配置名称
     async refreshDeviceList() {
         try {
             const { ipcRenderer } = getGlobals();
@@ -339,10 +339,36 @@ class LogManager {
             
             if (deviceSelect) {
                 deviceSelect.innerHTML = '<option value="">Select a device</option>';
+                
+                // 尝试获取用户保存的设备配置
+                let savedDevices = [];
+                try {
+                    savedDevices = await ipcRenderer.invoke('get-saved-devices') || [];
+                } catch (e) {
+                    console.log('无法获取保存的设备配置，使用默认显示方式');
+                    savedDevices = [];
+                }
+                
                 devices.forEach(device => {
                     const option = document.createElement('option');
                     option.value = device.id;
-                    option.textContent = `${device.model || 'Unknown'} (${device.id})`;
+                    
+                    // 简化的设备匹配逻辑
+                    let displayName = device.model || 'Unknown Device';
+                    let foundSavedDevice = false;
+                    
+                    // 查找匹配的保存配置
+                    for (const saved of savedDevices) {
+                        // 直接匹配设备ID，或者匹配IP地址（无线设备）
+                        if (saved.deviceId === device.id || 
+                            (saved.ipAddress && device.id.includes(saved.ipAddress))) {
+                            displayName = saved.deviceName;
+                            foundSavedDevice = true;
+                            break;
+                        }
+                    }
+                    
+                    option.textContent = `${displayName} (${device.id})`;
                     deviceSelect.appendChild(option);
                 });
             }
@@ -941,54 +967,39 @@ class LogManager {
         }
     }
 
-    // 格式化日志行显示
+    // 格式化日志行显示 - 标准adb logcat格式
     formatLogLine(entry) {
-        // 基础格式
+        // 严格按照adb logcat格式：MM-DD HH:MM:SS.mmm  PID  TID L TAG: MESSAGE
         let formatted = '';
         
-        // 高亮显示关键部分
-        if (entry.level && entry.tag) {
-            // 构建格式化的日志行 - 所有内容在一行
-            const parts = [];
+        if (entry.level && entry.tag && entry.date && entry.time) {
+            // 标准logcat格式的各个部分
+            const timestamp = `${entry.date} ${entry.time}`;
+            const pid = entry.pid || '';
+            const tid = entry.tid || entry.pid || '';
+            const level = entry.level;
+            const tag = entry.tag;
             
-            // 时间戳
-            if (entry.date && entry.time) {
-                parts.push(`<span class="log-timestamp">${entry.date} ${entry.time}</span>`);
-            }
-            
-            // PID:TID（使用冒号分隔，与logcat格式一致）
-            if (entry.pid) {
-                if (entry.tid && entry.tid !== entry.pid) {
-                    parts.push(`<span class="log-pid">${entry.pid}:${entry.tid}</span>`);
-                } else {
-                    parts.push(`<span class="log-pid">${entry.pid}</span>`);
-                }
-            }
-            
-            // 日志级别/标签
-            parts.push(`<span class="log-level log-level-${entry.level}">${entry.level}/${this.escapeHtml(entry.tag)}</span>`);
-            
-            // Package（如果有）
-            if (entry.package) {
-                parts.push(`<span class="log-package">${this.escapeHtml(entry.package)}</span>`);
-            }
-            
-            // 消息内容 - 在同一行显示，但处理多行内容
+            // 消息内容处理
+            let message = '';
             if (entry.message) {
-                // 将多行消息合并为单行，用空格分隔多行内容，保持日志的连续性
-                const messageText = entry.message
+                // 将多行消息合并为单行，保持原始内容
+                message = entry.message
                     .split('\n')
                     .map(line => line.trim())
                     .filter(line => line)
                     .join(' ');
-                    
-                parts.push(`<span class="log-message">${this.escapeHtml(messageText)}</span>`);
             }
             
-            formatted = parts.join(' ');
+            // 构建固定宽度的格式化字符串
+            formatted = `<span class="log-timestamp">${this.padRight(timestamp, 18)}</span>` +
+                       `<span class="log-pid">${this.padLeft(pid, 5)}</span>` +
+                       `<span class="log-tid">${this.padLeft(tid, 5)}</span>` +
+                       ` <span class="log-level log-level-${level}">${level}</span>` +
+                       ` <span class="log-tag">${this.padRight(tag, 25)}</span>` +
+                       `: <span class="log-message">${this.escapeHtml(message)}</span>`;
         } else {
-            // 如果解析失败，至少转义HTML
-            // 将多行合并为单行，用空格分隔保持连续性
+            // 如果解析失败，显示原始内容
             const rawText = entry.raw
                 .split('\n')
                 .map(line => line.trim())
@@ -1007,6 +1018,24 @@ class LogManager {
         }
         
         return formatted;
+    }
+
+    // 辅助函数：右填充字符串到指定长度
+    padRight(str, length) {
+        str = str.toString();
+        while (str.length < length) {
+            str += ' ';
+        }
+        return str.substring(0, length);
+    }
+
+    // 辅助函数：左填充字符串到指定长度
+    padLeft(str, length) {
+        str = str.toString();
+        while (str.length < length) {
+            str = ' ' + str;
+        }
+        return str.substring(0, length);
     }
 
     // 清理显示内容（Windows平台）

@@ -4513,39 +4513,6 @@ body {
 
 /* Log Page Styles */
 
-/* Windows平台日志颜色 - 增强版 */
-.platform-win32 .log-entry .log-level-V,
-.platform-win32 .log-entry .log-level-verbose {
-    color: #808080 !important;
-}
-
-.platform-win32 .log-entry .log-level-D,
-.platform-win32 .log-entry .log-level-debug {
-    color: #0000FF !important;
-}
-
-.platform-win32 .log-entry .log-level-I,
-.platform-win32 .log-entry .log-level-info {
-    color: #008000 !important;
-}
-
-.platform-win32 .log-entry .log-level-W,
-.platform-win32 .log-entry .log-level-warn {
-    color: #FFA500 !important;
-    font-weight: 500;
-}
-
-.platform-win32 .log-entry .log-level-E,
-.platform-win32 .log-entry .log-level-error {
-    color: #FF0000 !important;
-    font-weight: bold;
-}
-
-.platform-win32 .log-entry .log-level-A,
-.platform-win32 .log-entry .log-level-assert {
-    color: #FF00FF !important;
-    font-weight: bold;
-}
 
 /* Windows平台日志条目基础样式 */
 .platform-win32 .log-entry {
@@ -4556,52 +4523,8 @@ body {
     white-space: nowrap !important;
 }
 
-.platform-win32 .log-timestamp {
-    color: #666 !important;
-    margin-right: 8px;
-}
 
-.platform-win32 .log-pid,
-.platform-win32 .log-tid {
-    color: #999 !important;
-    margin-right: 4px;
-    font-size: 11px;
-}
 
-.platform-win32 .log-tag {
-    color: #0066CC !important;
-    font-weight: 500;
-    margin-right: 8px;
-}
-
-.platform-win32 .log-message {
-    color: #333 !important;
-}
-
-.platform-win32 .log-package {
-    color: #9C27B0 !important;
-    margin-right: 8px;
-    font-size: 11px;
-}
-
-/* Windows暗色主题支持 */
-@media (prefers-color-scheme: dark) {
-    .platform-win32 .log-message {
-        color: #E0E0E0 !important;
-    }
-    
-    .platform-win32 .log-timestamp {
-        color: #999 !important;
-    }
-    
-    .platform-win32 .log-tag {
-        color: #4FC3F7 !important;
-    }
-    
-    .platform-win32 .log-package {
-        color: #BA68C8 !important;
-    }
-}
 
 /* Logcat Controls - 改进的Android Studio风格 */
 .logcat-controls {
@@ -4766,13 +4689,14 @@ body {
 .log-entry {
     color: var(--text-primary);
     margin: 0;
-    padding: 4px 8px;
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    padding: 2px 8px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 1.3;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     transition: background-color 0.1s ease;
-    white-space: nowrap;
+    white-space: pre;
+    font-variant-numeric: tabular-nums;
 }
 
 .log-header {
@@ -4789,39 +4713,46 @@ body {
     border-radius: 3px;
 }
 
-/* Logcat级别颜色 - Android Studio风格 */
-.log-level-V, .log-level-verbose { color: #999; }
-.log-level-D, .log-level-debug { color: #3498db; }
-.log-level-I, .log-level-info { color: #27ae60; }
-.log-level-W, .log-level-warn { color: #f39c12; }
-.log-level-E, .log-level-error { color: #e74c3c; }
-.log-level-A, .log-level-assert { color: #9b59b6; }
+/* 统一的日志级别颜色方案 - 优化的配色 */
+.log-level-V, .log-level-verbose { 
+    color: #8e8e93; 
+    font-weight: normal;
+}
+.log-level-D, .log-level-debug { 
+    color: #007aff; 
+    font-weight: normal;
+}
+.log-level-I, .log-level-info { 
+    color: #34c759; 
+    font-weight: 500;
+}
+.log-level-W, .log-level-warn { 
+    color: #ff9500; 
+    font-weight: 600;
+}
+.log-level-E, .log-level-error { 
+    color: #ff3b30; 
+    font-weight: bold;
+}
+.log-level-A, .log-level-assert { 
+    color: #af52de; 
+    font-weight: bold;
+}
 
 .log-timestamp {
-    color: var(--text-muted);
-    margin-right: 12px;
-    font-size: 11px;
-    min-width: 140px;
-    width: 140px;
-    flex-shrink: 0; /* 防止被压缩 */
+    color: #8e8e93;
 }
 
 .log-pid {
-    color: var(--text-secondary);
-    margin-right: 12px;
-    min-width: 60px;
-    width: 60px;
-    font-size: 11px;
-    flex-shrink: 0;
+    color: #a0a0a8;
+}
+
+.log-tid {
+    color: #a0a0a8;
 }
 
 .log-level {
     font-weight: 600;
-    margin-right: 12px;
-    min-width: 25px;
-    width: 25px;
-    text-align: center;
-    flex-shrink: 0;
 }
 
 .log-level-verbose {
@@ -4862,25 +4793,12 @@ body {
 }
 
 .log-tag {
-    color: var(--primary-color);
-    margin-right: 12px;
-    min-width: 120px;
-    width: 120px;
-    font-size: 11px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-shrink: 0;
+    color: #5856d6;
+    font-weight: 500;
 }
 
 .log-message {
-    flex: 1;
-    white-space: nowrap; /* 不换行 */
-    overflow: hidden;
-    text-overflow: ellipsis; /* 超长显示省略号 */
-    min-width: 0; /* 允许flex正常工作 */
     color: var(--text-primary);
-    opacity: 0.9;
 }
 
 /* Log entry level colors */
