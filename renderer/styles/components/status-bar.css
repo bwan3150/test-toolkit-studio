@@ -1,0 +1,566 @@
+/* Status Bar - 类似VSCode的底部状态栏 */
+.status-bar {
+    height: 22px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 0 8px;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+    position: relative;
+    z-index: 100;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.status-left,
+.status-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 0 6px;
+    height: 20px;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.status-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* 项目路径特殊样式 */
+#currentProjectStatus {
+    user-select: none;
+}
+
+#currentProjectStatus:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+#currentProjectStatus:active {
+    background: var(--bg-active);
+    color: white;
+}
+
+.status-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+}
+
+#currentProjectPath {
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Editor Mode Toolbar */
+.editor-mode-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.editor-mode-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.mode-switcher {
+    display: flex;
+    gap: 8px;
+}
+
+.mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mode-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.mode-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}
+
+.mode-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.mode-hint {
+    font-size: 11px;
+    color: var(--text-disabled);
+}
+
+.block-editor-wrapper {
+    flex: 1;
+    overflow: hidden;
+}
+
+.editor-status-indicator.block-mode {
+    background: var(--accent-info);
+    color: white;
+}
+
+/* 设备连接向导样式 */
+.device-connection-guide {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.guide-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.guide-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 18px;
+}
+
+.connection-methods {
+    margin-top: 16px;
+}
+
+.method-selector {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.method-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex: 1;
+    justify-content: center;
+}
+
+.method-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.method-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}
+
+.method-icon {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.method-content {
+    display: none;
+}
+
+.method-content.active {
+    display: block;
+}
+
+.tutorial-section {
+    margin-bottom: 24px;
+}
+
+.tutorial-section h4 {
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+    font-size: 16px;
+}
+
+.tutorial-steps {
+    margin-left: 0;
+}
+
+.step {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    align-items: flex-start;
+}
+
+.step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.step-content {
+    flex: 1;
+}
+
+.step-content h5 {
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.step-content p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.pairing-options {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+
+
+.qr-note {
+    background: var(--bg-warning);
+    border: 1px solid var(--border-warning);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 16px;
+}
+
+.connection-help {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-info);
+    border: 1px solid var(--border-info);
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.connection-help svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+    opacity: 0.7;
+}
+
+.connection-help .help-content {
+    flex: 1;
+}
+
+.connection-help strong {
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 4px;
+}
+
+.connection-help p {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* 添加accent按钮样式 */
+.btn-accent {
+    background: var(--accent-success);
+    color: white;
+    border: 1px solid var(--accent-success);
+}
+
+.btn-accent:hover {
+    background: var(--accent-success-hover);
+    border-color: var(--accent-success-hover);
+}
+
+/* QR码配对样式保留但简化 */
+.qr-pairing-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 12px;
+}
+
+.qr-container {
+    display: flex;
+    gap: 24px;
+}
+
+.qr-help {
+    flex: 1;
+    max-width: 400px;
+}
+
+.help-steps h4 {
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.help-steps ol {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.help-steps li {
+    margin-bottom: 8px;
+}
+
+.alternative-method {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    border-left: 3px solid var(--accent-info);
+}
+
+.alternative-method h4 {
+    margin: 0 0 8px 0;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.alternative-method p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.qr-generation {
+    flex: 1;
+    max-width: 400px;
+}
+
+.qr-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.qr-timer {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.timer-text {
+    color: var(--text-info);
+}
+
+
+.qr-placeholder {
+    color: var(--text-disabled);
+    text-align: center;
+}
+
+.qr-placeholder .qr-icon {
+    opacity: 0.3;
+    margin-bottom: 12px;
+}
+
+.qr-placeholder p {
+    margin: 0;
+    font-size: 14px;
+}
+
+#qrCanvas {
+    max-width: 100%;
+    height: auto;
+}
+
+.qr-info {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.info-item label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.info-item span {
+    color: var(--text-primary);
+    font-family: monospace;
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.highlight-code {
+    background: var(--accent-primary) !important;
+    color: white !important;
+    font-weight: bold;
+}
+
+.manual-pairing-tip {
+    margin-top: 12px;
+    padding: 10px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    border-left: 3px solid var(--accent-warning);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+#toggleQrSectionBtn {
+    margin-left: auto;
+}
+
+#toggleQrSectionBtn .btn-icon {
+    transition: transform 0.3s ease;
+}
+
+#toggleQrSectionBtn.expanded .btn-icon {
+    transform: rotate(180deg);
+}
+
+/* 小屏幕适配 */
+@media (max-width: 768px) {
+    .qr-container {
+        flex-direction: column;
+    }
+    
+    .qr-help {
+        max-width: none;
+    }
+    
+    .qr-generation {
+        max-width: none;
+    }
+}
+
+
+/* 编辑器状态指示器样式 */
+.editor-status-item {
+    margin-left: auto;
+    margin-right: 8px;
+}
+
+.editor-status-indicator {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    color: white;
+    user-select: none;
+}
+
+.editor-status-indicator.normal {
+    background: #6b7280;
+    color: white;
+}
+
+/* 编辑器模式状态栏样式 */
+.status-bar {
+    transition: background-color 0.3s ease;
+}
+
+/* 文本编辑模式 - 蓝色调 */
+.status-bar.status-bar-text-mode {
+    background: linear-gradient(90deg, #252526 0%, #1e3a5f 50%, #1e3a5f 100%);
+}
+
+/* 运行中模式 - 橙色调 */
+.status-bar.status-bar-running {
+    background: linear-gradient(90deg, #252526 0%, #4a3319 50%, #4a3319 100%);
+    animation: statusPulse 2s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.95;
+    }
+}
+
+/* 编辑器模式文字样式 */
+.editor-mode-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+    padding: 0 12px;
+    user-select: none;
+}
+
+/* 确保状态栏内容在渐变背景上清晰可见 */
+.status-bar.status-bar-text-mode .status-item,
+.status-bar.status-bar-running .status-item {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.status-bar.status-bar-text-mode .status-icon,
+.status-bar.status-bar-running .status-icon {
+    opacity: 0.85;
+}

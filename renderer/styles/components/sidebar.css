@@ -1,0 +1,146 @@
+/* Sidebar Navigation */
+.sidebar {
+    width: 60px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s;
+    z-index: 100;
+    position: relative;
+    height: 100%;
+    -webkit-app-region: no-drag; /* Ensure sidebar is interactive */
+}
+
+.sidebar:hover {
+    width: 200px;
+}
+
+.sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    height: 60px;
+}
+
+.logo-small {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    display: block;
+    transition: opacity 0.3s;
+}
+
+.logo-large {
+    width: 50px;
+    height: 50px;
+    object-fit: contain;
+    position: absolute;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.sidebar:hover .logo-small {
+    opacity: 0;
+}
+
+.sidebar:hover .logo-large {
+    opacity: 1;
+}
+
+.nav-items {
+    flex: 1;
+    padding: 8px 0;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.nav-item:hover {
+    background: var(--bg-hover);
+}
+
+.nav-item.active {
+    background: var(--bg-active);
+    color: white;
+}
+
+.nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-primary);
+}
+
+.nav-icon {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    fill: currentColor;
+}
+
+.nav-label {
+    margin-left: 16px;
+    font-size: 13px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.sidebar:hover .nav-label {
+    opacity: 1;
+}
+
+.sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0; /* 允许文本收缩 */
+}
+
+.user-avatar {
+    width: 28px;
+    height: 28px;
+    min-width: 28px; /* 确保头像宽度不被压缩 */
+    background: var(--accent-primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0; /* 防止头像在flex容器中被压缩 */
+}
+
+.user-name {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.sidebar:hover .user-name {
+    opacity: 1;
+}
+

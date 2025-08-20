@@ -1,0 +1,172 @@
+/* YAML语法高亮样式 */
+.yaml-key {
+    color: #569cd6; /* 蓝色 - 键名 */
+}
+
+.yaml-string {
+    color: #ce9178; /* 橙色 - 字符串值 */
+}
+
+.yaml-number {
+    color: #b5cea8; /* 绿色 - 数字 */
+}
+
+.yaml-boolean {
+    color: #569cd6; /* 蓝色 - 布尔值 */
+}
+
+.yaml-comment {
+    color: #6a9955; /* 深绿色 - 注释 */
+    font-style: italic;
+}
+
+.yaml-null {
+    color: #569cd6; /* 蓝色 - null值 */
+}
+
+.yaml-dash {
+    color: #dcdcaa; /* 黄色 - 数组标识符 */
+    font-weight: bold;
+}
+
+/* 低代码语法高亮样式 */
+.lowcode-action {
+    color: #ff6b6b; /* 红色 - 中文动作关键词(点击、滑动等) */
+    font-weight: bold;
+}
+
+.lowcode-action-en {
+    color: #ff8787; /* 浅红色 - 英文动作关键词(click、swipe等) */
+    font-weight: bold;
+}
+
+.lowcode-param-type {
+    color: #4ecdc4; /* 青色 - 参数类型(元素、坐标等) */
+    font-weight: 500;
+}
+
+.lowcode-direction {
+    color: #ffe66d; /* 黄色 - 方向(上下左右) */
+    font-weight: bold;
+}
+
+.lowcode-coordinate {
+    color: #a8e6cf; /* 浅绿色 - 坐标数字 */
+    font-weight: bold;
+}
+
+.lowcode-number {
+    color: #b5cea8; /* 绿色 - 数字 */
+}
+
+.lowcode-unit {
+    color: #c586c0; /* 紫色 - 单位(秒、像素等) */
+    font-style: italic;
+}
+
+.lowcode-bracket {
+    color: #da70d6; /* 粉红色 - 中括号 */
+    font-weight: bold;
+}
+
+.lowcode-params {
+    color: #f0e68c; /* 淡黄色 - 参数列表内容 */
+}
+
+.lowcode-string {
+    color: #ce9178; /* 橙色 - 字符串 */
+}
+
+.lowcode-boolean {
+    color: #569cd6; /* 蓝色 - 布尔值 */
+}
+
+.lowcode-null {
+    color: #808080; /* 灰色 - null值 */
+    font-style: italic;
+}
+
+.lowcode-comment {
+    color: #6a9955; /* 深绿色 - 注释 */
+    font-style: italic;
+}
+
+.lowcode-punctuation {
+    color: #d4d4d4; /* 浅灰色 - 标点符号 */
+}
+
+.yaml-key-custom {
+    color: #9cdcfe; /* 浅蓝色 - 自定义键名 */
+}
+
+.yaml-punctuation {
+    color: #d4d4d4; /* 浅灰色 - YAML标点 */
+}
+
+/* 新的语法高亮样式 */
+.syntax-comment {
+    color: #6a9955;
+    font-style: italic;
+}
+
+.syntax-key {
+    color: #569cd6;
+    font-weight: 500;
+}
+
+.syntax-punctuation {
+    color: #d4d4d4;
+}
+
+.syntax-dash {
+    color: #dcdcaa;
+    font-weight: bold;
+}
+
+.syntax-action {
+    color: #ff6b6b;
+    font-weight: bold;
+}
+
+.syntax-action-en {
+    color: #ff8787;
+    font-weight: bold;
+}
+
+.syntax-coordinate {
+    color: #a8e6cf;
+    font-weight: bold;
+}
+
+.syntax-number {
+    color: #b5cea8;
+}
+
+.syntax-unit {
+    color: #c586c0;
+    font-style: italic;
+}
+
+.syntax-assertion {
+    color: #ffa500;
+    font-weight: bold;
+}
+
+.syntax-package {
+    color: #87ceeb;
+    font-family: monospace;
+}
+
+.syntax-string {
+    color: #ce9178;
+}
+
+.syntax-boolean {
+    color: #569cd6;
+}
+
+.syntax-direction {
+    color: #ffaa00;
+    font-weight: bold;
+}
+

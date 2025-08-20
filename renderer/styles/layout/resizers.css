@@ -1,0 +1,100 @@
+/* Resizers */
+.vertical-resizer {
+    width: 4px;
+    background: var(--border-color);
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.vertical-resizer:hover {
+    background: var(--accent-primary);
+}
+
+.vertical-resizer.dragging {
+    background: var(--accent-primary);
+}
+
+/* Explorer 水平拖拽条 */
+.explorer-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--border-color);
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    z-index: 10;
+}
+.explorer-resizer:hover {
+    background: var(--accent-primary);
+}
+.explorer-resizer.dragging {
+    background: var(--accent-primary);
+}
+
+/* Bottom Panel 垂直拖拽条 */
+.bottom-panel-resizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--border-color);
+    cursor: row-resize;
+    transition: background-color 0.2s;
+    z-index: 10;
+}
+.bottom-panel-resizer:hover {
+    background: var(--accent-primary);
+}
+.bottom-panel-resizer.dragging {
+    background: var(--accent-primary);
+}
+
+
+.run-section {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.console-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--border-color);
+    min-height: 32px; /* Minimum height when collapsed */
+    transition: all 0.3s ease;
+}
+
+.console-container.collapsed {
+    flex: 0 0 auto !important;
+    height: 32px !important; /* Only show header when collapsed */
+    min-height: 32px !important;
+    max-height: 32px !important;
+}
+
+.console-container.collapsed .console-output {
+    display: none !important;
+    flex: 0 0 0 !important;
+    height: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+.console-container.collapsed #toggleConsoleBtn svg {
+    transform: rotate(-90deg);
+}
+
+#toggleConsoleBtn svg {
+    transition: transform 0.3s ease;
+}
+
+.console-header {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;

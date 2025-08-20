@@ -1,0 +1,450 @@
+/* Log Page Styles */
+
+
+/* Windows平台日志条目基础样式 */
+.platform-win32 .log-entry {
+    font-family: 'Consolas', 'Courier New', monospace !important;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 2px 8px;
+    white-space: nowrap !important;
+}
+
+
+
+
+/* Logcat Controls - 改进的Android Studio风格 */
+.logcat-controls {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.logcat-controls label {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.logcat-controls .control-input,
+.logcat-controls .control-select {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    transition: all 0.2s ease;
+}
+
+.logcat-controls .control-input:focus,
+.logcat-controls .control-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    outline: none;
+}
+
+/* 模式切换开关样式 */
+.filter-mode-toggle {
+    display: flex;
+    gap: 12px;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.mode-option:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.mode-option input[type="radio"] {
+    margin: 0;
+}
+
+.mode-option span {
+    color: #ccc;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.mode-option input[type="radio"]:checked + span {
+    color: #0078d4;
+    font-weight: 600;
+}
+
+.control-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.control-row:last-child {
+    margin-bottom: 0;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-group label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.control-select {
+    min-width: 150px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.control-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.filter-input-group {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 200px;
+}
+
+.control-input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.control-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* 移除了旧的filter-help样式，现在使用独立的输入框 */
+
+.log-viewer {
+    flex: 1;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.log-container {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    position: relative;
+    transition: all 0.2s ease;
+    white-space: nowrap; /* 防止换行 */
+}
+
+.log-entry {
+    color: var(--text-primary);
+    margin: 0;
+    padding: 2px 8px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    transition: background-color 0.1s ease;
+    white-space: pre;
+    font-variant-numeric: tabular-nums;
+}
+
+.log-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-entry:hover {
+    background: var(--hover-bg);
+    border-radius: 3px;
+}
+
+/* 统一的日志级别颜色方案 - 优化的配色 */
+.log-level-V, .log-level-verbose { 
+    color: #8e8e93; 
+    font-weight: normal;
+}
+.log-level-D, .log-level-debug { 
+    color: #007aff; 
+    font-weight: normal;
+}
+.log-level-I, .log-level-info { 
+    color: #34c759; 
+    font-weight: 500;
+}
+.log-level-W, .log-level-warn { 
+    color: #ff9500; 
+    font-weight: 600;
+}
+.log-level-E, .log-level-error { 
+    color: #ff3b30; 
+    font-weight: bold;
+}
+.log-level-A, .log-level-assert { 
+    color: #af52de; 
+    font-weight: bold;
+}
+
+.log-timestamp {
+    color: #8e8e93;
+}
+
+.log-pid {
+    color: #a0a0a8;
+}
+
+.log-tid {
+    color: #a0a0a8;
+}
+
+.log-level {
+    font-weight: 600;
+}
+
+.log-level-verbose {
+    color: #666;
+}
+
+.log-level-debug {
+    color: #2196F3;
+}
+
+.log-level-info {
+    color: #4CAF50;
+}
+
+.log-level-warn {
+    color: #FF9800;
+}
+
+.log-level-error {
+    color: #F44336;
+}
+
+.log-level-assert {
+    color: #9C27B0;
+}
+
+.log-package {
+    color: var(--text-secondary);
+    margin-right: 12px;
+    min-width: 150px;
+    width: 150px;
+    font-size: 11px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.log-tag {
+    color: #5856d6;
+    font-weight: 500;
+}
+
+.log-message {
+    color: var(--text-primary);
+}
+
+/* Log entry level colors */
+.log-verbose {
+    opacity: 0.8;
+}
+
+.log-debug {
+    color: #2196F3;
+}
+
+.log-info {
+    color: inherit;
+}
+
+.log-warn {
+    background: rgba(255, 152, 0, 0.05);
+}
+
+.log-error {
+    background: rgba(244, 67, 54, 0.05);
+}
+
+.log-assert {
+    background: rgba(156, 39, 176, 0.05);
+}
+
+/* Loading状态样式 */
+.log-container.loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.log-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: 4px;
+}
+
+.log-loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.log-loading-text {
+    margin-left: 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* 输入框loading状态 */
+.control-input.filtering {
+    background: linear-gradient(90deg, var(--bg-primary) 0%, rgba(52, 152, 219, 0.1) 50%, var(--bg-primary) 100%);
+    background-size: 200% 100%;
+    animation: loading-gradient 1.5s ease-in-out infinite;
+    border-color: var(--primary-color);
+}
+
+@keyframes loading-gradient {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* 改进的按钮样式 */
+.btn {
+    transition: all 0.2s ease;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2980b9;
+}
+
+.btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background: var(--hover-bg);
+}
+
+/* 工具提示样式 */
+.tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 12px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    margin-left: -100px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Button states */
+#followLogBtn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-danger {
+    background: #F44336;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #d32f2f;
+}
+

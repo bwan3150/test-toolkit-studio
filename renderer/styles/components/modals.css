@@ -1,0 +1,104 @@
+/* 基础Modal样式 */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none; /* 默认隐藏 */
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+/* 当modal显示时 */
+.modal[style*="display: block"],
+.modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    min-width: 300px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-primary);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+/* APK安装Loading Modal样式 */
+.apk-loading-modal {
+    max-width: 400px;
+    text-align: center;
+}
+
+.apk-loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 20px;
+}
+
+.apk-loading-content h3 {
+    color: var(--text-primary);
+    font-size: 18px;
+    margin: 0;
+    font-weight: 500;
+}
+
+.apk-loading-content p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0;
+}
+
+#apkLoadingDetails {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    min-width: 200px;
+}
+
+#apkLoadingDetails p {
+    margin: 0;
+    font-size: 13px;
+}
+
+#apkPackageName {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    color: var(--primary-color);
+    font-weight: 500;
+}
+

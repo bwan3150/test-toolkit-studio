@@ -407,6 +407,14 @@ async function displayTestCasesTable(records) {
     // 获取所有列标题
     const headers = Object.keys(records[0]);
     
+    // 创建表格容器
+    const tableContainer = document.createElement('div');
+    tableContainer.className = 'testcase-table-container';
+    
+    // 创建滚动容器
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'testcase-scroll-container';
+    
     // 创建表格
     const table = document.createElement('table');
     table.className = 'testcase-table';
@@ -419,6 +427,7 @@ async function displayTestCasesTable(records) {
         th.textContent = header;
         headerRow.appendChild(th);
     });
+    
     thead.appendChild(headerRow);
     table.appendChild(thead);
     
@@ -441,40 +450,6 @@ async function displayTestCasesTable(records) {
             row.appendChild(td);
         });
         
-        // 创建浮动操作按钮
-        const actionBtn = document.createElement('button');
-        actionBtn.className = 'floating-action-btn';
-        
-        if (existingCases[index]) {
-            // Case已存在，显示"已创建"状态，但仍可点击跳转到Testcase页面
-            actionBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
-                <span>Already Exist</span>
-            `;
-            actionBtn.style.opacity = '0.8'; // 稍微透明但仍可点击
-            actionBtn.style.cursor = 'pointer';
-            actionBtn.onclick = (e) => {
-                e.stopPropagation();
-                navigateToTestcase(record, index);
-            };
-        } else {
-            // Case未存在，显示"创建"按钮
-            actionBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                    <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-                <span>Create Case</span>
-            `;
-            actionBtn.onclick = (e) => {
-                e.stopPropagation();
-                createTestCase(record, index);
-            };
-        }
-        
-        row.appendChild(actionBtn);
-        
         // 为已存在的case添加整行点击功能
         if (existingCases[index]) {
             row.style.cursor = 'pointer';
@@ -496,10 +471,123 @@ async function displayTestCasesTable(records) {
     });
     
     table.appendChild(tbody);
+    scrollContainer.appendChild(table);
     
-    // 清除现有内容并添加表格
+    // 创建浮动按钮容器 - 相对于滚动容器定位
+    const floatingContainer = document.createElement('div');
+    floatingContainer.className = 'table-floating-buttons';
+    
+    // 为每一行创建浮动按钮
+    records.forEach((record, index) => {
+        const btnWrapper = document.createElement('div');
+        btnWrapper.className = 'floating-btn-wrapper';
+        btnWrapper.dataset.rowIndex = index;
+        
+        const floatingBtn = document.createElement('button');
+        floatingBtn.className = 'table-action-btn';
+        
+        if (existingCases[index]) {
+            // Case已存在
+            floatingBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                </svg>
+                <span>Open</span>
+            `;
+            floatingBtn.className += ' btn-exists';
+            floatingBtn.onclick = (e) => {
+                e.stopPropagation();
+                navigateToTestcase(record, index);
+            };
+        } else {
+            // Case未存在
+            floatingBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                    <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+                <span>Create</span>
+            `;
+            floatingBtn.className += ' btn-create';
+            floatingBtn.onclick = (e) => {
+                e.stopPropagation();
+                createTestCase(record, index);
+            };
+        }
+        
+        btnWrapper.appendChild(floatingBtn);
+        floatingContainer.appendChild(btnWrapper);
+    });
+    
+    // 将浮动容器添加到表格容器（外层），不跟随左右滚动
+    tableContainer.appendChild(scrollContainer);
+    tableContainer.appendChild(floatingContainer);
+    
+    // 清除现有内容并添加表格容器
     testcaseList.innerHTML = '';
-    testcaseList.appendChild(table);
+    testcaseList.appendChild(tableContainer);
+    
+    // 设置浮动按钮位置同步
+    setupTableButtonsSync(scrollContainer, table, floatingContainer);
+}
+
+// 设置表格浮动按钮位置同步
+function setupTableButtonsSync(scrollContainer, table, floatingContainer) {
+    const tbody = table.querySelector('tbody');
+    const btnWrappers = floatingContainer.querySelectorAll('.floating-btn-wrapper');
+    const tableContainer = scrollContainer.parentElement; // 表格外层容器
+    
+    function updateButtonPositions() {
+        const rows = tbody.querySelectorAll('tr');
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const tableContainerRect = tableContainer.getBoundingClientRect();
+        const thead = table.querySelector('thead');
+        const theadRect = thead ? thead.getBoundingClientRect() : null;
+        
+        rows.forEach((row, index) => {
+            const btnWrapper = btnWrappers[index];
+            if (!btnWrapper) return;
+            
+            const rowRect = row.getBoundingClientRect();
+            const rowHeight = rowRect.height;
+            
+            // 检查行是否在滚动容器的可视区域内
+            const relativeTop = rowRect.top - containerRect.top;
+            const isInScrollArea = relativeTop > -rowHeight && relativeTop < containerRect.height;
+            
+            // 检查行是否被表头覆盖 - 只要行的下边缘在表头下方就显示
+            let isBelowHeader = true;
+            if (theadRect) {
+                // 只要行的底部超过表头底部就认为可以显示按钮
+                isBelowHeader = rowRect.bottom > theadRect.bottom;
+            }
+            
+            // 只有在滚动区域内且不被表头完全覆盖时才显示按钮
+            if (isInScrollArea && isBelowHeader) {
+                // 计算行相对于表格容器的位置（不考虑水平滚动）
+                const rowTopRelativeToContainer = rowRect.top - tableContainerRect.top;
+                
+                btnWrapper.style.display = 'block';
+                btnWrapper.style.top = `${rowTopRelativeToContainer + rowHeight / 2}px`;
+            } else {
+                btnWrapper.style.display = 'none';
+            }
+        });
+    }
+    
+    // 初始更新
+    setTimeout(updateButtonPositions, 50);
+    
+    // 监听垂直滚动事件
+    scrollContainer.addEventListener('scroll', updateButtonPositions);
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', updateButtonPositions);
+    
+    // 监听表格内容变化
+    const observer = new ResizeObserver(() => {
+        setTimeout(updateButtonPositions, 10);
+    });
+    observer.observe(table);
 }
 
 // 导航到testcase页面（用于已存在的case）

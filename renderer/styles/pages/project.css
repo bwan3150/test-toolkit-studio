@@ -1,0 +1,285 @@
+/* Project Page */
+.project-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+/* Loading State */
+.project-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    flex: 1;
+}
+
+.loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--bg-hover);
+    border-top: 3px solid var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.loading-content h3 {
+    color: var(--text-primary);
+    font-size: 18px;
+    margin: 0;
+}
+
+.loading-content p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0;
+}
+
+/* Project page when no project is loaded */
+.project-welcome {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* When only welcome content is shown, center it */
+.project-welcome:has(#welcomeContent[style*="display: block"]):has(#recentProjects[style*="display: none"]) {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Fallback for browsers that don't support :has() */
+.project-welcome.show-welcome {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.project-info {
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.info-card {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.info-card h3 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
+.project-path {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent-info);
+    background: var(--bg-primary);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+}
+
+.project-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 24px;
+}
+
+.action-card {
+    background: var(--bg-tertiary);
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.action-card h4 {
+    font-size: 14px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.action-card p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.testcase-list {
+    margin-top: 12px;
+    max-height: 400px;
+    overflow: auto;
+}
+
+/* Test case table container */
+.testcase-table-container {
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+}
+
+/* Test case scroll container */
+.testcase-scroll-container {
+    position: relative;
+    overflow: auto;
+    max-height: 400px;
+}
+
+/* Test case table styles */
+.testcase-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    background: var(--bg-primary);
+    min-width: 600px;
+}
+
+.testcase-table thead {
+    background: var(--bg-tertiary);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.testcase-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+    min-width: 120px;
+}
+
+.testcase-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+.testcase-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.testcase-table tbody tr.case-created {
+    opacity: 0.8;
+    background: rgba(78, 201, 176, 0.1);
+}
+
+.testcase-table td {
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 表格浮动按钮容器 - 固定在表格容器右侧 */
+.table-floating-buttons {
+    position: absolute;
+    top: 0;
+    right: 8px;
+    width: 90px;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5; /* 低于表头的z-index: 10 */
+}
+
+/* 浮动按钮包装器 */
+.floating-btn-wrapper {
+    position: absolute;
+    right: 0;
+    transform: translateY(-50%);
+    display: none;
+    pointer-events: auto;
+}
+
+/* 表格操作按钮 */
+.table-action-btn {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 0.2s;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.table-action-btn.btn-create {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.table-action-btn.btn-create:hover {
+    background: #e0950b;
+    transform: scale(1.05);
+}
+
+.table-action-btn.btn-exists {
+    background: var(--accent-success);
+    color: white;
+    opacity: 0.9;
+}
+
+.table-action-btn.btn-exists:hover {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.table-action-btn svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+.welcome-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+}
+
+.welcome-icon {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 24px;
+    opacity: 0.5;
+}
+
+.welcome-screen h3 {
+    font-size: 20px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+

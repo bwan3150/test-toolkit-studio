@@ -1,0 +1,200 @@
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.2);
+}
+
+/* Right Panel */
+.right-panel {
+    width: 320px;
+    min-width: 200px;
+    max-width: 600px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* Resizers */
+.vertical-resizer {
+    width: 4px;
+    background: var(--border-color);
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.vertical-resizer:hover {
+    background: var(--accent-primary);
+}
+
+.vertical-resizer.dragging {
+    background: var(--accent-primary);
+}
+
+/* Explorer 水平拖拽条 */
+.explorer-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--border-color);
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    z-index: 10;
+}
+.explorer-resizer:hover {
+    background: var(--accent-primary);
+}
+.explorer-resizer.dragging {
+--
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.device-list,
+.connected-devices {
+    margin-bottom: 32px;
+}
+
+.device-list h3,
+.connected-devices h3 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
+.device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.device-card {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    position: relative;
+    transition: all 0.2s;
+}
+
+.device-card:hover {
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.device-status {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-disabled);
+}
+
+.device-status.connected {
+    background: var(--accent-success);
+--
+.device-actions .btn {
+    flex: 1;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.device-actions .btn-icon-only {
+    flex: 0 0 auto;
+    width: 32px;
+    padding: 6px;
+}
+
+.connected-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.connected-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+.connected-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.connected-item .device-id {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.connected-item .device-status-text {
+    font-size: 12px;
+    color: var(--accent-success);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 12px;
+}
+
+.connected-item .btn {
+    font-size: 12px;
+    padding: 4px 12px;
+}
+
+/* Settings Page */
+.settings-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.settings-section {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.settings-section h3 {
+    font-size: 16px;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}

@@ -1,0 +1,89 @@
+/* Main application styles */
+body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--bg-primary);
+}
+
+/* Ensure no extra space on macOS */
+.platform-darwin body {
+    position: fixed;
+    width: 100%;
+    top: 0;
+    left: 0;
+}
+
+/* Title bar area - always on top, only for dragging */
+.titlebar-area {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px; /* Adjusted height for macOS */
+    background: transparent;
+    -webkit-app-region: drag;
+    z-index: 10000;
+    pointer-events: none; /* Allow clicks to pass through to content */
+}
+
+/* Enable dragging only in the drag region */
+.titlebar-area {
+    pointer-events: auto;
+}
+
+/* Exclude sidebar area from dragging */
+.titlebar-area::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80px; /* Adjusted to cover collapsed sidebar */
+    height: 100%;
+    -webkit-app-region: no-drag;
+}
+
+/* Hide title bar area on all platforms except when needed for dragging */
+.platform-win32 .titlebar-area,
+.platform-linux .titlebar-area {
+    display: none;
+}
+
+/* On macOS, keep titlebar for dragging but make it smaller */
+.platform-darwin .titlebar-area {
+    height: 28px;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+    background-color: var(--bg-primary);
+}
+
+.app-main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+/* macOS specific adjustments */
+.platform-darwin .app-container {
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    box-sizing: border-box;
+}
+
+/* Remove any extra top spacing on macOS page headers */
+.platform-darwin .page-header {
+    margin-top: 0;
+}
+
