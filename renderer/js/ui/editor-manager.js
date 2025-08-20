@@ -6,6 +6,7 @@ class EditorManager {
         this.activeTabId = null;
         this.tabsContainer = null;
         this.editorContainer = null;
+        this.globalEditMode = 'block'; // 全局编辑模式，所有 tab 共享
         this.init();
     }
     
@@ -18,7 +19,36 @@ class EditorManager {
             return;
         }
         
+        // 设置全局快捷键监听器
+        this.setupGlobalKeyboardShortcuts();
+        
         console.log('编辑器管理器初始化完成');
+    }
+    
+    setupGlobalKeyboardShortcuts() {
+        // 全局监听 Cmd/Ctrl + / 用于切换模式
+        this.globalModeToggleHandler = (e) => {
+            // 检查是否在 Testcase 页面
+            const testcasePage = document.getElementById('testcasePage');
+            const isTestcasePageActive = testcasePage && testcasePage.classList.contains('active');
+            
+            if (!isTestcasePageActive) {
+                return;
+            }
+            
+            if (e.key === '/' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                
+                console.log('全局快捷键触发模式切换');
+                this.toggleGlobalEditMode();
+                return false;
+            }
+        };
+        
+        // 使用最高优先级监听
+        document.addEventListener('keydown', this.globalModeToggleHandler, true);
     }
     
     // 创建新标签和编辑器实例
@@ -37,8 +67,11 @@ class EditorManager {
         // 为该标签创建编辑器容器
         const editorTabContainer = this.createEditorTabContainer(tab.id);
         
-        // 创建编辑器实例
-        const editorTab = new EditorTab(editorTabContainer);
+        // 创建编辑器实例，传入管理器引用
+        const editorTab = new EditorTab(editorTabContainer, this);
+        
+        // 新 tab 会自动从管理器读取当前模式
+        
         this.editors.set(tab.id, editorTab);
         
         // 设置编辑器内容
@@ -156,6 +189,15 @@ class EditorManager {
         const editorContainer = document.getElementById(`editor-${tabId}`);
         if (editorContainer) {
             editorContainer.remove();
+        }
+        
+        // 从 openTabs 数组中移除
+        if (window.AppGlobals && window.AppGlobals.openTabs) {
+            const tabIndex = window.AppGlobals.openTabs.findIndex(t => t.id === tabId);
+            if (tabIndex !== -1) {
+                window.AppGlobals.openTabs.splice(tabIndex, 1);
+                console.log('已从 openTabs 中移除标签:', tabId);
+            }
         }
         
         // 如果关闭的是活动标签，切换到其他标签
@@ -337,8 +379,37 @@ class EditorManager {
         return editor ? editor.textContentEl : null;
     }
     
+    // 切换编辑模式（全局）
+    toggleGlobalEditMode() {
+        // 切换全局模式
+        this.globalEditMode = this.globalEditMode === 'block' ? 'text' : 'block';
+        console.log('切换全局编辑模式为:', this.globalEditMode);
+        
+        // 同步到所有打开的编辑器
+        this.editors.forEach((editor, tabId) => {
+            if (editor.currentMode !== this.globalEditMode) {
+                if (this.globalEditMode === 'text') {
+                    editor.switchToTextMode();
+                } else {
+                    editor.switchToBlockMode();
+                }
+                console.log('同步 tab', tabId, '到模式:', this.globalEditMode);
+            }
+        });
+    }
+    
+    // 获取当前全局编辑模式
+    getGlobalEditMode() {
+        return this.globalEditMode;
+    }
+    
     // 销毁管理器
     destroy() {
+        // 移除全局快捷键监听器
+        if (this.globalModeToggleHandler) {
+            document.removeEventListener('keydown', this.globalModeToggleHandler, true);
+        }
+        
         this.editors.forEach(editor => editor.destroy());
         this.editors.clear();
         this.activeTabId = null;

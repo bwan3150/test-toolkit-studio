@@ -2,9 +2,10 @@
 // 支持文本和块两种渲染模式，基于统一的数据模型
 
 class EditorTab {
-    constructor(container) {
+    constructor(container, editorManager) {
         this.container = container;
-        this.currentMode = 'block'; // 'text' 或 'block'
+        this.editorManager = editorManager; // 保存管理器引用
+        this.currentMode = editorManager ? editorManager.getGlobalEditMode() : 'block'; // 从管理器读取模式
         this.script = new ScriptModel(); // 统一的脚本数据模型
         this.listeners = [];
         this.saveTimeout = null;
@@ -201,26 +202,12 @@ class EditorTab {
     }
     
     setupEventListeners() {
-        // 全局快捷键监听器 - 使用 Cmd/Ctrl + / 切换模式
-        this.globalKeyHandler = (e) => {
-            if (e.key === '/' && (e.metaKey || e.ctrlKey)) {
-                // 检查是否在Testcase页面
-                const testcasePage = document.getElementById('testcasePage');
-                const isTestcasePageActive = testcasePage && testcasePage.classList.contains('active');
-                
-                if (isTestcasePageActive) {
-                    e.preventDefault();
-                    console.log('切换编辑器模式:', this.currentMode, '->', this.currentMode === 'text' ? 'block' : 'text');
-                    this.toggleMode();
-                    return;
-                }
-            }
-        };
-        
-        document.addEventListener('keydown', this.globalKeyHandler);
+        // 不再在这里监听全局快捷键，由 EditorManager 统一处理
+        // 只处理编辑器内部的事件
     }
     
     toggleMode() {
+        // 这个方法保留用于向后兼容，但优先使用全局切换
         if (this.currentMode === 'text') {
             this.switchToBlockMode();
         } else {
@@ -637,6 +624,7 @@ class EditorTab {
                 return;
             }
             
+            // 只处理编辑器特定的快捷键
             if (e.key === 'Tab') {
                 e.preventDefault();
                 document.execCommand('insertText', false, '  ');
@@ -644,6 +632,7 @@ class EditorTab {
                 e.preventDefault();
                 document.execCommand('insertText', false, '\n');
             }
+            // 其他按键正常处理，不阻止
         });
         
         // 添加拖放支持
@@ -1778,9 +1767,7 @@ class EditorTab {
 
     destroy() {
         clearTimeout(this.saveTimeout);
-        if (this.globalKeyHandler) {
-            document.removeEventListener('keydown', this.globalKeyHandler);
-        }
+        // 不再需要移除全局快捷键监听器，因为它在 EditorManager 中
         this.removeStatusIndicator();
         this.hideCommandMenu();
         this.hideContextMenu();
