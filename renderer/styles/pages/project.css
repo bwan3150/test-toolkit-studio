@@ -148,6 +148,48 @@
     max-height: 400px;
 }
 
+/* 表格专用精致滚动条样式 */
+.testcase-scroll-container::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.testcase-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+}
+
+.testcase-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    transition: all 0.2s ease;
+}
+
+.testcase-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+    width: 8px;
+    height: 8px;
+}
+
+.testcase-scroll-container::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* 现代浏览器滚动条样式 */
+.testcase-scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* 滚动时显示更明显的滚动条 */
+.testcase-scroll-container:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.testcase-scroll-container:active::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.4);
+}
+
 /* Test case table styles */
 .testcase-table {
     width: 100%;
