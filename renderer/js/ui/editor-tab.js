@@ -295,48 +295,12 @@ class EditorTab {
         // 在编辑器范围内创建状态指示器
         const editorContainer = this.container;
         if (editorContainer) {
-            // 移除之前的状态指示器
-            this.removeStatusIndicator();
+            // 移除旧的内联状态指示器（如果存在）
+            const oldIndicators = this.editorContainer.querySelectorAll('.editor-status-indicator');
+            oldIndicators.forEach(indicator => indicator.remove());
             
-            // 确保编辑器容器有相对定位
-            editorContainer.style.position = 'relative';
-            
-            // 创建新的状态指示器，直接添加到文本编辑器视图中
-            const statusIndicator = document.createElement('div');
-            statusIndicator.className = 'editor-status-indicator text-mode';
-            statusIndicator.id = 'editorStatusIndicator';
-            statusIndicator.textContent = '文本编辑';
-            statusIndicator.style.cssText = `
-                position: absolute !important;
-                top: 8px !important;
-                right: 12px !important;
-                padding: 4px 8px !important;
-                border-radius: 4px !important;
-                font-size: 11px !important;
-                font-weight: 600 !important;
-                color: white !important;
-                z-index: 100 !important;
-                user-select: none !important;
-                pointer-events: none !important;
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-            `;
-            
-            // 添加到文本编辑器视图内部，而不是整个容器
-            const textEditorView = this.editorContainer.querySelector('.text-editor-view');
-            if (textEditorView) {
-                textEditorView.appendChild(statusIndicator);
-                this.statusIndicatorEl = statusIndicator;
-                
-                // 立即更新状态指示器以设置正确的背景色
-                this.updateStatusIndicator();
-                
-                console.log('状态指示器已添加到文本编辑器视图内:', this.statusIndicatorEl);
-            } else {
-                console.error('找不到文本编辑器视图');
-            }
+            // 更新状态指示器
+            this.updateStatusIndicator();
         } else {
             console.error('找不到编辑器容器');
         }
@@ -368,8 +332,8 @@ class EditorTab {
             </div>
         `;
         
-        // 在块模式下，移除状态指示器
-        this.removeStatusIndicator();
+        // 在块模式下，更新状态指示器
+        this.updateStatusIndicator();
         
         this.blocksContainer = this.editorContainer.querySelector('.blocks-container');
         
@@ -1355,91 +1319,38 @@ class EditorTab {
     updateStatusIndicator() {
         console.log('更新状态指示器 - 运行状态:', this.isTestRunning, '当前模式:', this.currentMode);
         
-        // 在文本模式和块模式下都可能需要显示运行状态
-        if (this.statusIndicatorEl) {
-            if (this.isTestRunning) {
-                this.statusIndicatorEl.textContent = '运行中';
-                // 移除所有类并重新设置
-                this.statusIndicatorEl.className = 'editor-status-indicator running';
-                this.statusIndicatorEl.style.cssText = `
-                    position: absolute !important;
-                    top: 8px !important;
-                    right: 12px !important;
-                    padding: 4px 8px !important;
-                    border-radius: 4px !important;
-                    font-size: 11px !important;
-                    font-weight: 600 !important;
-                    color: white !important;
-                    background: #ff8c00 !important;
-                    z-index: 100 !important;
-                    user-select: none !important;
-                    pointer-events: none !important;
-                    display: block !important;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-                `;
-            } else if (this.currentMode === 'text') {
-                this.statusIndicatorEl.textContent = '文本编辑';
-                this.statusIndicatorEl.className = 'editor-status-indicator text-mode';
-                this.statusIndicatorEl.style.cssText = `
-                    position: absolute !important;
-                    top: 8px !important;
-                    right: 12px !important;
-                    padding: 4px 8px !important;
-                    border-radius: 4px !important;
-                    font-size: 11px !important;
-                    font-weight: 600 !important;
-                    color: white !important;
-                    background: #0078d4 !important;
-                    z-index: 100 !important;
-                    user-select: none !important;
-                    pointer-events: none !important;
-                    display: block !important;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-                `;
-            } else {
-                // 块模式下非运行时隐藏
-                this.statusIndicatorEl.style.display = 'none !important';
-            }
-            console.log('状态指示器已更新:', this.statusIndicatorEl.textContent, '背景色:', this.statusIndicatorEl.style.background);
+        const statusBar = document.querySelector('.status-bar');
+        const modeText = document.getElementById('editorModeText');
+        
+        if (!statusBar || !modeText) {
+            console.error('找不到状态栏或模式文本元素');
+            return;
         }
         
-        // 在块模式运行时，也需要创建状态指示器
-        if (this.currentMode === 'block' && this.isTestRunning && !this.statusIndicatorEl) {
-            this.createRunningIndicator();
+        // 清除所有模式类
+        statusBar.classList.remove('status-bar-text-mode', 'status-bar-running');
+        
+        if (this.isTestRunning) {
+            // 运行中状态
+            modeText.textContent = '运行中';
+            statusBar.classList.add('status-bar-running');
+        } else if (this.currentMode === 'text') {
+            // 文本编辑模式
+            modeText.textContent = '文本编辑';
+            statusBar.classList.add('status-bar-text-mode');
+        } else {
+            // 普通模式（块模式）
+            modeText.textContent = '';
+            // 不添加任何类，保持默认样式
         }
+        
+        console.log('状态栏已更新:', modeText.textContent || '普通模式');
     }
     
     createRunningIndicator() {
-        const editorContainer = this.container;
-        if (editorContainer) {
-            const statusIndicator = document.createElement('div');
-            statusIndicator.className = 'editor-status-indicator running';
-            statusIndicator.id = 'editorStatusIndicator';
-            statusIndicator.textContent = '运行中';
-            statusIndicator.style.cssText = `
-                position: absolute !important;
-                top: 8px !important;
-                right: 12px !important;
-                padding: 4px 8px !important;
-                border-radius: 4px !important;
-                font-size: 11px !important;
-                font-weight: 600 !important;
-                color: white !important;
-                background: #ff8c00 !important;
-                z-index: 100 !important;
-                user-select: none !important;
-                pointer-events: none !important;
-                display: block !important;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-            `;
-            
-            const blockEditorView = this.editorContainer.querySelector('.block-editor-view');
-            if (blockEditorView) {
-                blockEditorView.appendChild(statusIndicator);
-                this.statusIndicatorEl = statusIndicator;
-                console.log('块模式运行指示器已创建');
-            }
-        }
+        // 在块模式下运行时，更新状态栏
+        this.updateStatusIndicator();
+        console.log('块模式运行指示器已更新到状态栏');
     }
     
     // 行高亮功能
@@ -1837,16 +1748,23 @@ class EditorTab {
     }
     
     removeStatusIndicator() {
-        // 移除状态指示器（从所有可能的位置）
-        if (this.statusIndicatorEl) {
-            this.statusIndicatorEl.remove();
+        // 清理状态栏状态
+        const statusBar = document.querySelector('.status-bar');
+        const modeText = document.getElementById('editorModeText');
+        
+        if (statusBar) {
+            statusBar.classList.remove('status-bar-text-mode', 'status-bar-running');
         }
         
-        // 清理可能存在的所有状态指示器
+        if (modeText) {
+            modeText.textContent = '';
+        }
+        
+        // 清理可能存在的所有旧的内联状态指示器（用于兼容）
         const indicators = document.querySelectorAll('.editor-status-indicator');
         indicators.forEach(indicator => indicator.remove());
         
-        // 从编辑器视图中移除
+        // 从编辑器视图中移除内联指示器
         if (this.editorContainer) {
             const textEditorView = this.editorContainer.querySelector('.text-editor-view');
             if (textEditorView) {
@@ -1856,8 +1774,6 @@ class EditorTab {
                 }
             }
         }
-        
-        this.statusIndicatorEl = null;
     }
 
     destroy() {
