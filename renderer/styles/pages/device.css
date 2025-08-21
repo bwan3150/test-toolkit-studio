@@ -1,16 +1,12 @@
 /* Device Page */
-.device-content {
-    flex: 1;
-    padding: 24px;
-    overflow-y: auto;
-}
 
 .device-form {
     background: var(--bg-secondary);
     border-radius: 8px;
     padding: 24px;
-    margin-bottom: 24px;
     border: 1px solid var(--border-color);
+    display: none; /* 默认隐藏 */
+    order: 1; /* 确保显示在顶部 */
 }
 
 .device-form h3 {
@@ -28,6 +24,14 @@
 .device-list,
 .connected-devices {
     margin-bottom: 32px;
+}
+
+.device-list {
+    order: 2; /* 保存的设备列表第二 */
+}
+
+.connected-devices {
+    order: 3; /* 在线设备列表第三 */
 }
 
 .device-list h3,
@@ -2612,6 +2616,17 @@
     box-shadow: 0 0 4px rgba(76, 175, 80, 0.4);
 }
 
+.device-status.disconnected {
+    background: #F44336;
+    box-shadow: 0 0 4px rgba(244, 67, 54, 0.4);
+}
+
+.device-status-info {
+    font-size: 11px;
+    color: #F44336;
+    margin-top: 4px;
+}
+
 .device-name {
     font-weight: 600;
     color: var(--text-primary);
@@ -2643,6 +2658,39 @@
 .connection-type-badge.usb {
     background: rgba(255, 152, 0, 0.1);
     color: #FF9800;
+}
+
+.connection-type-badge.offline {
+    background: rgba(244, 67, 54, 0.1);
+    color: #F44336;
+}
+
+/* 平台标识 */
+.platform-badge {
+    position: absolute;
+    top: 0;
+    right: 60px; /* 位于连接类型标识左侧 */
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.platform-badge.android {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4CAF50;
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.platform-badge.ios {
+    background: rgba(96, 125, 139, 0.1);
+    color: #607D8B;
+    border-color: rgba(96, 125, 139, 0.3);
 }
 
 .device-info {
@@ -2762,9 +2810,11 @@
 
 .device-content {
     flex: 1;
+    padding: 24px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    gap: 24px;
 }
 
 /* 配对帮助信息样式 */
@@ -2849,5 +2899,76 @@
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* Radio Group 样式 */
+.radio-group {
+    display: flex;
+    gap: 16px;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    transition: all 0.2s ease;
+    flex: 1;
+}
+
+.radio-option:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+}
+
+.radio-option input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent-primary);
+}
+
+.radio-option .radio-label {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+    user-select: none;
+}
+
+.radio-option input[type="radio"]:checked + .radio-label {
+    color: var(--accent-primary);
+}
+
+.radio-option:has(input[type="radio"]:checked) {
+    border-color: var(--accent-primary);
+    background: rgba(64, 158, 255, 0.1);
+}
+
+/* 配置组样式 */
+.config-group {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+    transition: all 0.3s ease;
+}
+
+.config-group:last-child {
+    margin-bottom: 0;
+}
+
+.form-note {
+    background: rgba(33, 150, 243, 0.1);
+    border-left: 3px solid #2196F3;
+    padding: 12px;
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 12px;
 }
 

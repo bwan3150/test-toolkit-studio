@@ -13,7 +13,6 @@ function initializeDevicePage() {
     const deviceForm = document.getElementById('deviceForm');
     const newDeviceForm = document.getElementById('newDeviceForm');
     const cancelDeviceBtn = document.getElementById('cancelDeviceBtn');
-    const connectionTypeSelect = document.getElementById('connectionTypeSelect');
     
     // 连接向导相关元素
     const connectDeviceBtn = document.getElementById('connectDeviceBtn');
@@ -29,14 +28,17 @@ function initializeDevicePage() {
     
     if (addDeviceBtn) {
         addDeviceBtn.addEventListener('click', () => {
-            deviceForm.style.display = deviceForm.style.display === 'none' ? 'block' : 'none';
+            const isHidden = deviceForm.style.display === 'none' || deviceForm.style.display === '';
+            deviceForm.style.display = isHidden ? 'block' : 'none';
             // 重置表单并设置默认值
-            if (deviceForm.style.display === 'block') {
+            if (isHidden) {
                 newDeviceForm.reset();
                 delete deviceForm.dataset.mode;
                 delete deviceForm.dataset.filename;
                 deviceForm.querySelector('h3').textContent = 'Add New Device';
-                updateConnectionTypeFields();
+                updatePlatformFields();
+                // 滚动到表单顶部
+                deviceForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         });
     }
@@ -52,10 +54,18 @@ function initializeDevicePage() {
         scanDevicesBtn.addEventListener('click', refreshConnectedDevices);
     }
     
-    // 连接类型切换事件
-    if (connectionTypeSelect) {
-        connectionTypeSelect.addEventListener('change', updateConnectionTypeFields);
-    }
+    
+    // 平台选择事件
+    const platformRadios = document.querySelectorAll('input[name="platform"]');
+    platformRadios.forEach(radio => {
+        radio.addEventListener('change', updatePlatformFields);
+    });
+    
+    // 连接类型选择事件
+    const connectionRadios = document.querySelectorAll('input[name="connectionType"]');
+    connectionRadios.forEach(radio => {
+        radio.addEventListener('change', updatePlatformFields);
+    });
     
     // 连接设备向导
     if (connectDeviceBtn) {
@@ -110,6 +120,7 @@ function initializeDevicePage() {
     if (newDeviceForm) {
         newDeviceForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('表单提交事件触发');
             
             if (!window.AppGlobals.currentProject) {
                 window.NotificationModule.showNotification('Please open a project first', 'warning');
@@ -123,10 +134,37 @@ function initializeDevicePage() {
                 deviceConfig[key] = value === 'true' ? true : value === 'false' ? false : value;
             }
             
-            // 如果是WiFi连接，将IP和端口组合为deviceId
-            if (deviceConfig.connectionType === 'wifi' && deviceConfig.ipAddress) {
-                deviceConfig.deviceId = `${deviceConfig.ipAddress}:${deviceConfig.port || 5555}`;
+            console.log('收集到的表单数据:', deviceConfig);
+            
+            // 根据平台处理连接信息
+            if (deviceConfig.connectionType === 'wifi') {
+                if (deviceConfig.platform === 'ios') {
+                    // iOS WiFi: 使用 wdaIpAddress 和 wdaPort
+                    if (deviceConfig.wdaIpAddress) {
+                        deviceConfig.ipAddress = deviceConfig.wdaIpAddress;
+                        deviceConfig.port = deviceConfig.wdaPort;
+                        const port = deviceConfig.wdaPort || '';
+                        if (port) {
+                            deviceConfig.deviceId = `${deviceConfig.wdaIpAddress}:${port}`;
+                        } else {
+                            deviceConfig.deviceId = deviceConfig.wdaIpAddress;
+                        }
+                    }
+                } else {
+                    // Android WiFi: 使用 ipAddress 和 port
+                    if (deviceConfig.ipAddress) {
+                        const port = deviceConfig.port || '';
+                        if (port) {
+                            deviceConfig.deviceId = `${deviceConfig.ipAddress}:${port}`;
+                        } else {
+                            deviceConfig.deviceId = deviceConfig.ipAddress;
+                        }
+                    }
+                }
             }
+            
+            // 根据平台自动设置platformName
+            deviceConfig.platformName = deviceConfig.platform === 'ios' ? 'iOS' : 'Android';
             
             // 检查是否在编辑模式
             const deviceForm = document.getElementById('deviceForm');
@@ -166,6 +204,9 @@ function initializeDevicePage() {
     // 加载保存的设备
     loadSavedDevices();
     
+    // 确保页面加载时字段显示正确
+    updatePlatformFields();
+    
     // 监听配对成功事件
     const { ipcRenderer } = getGlobals();
     ipcRenderer.on('pairing-success', (event, data) => {
@@ -183,24 +224,50 @@ function initializeDevicePage() {
     });
 }
 
-// 更新连接类型字段显示
+// 更新连接类型字段显示（简化版本，主要逻辑已移至 updatePlatformFields）
 function updateConnectionTypeFields() {
-    const connectionType = document.getElementById('connectionTypeSelect').value;
-    const deviceIdGroup = document.getElementById('deviceIdGroup');
-    const wifiAddressRow = document.getElementById('wifiAddressRow');
-    const connectionHelpRow = document.getElementById('connectionHelpRow');
+    // 触发平台字段更新，因为连接类型会影响字段显示
+    updatePlatformFields();
+}
+
+// 更新平台字段显示 - 使用组合键方式
+function updatePlatformFields() {
+    const platformRadio = document.querySelector('input[name="platform"]:checked');
+    const connectionRadio = document.querySelector('input[name="connectionType"]:checked');
     
-    if (connectionType === 'wifi') {
-        // WiFi 连接
-        if (deviceIdGroup) deviceIdGroup.parentElement.style.display = 'none';
-        if (wifiAddressRow) wifiAddressRow.style.display = 'flex';
-        if (connectionHelpRow) connectionHelpRow.style.display = 'flex';
+    if (!platformRadio || !connectionRadio) return;
+    
+    const platform = platformRadio.value;
+    const connectionType = connectionRadio.value;
+    
+    // 生成组合键
+    const configKey = `${platform}-${connectionType}`;
+    
+    // 隐藏所有配置组并禁用required属性
+    document.querySelectorAll('.config-group').forEach(group => {
+        group.style.display = 'none';
+        // 禁用隐藏组中的required字段
+        const requiredInputs = group.querySelectorAll('input[required]');
+        requiredInputs.forEach(input => {
+            input.disabled = true;
+        });
+    });
+    
+    // 显示对应的配置组并启用required属性
+    const targetConfig = document.getElementById(`${configKey}-config`);
+    if (targetConfig) {
+        targetConfig.style.display = 'block';
+        // 启用显示组中的required字段
+        const requiredInputs = targetConfig.querySelectorAll('input[required]');
+        requiredInputs.forEach(input => {
+            input.disabled = false;
+        });
+        console.log(`显示配置组: ${configKey}-config`);
     } else {
-        // USB 连接
-        if (deviceIdGroup) deviceIdGroup.parentElement.style.display = 'flex';
-        if (wifiAddressRow) wifiAddressRow.style.display = 'none';
-        if (connectionHelpRow) connectionHelpRow.style.display = 'none';
+        console.warn(`未找到配置组: ${configKey}-config`);
     }
+    
+    console.log(`更新字段显示: ${configKey}`);
 }
 
 // 切换高级设置显示
@@ -309,17 +376,89 @@ async function loadSavedDevices() {
     }
 }
 
-// 刷新连接的设备（统一显示有线和无线设备）
+// 检查 iOS 设备的 WDA 连接状态
+async function checkIosDeviceStatus(device) {
+    try {
+        // 尝试通过 USB 连接检查 WDA 状态
+        const response = await fetch(`http://localhost:8100/status`, {
+            method: 'GET',
+            timeout: 3000
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            device.wdaStatus = 'connected';
+            device.wdaInfo = data;
+            console.log('iOS 设备 WDA 状态检测成功（USB）:', device.id);
+        } else {
+            device.wdaStatus = 'disconnected';
+        }
+    } catch (error) {
+        // USB 连接失败，尝试检查保存的 WiFi 配置
+        try {
+            const { path, fs, yaml } = getGlobals();
+            if (window.AppGlobals.currentProject) {
+                const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
+                const files = await fs.readdir(devicesPath);
+                
+                for (const file of files) {
+                    if (file.endsWith('.yaml')) {
+                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
+                        const config = yaml.load(content);
+                        
+                        // 检查是否是对应的 iOS 设备配置
+                        if (config.platform === 'ios' && config.udid === device.udid && config.connectionType === 'wifi' && config.ipAddress) {
+                            const wifiResponse = await fetch(`http://${config.ipAddress}:${config.port || 8100}/status`, {
+                                method: 'GET',
+                                timeout: 3000
+                            });
+                            
+                            if (wifiResponse.ok) {
+                                device.wdaStatus = 'connected';
+                                device.connectionType = 'wifi';
+                                device.ipAddress = config.ipAddress;
+                                device.port = config.port || 8100;
+                                console.log('iOS 设备 WDA 状态检测成功（WiFi）:', device.id);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (wifiError) {
+            console.log('WiFi WDA 状态检测失败:', wifiError.message);
+        }
+        
+        device.wdaStatus = 'disconnected';
+        console.log('iOS 设备 WDA 状态检测失败:', device.id);
+    }
+}
+
+// 刷新连接的设备（统一显示 Android 和 iOS 设备）
 async function refreshConnectedDevices() {
     const { ipcRenderer, path, fs, yaml } = getGlobals();
-    const result = await ipcRenderer.invoke('adb-devices');
-    const connectedDevicesGrid = document.getElementById('connectedDevicesGrid');
     
+    // 同时获取 Android 和 iOS 设备
+    const [androidResult, iosResult] = await Promise.all([
+        ipcRenderer.invoke('adb-devices'),
+        ipcRenderer.invoke('get-ios-devices')
+    ]);
+    
+    const connectedDevicesGrid = document.getElementById('connectedDevicesGrid');
     if (!connectedDevicesGrid) return;
     
     connectedDevicesGrid.innerHTML = '';
     
-    if (result.success && result.devices.length > 0) {
+    // 合并所有设备
+    const allDevices = [];
+    if (androidResult.success) {
+        allDevices.push(...androidResult.devices.map(device => ({ ...device, platform: 'android' })));
+    }
+    if (iosResult.success) {
+        allDevices.push(...iosResult.devices.map(device => ({ ...device, platform: 'ios' })));
+    }
+    
+    if (allDevices.length > 0) {
         // 获取保存的设备以检查哪些已经保存
         let savedDeviceIds = [];
         let savedDeviceConfigs = {};
@@ -343,28 +482,65 @@ async function refreshConnectedDevices() {
         }
         
         // 为每个连接的设备创建卡片
-        for (const device of result.devices) {
-            if (device.status !== 'device') continue;
+        for (const device of allDevices) {
+            // 跳过 Android 设备状态检查（Android 设备）或确认 iOS 设备已连接
+            if (device.platform === 'android' && device.status !== 'device') continue;
+            
+            // 对于 iOS 设备，检测 WDA 连接状态
+            if (device.platform === 'ios') {
+                await checkIosDeviceStatus(device);
+            }
             
             const isSaved = savedDeviceIds.includes(device.id);
             const savedConfig = savedDeviceConfigs[device.id];
-            // 判断是否为无线设备：包含冒号或者是mDNS格式（包含._adb-tls-connect._tcp）
-            const isWifi = device.id.includes(':') || device.id.includes('._adb-tls-connect._tcp');
+            
+            // 判断连接类型
+            let isWifi = false;
+            let connectionType = 'USB';
+            
+            if (device.platform === 'android') {
+                // Android: 判断是否为无线设备：包含冒号或者是mDNS格式
+                isWifi = device.id.includes(':') || device.id.includes('._adb-tls-connect._tcp');
+                connectionType = isWifi ? 'WiFi' : 'USB';
+            } else if (device.platform === 'ios') {
+                // iOS: 根据 WDA 检测结果显示连接状态
+                if (device.wdaStatus === 'connected') {
+                    connectionType = device.connectionType === 'wifi' ? 'WDA-WiFi' : 'WDA-USB';
+                    isWifi = device.connectionType === 'wifi';
+                } else {
+                    connectionType = 'WDA-Off';
+                }
+            }
             
             const item = document.createElement('div');
             item.className = 'device-card';
             
             // 创建卡片内容
-            const deviceName = savedConfig ? savedConfig.deviceName : '未知设备';
+            const deviceName = savedConfig ? savedConfig.deviceName : (device.name || '未知设备');
+            const platformBadge = device.platform === 'ios' ? 'iOS' : 'Android';
             
+            // 设置设备状态
+            let deviceStatus = 'connected';
+            let statusTitle = 'Connected';
+            
+            if (device.platform === 'ios' && device.wdaStatus !== 'connected') {
+                deviceStatus = 'disconnected';
+                statusTitle = 'iOS Device Found - WDA Not Available';
+            }
+
             let cardContent = `
                 <div class="device-card-header">
-                    <div class="device-status connected" title="Connected"></div>
+                    <div class="device-status ${deviceStatus}" title="${statusTitle}"></div>
                     <div class="device-name">${deviceName}</div>
-                    <span class="connection-type-badge ${isWifi ? 'wifi' : 'usb'}">${isWifi ? 'WiFi' : 'USB'}</span>
+                    <span class="platform-badge ${device.platform}">${platformBadge}</span>
+                    <span class="connection-type-badge ${isWifi ? 'wifi' : 'usb'} ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? 'offline' : ''}">${connectionType}</span>
                 </div>
                 <div class="device-info">
                     <div class="device-id">ID: ${device.id}</div>
+                    ${device.model ? `<div class="device-model">Model: ${device.model}</div>` : ''}
+                    ${device.version ? `<div class="device-version">Version: ${device.version}</div>` : ''}
+                    ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? 
+                        '<div class="device-status-info">⚠️ WDA service not available</div>' : ''}
                 </div>
             `;
             
@@ -528,37 +704,80 @@ async function createDeviceFromConnected(deviceId) {
     
     // 重置表单并设置模式
     newDeviceForm.reset();
-    deviceForm.dataset.mode = 'create';
+    delete deviceForm.dataset.mode;
+    delete deviceForm.dataset.filename;
     
     // 预填充表单
     if (newDeviceForm) {
         // 判断是否为WiFi设备
         const isWifi = deviceId.includes(':');
         
+        // 设置平台（默认Android）
+        const androidRadio = newDeviceForm.querySelector('input[name="platform"][value="android"]');
+        if (androidRadio) {
+            androidRadio.checked = true;
+        }
+        
+        // 设置连接类型
+        const connectionType = isWifi ? 'wifi' : 'usb';
+        const connectionRadio = newDeviceForm.querySelector(`input[name="connectionType"][value="${connectionType}"]`);
+        if (connectionRadio) {
+            connectionRadio.checked = true;
+        }
+        
         if (isWifi) {
             const [ip, port] = deviceId.split(':');
-            newDeviceForm.querySelector('select[name="connectionType"]').value = 'wifi';
-            newDeviceForm.querySelector('input[name="ipAddress"]').value = ip;
-            newDeviceForm.querySelector('input[name="port"]').value = port || '5555';
             newDeviceForm.querySelector('input[name="deviceName"]').value = `WiFi Device (${ip})`;
         } else {
-            newDeviceForm.querySelector('select[name="connectionType"]').value = 'usb';
-            newDeviceForm.querySelector('input[name="deviceId"]').value = deviceId;
             newDeviceForm.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
         }
         
-        newDeviceForm.querySelector('input[name="platformName"]').value = 'Android';
-        newDeviceForm.querySelector('input[name="automationName"]').value = 'UiAutomator2';
-        newDeviceForm.querySelector('select[name="noReset"]').value = 'true';
-        newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = '6000';
+        // 设置平台版本默认值
+        newDeviceForm.querySelector('input[name="platformVersion"]').value = '14';
+        
+        // 填充高级设置
+        const automationNameInput = newDeviceForm.querySelector('input[name="automationName"]');
+        if (automationNameInput) {
+            automationNameInput.value = 'UiAutomator2';
+        }
+        
+        const timeoutInput = newDeviceForm.querySelector('input[name="newCommandTimeout"]');
+        if (timeoutInput) {
+            timeoutInput.value = '6000';
+        }
+        
+        const noResetSelect = newDeviceForm.querySelector('select[name="noReset"]');
+        if (noResetSelect) {
+            noResetSelect.value = 'true';
+        }
         
         // 更新表单字段显示
-        updateConnectionTypeFields();
+        updatePlatformFields();
+        
+        // 延迟填充具体字段
+        setTimeout(() => {
+            const configKey = `android-${connectionType}`;
+            const targetConfig = document.getElementById(`${configKey}-config`);
+            
+            if (targetConfig && isWifi) {
+                const [ip, port] = deviceId.split(':');
+                // Android WiFi 使用 ipAddress 和 port
+                const ipInput = targetConfig.querySelector('input[name="ipAddress"]');
+                if (ipInput) ipInput.value = ip;
+                
+                const portInput = targetConfig.querySelector('input[name="port"]');
+                if (portInput) portInput.value = port || '';
+            } else if (targetConfig && !isWifi) {
+                const deviceIdInput = targetConfig.querySelector('input[name="deviceId"]');
+                if (deviceIdInput) deviceIdInput.value = deviceId;
+            }
+        }, 100);
     }
     
     // 更新表单标题
     deviceForm.querySelector('h3').textContent = 'Add New Device';
     deviceForm.style.display = 'block';
+    deviceForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.NotificationModule.showNotification('Please complete the device configuration', 'info');
 }
 
@@ -583,27 +802,93 @@ async function editDevice(filename) {
         // 用现有数据填充表单
         if (newDeviceForm) {
             newDeviceForm.querySelector('input[name="deviceName"]').value = config.deviceName || '';
+            newDeviceForm.querySelector('input[name="platformVersion"]').value = config.platformVersion || '';
+            
+            // 设置平台
+            const platform = config.platform || 'android';
+            const platformRadio = newDeviceForm.querySelector(`input[name="platform"][value="${platform}"]`);
+            if (platformRadio) {
+                platformRadio.checked = true;
+            }
             
             // 设置连接类型
             const connectionType = config.connectionType || (config.ipAddress ? 'wifi' : 'usb');
-            newDeviceForm.querySelector('select[name="connectionType"]').value = connectionType;
-            
-            // 根据连接类型设置相应字段
-            if (connectionType === 'wifi') {
-                newDeviceForm.querySelector('input[name="ipAddress"]').value = config.ipAddress || '';
-                newDeviceForm.querySelector('input[name="port"]').value = config.port || '5555';
-            } else {
-                newDeviceForm.querySelector('input[name="deviceId"]').value = config.deviceId || '';
+            const connectionRadio = newDeviceForm.querySelector(`input[name="connectionType"][value="${connectionType}"]`);
+            if (connectionRadio) {
+                connectionRadio.checked = true;
             }
             
-            newDeviceForm.querySelector('input[name="platformName"]').value = config.platformName || 'Android';
-            newDeviceForm.querySelector('input[name="platformVersion"]').value = config.platformVersion || '';
-            newDeviceForm.querySelector('input[name="automationName"]').value = config.automationName || 'UiAutomator2';
-            newDeviceForm.querySelector('input[name="newCommandTimeout"]').value = config.newCommandTimeout || '6000';
-            newDeviceForm.querySelector('select[name="noReset"]').value = config.noReset ? 'true' : 'false';
+            // 填充高级设置
+            const automationNameInput = newDeviceForm.querySelector('input[name="automationName"]');
+            if (automationNameInput) {
+                automationNameInput.value = config.automationName || 'UiAutomator2';
+            }
+            
+            const timeoutInput = newDeviceForm.querySelector('input[name="newCommandTimeout"]');
+            if (timeoutInput) {
+                timeoutInput.value = config.newCommandTimeout || '6000';
+            }
+            
+            const noResetSelect = newDeviceForm.querySelector('select[name="noReset"]');
+            if (noResetSelect) {
+                noResetSelect.value = config.noReset ? 'true' : 'false';
+            }
             
             // 更新表单字段显示
-            updateConnectionTypeFields();
+            updatePlatformFields();
+            
+            // 延迟填充具体配置字段，确保对应的配置组已显示
+            setTimeout(() => {
+                const configKey = `${platform}-${connectionType}`;
+                const targetConfig = document.getElementById(`${configKey}-config`);
+                
+                if (targetConfig) {
+                    // 根据配置类型填充特定字段
+                    if (connectionType === 'wifi') {
+                        if (platform === 'ios') {
+                            // iOS WiFi: 填充 wdaIpAddress 和 wdaPort
+                            const wdaIpInput = targetConfig.querySelector('input[name="wdaIpAddress"]');
+                            if (wdaIpInput) {
+                                wdaIpInput.value = config.ipAddress || '';
+                            }
+                            
+                            const wdaPortInput = targetConfig.querySelector('input[name="wdaPort"]');
+                            if (wdaPortInput) {
+                                wdaPortInput.value = config.port !== undefined ? String(config.port) : '';
+                            }
+                        } else {
+                            // Android WiFi: 填充 ipAddress 和 port
+                            const ipInput = targetConfig.querySelector('input[name="ipAddress"]');
+                            if (ipInput) {
+                                ipInput.value = config.ipAddress || '';
+                            }
+                            
+                            const portInput = targetConfig.querySelector('input[name="port"]');
+                            if (portInput) {
+                                portInput.value = config.port !== undefined ? String(config.port) : '';
+                            }
+                        }
+                    } else {
+                        const deviceIdInput = targetConfig.querySelector('input[name="deviceId"]');
+                        if (deviceIdInput) {
+                            deviceIdInput.value = config.deviceId || '';
+                        }
+                    }
+                    
+                    // iOS特定字段
+                    if (platform === 'ios') {
+                        const udidInput = targetConfig.querySelector('input[name="udid"]');
+                        if (udidInput) {
+                            udidInput.value = config.udid || '';
+                        }
+                        
+                        const bundleIdInput = targetConfig.querySelector('input[name="bundleId"]');
+                        if (bundleIdInput) {
+                            bundleIdInput.value = config.bundleId || '';
+                        }
+                    }
+                }
+            }, 100);
         }
         
         // 更新表单标题

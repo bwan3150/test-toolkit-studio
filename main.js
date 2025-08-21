@@ -14,6 +14,7 @@ const { registerOtherHandlers: registerMiscHandlers } = require('./handlers/othe
 const { registerLogcatHandlers } = require('./handlers/logcat-handlers');
 const { registerAuthHandlers } = require('./handlers/auth-handlers');
 const { registerProjectHandlers } = require('./handlers/project-handlers');
+const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/ios-handlers');
 
 // 全局变量
 let mainWindow;
@@ -141,6 +142,13 @@ function cleanupProcesses() {
     }
     stbProcess = null;
   }
+  
+  // 清理 iOS 相关进程
+  try {
+    cleanupIosProcesses();
+  } catch (e) {
+    console.error('清理iOS进程失败:', e);
+  }
 }
 
 // 创建系统托盘
@@ -217,6 +225,9 @@ function registerAllHandlers() {
     
     console.log('注册项目处理器...');
     registerProjectHandlers();
+    
+    console.log('注册iOS处理器...');
+    registerIosHandlers(app);
     
     // 注册其他IPC处理器
     registerOtherHandlers();
