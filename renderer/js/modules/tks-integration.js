@@ -173,27 +173,30 @@ class TKSScriptRunner {
                 console.log('调试信息:', {
                     'window.AppGlobals': window.AppGlobals,
                     'window.AppGlobals.path': window.AppGlobals ? window.AppGlobals.path : 'undefined',
-                    'currentTab': currentTab,
-                    'currentTab.path': currentTab ? currentTab.path : 'undefined'
+                    'scriptPath': scriptPath,
+                    'typeof scriptPath': typeof scriptPath
                 });
                 
                 const pathModule = window.AppGlobals ? window.AppGlobals.path : null;
-                let scriptPath = currentTab ? currentTab.path : null;
+                let currentScriptPath = scriptPath; // 使用传递进来的scriptPath参数
                 
                 // 如果没有路径，这可能是一个临时脚本，创建一个临时路径
-                if (!scriptPath && currentTab && currentTab.name) {
-                    console.log('检测到临时脚本，创建临时路径');
+                if (!currentScriptPath) {
+                    console.log('检测到临时脚本或未保存的脚本，创建临时路径');
                     // 获取当前项目路径
                     const currentProject = window.AppGlobals.currentProject;
                     if (currentProject && pathModule) {
                         // 创建临时路径：项目/cases/temp/脚本名
-                        scriptPath = pathModule.join(currentProject, 'cases', 'temp', currentTab.name);
-                        console.log('生成临时脚本路径:', scriptPath);
+                        // 从当前标签页获取文件名（如果有的话）
+                        const currentTab = window.AppGlobals.currentTab;
+                        const fileName = currentTab && currentTab.name ? currentTab.name : 'temp_script.tks';
+                        currentScriptPath = pathModule.join(currentProject, 'cases', 'temp', fileName);
+                        console.log('生成临时脚本路径:', currentScriptPath);
                     }
                 }
                 
-                if (pathModule && scriptPath) {
-                    const pathParts = scriptPath.split(pathModule.sep);
+                if (pathModule && currentScriptPath) {
+                    const pathParts = currentScriptPath.split(pathModule.sep);
                     const caseIndex = pathParts.indexOf('cases');
                     let caseFolder = '';
                     
@@ -206,17 +209,22 @@ class TKSScriptRunner {
                     }
                     
                     // 设置脚本物理文件名（去掉.tks扩展名）
-                    const fileName = pathModule.basename(scriptPath, '.tks');
+                    const fileName = pathModule.basename(currentScriptPath, '.tks');
                     this.currentExecutor.setScriptFileName(fileName);
                     console.log('设置脚本文件名:', fileName);
                 } else {
-                    console.error('缺少必要的路径信息:', { pathModule, scriptPath });
+                    console.error('缺少必要的路径信息:', { pathModule, currentScriptPath });
                     // 使用默认值继续执行
-                    if (scriptPath) {
+                    if (currentScriptPath) {
                         // 简单的文件名提取，不依赖path模块
-                        const fileName = scriptPath.split(/[/\\]/).pop().replace('.tks', '');
+                        const fileName = currentScriptPath.split(/[/\\]/).pop().replace('.tks', '');
                         this.currentExecutor.setScriptFileName(fileName);
                         console.log('使用简单方式设置脚本文件名:', fileName);
+                    } else {
+                        // 如果仍然没有路径，使用默认值
+                        this.currentExecutor.setCurrentCase('temp');
+                        this.currentExecutor.setScriptFileName('temp_script');
+                        console.log('使用默认的临时case和文件名');
                     }
                 }
                 
@@ -253,9 +261,21 @@ class TKSScriptRunner {
             this.currentExecutor = null; // 清除执行器引用
             this.updateRunButton(false);
             
+            // 恢复编辑器交互状态
+            if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
+                console.log('TKS集成: 恢复编辑器交互状态');
+                window.AppGlobals.codeEditor.setTestRunning(false);
+            }
+            
             // 恢复屏幕模式切换功能
             if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
                 window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
+            }
+            
+            // 更新状态栏显示
+            if (window.StatusBarModule && window.StatusBarModule.updateRunStatus) {
+                console.log('TKS集成: 更新状态栏为空闲状态');
+                window.StatusBarModule.updateRunStatus(false);
             }
         }
     }
@@ -275,6 +295,12 @@ class TKSScriptRunner {
         this.isRunning = false;
         this.currentExecutor = null;
         this.updateRunButton(false);
+        
+        // 恢复编辑器交互状态
+        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
+            console.log('TKSScriptRunner: 恢复编辑器交互状态');
+            window.AppGlobals.codeEditor.setTestRunning(false);
+        }
         
         // 恢复屏幕模式切换功能
         if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {

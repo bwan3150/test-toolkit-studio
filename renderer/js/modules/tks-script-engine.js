@@ -1344,14 +1344,18 @@ class TKSScriptExecutor {
      * 保存执行结果
      */
     async saveResult(result) {
+        // 确保有case文件夹名称，如果没有则使用默认值
+        const caseFolder = this.currentCaseFolder || 'temp';
+        
         // 保存到当前case的result文件夹
-        const resultDir = tksPath.join(this.projectPath, 'cases', this.currentCaseFolder, 'result');
+        const resultDir = tksPath.join(this.projectPath, 'cases', caseFolder, 'result');
         
         // 确保result目录存在
         try {
             await tksFs.mkdir(resultDir, { recursive: true });
         } catch (error) {
             // 目录可能已存在，忽略错误
+            console.warn('创建result目录时出现警告（可能已存在）:', error.message);
         }
         
         // 生成结果文件名：物理文件名 + 时间 + 结果
@@ -1364,9 +1368,10 @@ class TKSScriptExecutor {
 
         try {
             await tksFs.writeFile(resultPath, JSON.stringify(result, null, 2));
-            // console.log(`执行结果已保存到: ${resultPath}`); // 已禁用以减少日志
+            console.log(`执行结果已保存到: ${resultPath}`);
         } catch (error) {
             console.error('保存执行结果失败:', error);
+            // 不让保存失败影响整体流程
         }
     }
 
