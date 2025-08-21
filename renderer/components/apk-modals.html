@@ -18,17 +18,13 @@
 <div id="apkInstallModal" class="modal" style="display: none;">
   <div class="modal-content">
     <div class="modal-header">
-      <h3>安装冲突</h3>
+      <h3>版本或签名冲突</h3>
     </div>
     <div class="modal-body">
-      <p class="modal-message">APK无法直接安装，可能原因：</p>
-      <ul class="modal-reasons">
-        <li>签名不匹配（Debug和Release版本使用不同签名）</li>
-        <li>版本号冲突（尝试安装更旧的版本）</li>
-        <li>其他安装限制</li>
-      </ul>
-      <p class="modal-solution"><strong>解决方案：</strong>先卸载原应用，再安装新版本</p>
-      <p class="warning-text">⚠️ 卸载会清除应用数据</p>
+      <p class="modal-message">可能的原因：</p>
+      <p class="modal-reason">• 已安装App与APK包签名不一致(Debug包和Release包会使用不同签名)</p>
+      <p class="modal-reason">• 尝试安装的APK包版本比当前安装的App版本更老</p>
+      <p class="warning-text">⚠️ 需要卸载当前安装的App后进行APK包的安装, 可能导致APP内本地数据被清除</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="cancelUninstallBtn">取消</button>

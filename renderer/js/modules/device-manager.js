@@ -526,10 +526,10 @@ async function refreshConnectedDevices() {
             } else if (device.platform === 'ios') {
                 // iOS: 根据 WDA 检测结果显示连接状态
                 if (device.wdaStatus === 'connected') {
-                    connectionType = device.connectionType === 'wifi' ? 'WDA-WiFi' : 'WDA-USB';
+                    connectionType = device.connectionType === 'wifi' ? 'WDA-WiFi' : 'USB';
                     isWifi = device.connectionType === 'wifi';
                 } else {
-                    connectionType = 'WDA-Off';
+                    connectionType = 'Off';
                 }
             }
             

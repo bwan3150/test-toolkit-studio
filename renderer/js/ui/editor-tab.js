@@ -372,20 +372,19 @@ class EditorTab {
                             </select>
                         `;
                     } else {
-                        // 检查参数类型是否为locator，以支持可视化渲染
-                        if (param.type === 'locator' && value) {
-                            // 检查值是否为图片引用格式 @{name}
-                            const imageMatch = value.match(/^@\{(.+)\}$/);
-                            // 检查值是否为XML元素引用格式 [name]
-                            const xmlMatch = value.match(/^\[(.+)\]$/);
-                            
-                            if (imageMatch || xmlMatch) {
+                        // 检查参数类型是否为element，以支持可视化渲染
+                        if (param.type === 'element') {
+                            if (value && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+)\}$/))) {
+                                // 检查值是否为图片引用格式 @{name} 或 XML元素引用格式 {name}
+                                const imageMatch = value.match(/^@\{(.+)\}$/);
+                                const xmlMatch = value.match(/^\{(.+)\}$/);
+                                
                                 // 创建一个容器用于显示可视化元素
                                 commandContent += `
                                     <div class="param-hole-container" 
                                          data-param="${param.name}"
                                          data-command-index="${index}"
-                                         data-type="locator">
+                                         data-type="element">
                                         <input class="param-hole hidden-input" 
                                                id="${paramId}"
                                                type="hidden"
@@ -401,14 +400,14 @@ class EditorTab {
                                     </div>
                                 `;
                             } else {
-                                // 普通文本输入框
+                                // element 类型的普通文本输入框（无论是否有值）
                                 commandContent += `
                                     <input class="param-hole" 
                                            id="${paramId}"
                                            type="text"
                                            data-param="${param.name}"
                                            data-command-index="${index}"
-                                           data-param-type="locator"
+                                           data-param-type="element"
                                            placeholder="${param.placeholder}"
                                            title="${param.placeholder}"
                                            value="${value}">
@@ -494,7 +493,7 @@ class EditorTab {
                 const value = command.params[paramName];
                 
                 const imageMatch = value.match(/^@\{(.+)\}$/);
-                const xmlMatch = value.match(/^\[(.+)\]$/);
+                const xmlMatch = value.match(/^\{(.+)\}$/);
                 
                 if (imageMatch) {
                     // 渲染图片元素
@@ -553,51 +552,136 @@ class EditorTab {
     
     // 为locator类型的输入框添加拖放支持
     setupLocatorInputDragDrop() {
-        const locatorInputs = this.blocksContainer.querySelectorAll('input[data-param-type="locator"], .param-hole-container[data-type="locator"]');
+        console.log('设置拖拽监听器...');
         
-        locatorInputs.forEach(element => {
-            // 如果是容器，需要找到实际的输入元素
-            const isContainer = element.classList.contains('param-hole-container');
-            const dropTarget = isContainer ? element : element;
+        // 移除之前的拖拽监听器（如果存在）
+        if (this.dragOverHandler) {
+            this.blocksContainer.removeEventListener('dragover', this.dragOverHandler);
+        }
+        if (this.dragLeaveHandler) {
+            this.blocksContainer.removeEventListener('dragleave', this.dragLeaveHandler);
+        }
+        if (this.dropHandler) {
+            this.blocksContainer.removeEventListener('drop', this.dropHandler);
+        }
+        
+        // 使用事件委托，在块容器上监听拖拽事件
+        this.dragOverHandler = (e) => {
+            // 查找拖拽目标
+            const dropTarget = this.findDropTarget(e.target);
+            if (!dropTarget) return;
             
-            dropTarget.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.dataTransfer.dropEffect = 'copy';
-                dropTarget.classList.add('drag-over');
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'copy';
+            
+            // 清除之前的高亮
+            this.blocksContainer.querySelectorAll('.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
             });
             
-            dropTarget.addEventListener('dragleave', (e) => {
-                e.stopPropagation();
-                dropTarget.classList.remove('drag-over');
-            });
+            // 添加当前目标的高亮
+            dropTarget.classList.add('drag-over');
+            console.log('拖拽悬停在:', dropTarget, '数据:', dropTarget.dataset);
+        };
+        
+        this.dragLeaveHandler = (e) => {
+            const dropTarget = this.findDropTarget(e.target);
+            if (!dropTarget) return;
             
-            dropTarget.addEventListener('drop', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+            // 检查鼠标是否真的离开了目标区域
+            const rect = dropTarget.getBoundingClientRect();
+            const isInside = e.clientX >= rect.left && e.clientX <= rect.right && 
+                           e.clientY >= rect.top && e.clientY <= rect.bottom;
+            
+            if (!isInside) {
                 dropTarget.classList.remove('drag-over');
-                
-                const commandIndex = parseInt(element.dataset.commandIndex);
-                const paramName = element.dataset.param;
-                
-                // 尝试获取自定义格式的数据
-                const locatorDataStr = e.dataTransfer.getData('application/x-locator');
-                const textData = e.dataTransfer.getData('text/plain');
-                
-                if (textData) {
-                    // 更新参数值
-                    const command = this.script.getCommands()[commandIndex];
-                    if (command) {
-                        command.params[paramName] = textData;
-                        
-                        // 重新渲染块以显示可视化元素
-                        this.renderBlocks();
-                        this.setupBlockModeListeners();
-                        this.triggerChange();
-                    }
+            }
+        };
+        
+        this.dropHandler = (e) => {
+            const dropTarget = this.findDropTarget(e.target);
+            if (!dropTarget) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('拖拽放置在:', dropTarget);
+            
+            // 清除高亮
+            dropTarget.classList.remove('drag-over');
+            
+            // 获取参数信息
+            const commandIndex = parseInt(dropTarget.dataset.commandIndex);
+            const paramName = dropTarget.dataset.param;
+            
+            if (isNaN(commandIndex) || !paramName) {
+                console.warn('无法获取命令索引或参数名:', { commandIndex, paramName, dataset: dropTarget.dataset });
+                return;
+            }
+            
+            // 获取拖拽数据
+            const locatorDataStr = e.dataTransfer.getData('application/x-locator');
+            const textData = e.dataTransfer.getData('text/plain');
+            
+            console.log('拖拽数据:', { locatorDataStr, textData });
+            
+            if (textData) {
+                // 更新参数值
+                const command = this.script.getCommands()[commandIndex];
+                if (command) {
+                    console.log('更新参数:', commandIndex, paramName, textData);
+                    command.params[paramName] = textData;
+                    
+                    // 重新渲染块以显示可视化元素
+                    this.renderBlocks();
+                    this.setupBlockModeListeners();
+                    this.triggerChange();
+                } else {
+                    console.warn('未找到命令:', commandIndex);
                 }
-            });
-        });
+            } else {
+                console.warn('未获取到拖拽数据');
+            }
+        };
+        
+        // 添加事件监听器
+        this.blocksContainer.addEventListener('dragover', this.dragOverHandler);
+        this.blocksContainer.addEventListener('dragleave', this.dragLeaveHandler);
+        this.blocksContainer.addEventListener('drop', this.dropHandler);
+        
+        // 统计当前可拖拽目标数量
+        const dropTargets = this.getAllDropTargets();
+        console.log(`已设置拖拽监听器，找到 ${dropTargets.length} 个可拖拽目标:`, dropTargets);
+    }
+    
+    // 查找有效的拖拽目标
+    findDropTarget(element) {
+        let current = element;
+        while (current && current !== this.blocksContainer) {
+            // 检查是否是element类型的输入框或容器
+            if ((current.classList.contains('param-hole') && current.dataset.paramType === 'element') ||
+                (current.classList.contains('param-hole-container') && current.dataset.type === 'element') ||
+                current.matches('input[data-param-type="element"]')) {
+                
+                console.log('找到拖拽目标:', current, {
+                    classList: current.classList.toString(),
+                    dataset: current.dataset,
+                    tagName: current.tagName
+                });
+                return current;
+            }
+            current = current.parentElement;
+        }
+        console.log('未找到拖拽目标，检查的元素:', element);
+        return null;
+    }
+    
+    // 获取所有可拖拽目标（用于调试）
+    getAllDropTargets() {
+        return this.blocksContainer.querySelectorAll(
+            'input[data-param-type="element"], .param-hole[data-param-type="element"], .param-hole-container[data-type="element"]'
+        );
     }
     
     setupTextModeListeners() {
@@ -848,6 +932,9 @@ class EditorTab {
                 this.hideContextMenu();
             }
         });
+        
+        // 重新设置拖拽监听器（确保删除元素后拖拽功能仍然可用）
+        this.setupLocatorInputDragDrop();
     }
     
     // 显示命令选择菜单
@@ -1771,6 +1858,18 @@ class EditorTab {
         this.removeStatusIndicator();
         this.hideCommandMenu();
         this.hideContextMenu();
+        
+        // 清理拖拽监听器
+        if (this.dragOverHandler) {
+            this.blocksContainer.removeEventListener('dragover', this.dragOverHandler);
+        }
+        if (this.dragLeaveHandler) {
+            this.blocksContainer.removeEventListener('dragleave', this.dragLeaveHandler);
+        }
+        if (this.dropHandler) {
+            this.blocksContainer.removeEventListener('drop', this.dropHandler);
+        }
+        
         this.listeners = [];
     }
 }
