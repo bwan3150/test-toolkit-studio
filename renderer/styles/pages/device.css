@@ -2972,3 +2972,174 @@
     margin-top: 12px;
 }
 
+/* WDA设置指导弹窗样式 */
+.wda-guide-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.wda-guide-modal h3 {
+    margin-top: 0;
+    color: var(--text-primary);
+    font-size: 18px;
+    margin-bottom: 16px;
+}
+
+.wda-guide-modal h4 {
+    color: var(--text-primary);
+    font-size: 14px;
+    margin: 16px 0 8px 0;
+}
+
+.guide-content {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.guide-content ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.guide-content ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.guide-content li {
+    margin-bottom: 4px;
+}
+
+.guide-note {
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid #FFC107;
+    padding: 12px;
+    margin: 16px 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+}
+
+.guide-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+
+.guide-actions .btn {
+    padding: 8px 16px;
+    font-size: 13px;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+/* 平台选择样式 */
+.platform-selection {
+    text-align: center;
+    padding: 20px;
+}
+
+.platform-selection h3 {
+    margin-bottom: 24px;
+    color: var(--text-primary);
+    font-size: 18px;
+}
+
+.platform-options {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.platform-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-width: 160px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.platform-option:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+    transform: translateY(-2px);
+}
+
+.platform-icon {
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+    transition: color 0.3s ease;
+}
+
+.platform-option:hover .platform-icon {
+    color: var(--accent-primary);
+}
+
+.platform-text h4 {
+    margin: 0 0 4px 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.platform-text p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* 返回按钮样式 */
+.back-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    margin-bottom: 16px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    width: fit-content;
+}
+
+.back-button:hover {
+    color: var(--accent-primary);
+    background: var(--bg-hover);
+}
+
+.back-button svg {
+    transition: transform 0.2s ease;
+}
+
+.back-button:hover svg {
+    transform: translateX(-2px);
+}
+

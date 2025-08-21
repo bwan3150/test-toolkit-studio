@@ -830,35 +830,21 @@
                     <div class="connection-tabs">
                       <div class="tab-list">
                         <button class="tab-button active" data-tab="usb">
-                          <svg
-                            class="tab-icon"
-                            viewBox="0 0 24 24"
-                            width="16"
-                            height="16"
-                          >
-                            <path
-                              d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2S4.8 7.79 4.8 9c0 .85.5 1.56 1.2 1.93V11H9v2H6v3h3v2.07c-.7.37-1.2 1.08-1.2 1.93 0 1.21.99 2.2 2.2 2.2s2.2-.99 2.2-2.2c0-.85-.5-1.56-1.2-1.93V16h3v-3h3v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2s-2.2.99-2.2 2.2c0 .85.5 1.56 1.2 1.93V13h-3V7z"
-                            />
+                          <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16">
+                            <path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2S4.8 7.79 4.8 9c0 .85.5 1.56 1.2 1.93V11H9v2H6v3h3v2.07c-.7.37-1.2 1.08-1.2 1.93 0 1.21.99 2.2 2.2 2.2s2.2-.99 2.2-2.2c0-.85-.5-1.56-1.2-1.93V16h3v-3h3v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2s-2.2.99-2.2 2.2c0 .85.5 1.56 1.2 1.93V13h-3V7z"/>
                           </svg>
                           USB Connection
                         </button>
                         <button class="tab-button" data-tab="wireless">
-                          <svg
-                            class="tab-icon"
-                            viewBox="0 0 24 24"
-                            width="16"
-                            height="16"
-                          >
-                            <path
-                              d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.07 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"
-                            />
+                          <svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16">
+                            <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.07 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
                           </svg>
                           Wireless Connection
                         </button>
                       </div>
                     </div>
 
-                    <!-- USB连接教程 -->
+                    <!-- Android USB连接教程 -->
                     <div class="tab-content active" id="usbTab">
                       <div class="instruction-panel">
                         <div class="instruction-header">
@@ -920,6 +906,7 @@
                     </div>
 
                     <!-- 无线连接教程 -->
+                    <!-- Android无线连接教程 -->
                     <div class="tab-content" id="wirelessTab">
                       <div class="instruction-panel">
                         <div class="instruction-header">
@@ -1163,6 +1150,91 @@
                             style="display: none"
                           >
                             <!-- QR码信息会动态插入这里 -->
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+
+                    <!-- iOS USB连接教程 -->
+                    <div class="tab-content" id="ios-usb-tab" style="display: none;">
+                      <div class="instruction-panel">
+                        <div class="instruction-header">
+                          <svg viewBox="0 0 24 24" width="16" height="16" class="header-icon">
+                            <path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2S4.8 7.79 4.8 9c0 .85.5 1.56 1.2 1.93V11H9v2H6v3h3v2.07c-.7.37-1.2 1.08-1.2 1.93 0 1.21.99 2.2 2.2 2.2s2.2-.99 2.2-2.2c0-.85-.5-1.56-1.2-1.93V16h3v-3h3v-2.07c.7-.37 1.2-1.08 1.2-1.93 0-1.21-.99-2.2-2.2-2.2s-2.2.99-2.2 2.2c0 .85.5 1.56 1.2 1.93V13h-3V7z"/>
+                          </svg>
+                          iOS USB连接设置
+                        </div>
+                        <div class="instruction-list">
+                          <div class="instruction-item">
+                            <div class="instruction-step">1</div>
+                            <div class="instruction-text">
+                              <strong>安装WebDriverAgent</strong>
+                              <span>确保iOS设备上已安装WebDriverAgent应用</span>
+                            </div>
+                          </div>
+                          <div class="instruction-item">
+                            <div class="instruction-step">2</div>
+                            <div class="instruction-text">
+                              <strong>启动WDA服务</strong>
+                              <span>在iOS设备上打开WebDriverAgent应用并启动服务</span>
+                            </div>
+                          </div>
+                          <div class="instruction-item">
+                            <div class="instruction-step">3</div>
+                            <div class="instruction-text">
+                              <strong>USB连接设备</strong>
+                              <span>使用USB线缆连接iOS设备到电脑</span>
+                            </div>
+                          </div>
+                          <div class="instruction-item">
+                            <div class="instruction-step">4</div>
+                            <div class="instruction-text">
+                              <strong>端口转发设置</strong>
+                              <span>系统会自动通过iproxy将WDA服务转发到localhost:8100</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- iOS WiFi连接教程 -->
+                    <div class="tab-content" id="ios-wireless-tab" style="display: none;">
+                      <div class="instruction-panel">
+                        <div class="instruction-header">
+                          <svg viewBox="0 0 24 24" width="16" height="16" class="header-icon">
+                            <path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.07 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/>
+                          </svg>
+                          iOS WiFi连接设置
+                        </div>
+                        <div class="instruction-list">
+                          <div class="instruction-item">
+                            <div class="instruction-step">1</div>
+                            <div class="instruction-text">
+                              <strong>网络连接</strong>
+                              <span>确保iOS设备和电脑连接到同一WiFi网络</span>
+                            </div>
+                          </div>
+                          <div class="instruction-item">
+                            <div class="instruction-step">2</div>
+                            <div class="instruction-text">
+                              <strong>启动WDA服务</strong>
+                              <span>在iOS设备上启动WebDriverAgent，记录设备IP地址</span>
+                            </div>
+                          </div>
+                          <div class="instruction-item">
+                            <div class="instruction-step">3</div>
+                            <div class="instruction-text">
+                              <strong>获取设备IP</strong>
+                              <span>在iOS设备的设置 → WiFi中查看当前网络的IP地址</span>
+                            </div>
+                          </div>
+                          <div class="instruction-item">
+                            <div class="instruction-step">4</div>
+                            <div class="instruction-text">
+                              <strong>配置连接信息</strong>
+                              <span>在Add Config中配置iOS设备的IP地址和WDA端口(默认8100)</span>
+                            </div>
                           </div>
                         </div>
                       </div>

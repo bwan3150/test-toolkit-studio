@@ -427,6 +427,7 @@ async function checkIosDeviceStatus(device) {
             }
         } catch (wifiError) {
             console.log('WiFi WDA 状态检测失败:', wifiError.message);
+            device.wdaError = wifiError.message;
         }
         
         device.wdaStatus = 'disconnected';
@@ -540,7 +541,7 @@ async function refreshConnectedDevices() {
                     ${device.model ? `<div class="device-model">Model: ${device.model}</div>` : ''}
                     ${device.version ? `<div class="device-version">Version: ${device.version}</div>` : ''}
                     ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? 
-                        '<div class="device-status-info">⚠️ WDA service not available</div>' : ''}
+                        `<div class="device-status-info">WDA连接失败: ${device.wdaError || 'WDA service not available'}</div>` : ''}
                 </div>
             `;
             
@@ -609,6 +610,14 @@ async function refreshConnectedDevices() {
                                 <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                             </svg>
                             Save Config
+                        </button>
+                    ` : ''}
+                    ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? `
+                        <button class="btn btn-secondary btn-small" onclick="showWdaSetupGuide('${device.id}')">
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                                <path fill="currentColor" d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                            </svg>
+                            WDA Guide
                         </button>
                     ` : ''}
                     ${isWifi ? `
@@ -936,6 +945,9 @@ window.editDevice = editDevice;
 window.deleteDevice = deleteDevice;
 window.copyToClipboard = copyToClipboard;
 window.toggleAdvancedSettings = toggleAdvancedSettings;
+window.showWdaSetupGuide = showWdaSetupGuide;
+window.hideWdaGuide = hideWdaGuide;
+window.retryWdaConnection = retryWdaConnection;
 
 // 已移除 pairWirelessDevice 函数，现在使用连接向导进行配对
 
@@ -972,6 +984,61 @@ async function connectWirelessDevice(ipAddress, port = 5555) {
         window.NotificationModule.showNotification(`连接失败: ${error.message}`, 'error');
         return { success: false, error: error.message };
     }
+}
+
+// 显示WDA设置指导
+function showWdaSetupGuide(deviceId) {
+    const guideContent = `
+        <div class="wda-guide-modal">
+            <h3>iOS WebDriverAgent 设置指导</h3>
+            <div class="guide-content">
+                <p><strong>设备ID:</strong> ${deviceId}</p>
+                
+                <h4>WDA服务未连接的可能原因：</h4>
+                <ul>
+                    <li>iOS设备上的WebDriverAgent应用未安装或未启动</li>
+                    <li>WDA服务端口配置错误（默认8100）</li>
+                    <li>网络连接问题或防火墙阻止</li>
+                    <li>iOS设备和电脑不在同一网络</li>
+                </ul>
+                
+                <h4>解决步骤：</h4>
+                <ol>
+                    <li><strong>确认WDA安装：</strong>确保iOS设备上已安装WebDriverAgent应用</li>
+                    <li><strong>启动WDA服务：</strong>在iOS设备上启动WebDriverAgent应用</li>
+                    <li><strong>检查端口：</strong>确认WDA服务运行在正确端口（通常是8100）</li>
+                    <li><strong>网络连接：</strong>确保iOS设备和电脑在同一WiFi网络</li>
+                    <li><strong>防火墙设置：</strong>检查电脑和iOS设备的防火墙设置</li>
+                </ol>
+                
+                <div class="guide-note">
+                    <strong>提示：</strong>可以在iOS设备的Safari浏览器中访问 http://[设备IP]:8100/status 来测试WDA服务是否正常运行。
+                </div>
+            </div>
+            <div class="guide-actions">
+                <button class="btn btn-primary" onclick="hideWdaGuide()">知道了</button>
+                <button class="btn btn-secondary" onclick="retryWdaConnection('${deviceId}')">重试连接</button>
+            </div>
+        </div>
+        <div class="modal-overlay" onclick="hideWdaGuide()"></div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', guideContent);
+}
+
+// 隐藏WDA设置指导
+function hideWdaGuide() {
+    const guide = document.querySelector('.wda-guide-modal');
+    const overlay = document.querySelector('.modal-overlay');
+    if (guide) guide.remove();
+    if (overlay) overlay.remove();
+}
+
+// 重试WDA连接
+async function retryWdaConnection(deviceId) {
+    hideWdaGuide();
+    window.NotificationModule.showNotification('正在重试WDA连接...', 'info');
+    await refreshConnectedDevices();
 }
 
 // 断开无线设备连接
@@ -1019,13 +1086,14 @@ function showConnectionGuide() {
     if (modal) {
         modal.style.display = 'flex';
         
-        // 重置到USB连接指导
+        // 重置到USB连接指导（恢复原来的行为）
         showConnectionMethod('usb');
         
         // 重置配对状态
         resetPairingStatus();
     }
 }
+
 
 // 隐藏连接向导
 function hideConnectionGuide() {
@@ -1137,16 +1205,21 @@ function showPairingMethod(method) {
     const showCodeBtn = document.getElementById('showPairingCodeBtn');
     const showQrBtn = document.getElementById('showQrCodeBtn');
     
+    if (!codeSection || !qrSection) {
+        console.error('配对区域元素未找到');
+        return;
+    }
+    
     if (method === 'code') {
         codeSection.style.display = 'block';
         qrSection.style.display = 'none';
-        showCodeBtn.classList.add('active');
-        showQrBtn.classList.remove('active');
+        if (showCodeBtn) showCodeBtn.classList.add('active');
+        if (showQrBtn) showQrBtn.classList.remove('active');
     } else {
         codeSection.style.display = 'none';
         qrSection.style.display = 'block';
-        showCodeBtn.classList.remove('active');
-        showQrBtn.classList.add('active');
+        if (showCodeBtn) showCodeBtn.classList.remove('active');
+        if (showQrBtn) showQrBtn.classList.add('active');
     }
 }
 
