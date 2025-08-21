@@ -1,0 +1,38 @@
+<!-- APK安装Loading Modal -->
+<div id="apkInstallLoadingModal" class="modal" style="display: none;">
+  <div class="modal-content apk-loading-modal">
+    <div class="modal-body">
+      <div class="apk-loading-content">
+        <div class="loading-spinner"></div>
+        <h3 id="apkLoadingTitle">正在处理APK...</h3>
+        <p id="apkLoadingMessage">请稍候，正在获取APK信息</p>
+        <div id="apkLoadingDetails" style="display: none;">
+          <p>包名: <span id="apkPackageName">-</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APK安装确认对话框 -->
+<div id="apkInstallModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>安装冲突</h3>
+    </div>
+    <div class="modal-body">
+      <p class="modal-message">APK无法直接安装，可能原因：</p>
+      <ul class="modal-reasons">
+        <li>签名不匹配（Debug和Release版本使用不同签名）</li>
+        <li>版本号冲突（尝试安装更旧的版本）</li>
+        <li>其他安装限制</li>
+      </ul>
+      <p class="modal-solution"><strong>解决方案：</strong>先卸载原应用，再安装新版本</p>
+      <p class="warning-text">⚠️ 卸载会清除应用数据</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="cancelUninstallBtn">取消</button>
+      <button class="btn btn-primary" id="confirmUninstallBtn">卸载并重装</button>
+    </div>
+  </div>
+</div>

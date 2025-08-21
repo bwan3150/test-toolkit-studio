@@ -46,6 +46,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
         // 初始化编辑器管理器
         window.initializeEditorManager();
+        
+        // 2.5 加载组件
+        if (window.ComponentLoader) {
+            const components = [
+                { name: 'connection-guide', container: 'connectionGuideModalContainer' },
+                { name: 'apk-modals', container: 'apkModalsContainer' },
+                { name: 'common-modals', container: 'commonModalsContainer' }
+            ];
+            await window.ComponentLoader.loadComponents(components);
+        }
         await loadScript('./js/ui/settings.js');
         await loadScript('./js/ui/resizable-panels.js');
         await loadScript('./js/ui/status-bar.js');
@@ -122,11 +132,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.DeviceManagerModule.initializeDevicePage();
             // console.log('✓ 设备管理模块已初始化'); // 已禁用以减少日志
             
-            window.LogManagerModule.initializeLogPage();
-            // console.log('✓ 日志管理模块已初始化'); // 已禁用以减少日志
+            try {
+                await window.LogManagerModule.initializeLogPage();
+                console.log('✓ 日志管理模块已初始化');
+            } catch (error) {
+                console.error('日志管理模块初始化失败:', error);
+            }
             
-            window.SettingsModule.initializeSettingsPage();
-            // console.log('✓ 设置模块已初始化'); // 已禁用以减少日志
+            try {
+                window.SettingsModule.initializeSettingsPage();
+                console.log('✓ 设置模块已初始化');
+            } catch (error) {
+                console.error('设置模块初始化失败:', error);
+            }
             
             // 初始化TKS集成模块
             window.TKSIntegrationModule.initializeTKSIntegration();
@@ -172,8 +190,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 初始化测试报告模块
         if (window.TestReportModule) {
-            window.TestReportModule.initializeReportPage();
-            // console.log('✓ 测试报告模块已初始化'); // 已禁用以减少日志
+            try {
+                window.TestReportModule.initializeReportPage();
+                console.log('✓ 测试报告模块已初始化');
+            } catch (error) {
+                console.error('测试报告模块初始化失败:', error);
+            }
+        } else {
+            console.error('TestReportModule未加载');
         }
         
         // 最后初始化状态栏，确保能获取到正确的项目信息

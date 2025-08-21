@@ -6,6 +6,7 @@ function initializeNavigation() {
     navItems.forEach(item => {
         item.addEventListener('click', () => {
             const targetPage = item.dataset.page;
+            console.log(`切换到页面: ${targetPage}`);
             
             // 更新激活的导航项
             navItems.forEach(nav => nav.classList.remove('active'));
@@ -13,7 +14,13 @@ function initializeNavigation() {
             
             // 更新激活的页面
             pages.forEach(page => page.classList.remove('active'));
-            document.getElementById(`${targetPage}Page`).classList.add('active');
+            const targetPageElement = document.getElementById(`${targetPage}Page`);
+            if (targetPageElement) {
+                targetPageElement.classList.add('active');
+                console.log(`页面 ${targetPage}Page 已激活`);
+            } else {
+                console.error(`页面元素 ${targetPage}Page 未找到`);
+            }
             
             // 页面特定的动作
             if (targetPage === 'device') {

@@ -6,7 +6,7 @@
     padding: 24px;
     border: 1px solid var(--border-color);
     display: none; /* 默认隐藏 */
-    order: 1; /* 确保显示在顶部 */
+    order: -10; /* 确保显示在最顶部 */
 }
 
 .device-form h3 {
@@ -2793,13 +2793,6 @@
 }
 
 /* 设备表单样式 */
-.device-form {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 24px;
-    margin-bottom: 24px;
-}
 
 .device-form h3 {
     color: var(--text-primary);

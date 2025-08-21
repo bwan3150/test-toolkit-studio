@@ -5,16 +5,36 @@ function getGlobals() {
     return window.AppGlobals;
 }
 
+// 动态加载连接向导模态框
+async function loadConnectionGuideModal() {
+    const container = document.getElementById('connectionGuideModalContainer');
+    if (!container) return;
+    
+    try {
+        const response = await fetch('modals/connection-guide-modal.html');
+        if (response.ok) {
+            const html = await response.text();
+            container.innerHTML = html;
+        }
+    } catch (error) {
+        console.error('Failed to load connection guide modal:', error);
+    }
+}
+
 // 初始化设备页面
-function initializeDevicePage() {
+async function initializeDevicePage() {
     const { fs, yaml } = getGlobals();
+    
+    // 动态加载连接向导模态框
+    await loadConnectionGuideModal();
+    
     const addDeviceBtn = document.getElementById('addDeviceBtn');
     const scanDevicesBtn = document.getElementById('scanDevicesBtn');
     const deviceForm = document.getElementById('deviceForm');
     const newDeviceForm = document.getElementById('newDeviceForm');
     const cancelDeviceBtn = document.getElementById('cancelDeviceBtn');
     
-    // 连接向导相关元素
+    // 连接向导相关元素（加载后才能获取）
     const connectDeviceBtn = document.getElementById('connectDeviceBtn');
     const connectionGuideModal = document.getElementById('connectionGuideModal');
     const closeGuideBtn = document.getElementById('closeGuideBtn');
@@ -1660,13 +1680,16 @@ async function installApkToDevice(deviceId, apkPath) {
             const errorMsg = result.error || '安装失败';
             console.log('APK安装失败:', errorMsg);
             
-            // 检查是否包含签名不匹配的标识
-            const isSignatureMismatch = errorMsg.includes('签名不匹配') || 
-                                       (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE'));
+            // 检查是否需要卸载重装（签名冲突或版本冲突）
+            const needUninstallReinstall = errorMsg.includes('签名不匹配') || 
+                                          (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) ||
+                                          errorMsg.includes('is older than current') ||
+                                          errorMsg.includes('INSTALL_FAILED') ||
+                                          result.details?.includes('INSTALL_FAILED');
             
-            console.log('是否签名不匹配:', isSignatureMismatch);
+            console.log('是否需要卸载重装:', needUninstallReinstall, '错误信息:', errorMsg);
             
-            if (isSignatureMismatch) {
+            if (needUninstallReinstall) {
                 // 第三步：安装失败时，隐藏loading并显示确认框
                 hideApkInstallLoading();
                 showApkInstallModalWithPackage(deviceId, apkPath, packageName);

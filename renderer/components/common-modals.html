@@ -1,0 +1,64 @@
+<!-- 输入对话框 -->
+<div class="modal" id="inputDialog" style="display: none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="inputDialogTitle">输入</h3>
+      <button class="modal-close" id="closeInputDialog">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label id="inputDialogLabel">请输入：</label>
+        <input type="text" id="inputDialogInput" class="form-control" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="confirmInputDialog">确定</button>
+      <button class="btn btn-secondary" id="cancelInputDialog">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 创建测试用例模态框 -->
+<div class="modal" id="createCaseModal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Create Test Case</h3>
+      <button class="modal-close" id="closeCaseModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="createCaseForm">
+        <div class="form-group">
+          <label>Case Name</label>
+          <input
+            type="text"
+            name="caseName"
+            placeholder="e.g., case_001"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea
+            name="description"
+            rows="3"
+            placeholder="Test case description"
+          ></textarea>
+        </div>
+        <div class="form-group">
+          <label>Requirements</label>
+          <textarea
+            name="requirements"
+            rows="3"
+            placeholder="Test requirements"
+          ></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="confirmCreateCase">Create</button>
+      <button class="btn btn-secondary" id="cancelCreateCase">
+        Cancel
+      </button>
+    </div>
+  </div>
+</div>
