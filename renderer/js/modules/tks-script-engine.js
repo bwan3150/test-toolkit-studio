@@ -288,9 +288,10 @@ class TKSScriptParser {
             };
         }
         
-        // 解析坐标 [x,y]
-        if (/^\d+,\d+$/.test(param)) {
-            const [x, y] = param.split(',').map(n => parseInt(n));
+        // 解析坐标 {x,y}
+        if (/^\{\d+,\d+\}$/.test(param)) {
+            const coordStr = param.slice(1, -1); // 去掉花括号
+            const [x, y] = coordStr.split(',').map(n => parseInt(n));
             return { type: 'coordinate', x, y };
         }
         
@@ -298,6 +299,14 @@ class TKSScriptParser {
         if (param.startsWith('@{') && param.endsWith('}')) {
             const imageName = param.slice(2, -1);
             return { type: 'image_reference', name: imageName };
+        }
+        
+        // 解析XML元素引用 {元素名称}
+        if (param.startsWith('{') && param.endsWith('}')) {
+            const elementName = param.slice(1, -1);
+            // 直接返回元素名称字符串，不需要特殊类型标记
+            // 因为findElement方法会处理字符串类型的选择器
+            return elementName;
         }
         
         // 解析方向
@@ -637,6 +646,68 @@ class TKSScriptExecutor {
             // 缓存元素供后续使用
             this.currentElements = elements;
             this.currentUITree = uiDumpResult.xml;
+        }
+    }
+
+    /**
+     * 获取当前UI元素数据
+     * @returns {Array} UI元素数组
+     */
+    async getCurrentUIElements() {
+        const { ipcRenderer } = window.AppGlobals;
+        
+        try {
+            console.log('TKS执行器: 获取当前UI元素数据...');
+            const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', this.deviceId);
+            
+            if (uiDumpResult.success && uiDumpResult.xml) {
+                // 解析UI树并缓存元素
+                const parser = new window.XMLParser();
+                if (uiDumpResult.screenSize) {
+                    parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
+                }
+                
+                console.log(`TKS执行器: XML长度: ${uiDumpResult.xml.length}`);
+                
+                const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
+                // 如果优化失败，传递原始XML作为回退
+                const elements = parser.extractUIElements(optimizedTree, uiDumpResult.xml);
+                
+                console.log(`TKS执行器: 解析得到 ${elements.length} 个UI元素`);
+                
+                // 更新实例状态
+                this.currentElements = elements;
+                this.currentUITree = uiDumpResult.xml;
+                
+                // 保存UI树到workarea（确保始终保存）
+                if (this.projectPath && window.AppGlobals.fs && window.AppGlobals.path) {
+                    try {
+                        const { fs, path } = window.AppGlobals;
+                        const workareaDir = path.join(this.projectPath, 'workarea');
+                        const xmlPath = path.join(workareaDir, 'current_ui_tree.xml');
+                        
+                        // 确保workarea目录存在
+                        await fs.mkdir(workareaDir, { recursive: true });
+                        // 保存UI树
+                        await fs.writeFile(xmlPath, uiDumpResult.xml, 'utf8');
+                        console.log(`TKS执行器: UI树已保存到 ${xmlPath}`);
+                    } catch (error) {
+                        console.warn(`TKS执行器: 保存UI树到workarea失败:`, error);
+                    }
+                }
+                
+                return elements;
+            } else {
+                console.warn('TKS执行器: UI树获取失败');
+                this.currentElements = [];
+                this.currentUITree = null;
+                return [];
+            }
+        } catch (error) {
+            console.error('TKS执行器: getCurrentUIElements失败:', error);
+            this.currentElements = [];
+            this.currentUITree = null;
+            return [];
         }
     }
     
