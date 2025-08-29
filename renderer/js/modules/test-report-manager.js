@@ -30,14 +30,23 @@
     // Initialize report page
     async function initializeReportPage() {
         bindEventListeners();
-        await loadRealData(); // 加载真实数据
+        
+        // 尝试加载真实数据，但不阻塞初始化
+        try {
+            await loadRealData(); // 加载真实数据
+        } catch (error) {
+            console.error('加载API数据失败，但继续初始化:', error);
+            // 即使API失败，也继续初始化图表（会显示无数据状态）
+        }
+        
         initializeCharts();
     }
     
     // 加载真实API数据
     async function loadRealData() {
         if (!window.BugAnalyzerClient) {
-            throw new Error('Bug Analyzer API客户端未加载');
+            console.warn('Bug Analyzer API客户端未加载，跳过数据加载');
+            return;
         }
 
         try {
@@ -48,23 +57,25 @@
             
             // 1. 获取今日Priority统计（用于饼图）
             const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats();
-            if (!priorityStats || !priorityStats.data) {
-                throw new Error('无法获取Priority统计数据');
+            if (priorityStats && priorityStats.data && priorityStats.data[today]) {
+                apiData.priorityStats = priorityStats.data[today];
+                console.log('Priority统计数据:', apiData.priorityStats);
+            } else {
+                console.warn('Priority统计数据为空');
             }
-            apiData.priorityStats = priorityStats.data[today];
-            console.log('Priority统计数据:', apiData.priorityStats);
             
             // 2. 获取趋势数据（用于趋势图）
             const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority');
-            if (!trendData || !trendData.data) {
-                throw new Error('无法获取趋势数据');
+            if (trendData && trendData.data) {
+                apiData.trendData = trendData.data;
+                console.log('趋势数据:', apiData.trendData);
+            } else {
+                console.warn('趋势数据为空');
             }
-            apiData.trendData = trendData.data;
-            console.log('趋势数据:', apiData.trendData);
             
             // 3. 获取问题模块统计（用于表格）
             const moduleStats = await window.BugAnalyzerClient.getModuleStats();
-            if (moduleStats && moduleStats.data) {
+            if (moduleStats && moduleStats.data && moduleStats.data[today]) {
                 apiData.moduleStats = moduleStats.data[today];
                 console.log('模块统计数据:', apiData.moduleStats);
             }
@@ -79,21 +90,11 @@
                 }
             }
             
-            console.log('所有API数据加载完成:', apiData);
+            console.log('API数据加载完成:', apiData);
         } catch (error) {
             console.error('加载真实数据失败:', error);
-            // 显示错误信息
-            const reportContent = document.querySelector('.report-content');
-            if (reportContent) {
-                reportContent.innerHTML = `
-                    <div style="text-align: center; padding: 50px; color: #ff5555;">
-                        <h3>加载数据失败</h3>
-                        <p>${error.message}</p>
-                        <p>请检查API服务器是否正常运行</p>
-                    </div>
-                `;
-            }
-            throw error;
+            // 不显示错误界面，让图表显示"暂无数据"状态
+            // 这样至少UI是正常的
         }
     }
     
@@ -348,7 +349,7 @@
         
         const container = canvas.parentElement;
         canvas.width = container.offsetWidth;
-        canvas.height = 200;
+        canvas.height = 220; // 增加高度以容纳日期标签
         
         // 刷新时需要重新生成数据
         canvas.chartData = generateTimelineData();
@@ -360,7 +361,19 @@
     // Draw timeline chart with smooth gradients and hover effects
     function drawTimelineChart(canvas) {
         const ctx = canvas.getContext('2d');
-        const padding = { top: 20, right: 20, bottom: 20, left: 40 };
+        const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+        
+        // 根据数据点数量动态调整画布宽度（如果数据点多，增加宽度）
+        const minWidth = canvas.parentElement.offsetWidth;
+        const initialDataPoints = canvas.chartData ? (canvas.chartData['Block'] ? canvas.chartData['Block'].length : 0) : 0;
+        const pointWidth = 40; // 每个数据点的宽度
+        const requiredWidth = Math.max(minWidth, initialDataPoints * pointWidth + padding.left + padding.right);
+        
+        // 设置画布实际宽度
+        if (canvas.width !== requiredWidth) {
+            canvas.width = requiredWidth;
+        }
+        
         const chartWidth = canvas.width - padding.left - padding.right;
         const chartHeight = canvas.height - padding.top - padding.bottom;
         
@@ -388,10 +401,38 @@
             return;
         }
         
+        // 获取数据点数量
         const dataPoints = data['Block'] ? data['Block'].length : 0;
+        if (dataPoints === 0) {
+            ctx.fillStyle = '#666';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据点', canvas.width / 2, canvas.height / 2);
+            return;
+        }
         
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 计算数据的最大值以确定Y轴比例
+        let maxValue = 0;
+        const keys = ['Low', 'Normal', 'High', 'Block']; // 移除info，因为API数据中没有
+        const stackedData = [];
+        
+        // Calculate stacked values and find max
+        for (let i = 0; i < dataPoints; i++) {
+            let stack = 0;
+            stackedData[i] = {};
+            keys.forEach(key => {
+                const value = data[key] && data[key][i] ? data[key][i] : 0;
+                stack += value;
+                stackedData[i][key] = stack;
+            });
+            maxValue = Math.max(maxValue, stack);
+        }
+        
+        // 设置Y轴的合理范围（向上取整到最近的10的倍数）
+        const yAxisMax = Math.ceil(maxValue / 10) * 10 || 100;
         
         // Draw subtle grid lines
         ctx.strokeStyle = 'rgba(60, 60, 60, 0.15)';
@@ -407,25 +448,17 @@
             ctx.stroke();
         }
         
-        // Draw stacked area chart with gradients - 使用实际字段名
-        const keys = ['info', 'Low', 'Normal', 'High', 'Block'];
-        const stackedData = [];
-        
-        // Calculate stacked values
-        for (let i = 0; i < dataPoints; i++) {
-            let stack = 0;
-            stackedData[i] = {};
-            keys.forEach(key => {
-                stack += data[key][i];
-                stackedData[i][key] = stack;
-            });
-        }
-        
         // Draw each layer with gradient
         keys.reverse().forEach((key, keyIndex) => {
+            if (!TIMELINE_COLORS[key]) {
+                console.warn(`没有找到${key}的颜色配置`);
+                return;
+            }
+            
             const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
-            gradient.addColorStop(0, TIMELINE_COLORS[key]);
-            gradient.addColorStop(1, TIMELINE_COLORS[key].replace(/[\d.]+\)/, '0.1)'));
+            const baseColor = TIMELINE_COLORS[key];
+            gradient.addColorStop(0, baseColor);
+            gradient.addColorStop(1, baseColor.replace(/[\d.]+\)/, '0.1)'));
             
             ctx.beginPath();
             ctx.fillStyle = gradient;
@@ -445,27 +478,25 @@
             // Start from bottom left
             ctx.moveTo(padding.left, padding.top + chartHeight);
             
-            // Draw the upper line with smooth curves
+            // Draw the upper line with straight lines between points
             for (let i = 0; i < dataPoints; i++) {
-                const x = padding.left + (chartWidth / (dataPoints - 1)) * i;
-                const y = padding.top + chartHeight - (stackedData[i][key] / 4000) * chartHeight;
+                const x = padding.left + (chartWidth / Math.max(1, dataPoints - 1)) * i;
+                const y = padding.top + chartHeight - (stackedData[i][key] / yAxisMax) * chartHeight;
                 
                 if (i === 0) {
                     ctx.lineTo(x, y);
                 } else {
-                    // Use quadratic curves for smoother lines
-                    const prevX = padding.left + (chartWidth / (dataPoints - 1)) * (i - 1);
-                    const prevY = padding.top + chartHeight - (stackedData[i - 1][key] / 4000) * chartHeight;
-                    const cpX = (prevX + x) / 2;
-                    const cpY = (prevY + y) / 2;
-                    ctx.quadraticCurveTo(prevX, prevY, cpX, cpY);
+                    // 直接用直线连接数据点，避免曲线造成的波动
+                    ctx.lineTo(x, y);
                 }
             }
             
             // Draw the last point
-            const lastX = padding.left + chartWidth;
-            const lastY = padding.top + chartHeight - (stackedData[dataPoints - 1][key] / 4000) * chartHeight;
-            ctx.lineTo(lastX, lastY);
+            if (dataPoints > 0) {
+                const lastX = padding.left + chartWidth;
+                const lastY = padding.top + chartHeight - (stackedData[dataPoints - 1][key] / yAxisMax) * chartHeight;
+                ctx.lineTo(lastX, lastY);
+            }
             
             // Complete the shape
             ctx.lineTo(canvas.width - padding.right, padding.top + chartHeight);
@@ -478,19 +509,20 @@
         
         ctx.globalAlpha = 1;
         
-        // Y-axis labels
+        // Y-axis labels - 根据实际数据范围动态生成
         ctx.fillStyle = '#6c6c6c';
         ctx.font = '10px var(--font-family)';
         ctx.textAlign = 'right';
         
-        const yLabels = ['0', '500', '1K', '1.5K', '2K'];
-        for (let i = 0; i < yLabels.length; i++) {
-            const y = padding.top + chartHeight - (chartHeight / (yLabels.length - 1)) * i;
-            ctx.fillText(yLabels[i], padding.left - 5, y + 3);
+        const yStepValue = yAxisMax / 4;
+        for (let i = 0; i <= 4; i++) {
+            const value = Math.round(yStepValue * i);
+            const y = padding.top + chartHeight - (chartHeight / 4) * i;
+            ctx.fillText(value.toString(), padding.left - 5, y + 3);
         }
         
-        // 更新HTML中的日期标签
-        updateTimelineLabels();
+        // 在canvas上直接绘制日期标签（这样标签会跟随滚动）
+        drawTimelineLabels(ctx, padding, chartWidth, chartHeight);
         
         // Draw hover indicator in fixed position
         if (canvas.hoveredLine) {
@@ -498,33 +530,56 @@
         }
     }
     
-    // 更新时间轴标签
-    function updateTimelineLabels() {
-        const labelsContainer = document.querySelector('.timeline-labels');
-        if (!labelsContainer || !timelineDates || timelineDates.length === 0) {
+    // 在canvas上绘制时间轴标签
+    function drawTimelineLabels(ctx, padding, chartWidth, chartHeight) {
+        if (!timelineDates || timelineDates.length === 0) {
             return;
         }
         
-        // 清空现有标签
-        labelsContainer.innerHTML = '';
+        ctx.fillStyle = '#6c6c6c';
+        ctx.font = '10px var(--font-family)';
+        ctx.textAlign = 'center';
         
-        // 选择要显示的日期（显示5个均匀分布的日期）
-        const totalDates = timelineDates.length;
-        const labelsToShow = 5;
-        const step = Math.floor(totalDates / labelsToShow);
+        const dataPoints = timelineDates.length;
         
-        for (let i = 0; i < labelsToShow; i++) {
-            const index = Math.min(i * step, totalDates - 1);
-            const date = timelineDates[index];
+        // 每隔几个数据点显示一个日期标签（避免重叠）
+        const labelInterval = Math.max(1, Math.floor(dataPoints / 10)); // 最多显示10个标签
+        
+        for (let i = 0; i < dataPoints; i += labelInterval) {
+            const x = padding.left + (chartWidth / Math.max(1, dataPoints - 1)) * i;
+            const y = padding.top + chartHeight + 20; // 标签位置在图表下方
             
-            // 格式化日期显示（例如：08-27）
-            const dateObj = new Date(date);
-            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const day = String(dateObj.getDate()).padStart(2, '0');
-            
-            const label = document.createElement('span');
-            label.textContent = `${month}-${day}`;
-            labelsContainer.appendChild(label);
+            const date = timelineDates[i];
+            if (date) {
+                // 格式化日期显示（例如：08-27）
+                const dateObj = new Date(date);
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                
+                ctx.fillText(`${month}-${day}`, x, y);
+            }
+        }
+        
+        // 始终显示最后一个日期
+        if (dataPoints > 0 && dataPoints % labelInterval !== 0) {
+            const lastX = padding.left + chartWidth;
+            const lastY = padding.top + chartHeight + 20;
+            const lastDate = timelineDates[dataPoints - 1];
+            if (lastDate) {
+                const dateObj = new Date(lastDate);
+                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getDate()).padStart(2, '0');
+                ctx.fillText(`${month}-${day}`, lastX, lastY);
+            }
+        }
+    }
+    
+    // 更新HTML中的时间轴标签（现在已不需要，因为标签直接绘制在canvas上）
+    function updateTimelineLabels() {
+        // 隐藏HTML中的时间标签容器
+        const labelsContainer = document.querySelector('.timeline-labels');
+        if (labelsContainer) {
+            labelsContainer.style.display = 'none';
         }
     }
     
@@ -541,8 +596,7 @@
             'Block': [],
             'High': [],
             'Normal': [],
-            'Low': [],
-            'info': [] // 保留info以防需要
+            'Low': []
         };
         
         // 获取所有日期并排序
@@ -605,7 +659,7 @@
         
         if (dataIndex >= 0 && dataIndex < dataPoints && x >= padding.left && x <= canvas.width - padding.right) {
             let stack = 0;
-            const keys = ['info', 'Low', 'Normal', 'High', 'Block'];
+            const keys = ['Low', 'Normal', 'High', 'Block'];
             
             for (const key of keys) {
                 stack += data[key][dataIndex];

@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 初始化测试报告模块
         if (window.TestReportModule) {
             try {
-                window.TestReportModule.initializeReportPage();
+                await window.TestReportModule.initializeReportPage();
                 console.log('✓ 测试报告模块已初始化');
             } catch (error) {
                 console.error('测试报告模块初始化失败:', error);
