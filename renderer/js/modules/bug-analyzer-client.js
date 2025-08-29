@@ -16,30 +16,37 @@
             try {
                 const url = `${this.baseURL}${endpoint}`;
                 
-                // 使用渲染进程日志
-                if (window.rDebug) {
-                    window.rDebug('BugAnalyzer API请求:', url);
-                }
-                
-                // 检查缓存
+                // 暂时禁用缓存，直接请求
+                // TODO: 修复缓存逻辑，确保筛选条件变化时不使用缓存
+                /*
                 const cacheKey = `${options.method || 'GET'}_${url}_${JSON.stringify(options.body)}`;
                 if (this.cache.has(cacheKey)) {
                     const cached = this.cache.get(cacheKey);
                     if (Date.now() - cached.timestamp < this.cacheTimeout) {
                         if (window.rDebug) {
-                            window.rDebug('使用缓存数据:', endpoint);
+                            window.rDebug('使用缓存数据, key:', cacheKey.substring(0, 100));
                         }
                         return cached.data;
                     }
                 }
+                */
 
+                // 构建请求体
+                const requestBody = options.body ? JSON.stringify(options.body) : undefined;
+                
+                // 详细记录请求（用于调试）
+                if (window.rInfo && options.body && options.body.filters) {
+                    window.rInfo('完整请求URL:', url);
+                    window.rInfo('完整请求体:', requestBody);
+                }
+                
                 const response = await fetch(url, {
                     method: options.method || 'GET',
                     headers: {
                         'Content-Type': 'application/json',
                         ...options.headers
                     },
-                    body: options.body ? JSON.stringify(options.body) : undefined
+                    body: requestBody
                 });
 
                 if (!response.ok) {
@@ -52,16 +59,32 @@
 
                 const data = await response.json();
                 
-                // 记录响应
-                if (window.rDebug) {
-                    window.rDebug('API响应:', endpoint, '数据大小:', JSON.stringify(data).length, '字节');
+                // 记录响应数据（更详细）
+                if (window.rInfo && endpoint === '/api/analysis') {
+                    // 对于分析API，记录关键响应信息
+                    if (data && data.data) {
+                        const dates = Object.keys(data.data);
+                        if (dates.length > 0) {
+                            const firstDateData = data.data[dates[0]];
+                            if (options.body && options.body.filters) {
+                                window.rInfo('===筛选后的API响应===');
+                                window.rInfo(`日期:${dates[0]}, total:${firstDateData.total}`);
+                                window.rInfo('breakdown:', JSON.stringify(firstDateData.breakdown));
+                                window.rInfo('===================');
+                            } else {
+                                window.rInfo(`API响应(无筛选) - date:${dates[0]}, total:${firstDateData.total}`);
+                            }
+                        }
+                    }
                 }
                 
-                // 缓存结果
+                // 暂时禁用缓存存储
+                /*
                 this.cache.set(cacheKey, {
                     data: data,
                     timestamp: Date.now()
                 });
+                */
 
                 return data;
             } catch (error) {
@@ -85,13 +108,7 @@
         // 获取字段选项
         async getFieldOptions(field, schema = 'normal_buglist') {
             try {
-                if (window.rInfo) {
-                    window.rInfo(`正在获取字段选项: ${field} (schema: ${schema})`);
-                }
                 const result = await this.request(`/api/schema/field/options?schema=${schema}&field=${encodeURIComponent(field)}`);
-                if (window.rInfo) {
-                    window.rInfo(`${field}字段选项结果:`, result);
-                }
                 return result;
             } catch (error) {
                 if (window.rError) {
@@ -104,9 +121,6 @@
         // 执行数据分析
         async performAnalysis(params) {
             try {
-                if (window.rInfo && params.filters) {
-                    window.rInfo('执行分析，包含筛选条件:', params.filters);
-                }
                 return await this.request('/api/analysis', {
                     method: 'POST',
                     body: params
@@ -148,6 +162,7 @@
 
         // 获取今日Bug统计（Priority分布）
         async getTodayPriorityStats(filters = {}) {
+            // 使用今天的日期
             const today = new Date().toISOString().split('T')[0];
             
             const params = {

@@ -55,10 +55,7 @@
 
         try {
             if (window.rInfo) {
-                window.rInfo('开始加载真实Bug数据...');
-                if (Object.keys(currentFilters).length > 0) {
-                    window.rInfo('当前筛选条件:', currentFilters);
-                }
+                window.rInfo('加载数据, 筛选器:', Object.keys(currentFilters).join(', ') || '无');
             }
             
             // 获取当前日期
@@ -66,27 +63,63 @@
             
             // 1. 获取今日Priority统计（用于饼图）- 应用筛选器
             const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats(currentFilters);
-            if (priorityStats && priorityStats.data && priorityStats.data[today]) {
-                apiData.priorityStats = priorityStats.data[today];
-                console.log('Priority统计数据:', apiData.priorityStats);
+            if (priorityStats && priorityStats.data) {
+                // 获取返回数据中的第一个日期的数据（API可能返回的不是今天）
+                const dates = Object.keys(priorityStats.data);
+                if (dates.length > 0) {
+                    apiData.priorityStats = priorityStats.data[dates[0]];
+                    if (window.rInfo) {
+                        window.rInfo(`数据已应用到图表 (${dates[0]}), total:`, apiData.priorityStats.total);
+                    }
+                } else {
+                    if (window.rWarn) {
+                        window.rWarn('Priority统计数据为空，尝试获取最近的数据...');
+                    }
+                    // 如果没有今天的数据，尝试获取最近7天的任意一天
+                    const fallbackDates = [];
+                    for (let i = 0; i < 7; i++) {
+                        const date = new Date();
+                        date.setDate(date.getDate() - i);
+                        fallbackDates.push(date.toISOString().split('T')[0]);
+                    }
+                    
+                    // 尝试使用最近的日期
+                    for (const date of fallbackDates) {
+                        const fallbackParams = {
+                            dates: date,
+                            target_field: 'Priority',
+                            analysis_type: 'proportion'
+                        };
+                        if (Object.keys(currentFilters).length > 0) {
+                            fallbackParams.filters = currentFilters;
+                        }
+                        
+                        const fallbackStats = await window.BugAnalyzerClient.performAnalysis(fallbackParams);
+                        if (fallbackStats && fallbackStats.data && fallbackStats.data[date]) {
+                            apiData.priorityStats = fallbackStats.data[date];
+                            if (window.rInfo) {
+                                window.rInfo(`使用备用日期 ${date} 的数据, total:`, apiData.priorityStats.total);
+                            }
+                            break;
+                        }
+                    }
+                }
             } else {
-                console.warn('Priority统计数据为空');
+                if (window.rWarn) {
+                    window.rWarn('Priority统计API返回为空');
+                }
             }
             
             // 2. 获取趋势数据（用于趋势图）- 应用筛选器
             const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority', currentFilters);
             if (trendData && trendData.data) {
                 apiData.trendData = trendData.data;
-                console.log('趋势数据:', apiData.trendData);
-            } else {
-                console.warn('趋势数据为空');
             }
             
             // 3. 获取问题模块统计（用于表格）
             const moduleStats = await window.BugAnalyzerClient.getModuleStats();
             if (moduleStats && moduleStats.data && moduleStats.data[today]) {
                 apiData.moduleStats = moduleStats.data[today];
-                console.log('模块统计数据:', apiData.moduleStats);
             }
             
             // 4. 获取总Bug数（用于顶部统计）- 应用筛选器
@@ -140,7 +173,6 @@
         if (moreFiltersBtn) {
             moreFiltersBtn.addEventListener('click', () => {
                 // TODO: Show more filters dialog
-                console.log('More filters clicked');
             });
         }
         
@@ -178,6 +210,9 @@
     
     // Draw severity donut chart with hover effects
     function drawSeverityDonut(canvas) {
+        if (window.rInfo) {
+            window.rInfo('绘制饼图, total:', apiData.priorityStats?.total || 0);
+        }
         const ctx = canvas.getContext('2d');
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
@@ -230,6 +265,11 @@
             }
         }
         
+        if (window.rInfo) {
+            const summary = data.map(d => `${d.label}:${d.value}`).join(', ');
+            window.rInfo('饼图数据:', summary);
+        }
+        
         // 如果没有数据，显示空状态
         if (data.length === 0) {
             ctx.fillStyle = '#666';
@@ -247,9 +287,6 @@
         
         const total = data.reduce((sum, item) => sum + item.value, 0);
         let currentAngle = -Math.PI / 2;
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         // Clear and rebuild segment data
         canvas.segments = [];
@@ -817,6 +854,10 @@
     
     // Refresh report data
     async function refreshReportData() {
+        if (window.rInfo) {
+            window.rInfo('开始刷新报告数据');
+        }
+        
         // Show loading animation
         const reportContent = document.querySelector('.report-content');
         if (reportContent) {
@@ -834,12 +875,15 @@
         const timelineChart = document.getElementById('timelineChart');
         
         if (severityChart) {
+            if (window.rInfo) {
+                window.rInfo('重新绘制饼图');
+            }
             // 重新设置canvas尺寸
             severityChart.width = 180;
             severityChart.height = 180;
-            // 重置状态
-            severityChart.hoveredSegment = undefined;
-            severityChart.segments = undefined;
+            // 保持hoveredSegment为null但不设为undefined，避免重复添加事件监听器
+            severityChart.hoveredSegment = null;
+            severityChart.segments = [];
             // 重新绘制
             drawSeverityDonut(severityChart);
         }
@@ -884,53 +928,24 @@
     
     // 显示筛选器弹窗
     async function showFilterModal() {
-        if (window.rInfo) {
-            window.rInfo('showFilterModal 函数被调用');
-        }
-        
         // 总是删除旧的弹窗，重新创建
         let oldModal = document.getElementById('filterModal');
         if (oldModal) {
-            if (window.rInfo) {
-                window.rInfo('删除旧弹窗');
-            }
             oldModal.remove();
         }
         
         // 创建新弹窗
-        if (window.rInfo) {
-            window.rInfo('创建新的筛选器弹窗');
-        }
         const modal = createFilterModal();
         document.body.appendChild(modal);
-        if (window.rInfo) {
-            window.rInfo('弹窗已添加到body');
-        }
         
         // 等待DOM完全渲染
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // 显示弹窗
         modal.style.display = 'flex';
-        if (window.rInfo) {
-            window.rInfo('弹窗display设置为flex');
-        }
         
         // 等待显示动画
         await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // 验证容器是否存在
-        if (window.rDebug) {
-            window.rDebug('检查容器是否存在:');
-            window.rDebug('priorityFilterOptions:', document.getElementById('priorityFilterOptions'));
-            window.rDebug('statusFilterOptions:', document.getElementById('statusFilterOptions'));
-            window.rDebug('typeFilterOptions:', document.getElementById('typeFilterOptions'));
-            window.rDebug('moduleFilterOptions:', document.getElementById('moduleFilterOptions'));
-            
-            // 也检查弹窗本身
-            window.rDebug('弹窗本身:', document.getElementById('filterModal'));
-            window.rDebug('弹窗内容:', document.querySelector('.filter-modal-content'));
-        }
         
         // 加载筛选选项
         await loadFilterOptions();
@@ -950,11 +965,11 @@
         }
         
         if (applyBtn) {
-            applyBtn.onclick = () => applyFilters();
+            applyBtn.onclick = async () => await applyFilters();
         }
         
         if (clearBtn) {
-            clearBtn.onclick = () => clearFilters();
+            clearBtn.onclick = async () => await clearFilters();
         }
         
         // 点击背景关闭
@@ -975,9 +990,6 @@
     
     // 创建筛选器弹窗
     function createFilterModal() {
-        if (window.rInfo) {
-            window.rInfo('开始创建筛选器弹窗DOM');
-        }
         
         const modal = document.createElement('div');
         modal.id = 'filterModal';
@@ -1031,20 +1043,6 @@
             </div>
         `;
         
-        if (window.rInfo) {
-            window.rInfo('筛选器弹窗DOM创建完成');
-            // 验证内部元素
-            const priorityEl = modal.querySelector('#priorityFilterOptions');
-            const statusEl = modal.querySelector('#statusFilterOptions');
-            const typeEl = modal.querySelector('#typeFilterOptions');
-            const moduleEl = modal.querySelector('#moduleFilterOptions');
-            
-            window.rInfo('内部元素检查:');
-            window.rInfo('Priority容器:', priorityEl ? '存在' : '不存在');
-            window.rInfo('Status容器:', statusEl ? '存在' : '不存在');
-            window.rInfo('Type容器:', typeEl ? '存在' : '不存在');
-            window.rInfo('Module容器:', moduleEl ? '存在' : '不存在');
-        }
         
         return modal;
     }
@@ -1060,16 +1058,10 @@
         
         try {
             // 直接加载四个固定字段的选项
-            if (window.rInfo) {
-                window.rInfo('开始加载筛选选项...');
-            }
             
             // 1. 加载Priority选项
             try {
                 const priorityOptions = await window.BugAnalyzerClient.getFieldOptions('Priority', 'normal_buglist');
-                if (window.rLog) {
-                    window.rLog('Priority选项响应:', priorityOptions);
-                }
                 if (priorityOptions && priorityOptions.options) {
                     renderFilterOptions('priorityFilterOptions', 'Priority', priorityOptions.options);
                 } else {
@@ -1085,9 +1077,6 @@
             // 2. 加载Status选项
             try {
                 const statusOptions = await window.BugAnalyzerClient.getFieldOptions('Status', 'normal_buglist');
-                if (window.rLog) {
-                    window.rLog('Status选项响应:', statusOptions);
-                }
                 if (statusOptions && statusOptions.options) {
                     renderFilterOptions('statusFilterOptions', 'Status', statusOptions.options);
                 } else {
@@ -1103,9 +1092,6 @@
             // 3. 加载Type选项
             try {
                 const typeOptions = await window.BugAnalyzerClient.getFieldOptions('Type', 'normal_buglist');
-                if (window.rLog) {
-                    window.rLog('Type选项响应:', typeOptions);
-                }
                 if (typeOptions && typeOptions.options) {
                     renderFilterOptions('typeFilterOptions', 'Type', typeOptions.options);
                 } else {
@@ -1121,9 +1107,6 @@
             // 4. 加载问题模块选项
             try {
                 const moduleOptions = await window.BugAnalyzerClient.getFieldOptions('问题模块', 'normal_buglist');
-                if (window.rLog) {
-                    window.rLog('问题模块选项响应:', moduleOptions);
-                }
                 if (moduleOptions && moduleOptions.options) {
                     renderFilterOptions('moduleFilterOptions', '问题模块', moduleOptions.options);
                 } else {
@@ -1153,9 +1136,6 @@
             return;
         }
         
-        if (window.rInfo) {
-            window.rInfo(`渲染 ${fieldName} 的选项到 ${containerId}:`, options);
-        }
         
         // 确保options是数组
         if (!Array.isArray(options)) {
@@ -1225,13 +1205,14 @@
             });
         });
         
-        if (window.rInfo) {
-            window.rInfo(`${fieldName} 选项渲染完成，共 ${options.length} 个选项`);
-        }
     }
     
     // 应用筛选器
-    function applyFilters() {
+    async function applyFilters() {
+        if (window.rInfo) {
+            window.rInfo('applyFilters 被调用');
+        }
+        
         // 收集所有筛选条件
         const fields = ['Priority', 'Status', 'Type', '问题模块'];
         
@@ -1241,13 +1222,19 @@
         fields.forEach(field => {
             const checkboxes = document.querySelectorAll(`input[data-field="${field}"]:checked:not([value="all"])`);
             if (checkboxes.length > 0) {
-                currentFilters[field] = Array.from(checkboxes).map(cb => cb.value);
+                const values = Array.from(checkboxes).map(cb => cb.value);
+                // API期望的格式是 { "field": { "in": [...] } }
+                currentFilters[field] = { in: values };
+                if (window.rInfo) {
+                    window.rInfo(`${field} 筛选值:`, values);
+                }
             }
         });
         
         if (window.rInfo) {
-            window.rInfo('应用筛选器:', currentFilters);
+            window.rInfo('最终筛选条件(API格式):', JSON.stringify(currentFilters));
         }
+        
         
         // 更新筛选器按钮状态
         updateFilterButtonStatus();
@@ -1255,12 +1242,12 @@
         // 隐藏弹窗
         hideFilterModal();
         
-        // 刷新数据
-        refreshReportData();
+        // 刷新数据 - 等待异步完成
+        await refreshReportData();
     }
     
     // 清除所有筛选器
-    function clearFilters() {
+    async function clearFilters() {
         currentFilters = {};
         
         // 重置所有复选框
@@ -1270,18 +1257,20 @@
         const otherCheckboxes = document.querySelectorAll('.filter-modal input:not([value="all"])');
         otherCheckboxes.forEach(cb => cb.checked = false);
         
+        
         // 更新按钮状态
         updateFilterButtonStatus();
         
         // 隐藏弹窗
         hideFilterModal();
         
-        // 刷新数据
-        refreshReportData();
+        // 刷新数据 - 等待异步完成
+        await refreshReportData();
     }
     
     // 更新筛选器按钮状态（显示是否有激活的筛选器）
     function updateFilterButtonStatus() {
+        // 检查是否有筛选器（格式为 { field: { in: [...] } }）
         const hasFilters = Object.keys(currentFilters).length > 0;
         const severityFilterBtn = document.getElementById('severityFilterBtn');
         const timelineFilterBtn = document.getElementById('timelineFilterBtn');
