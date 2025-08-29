@@ -47,12 +47,19 @@
     // 加载真实API数据
     async function loadRealData() {
         if (!window.BugAnalyzerClient) {
-            console.warn('Bug Analyzer API客户端未加载，跳过数据加载');
+            if (window.rWarn) {
+                window.rWarn('Bug Analyzer API客户端未加载，跳过数据加载');
+            }
             return;
         }
 
         try {
-            console.log('开始加载真实Bug数据...');
+            if (window.rInfo) {
+                window.rInfo('开始加载真实Bug数据...');
+                if (Object.keys(currentFilters).length > 0) {
+                    window.rInfo('当前筛选条件:', currentFilters);
+                }
+            }
             
             // 获取当前日期
             const today = new Date().toISOString().split('T')[0];
@@ -190,15 +197,29 @@
             });
         }
         
+        // 清除画布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
         // 使用真实API数据
         let data = [];
         if (!apiData.priorityStats || !apiData.priorityStats.breakdown) {
-            console.error('没有Priority统计数据');
-            return; // 没有数据时直接返回
+            // 显示无数据提示
+            ctx.fillStyle = '#666';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据', centerX, centerY);
+            
+            // 更新图例为空
+            const legendContainer = document.querySelector('.severity-legend');
+            if (legendContainer) {
+                legendContainer.innerHTML = '<div style="color: #666; font-size: 12px;">暂无数据</div>';
+            }
+            return;
         }
         
         // 使用真实数据
         const breakdown = apiData.priorityStats.breakdown;
+        
         for (const [priority, stats] of Object.entries(breakdown)) {
             if (SEVERITY_COLORS[priority]) {
                 data.push({
@@ -215,6 +236,12 @@
             ctx.font = '14px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText('暂无数据', centerX, centerY);
+            
+            // 更新图例为空
+            const legendContainer = document.querySelector('.severity-legend');
+            if (legendContainer) {
+                legendContainer.innerHTML = '<div style="color: #666; font-size: 12px;">暂无数据</div>';
+            }
             return;
         }
         
@@ -802,8 +829,25 @@
         // Update stats
         updateStats();
         
-        // Redraw charts
-        initializeCharts();
+        // 重新绘制图表 - 先检查canvas是否存在
+        const severityChart = document.getElementById('severityChart');
+        const timelineChart = document.getElementById('timelineChart');
+        
+        if (severityChart) {
+            // 重新设置canvas尺寸
+            severityChart.width = 180;
+            severityChart.height = 180;
+            // 重置状态
+            severityChart.hoveredSegment = undefined;
+            severityChart.segments = undefined;
+            // 重新绘制
+            drawSeverityDonut(severityChart);
+        }
+        
+        if (timelineChart) {
+            // 重新初始化时间线图表
+            initializeTimelineChart();
+        }
         
         // Hide loading animation
         if (reportContent) {
@@ -840,18 +884,53 @@
     
     // 显示筛选器弹窗
     async function showFilterModal() {
-        // 创建或获取筛选器弹窗
-        let modal = document.getElementById('filterModal');
-        if (!modal) {
-            modal = createFilterModal();
-            document.body.appendChild(modal);
+        if (window.rInfo) {
+            window.rInfo('showFilterModal 函数被调用');
         }
+        
+        // 总是删除旧的弹窗，重新创建
+        let oldModal = document.getElementById('filterModal');
+        if (oldModal) {
+            if (window.rInfo) {
+                window.rInfo('删除旧弹窗');
+            }
+            oldModal.remove();
+        }
+        
+        // 创建新弹窗
+        if (window.rInfo) {
+            window.rInfo('创建新的筛选器弹窗');
+        }
+        const modal = createFilterModal();
+        document.body.appendChild(modal);
+        if (window.rInfo) {
+            window.rInfo('弹窗已添加到body');
+        }
+        
+        // 等待DOM完全渲染
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         // 显示弹窗
         modal.style.display = 'flex';
+        if (window.rInfo) {
+            window.rInfo('弹窗display设置为flex');
+        }
         
-        // 等待DOM更新
-        await new Promise(resolve => setTimeout(resolve, 10));
+        // 等待显示动画
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 验证容器是否存在
+        if (window.rDebug) {
+            window.rDebug('检查容器是否存在:');
+            window.rDebug('priorityFilterOptions:', document.getElementById('priorityFilterOptions'));
+            window.rDebug('statusFilterOptions:', document.getElementById('statusFilterOptions'));
+            window.rDebug('typeFilterOptions:', document.getElementById('typeFilterOptions'));
+            window.rDebug('moduleFilterOptions:', document.getElementById('moduleFilterOptions'));
+            
+            // 也检查弹窗本身
+            window.rDebug('弹窗本身:', document.getElementById('filterModal'));
+            window.rDebug('弹窗内容:', document.querySelector('.filter-modal-content'));
+        }
         
         // 加载筛选选项
         await loadFilterOptions();
@@ -896,6 +975,10 @@
     
     // 创建筛选器弹窗
     function createFilterModal() {
+        if (window.rInfo) {
+            window.rInfo('开始创建筛选器弹窗DOM');
+        }
+        
         const modal = document.createElement('div');
         modal.id = 'filterModal';
         modal.className = 'filter-modal';
@@ -947,6 +1030,21 @@
                 </div>
             </div>
         `;
+        
+        if (window.rInfo) {
+            window.rInfo('筛选器弹窗DOM创建完成');
+            // 验证内部元素
+            const priorityEl = modal.querySelector('#priorityFilterOptions');
+            const statusEl = modal.querySelector('#statusFilterOptions');
+            const typeEl = modal.querySelector('#typeFilterOptions');
+            const moduleEl = modal.querySelector('#moduleFilterOptions');
+            
+            window.rInfo('内部元素检查:');
+            window.rInfo('Priority容器:', priorityEl ? '存在' : '不存在');
+            window.rInfo('Status容器:', statusEl ? '存在' : '不存在');
+            window.rInfo('Type容器:', typeEl ? '存在' : '不存在');
+            window.rInfo('Module容器:', moduleEl ? '存在' : '不存在');
+        }
         
         return modal;
     }
@@ -1137,16 +1235,19 @@
         // 收集所有筛选条件
         const fields = ['Priority', 'Status', 'Type', '问题模块'];
         
+        // 清空现有筛选器
+        currentFilters = {};
+        
         fields.forEach(field => {
             const checkboxes = document.querySelectorAll(`input[data-field="${field}"]:checked:not([value="all"])`);
             if (checkboxes.length > 0) {
                 currentFilters[field] = Array.from(checkboxes).map(cb => cb.value);
-            } else {
-                delete currentFilters[field];
             }
         });
         
-        console.log('应用筛选器:', currentFilters);
+        if (window.rInfo) {
+            window.rInfo('应用筛选器:', currentFilters);
+        }
         
         // 更新筛选器按钮状态
         updateFilterButtonStatus();

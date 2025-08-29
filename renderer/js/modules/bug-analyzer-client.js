@@ -104,12 +104,17 @@
         // 执行数据分析
         async performAnalysis(params) {
             try {
+                if (window.rInfo && params.filters) {
+                    window.rInfo('执行分析，包含筛选条件:', params.filters);
+                }
                 return await this.request('/api/analysis', {
                     method: 'POST',
                     body: params
                 });
             } catch (error) {
-                console.error('执行分析失败:', error);
+                if (window.rError) {
+                    window.rError('执行分析失败:', error.message);
+                }
                 return null;
             }
         }
