@@ -36,6 +36,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 0. 首先加载日志控制系统（完全禁用用户控制台日志）
         await loadScript('./js/utils/log-control.js');
         
+        // 0.5 加载渲染进程日志模块（用于发送日志到CLI）
+        await loadScript('./js/utils/renderer-logger.js');
+        
         // 1. 然后加载核心模块（全局变量）
         await loadScript('./js/core/globals.js');
         // console.log('✓ 核心模块已加载'); // 已禁用以减少日志

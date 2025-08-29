@@ -8,6 +8,8 @@
     let currentSeverity = 'all';
     let apiData = {}; // 缓存API数据
     let timelineDates = []; // 存储趋势图的日期标签
+    let currentFilters = {}; // 当前应用的筛选器
+    let filterOptions = {}; // 可用的筛选选项
     
     // Chart colors matching JetBrains theme - 使用API返回的实际字段名
     const SEVERITY_COLORS = {
@@ -55,8 +57,8 @@
             // 获取当前日期
             const today = new Date().toISOString().split('T')[0];
             
-            // 1. 获取今日Priority统计（用于饼图）
-            const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats();
+            // 1. 获取今日Priority统计（用于饼图）- 应用筛选器
+            const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats(currentFilters);
             if (priorityStats && priorityStats.data && priorityStats.data[today]) {
                 apiData.priorityStats = priorityStats.data[today];
                 console.log('Priority统计数据:', apiData.priorityStats);
@@ -64,8 +66,8 @@
                 console.warn('Priority统计数据为空');
             }
             
-            // 2. 获取趋势数据（用于趋势图）
-            const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority');
+            // 2. 获取趋势数据（用于趋势图）- 应用筛选器
+            const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority', currentFilters);
             if (trendData && trendData.data) {
                 apiData.trendData = trendData.data;
                 console.log('趋势数据:', apiData.trendData);
@@ -80,8 +82,8 @@
                 console.log('模块统计数据:', apiData.moduleStats);
             }
             
-            // 4. 获取总Bug数（用于顶部统计）
-            const totalBugTrend = await window.BugAnalyzerClient.getTotalBugTrend(1);
+            // 4. 获取总Bug数（用于顶部统计）- 应用筛选器
+            const totalBugTrend = await window.BugAnalyzerClient.getTotalBugTrend(1, currentFilters);
             if (totalBugTrend && totalBugTrend.data) {
                 const dates = Object.keys(totalBugTrend.data);
                 if (dates.length > 0) {
@@ -104,6 +106,8 @@
         const severityFilter = document.getElementById('reportSeverityFilter');
         const timeRange = document.getElementById('reportTimeRange');
         const moreFiltersBtn = document.getElementById('moreFiltersBtn');
+        const severityFilterBtn = document.getElementById('severityFilterBtn');
+        const timelineFilterBtn = document.getElementById('timelineFilterBtn');
         
         if (projectSelect) {
             projectSelect.addEventListener('change', (e) => {
@@ -130,6 +134,20 @@
             moreFiltersBtn.addEventListener('click', () => {
                 // TODO: Show more filters dialog
                 console.log('More filters clicked');
+            });
+        }
+        
+        // 饼图筛选器按钮
+        if (severityFilterBtn) {
+            severityFilterBtn.addEventListener('click', () => {
+                showFilterModal();
+            });
+        }
+        
+        // 趋势图筛选器按钮
+        if (timelineFilterBtn) {
+            timelineFilterBtn.addEventListener('click', () => {
+                showFilterModal();
             });
         }
     }
@@ -349,7 +367,7 @@
         
         const container = canvas.parentElement;
         canvas.width = container.offsetWidth;
-        canvas.height = 230; // 增加高度，充分利用可用空间
+        canvas.height = 280; // 增加高度，充分利用可用空间
         
         // 刷新时需要重新生成数据
         canvas.chartData = generateTimelineData();
@@ -817,6 +835,364 @@
         if (coverageValue) {
             // API中没有覆盖率数据，显示N/A
             coverageValue.textContent = 'N/A';
+        }
+    }
+    
+    // 显示筛选器弹窗
+    async function showFilterModal() {
+        // 创建或获取筛选器弹窗
+        let modal = document.getElementById('filterModal');
+        if (!modal) {
+            modal = createFilterModal();
+            document.body.appendChild(modal);
+        }
+        
+        // 显示弹窗
+        modal.style.display = 'flex';
+        
+        // 等待DOM更新
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        // 加载筛选选项
+        await loadFilterOptions();
+        
+        // 绑定关闭按钮事件
+        const closeBtn = modal.querySelector('.close-btn');
+        const cancelBtn = modal.querySelector('#filterCancelBtn');
+        const applyBtn = modal.querySelector('#filterApplyBtn');
+        const clearBtn = modal.querySelector('#filterClearBtn');
+        
+        if (closeBtn) {
+            closeBtn.onclick = () => hideFilterModal();
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.onclick = () => hideFilterModal();
+        }
+        
+        if (applyBtn) {
+            applyBtn.onclick = () => applyFilters();
+        }
+        
+        if (clearBtn) {
+            clearBtn.onclick = () => clearFilters();
+        }
+        
+        // 点击背景关闭
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                hideFilterModal();
+            }
+        };
+    }
+    
+    // 隐藏筛选器弹窗
+    function hideFilterModal() {
+        const modal = document.getElementById('filterModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+    
+    // 创建筛选器弹窗
+    function createFilterModal() {
+        const modal = document.createElement('div');
+        modal.id = 'filterModal';
+        modal.className = 'filter-modal';
+        modal.style.display = 'none';
+        
+        modal.innerHTML = `
+            <div class="filter-modal-content">
+                <div class="filter-modal-header">
+                    <h3>筛选器</h3>
+                    <button class="close-btn">&times;</button>
+                </div>
+                <div class="filter-modal-body">
+                    <div class="filter-group" id="priorityFilterGroup">
+                        <div class="filter-group-title">Priority</div>
+                        <div class="filter-options" id="priorityFilterOptions">
+                            <!-- 动态加载选项 -->
+                            <div class="loading-text">正在加载选项...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-group" id="statusFilterGroup">
+                        <div class="filter-group-title">Status</div>
+                        <div class="filter-options" id="statusFilterOptions">
+                            <!-- 动态加载选项 -->
+                            <div class="loading-text">正在加载选项...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-group" id="typeFilterGroup">
+                        <div class="filter-group-title">Type</div>
+                        <div class="filter-options" id="typeFilterOptions">
+                            <!-- 动态加载选项 -->
+                            <div class="loading-text">正在加载选项...</div>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-group" id="moduleFilterGroup">
+                        <div class="filter-group-title">问题模块</div>
+                        <div class="filter-options" id="moduleFilterOptions">
+                            <!-- 动态加载选项 -->
+                            <div class="loading-text">正在加载选项...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-modal-footer">
+                    <button class="btn btn-secondary" id="filterClearBtn">清除筛选</button>
+                    <button class="btn btn-secondary" id="filterCancelBtn">取消</button>
+                    <button class="btn btn-primary" id="filterApplyBtn">应用</button>
+                </div>
+            </div>
+        `;
+        
+        return modal;
+    }
+    
+    // 从API加载筛选选项
+    async function loadFilterOptions() {
+        if (!window.BugAnalyzerClient) {
+            if (window.rError) {
+                window.rError('Bug Analyzer API客户端未加载');
+            }
+            return;
+        }
+        
+        try {
+            // 直接加载四个固定字段的选项
+            if (window.rInfo) {
+                window.rInfo('开始加载筛选选项...');
+            }
+            
+            // 1. 加载Priority选项
+            try {
+                const priorityOptions = await window.BugAnalyzerClient.getFieldOptions('Priority', 'normal_buglist');
+                if (window.rLog) {
+                    window.rLog('Priority选项响应:', priorityOptions);
+                }
+                if (priorityOptions && priorityOptions.options) {
+                    renderFilterOptions('priorityFilterOptions', 'Priority', priorityOptions.options);
+                } else {
+                    document.getElementById('priorityFilterOptions').innerHTML = '<div style="color: #999; font-size: 12px;">无可用选项</div>';
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('加载Priority选项失败:', error.message);
+                }
+                document.getElementById('priorityFilterOptions').innerHTML = '<div style="color: #ff6b6b; font-size: 12px;">加载失败</div>';
+            }
+            
+            // 2. 加载Status选项
+            try {
+                const statusOptions = await window.BugAnalyzerClient.getFieldOptions('Status', 'normal_buglist');
+                if (window.rLog) {
+                    window.rLog('Status选项响应:', statusOptions);
+                }
+                if (statusOptions && statusOptions.options) {
+                    renderFilterOptions('statusFilterOptions', 'Status', statusOptions.options);
+                } else {
+                    document.getElementById('statusFilterOptions').innerHTML = '<div style="color: #999; font-size: 12px;">无可用选项</div>';
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('加载Status选项失败:', error.message);
+                }
+                document.getElementById('statusFilterOptions').innerHTML = '<div style="color: #ff6b6b; font-size: 12px;">加载失败</div>';
+            }
+            
+            // 3. 加载Type选项
+            try {
+                const typeOptions = await window.BugAnalyzerClient.getFieldOptions('Type', 'normal_buglist');
+                if (window.rLog) {
+                    window.rLog('Type选项响应:', typeOptions);
+                }
+                if (typeOptions && typeOptions.options) {
+                    renderFilterOptions('typeFilterOptions', 'Type', typeOptions.options);
+                } else {
+                    document.getElementById('typeFilterOptions').innerHTML = '<div style="color: #999; font-size: 12px;">无可用选项</div>';
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('加载Type选项失败:', error.message);
+                }
+                document.getElementById('typeFilterOptions').innerHTML = '<div style="color: #ff6b6b; font-size: 12px;">加载失败</div>';
+            }
+            
+            // 4. 加载问题模块选项
+            try {
+                const moduleOptions = await window.BugAnalyzerClient.getFieldOptions('问题模块', 'normal_buglist');
+                if (window.rLog) {
+                    window.rLog('问题模块选项响应:', moduleOptions);
+                }
+                if (moduleOptions && moduleOptions.options) {
+                    renderFilterOptions('moduleFilterOptions', '问题模块', moduleOptions.options);
+                } else {
+                    document.getElementById('moduleFilterOptions').innerHTML = '<div style="color: #999; font-size: 12px;">无可用选项</div>';
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('加载问题模块选项失败:', error.message);
+                }
+                document.getElementById('moduleFilterOptions').innerHTML = '<div style="color: #ff6b6b; font-size: 12px;">加载失败</div>';
+            }
+            
+        } catch (error) {
+            if (window.rError) {
+                window.rError('加载筛选选项总体失败:', error);
+            }
+        }
+    }
+    
+    // 渲染筛选选项
+    function renderFilterOptions(containerId, fieldName, options) {
+        const container = document.getElementById(containerId);
+        if (!container) {
+            if (window.rError) {
+                window.rError(`容器 ${containerId} 不存在`);
+            }
+            return;
+        }
+        
+        if (window.rInfo) {
+            window.rInfo(`渲染 ${fieldName} 的选项到 ${containerId}:`, options);
+        }
+        
+        // 确保options是数组
+        if (!Array.isArray(options)) {
+            if (window.rError) {
+                window.rError(`${fieldName} 的选项不是数组:`, options);
+            }
+            container.innerHTML = '<div style="color: #ff6b6b; font-size: 12px;">选项格式错误</div>';
+            return;
+        }
+        
+        if (options.length === 0) {
+            container.innerHTML = '<div style="color: #999; font-size: 12px;">无可用选项</div>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        // 添加全选选项
+        const allOption = document.createElement('div');
+        allOption.className = 'filter-option';
+        allOption.innerHTML = `
+            <input type="checkbox" id="${fieldName}_all" data-field="${fieldName}" value="all" 
+                   ${!currentFilters[fieldName] || currentFilters[fieldName].length === 0 ? 'checked' : ''}>
+            <label for="${fieldName}_all">全部</label>
+        `;
+        container.appendChild(allOption);
+        
+        // 添加各个选项
+        options.forEach((option, index) => {
+            // 跳过空选项
+            if (!option || option.trim() === '') return;
+            
+            const optionDiv = document.createElement('div');
+            optionDiv.className = 'filter-option';
+            const optionId = `${fieldName}_${index}`;
+            
+            const isChecked = currentFilters[fieldName] && currentFilters[fieldName].includes(option);
+            
+            optionDiv.innerHTML = `
+                <input type="checkbox" id="${optionId}" data-field="${fieldName}" value="${option}" 
+                       ${isChecked ? 'checked' : ''}>
+                <label for="${optionId}">${option}</label>
+            `;
+            container.appendChild(optionDiv);
+        });
+        
+        // 添加全选/取消全选逻辑
+        const allCheckbox = container.querySelector(`#${fieldName}_all`);
+        const fieldCheckboxes = container.querySelectorAll(`input[data-field="${fieldName}"]:not([value="all"])`);
+        
+        if (allCheckbox) {
+            allCheckbox.addEventListener('change', (e) => {
+                fieldCheckboxes.forEach(cb => {
+                    cb.checked = false;
+                });
+                if (e.target.checked) {
+                    delete currentFilters[fieldName];
+                }
+            });
+        }
+        
+        fieldCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (cb.checked && allCheckbox) {
+                    allCheckbox.checked = false;
+                }
+            });
+        });
+        
+        if (window.rInfo) {
+            window.rInfo(`${fieldName} 选项渲染完成，共 ${options.length} 个选项`);
+        }
+    }
+    
+    // 应用筛选器
+    function applyFilters() {
+        // 收集所有筛选条件
+        const fields = ['Priority', 'Status', 'Type', '问题模块'];
+        
+        fields.forEach(field => {
+            const checkboxes = document.querySelectorAll(`input[data-field="${field}"]:checked:not([value="all"])`);
+            if (checkboxes.length > 0) {
+                currentFilters[field] = Array.from(checkboxes).map(cb => cb.value);
+            } else {
+                delete currentFilters[field];
+            }
+        });
+        
+        console.log('应用筛选器:', currentFilters);
+        
+        // 更新筛选器按钮状态
+        updateFilterButtonStatus();
+        
+        // 隐藏弹窗
+        hideFilterModal();
+        
+        // 刷新数据
+        refreshReportData();
+    }
+    
+    // 清除所有筛选器
+    function clearFilters() {
+        currentFilters = {};
+        
+        // 重置所有复选框
+        const allCheckboxes = document.querySelectorAll('.filter-modal input[value="all"]');
+        allCheckboxes.forEach(cb => cb.checked = true);
+        
+        const otherCheckboxes = document.querySelectorAll('.filter-modal input:not([value="all"])');
+        otherCheckboxes.forEach(cb => cb.checked = false);
+        
+        // 更新按钮状态
+        updateFilterButtonStatus();
+        
+        // 隐藏弹窗
+        hideFilterModal();
+        
+        // 刷新数据
+        refreshReportData();
+    }
+    
+    // 更新筛选器按钮状态（显示是否有激活的筛选器）
+    function updateFilterButtonStatus() {
+        const hasFilters = Object.keys(currentFilters).length > 0;
+        const severityFilterBtn = document.getElementById('severityFilterBtn');
+        const timelineFilterBtn = document.getElementById('timelineFilterBtn');
+        
+        if (severityFilterBtn) {
+            severityFilterBtn.classList.toggle('active', hasFilters);
+            severityFilterBtn.title = hasFilters ? '筛选器已激活' : '筛选器';
+        }
+        
+        if (timelineFilterBtn) {
+            timelineFilterBtn.classList.toggle('active', hasFilters);
+            timelineFilterBtn.title = hasFilters ? '筛选器已激活' : '筛选器';
         }
     }
     

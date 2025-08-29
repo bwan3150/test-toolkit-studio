@@ -16,12 +16,19 @@
             try {
                 const url = `${this.baseURL}${endpoint}`;
                 
+                // 使用渲染进程日志
+                if (window.rDebug) {
+                    window.rDebug('BugAnalyzer API请求:', url);
+                }
+                
                 // 检查缓存
                 const cacheKey = `${options.method || 'GET'}_${url}_${JSON.stringify(options.body)}`;
                 if (this.cache.has(cacheKey)) {
                     const cached = this.cache.get(cacheKey);
                     if (Date.now() - cached.timestamp < this.cacheTimeout) {
-                        console.log('使用缓存数据:', endpoint);
+                        if (window.rDebug) {
+                            window.rDebug('使用缓存数据:', endpoint);
+                        }
                         return cached.data;
                     }
                 }
@@ -36,10 +43,19 @@
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                    if (window.rError) {
+                        window.rError('API请求失败:', errorMsg, 'URL:', url);
+                    }
+                    throw new Error(errorMsg);
                 }
 
                 const data = await response.json();
+                
+                // 记录响应
+                if (window.rDebug) {
+                    window.rDebug('API响应:', endpoint, '数据大小:', JSON.stringify(data).length, '字节');
+                }
                 
                 // 缓存结果
                 this.cache.set(cacheKey, {
@@ -49,7 +65,9 @@
 
                 return data;
             } catch (error) {
-                console.error('Bug Analyzer API请求失败:', error);
+                if (window.rError) {
+                    window.rError('Bug Analyzer API请求失败:', error.message, 'Endpoint:', endpoint);
+                }
                 throw error;
             }
         }
@@ -67,9 +85,18 @@
         // 获取字段选项
         async getFieldOptions(field, schema = 'normal_buglist') {
             try {
-                return await this.request(`/api/schema/field/options?schema=${schema}&field=${encodeURIComponent(field)}`);
+                if (window.rInfo) {
+                    window.rInfo(`正在获取字段选项: ${field} (schema: ${schema})`);
+                }
+                const result = await this.request(`/api/schema/field/options?schema=${schema}&field=${encodeURIComponent(field)}`);
+                if (window.rInfo) {
+                    window.rInfo(`${field}字段选项结果:`, result);
+                }
+                return result;
             } catch (error) {
-                console.error(`获取${field}字段选项失败:`, error);
+                if (window.rError) {
+                    window.rError(`获取${field}字段选项失败:`, error.message);
+                }
                 return null;
             }
         }

@@ -896,7 +896,14 @@
               <div class="report-main-grid">
                 <!-- Left Column - Problems by severity -->
                 <div class="severity-card">
-                  <h3>Problems by severity</h3>
+                  <div class="card-header">
+                    <h3>Problems by severity</h3>
+                    <button class="filter-btn" id="severityFilterBtn" title="Filter">
+                      <svg viewBox="0 0 24 24" width="16" height="16">
+                        <path fill="currentColor" d="M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C13.32,21.1 12.69,21.1 12.3,20.71L10.29,18.7C10.06,18.47 9.96,18.16 10,17.87V12H9.97L4.21,4.62C3.87,4.19 3.95,3.56 4.38,3.22C4.57,3.08 4.78,3 5,3V3H19V3C19.22,3 19.43,3.08 19.62,3.22C20.05,3.56 20.13,4.19 19.79,4.62L14.03,12H14Z"/>
+                      </svg>
+                    </button>
+                  </div>
                   <div class="donut-chart-wrapper">
                     <div class="donut-chart-container">
                       <canvas id="severityChart"></canvas>
@@ -936,7 +943,14 @@
 
                 <!-- Right Column - Problems over period -->
                 <div class="timeline-card">
-                  <h3>Problems over period</h3>
+                  <div class="card-header">
+                    <h3>Problems over period</h3>
+                    <button class="filter-btn" id="timelineFilterBtn" title="Filter">
+                      <svg viewBox="0 0 24 24" width="16" height="16">
+                        <path fill="currentColor" d="M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C13.32,21.1 12.69,21.1 12.3,20.71L10.29,18.7C10.06,18.47 9.96,18.16 10,17.87V12H9.97L4.21,4.62C3.87,4.19 3.95,3.56 4.38,3.22C4.57,3.08 4.78,3 5,3V3H19V3C19.22,3 19.43,3.08 19.62,3.22C20.05,3.56 20.13,4.19 19.79,4.62L14.03,12H14Z"/>
+                      </svg>
+                    </button>
+                  </div>
                   <div class="timeline-chart-container">
                     <canvas id="timelineChart"></canvas>
                   </div>
@@ -1046,6 +1060,23 @@
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 筛选器弹窗 -->
+            <div id="filterModal" class="filter-modal" style="display: none;">
+              <div class="filter-modal-content">
+                <div class="filter-modal-header">
+                  <h3>Filter Options</h3>
+                  <button class="close-btn" id="closeFilterBtn">&times;</button>
+                </div>
+                <div class="filter-modal-body">
+                  <!-- 动态生成的筛选器内容 -->
+                </div>
+                <div class="filter-modal-footer">
+                  <button class="btn btn-primary" id="applyFilterBtn">Apply</button>
+                  <button class="btn btn-secondary" id="clearFilterBtn">Clear All</button>
                 </div>
               </div>
             </div>

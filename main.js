@@ -252,6 +252,27 @@ app.whenReady().then(() => {
 
 // 注册其他IPC处理器
 function registerOtherHandlers() {
+  // 处理渲染进程的日志消息（旧版本，保留兼容性）
+  ipcMain.on('log-message', (event, message) => {
+    console.log('[Renderer Log]:', message);
+  });
+  
+  // 新的渲染进程日志处理器
+  ipcMain.on('renderer-log', (event, logData) => {
+    const { level, message, timestamp } = logData;
+    const levelColors = {
+      log: '\x1b[0m',    // 默认
+      info: '\x1b[36m',   // 青色
+      warn: '\x1b[33m',   // 黄色
+      error: '\x1b[31m',  // 红色
+      debug: '\x1b[35m'   // 紫色
+    };
+    const color = levelColors[level] || levelColors.log;
+    const reset = '\x1b[0m';
+    
+    console.log(`${color}[Renderer ${level.toUpperCase()}] ${timestamp}:${reset} ${message}`);
+  });
+
   // 获取保存的设备列表
   ipcMain.handle('get-saved-devices', async () => {
     try {
