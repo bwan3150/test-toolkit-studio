@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('./js/modules/device-manager.js');
         await loadScript('./js/modules/locator-manager.js');
         await loadScript('./js/modules/log-manager.js');
+        await loadScript('./js/modules/bug-analyzer-client.js'); // Bug分析API客户端
         await loadScript('./js/modules/test-report-manager.js');
         
         // 4. 加载TKS脚本引擎模块

@@ -6,29 +6,95 @@
     let currentTimeRange = 30;
     let currentProject = 'all';
     let currentSeverity = 'all';
+    let apiData = {}; // 缓存API数据
+    let timelineDates = []; // 存储趋势图的日期标签
     
-    // Chart colors matching JetBrains theme (from screenshot)
+    // Chart colors matching JetBrains theme - 使用API返回的实际字段名
     const SEVERITY_COLORS = {
-        critical: '#e55765',  // Soft red/pink
-        high: '#f09f5b',      // Warm orange
-        moderate: '#f4c752',  // Golden yellow
-        low: '#7ca82b',
-        info: '#659ad2'
+        'Block': '#e55765',     // 红色 (原critical)
+        'High': '#f09f5b',      // 橙色
+        'Normal': '#f4c752',    // 黄色 (原moderate)
+        'Low': '#7ca82b',       // 绿色
+        'info': '#659ad2'       // 蓝色 (保留以防需要)
     };
     
-    // Timeline chart gradient colors
+    // Timeline chart gradient colors - 使用API返回的实际字段名
     const TIMELINE_COLORS = {
-        critical: 'rgba(229, 87, 101, 0.8)',   // Pink/red
-        high: 'rgba(240, 159, 91, 0.7)',       // Orange
-        moderate: 'rgba(244, 199, 82, 0.6)',   // Yellow
-        low: 'rgba(124, 168, 43, 0.5)',        // Green
-        info: 'rgba(101, 154, 210, 0.4)'       // Blue
+        'Block': 'rgba(229, 87, 101, 0.8)',    // 红色 (原critical)
+        'High': 'rgba(240, 159, 91, 0.7)',     // 橙色
+        'Normal': 'rgba(244, 199, 82, 0.6)',   // 黄色 (原moderate)
+        'Low': 'rgba(124, 168, 43, 0.5)',      // 绿色
+        'info': 'rgba(101, 154, 210, 0.4)'     // 蓝色 (保留)
     };
     
     // Initialize report page
-    function initializeReportPage() {
+    async function initializeReportPage() {
         bindEventListeners();
+        await loadRealData(); // 加载真实数据
         initializeCharts();
+    }
+    
+    // 加载真实API数据
+    async function loadRealData() {
+        if (!window.BugAnalyzerClient) {
+            throw new Error('Bug Analyzer API客户端未加载');
+        }
+
+        try {
+            console.log('开始加载真实Bug数据...');
+            
+            // 获取当前日期
+            const today = new Date().toISOString().split('T')[0];
+            
+            // 1. 获取今日Priority统计（用于饼图）
+            const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats();
+            if (!priorityStats || !priorityStats.data) {
+                throw new Error('无法获取Priority统计数据');
+            }
+            apiData.priorityStats = priorityStats.data[today];
+            console.log('Priority统计数据:', apiData.priorityStats);
+            
+            // 2. 获取趋势数据（用于趋势图）
+            const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority');
+            if (!trendData || !trendData.data) {
+                throw new Error('无法获取趋势数据');
+            }
+            apiData.trendData = trendData.data;
+            console.log('趋势数据:', apiData.trendData);
+            
+            // 3. 获取问题模块统计（用于表格）
+            const moduleStats = await window.BugAnalyzerClient.getModuleStats();
+            if (moduleStats && moduleStats.data) {
+                apiData.moduleStats = moduleStats.data[today];
+                console.log('模块统计数据:', apiData.moduleStats);
+            }
+            
+            // 4. 获取总Bug数（用于顶部统计）
+            const totalBugTrend = await window.BugAnalyzerClient.getTotalBugTrend(1);
+            if (totalBugTrend && totalBugTrend.data) {
+                const dates = Object.keys(totalBugTrend.data);
+                if (dates.length > 0) {
+                    const latestDate = dates[dates.length - 1];
+                    apiData.totalBugs = totalBugTrend.data[latestDate].total || 0;
+                }
+            }
+            
+            console.log('所有API数据加载完成:', apiData);
+        } catch (error) {
+            console.error('加载真实数据失败:', error);
+            // 显示错误信息
+            const reportContent = document.querySelector('.report-content');
+            if (reportContent) {
+                reportContent.innerHTML = `
+                    <div style="text-align: center; padding: 50px; color: #ff5555;">
+                        <h3>加载数据失败</h3>
+                        <p>${error.message}</p>
+                        <p>请检查API服务器是否正常运行</p>
+                    </div>
+                `;
+            }
+            throw error;
+        }
     }
     
     // Bind event listeners
@@ -105,11 +171,33 @@
             });
         }
         
-        const data = [
-            { value: 1897, color: SEVERITY_COLORS.critical, label: 'Critical' },
-            { value: 1613, color: SEVERITY_COLORS.high, label: 'High' },
-            { value: 439, color: SEVERITY_COLORS.moderate, label: 'Moderate' }
-        ];
+        // 使用真实API数据
+        let data = [];
+        if (!apiData.priorityStats || !apiData.priorityStats.breakdown) {
+            console.error('没有Priority统计数据');
+            return; // 没有数据时直接返回
+        }
+        
+        // 使用真实数据
+        const breakdown = apiData.priorityStats.breakdown;
+        for (const [priority, stats] of Object.entries(breakdown)) {
+            if (SEVERITY_COLORS[priority]) {
+                data.push({
+                    value: stats.count || 0,
+                    color: SEVERITY_COLORS[priority],
+                    label: priority
+                });
+            }
+        }
+        
+        // 如果没有数据，显示空状态
+        if (data.length === 0) {
+            ctx.fillStyle = '#666';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无数据', centerX, centerY);
+            return;
+        }
         
         const total = data.reduce((sum, item) => sum + item.value, 0);
         let currentAngle = -Math.PI / 2;
@@ -159,6 +247,47 @@
             
             currentAngle = endAngle;
         });
+        
+        // 更新图例显示
+        updateSeverityLegend(data, total);
+    }
+    
+    // 更新图例显示
+    function updateSeverityLegend(data, total) {
+        const legendContainer = document.querySelector('.severity-legend');
+        if (!legendContainer) return;
+        
+        // 清空现有图例
+        legendContainer.innerHTML = '';
+        
+        // 为每个数据项创建图例
+        data.forEach(item => {
+            if (item.value > 0) { // 只显示有值的项
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                legendItem.innerHTML = `
+                    <span class="legend-dot" style="background: ${item.color}"></span>
+                    <span class="legend-label">${item.label}:</span>
+                    <span class="legend-value">${item.value}</span>
+                `;
+                legendContainer.appendChild(legendItem);
+            }
+        });
+        
+        // 更新中心文字（总数）
+        const centerValue = document.querySelector('.chart-center-value');
+        const centerLabel = document.querySelector('.chart-center-label');
+        if (centerValue && total > 0) {
+            // 格式化显示
+            if (total >= 1000) {
+                centerValue.textContent = (total / 1000).toFixed(1) + ' K';
+            } else {
+                centerValue.textContent = total.toString();
+            }
+        }
+        if (centerLabel) {
+            centerLabel.textContent = total === 1 ? 'problem' : 'problems';
+        }
     }
     
     // Handle donut hover with throttling
@@ -221,6 +350,10 @@
         canvas.width = container.offsetWidth;
         canvas.height = 200;
         
+        // 刷新时需要重新生成数据
+        canvas.chartData = generateTimelineData();
+        canvas.isInitialized = true;
+        
         drawTimelineChart(canvas);
     }
     
@@ -246,7 +379,16 @@
         }
         
         const data = canvas.chartData;
-        const dataPoints = data.critical.length;
+        if (!data) {
+            // 没有数据时显示提示
+            ctx.fillStyle = '#666';
+            ctx.font = '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无趋势数据', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+        
+        const dataPoints = data['Block'] ? data['Block'].length : 0;
         
         // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -265,8 +407,8 @@
             ctx.stroke();
         }
         
-        // Draw stacked area chart with gradients
-        const keys = ['info', 'low', 'moderate', 'high', 'critical'];
+        // Draw stacked area chart with gradients - 使用实际字段名
+        const keys = ['info', 'Low', 'Normal', 'High', 'Block'];
         const stackedData = [];
         
         // Calculate stacked values
@@ -347,33 +489,87 @@
             ctx.fillText(yLabels[i], padding.left - 5, y + 3);
         }
         
+        // 更新HTML中的日期标签
+        updateTimelineLabels();
+        
         // Draw hover indicator in fixed position
         if (canvas.hoveredLine) {
             drawFixedIndicator(ctx, canvas.hoveredLine, canvas.width - 100, 30);
         }
     }
     
-    // Generate timeline data
-    function generateTimelineData() {
-        const dataPoints = 30;
-        const data = {
-            critical: [],
-            high: [],
-            moderate: [],
-            low: [],
-            info: []
-        };
-        
-        // Generate more realistic data with trends
-        for (let i = 0; i < dataPoints; i++) {
-            const trend = Math.sin(i / 5) * 0.3 + 0.7;
-            data.critical.push(Math.random() * 800 * trend + 200);
-            data.high.push(Math.random() * 600 * trend + 150);
-            data.moderate.push(Math.random() * 300 * trend + 100);
-            data.low.push(Math.random() * 150 * trend + 50);
-            data.info.push(Math.random() * 100 * trend + 30);
+    // 更新时间轴标签
+    function updateTimelineLabels() {
+        const labelsContainer = document.querySelector('.timeline-labels');
+        if (!labelsContainer || !timelineDates || timelineDates.length === 0) {
+            return;
         }
         
+        // 清空现有标签
+        labelsContainer.innerHTML = '';
+        
+        // 选择要显示的日期（显示5个均匀分布的日期）
+        const totalDates = timelineDates.length;
+        const labelsToShow = 5;
+        const step = Math.floor(totalDates / labelsToShow);
+        
+        for (let i = 0; i < labelsToShow; i++) {
+            const index = Math.min(i * step, totalDates - 1);
+            const date = timelineDates[index];
+            
+            // 格式化日期显示（例如：08-27）
+            const dateObj = new Date(date);
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            
+            const label = document.createElement('span');
+            label.textContent = `${month}-${day}`;
+            labelsContainer.appendChild(label);
+        }
+    }
+    
+    // Generate timeline data
+    function generateTimelineData() {
+        // 必须有API数据
+        if (!apiData.trendData) {
+            console.error('没有趋势数据');
+            return null;
+        }
+        
+        // 转换API数据格式
+        const data = {
+            'Block': [],
+            'High': [],
+            'Normal': [],
+            'Low': [],
+            'info': [] // 保留info以防需要
+        };
+        
+        // 获取所有日期并排序
+        const dates = Object.keys(apiData.trendData).sort();
+        timelineDates = dates; // 保存日期用于显示
+        
+        console.log('趋势图日期:', dates);
+        
+        // 遍历每个日期的数据
+        dates.forEach(date => {
+            const dayData = apiData.trendData[date];
+            if (dayData && dayData.breakdown) {
+                // 使用实际的字段名
+                data['Block'].push(dayData.breakdown['Block'] || 0);
+                data['High'].push(dayData.breakdown['High'] || 0);
+                data['Normal'].push(dayData.breakdown['Normal'] || 0);  
+                data['Low'].push(dayData.breakdown['Low'] || 0);
+            } else {
+                // 如果某天没有breakdown数据，填充0
+                data['Block'].push(0);
+                data['High'].push(0);
+                data['Normal'].push(0);
+                data['Low'].push(0);
+            }
+        });
+        
+        console.log('处理后的趋势数据:', data);
         return data;
     }
     
@@ -402,11 +598,14 @@
         
         let hoveredLine = null;
         const data = canvas.chartData;
-        const dataIndex = Math.floor((x - padding.left) / ((canvas.width - padding.left - padding.right) / 29));
+        if (!data || !data['Block']) return;
         
-        if (dataIndex >= 0 && dataIndex < 30 && x >= padding.left && x <= canvas.width - padding.right) {
+        const dataPoints = data['Block'].length;
+        const dataIndex = Math.floor((x - padding.left) / ((canvas.width - padding.left - padding.right) / (dataPoints - 1)));
+        
+        if (dataIndex >= 0 && dataIndex < dataPoints && x >= padding.left && x <= canvas.width - padding.right) {
             let stack = 0;
-            const keys = ['info', 'low', 'moderate', 'high', 'critical'];
+            const keys = ['info', 'Low', 'Normal', 'High', 'Block'];
             
             for (const key of keys) {
                 stack += data[key][dataIndex];
@@ -426,11 +625,11 @@
     // Draw fixed indicator with simpler style
     function drawFixedIndicator(ctx, severity, x, y) {
         const labels = {
-            critical: 'Critical',
-            high: 'High', 
-            moderate: 'Moderate',
-            low: 'Low',
-            info: 'Info'
+            'Block': 'Block',
+            'High': 'High', 
+            'Normal': 'Normal',
+            'Low': 'Low',
+            'info': 'Info'
         };
         
         const text = labels[severity] || severity;
@@ -483,17 +682,24 @@
     }
     
     // Refresh report data
-    function refreshReportData() {
+    async function refreshReportData() {
+        // Show loading animation
+        const reportContent = document.querySelector('.report-content');
+        if (reportContent) {
+            reportContent.style.opacity = '0.7';
+        }
+        
+        // 重新加载真实数据
+        await loadRealData();
+        
         // Update stats
         updateStats();
         
         // Redraw charts
         initializeCharts();
         
-        // Show subtle loading animation
-        const reportContent = document.querySelector('.report-content');
+        // Hide loading animation
         if (reportContent) {
-            reportContent.style.opacity = '0.7';
             setTimeout(() => {
                 reportContent.style.opacity = '1';
             }, 200);
@@ -502,22 +708,26 @@
     
     // Update statistics
     function updateStats() {
-        // Update top stats with random values for demo
         const projectsValue = document.querySelector('.stat-box:nth-child(1) .stat-value');
         const scansValue = document.querySelector('.stat-box:nth-child(2) .stat-value');
         const coverageValue = document.querySelector('.stat-box:nth-child(3) .stat-value');
         
-        if (projectsValue) {
-            projectsValue.textContent = Math.floor(Math.random() * 30 + 10);
+        // 使用真实数据
+        if (projectsValue && apiData.moduleStats) {
+            // 计算问题模块的数量作为项目数
+            const moduleCount = apiData.moduleStats.breakdown ? 
+                Object.keys(apiData.moduleStats.breakdown).length : 0;
+            projectsValue.textContent = moduleCount;
         }
         
-        if (scansValue) {
-            scansValue.textContent = Math.floor(Math.random() * 20 + 5);
+        if (scansValue && apiData.totalBugs !== undefined) {
+            // 使用总Bug数
+            scansValue.textContent = apiData.totalBugs;
         }
         
         if (coverageValue) {
-            const coverage = (Math.random() * 30 + 70).toFixed(2);
-            coverageValue.textContent = `${coverage}%`;
+            // API中没有覆盖率数据，显示N/A
+            coverageValue.textContent = 'N/A';
         }
     }
     
