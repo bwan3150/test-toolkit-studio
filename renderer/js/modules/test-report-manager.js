@@ -20,11 +20,11 @@
     
     // Timeline chart gradient colors - 使用API返回的实际字段名
     const TIMELINE_COLORS = {
-        'Block': 'rgba(229, 87, 101, 0.8)',    // 红色 (原critical)
-        'High': 'rgba(240, 159, 91, 0.7)',     // 橙色
-        'Normal': 'rgba(244, 199, 82, 0.6)',   // 黄色 (原moderate)
-        'Low': 'rgba(124, 168, 43, 0.5)',      // 绿色
-        'info': 'rgba(101, 154, 210, 0.4)'     // 蓝色 (保留)
+        'Block': 'rgba(229, 87, 101, 0.8)',    // 红色
+        'High': 'rgba(240, 159, 91, 0.8)',     // 橙色
+        'Normal': 'rgba(244, 199, 82, 0.8)',   // 黄色
+        'Low': 'rgba(124, 168, 43, 0.8)',      // 绿色
+        'info': 'rgba(101, 154, 210, 0.8)'     // 蓝色 (保留)
     };
     
     // Initialize report page
@@ -349,7 +349,7 @@
         
         const container = canvas.parentElement;
         canvas.width = container.offsetWidth;
-        canvas.height = 220; // 增加高度以容纳日期标签
+        canvas.height = 230; // 增加高度，充分利用可用空间
         
         // 刷新时需要重新生成数据
         canvas.chartData = generateTimelineData();
@@ -361,7 +361,7 @@
     // Draw timeline chart with smooth gradients and hover effects
     function drawTimelineChart(canvas) {
         const ctx = canvas.getContext('2d');
-        const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+        const padding = { top: 15, right: 15, bottom: 35, left: 45 }; // 调整padding以更好利用空间
         
         // 根据数据点数量动态调整画布宽度（如果数据点多，增加宽度）
         const minWidth = canvas.parentElement.offsetWidth;
@@ -449,7 +449,9 @@
         }
         
         // Draw each layer with gradient
-        keys.reverse().forEach((key, keyIndex) => {
+        // 从底层开始绘制，所以需要反转keys数组
+        const reversedKeys = [...keys].reverse(); // 创建副本再反转，避免修改原数组
+        reversedKeys.forEach((key, keyIndex) => {
             if (!TIMELINE_COLORS[key]) {
                 console.warn(`没有找到${key}的颜色配置`);
                 return;
@@ -458,7 +460,7 @@
             const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
             const baseColor = TIMELINE_COLORS[key];
             gradient.addColorStop(0, baseColor);
-            gradient.addColorStop(1, baseColor.replace(/[\d.]+\)/, '0.1)'));
+            gradient.addColorStop(1, baseColor.replace(/[\d.]+\)/, '0.05)'));  // 更淡的渐变底部
             
             ctx.beginPath();
             ctx.fillStyle = gradient;
@@ -475,31 +477,29 @@
                 ctx.globalAlpha = 0.8;
             }
             
-            // Start from bottom left
-            ctx.moveTo(padding.left, padding.top + chartHeight);
-            
-            // Draw the upper line with straight lines between points
+            // 对于堆叠图，需要绘制当前层与下一层之间的区域
+            // 首先绘制上边界（当前层）
             for (let i = 0; i < dataPoints; i++) {
                 const x = padding.left + (chartWidth / Math.max(1, dataPoints - 1)) * i;
                 const y = padding.top + chartHeight - (stackedData[i][key] / yAxisMax) * chartHeight;
                 
                 if (i === 0) {
-                    ctx.lineTo(x, y);
+                    ctx.moveTo(x, y);
                 } else {
-                    // 直接用直线连接数据点，避免曲线造成的波动
                     ctx.lineTo(x, y);
                 }
             }
             
-            // Draw the last point
-            if (dataPoints > 0) {
-                const lastX = padding.left + chartWidth;
-                const lastY = padding.top + chartHeight - (stackedData[dataPoints - 1][key] / yAxisMax) * chartHeight;
-                ctx.lineTo(lastX, lastY);
+            // 然后绘制下边界（前一层的顶部，或底部）
+            for (let i = dataPoints - 1; i >= 0; i--) {
+                const x = padding.left + (chartWidth / Math.max(1, dataPoints - 1)) * i;
+                // 找到前一个层级的值
+                const prevKey = reversedKeys[keyIndex - 1];
+                const bottomValue = prevKey && stackedData[i][prevKey] ? stackedData[i][prevKey] : 0;
+                const y = padding.top + chartHeight - (bottomValue / yAxisMax) * chartHeight;
+                ctx.lineTo(x, y);
             }
             
-            // Complete the shape
-            ctx.lineTo(canvas.width - padding.right, padding.top + chartHeight);
             ctx.closePath();
             ctx.fill();
             
@@ -523,6 +523,9 @@
         
         // 在canvas上直接绘制日期标签（这样标签会跟随滚动）
         drawTimelineLabels(ctx, padding, chartWidth, chartHeight);
+        
+        // 更新图例
+        updateTimelineLegend();
         
         // Draw hover indicator in fixed position
         if (canvas.hoveredLine) {
@@ -574,13 +577,45 @@
         }
     }
     
-    // 更新HTML中的时间轴标签（现在已不需要，因为标签直接绘制在canvas上）
+    // 更新时间轴图例
+    function updateTimelineLegend() {
+        const legendContainer = document.querySelector('.timeline-legend');
+        if (!legendContainer) return;
+        
+        // 清空现有图例
+        legendContainer.innerHTML = '';
+        
+        // 定义要显示的图例项（按照绘制顺序，从底层到顶层）
+        const legendItems = [
+            { key: 'Block', label: 'Block', color: TIMELINE_COLORS['Block'] },
+            { key: 'High', label: 'High', color: TIMELINE_COLORS['High'] },
+            { key: 'Normal', label: 'Normal', color: TIMELINE_COLORS['Normal'] },
+            { key: 'Low', label: 'Low', color: TIMELINE_COLORS['Low'] }
+        ];
+        
+        // 创建图例项
+        legendItems.forEach(item => {
+            const legendItem = document.createElement('div');
+            legendItem.className = 'timeline-legend-item';
+            
+            const dot = document.createElement('span');
+            dot.className = 'timeline-legend-dot';
+            // 转换rgba为更不透明的颜色用于图例
+            const solidColor = item.color.replace(/[\d.]+\)/, '1)');
+            dot.style.backgroundColor = solidColor;
+            
+            const label = document.createElement('span');
+            label.textContent = item.label;
+            
+            legendItem.appendChild(dot);
+            legendItem.appendChild(label);
+            legendContainer.appendChild(legendItem);
+        });
+    }
+    
+    // 更新HTML中的时间轴标签（已废弃 - 标签现在直接绘制在canvas上）
     function updateTimelineLabels() {
-        // 隐藏HTML中的时间标签容器
-        const labelsContainer = document.querySelector('.timeline-labels');
-        if (labelsContainer) {
-            labelsContainer.style.display = 'none';
-        }
+        // 此函数已不再需要，保留空函数以避免调用错误
     }
     
     // Generate timeline data

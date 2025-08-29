@@ -166,10 +166,10 @@
 
 .timeline-chart-container {
     position: relative;
-    width: 100%;
-    max-width: 100%; /* 确保不会超出父容器 */
-    height: 220px;
-    margin-bottom: 8px;
+    width: calc(100% + 32px); /* 补偿父元素的padding */
+    max-width: calc(100% + 32px); /* 确保不会超出父容器 */
+    height: 280px; /* 增加高度，充分利用空间 */
+    margin: -8px -16px 0 -16px; /* 负margin让图表贴边，抵消父元素16px的padding */
     overflow-x: auto;
     overflow-y: hidden;
     /* 添加滚动条样式 */
@@ -200,12 +200,32 @@
     height: 100%;
 }
 
-.timeline-labels {
+/* timeline-labels 已移除 - 日期标签现在直接绘制在canvas上 */
+
+/* Timeline Legend */
+.timeline-legend {
     display: flex;
-    justify-content: space-between;
-    padding: 0 10px;
-    font-size: 10px;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    padding: 8px 0 4px; /* 减少padding，更紧凑 */
+    margin: 0 -16px; /* 对齐到卡片边缘 */
+    border-top: 1px solid var(--border-color);
+}
+
+.timeline-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
     color: var(--text-secondary);
+}
+
+.timeline-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    opacity: 0.8;
 }
 
 /* Tables Section */
