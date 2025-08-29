@@ -988,46 +988,46 @@
         modal.innerHTML = `
             <div class="filter-modal-content">
                 <div class="filter-modal-header">
-                    <h3>筛选器</h3>
+                    <h3>Filter Options</h3>
                     <button class="close-btn">&times;</button>
                 </div>
                 <div class="filter-modal-body">
                     <div class="filter-group" id="priorityFilterGroup">
-                        <div class="filter-group-title">Priority</div>
+                        <div class="filter-group-title">PRIORITY</div>
                         <div class="filter-options" id="priorityFilterOptions">
                             <!-- 动态加载选项 -->
-                            <div class="loading-text">正在加载选项...</div>
+                            <div class="loading-text">Loading...</div>
                         </div>
                     </div>
                     
                     <div class="filter-group" id="statusFilterGroup">
-                        <div class="filter-group-title">Status</div>
+                        <div class="filter-group-title">STATUS</div>
                         <div class="filter-options" id="statusFilterOptions">
                             <!-- 动态加载选项 -->
-                            <div class="loading-text">正在加载选项...</div>
+                            <div class="loading-text">Loading...</div>
                         </div>
                     </div>
                     
                     <div class="filter-group" id="typeFilterGroup">
-                        <div class="filter-group-title">Type</div>
+                        <div class="filter-group-title">TYPE</div>
                         <div class="filter-options" id="typeFilterOptions">
                             <!-- 动态加载选项 -->
-                            <div class="loading-text">正在加载选项...</div>
+                            <div class="loading-text">Loading...</div>
                         </div>
                     </div>
                     
                     <div class="filter-group" id="moduleFilterGroup">
-                        <div class="filter-group-title">问题模块</div>
+                        <div class="filter-group-title">MODULE</div>
                         <div class="filter-options" id="moduleFilterOptions">
                             <!-- 动态加载选项 -->
-                            <div class="loading-text">正在加载选项...</div>
+                            <div class="loading-text">Loading...</div>
                         </div>
                     </div>
                 </div>
                 <div class="filter-modal-footer">
-                    <button class="btn btn-secondary" id="filterClearBtn">清除筛选</button>
-                    <button class="btn btn-secondary" id="filterCancelBtn">取消</button>
-                    <button class="btn btn-primary" id="filterApplyBtn">应用</button>
+                    <button class="btn btn-secondary" id="filterClearBtn">Clear</button>
+                    <button class="btn btn-secondary" id="filterCancelBtn">Cancel</button>
+                    <button class="btn btn-primary" id="filterApplyBtn">Apply</button>
                 </div>
             </div>
         `;
