@@ -10,25 +10,25 @@
     let timelineDates = []; // 存储趋势图的日期标签
     let currentFilters = {}; // 当前应用的筛选器
     let filterOptions = {}; // 可用的筛选选项
-    
-    // Chart colors matching JetBrains theme - 使用API返回的实际字段名
-    const SEVERITY_COLORS = {
-        'Block': '#e55765',     // 红色 (原critical)
-        'High': '#f09f5b',      // 橙色
-        'Normal': '#f4c752',    // 黄色 (原moderate)
-        'Low': '#7ca82b',       // 绿色
-        'info': '#659ad2'       // 蓝色 (保留以防需要)
-    };
-    
-    // Timeline chart gradient colors - 使用API返回的实际字段名
-    const TIMELINE_COLORS = {
-        'Block': 'rgba(229, 87, 101, 0.8)',    // 红色
-        'High': 'rgba(240, 159, 91, 0.8)',     // 橙色
-        'Normal': 'rgba(244, 199, 82, 0.8)',   // 黄色
-        'Low': 'rgba(124, 168, 43, 0.8)',      // 绿色
-        'info': 'rgba(101, 154, 210, 0.8)'     // 蓝色 (保留)
-    };
-    
+
+
+
+const SEVERITY_COLORS = {
+    'Block': '#e63946',   // 鲜红 (阻塞)
+    'High':  '#f3722c',   // 橘红 (高风险)
+    'Normal':'#f8961e',   // 橙黄 (一般)
+    'Low':   '#f9c74f',   // 明黄 (低风险)
+    'info':  '#90be6d'    // 青绿 (信息)
+};
+
+const TIMELINE_COLORS = {
+    'Block': 'rgba(230, 57, 70, 0.8)',
+    'High':  'rgba(243, 114, 44, 0.8)',
+    'Normal':'rgba(248, 150, 30, 0.8)',
+    'Low':   'rgba(249, 199, 79, 0.8)',
+    'info':  'rgba(144, 190, 109, 0.8)'
+};
+
     // Initialize report page
     async function initializeReportPage() {
         bindEventListeners();
