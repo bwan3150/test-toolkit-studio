@@ -165,27 +165,16 @@
         
         if (timeRange) {
             timeRange.addEventListener('change', (e) => {
-                currentTimeRange = e.target.value === 'all' ? 365 : parseInt(e.target.value);
+                currentTimeRange = parseInt(e.target.value);
+                if (window.rInfo) {
+                    window.rInfo(`时间范围已更改为: ${currentTimeRange}天`);
+                }
                 refreshReportData();
             });
         }
         
         if (moreFiltersBtn) {
             moreFiltersBtn.addEventListener('click', () => {
-                // TODO: Show more filters dialog
-            });
-        }
-        
-        // 饼图筛选器按钮
-        if (severityFilterBtn) {
-            severityFilterBtn.addEventListener('click', () => {
-                showFilterModal();
-            });
-        }
-        
-        // 趋势图筛选器按钮
-        if (timelineFilterBtn) {
-            timelineFilterBtn.addEventListener('click', () => {
                 showFilterModal();
             });
         }
@@ -1272,17 +1261,18 @@
     function updateFilterButtonStatus() {
         // 检查是否有筛选器（格式为 { field: { in: [...] } }）
         const hasFilters = Object.keys(currentFilters).length > 0;
-        const severityFilterBtn = document.getElementById('severityFilterBtn');
-        const timelineFilterBtn = document.getElementById('timelineFilterBtn');
+        const moreFiltersBtn = document.getElementById('moreFiltersBtn');
         
-        if (severityFilterBtn) {
-            severityFilterBtn.classList.toggle('active', hasFilters);
-            severityFilterBtn.title = hasFilters ? '筛选器已激活' : '筛选器';
-        }
-        
-        if (timelineFilterBtn) {
-            timelineFilterBtn.classList.toggle('active', hasFilters);
-            timelineFilterBtn.title = hasFilters ? '筛选器已激活' : '筛选器';
+        if (moreFiltersBtn) {
+            // 如果有筛选器激活，可以改变按钮文本或样式
+            if (hasFilters) {
+                const filterCount = Object.keys(currentFilters).length;
+                moreFiltersBtn.textContent = `Filters (${filterCount})`;
+                moreFiltersBtn.classList.add('active');
+            } else {
+                moreFiltersBtn.textContent = 'More filters';
+                moreFiltersBtn.classList.remove('active');
+            }
         }
     }
     

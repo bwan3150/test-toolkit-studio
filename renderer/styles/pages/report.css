@@ -558,3 +558,15 @@
 .report-content::-webkit-scrollbar-thumb:hover {
     background: #4a4a4c;
 }
+
+/* More filters button active state */
+.btn.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.btn.active:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
