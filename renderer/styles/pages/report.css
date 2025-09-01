@@ -637,6 +637,7 @@
 #bugResultsTable {
     width: 100%;
     margin: 0;
+    table-layout: fixed;
 }
 
 #bugResultsTable thead {
@@ -652,6 +653,27 @@
     border-bottom: 1px solid var(--border-color);
 }
 
+/* Column widths - 应用到th和td */
+#bugResultsTable thead th:nth-child(1),
+#bugResultsTable tbody td:nth-child(1) { 
+    width: 20%; 
+} /* Bug ID */
+
+#bugResultsTable thead th:nth-child(2),
+#bugResultsTable tbody td:nth-child(2) { 
+    width: 40%; 
+} /* Task name */
+
+#bugResultsTable thead th:nth-child(3),
+#bugResultsTable tbody td:nth-child(3) { 
+    width: 20%; 
+} /* Status */
+
+#bugResultsTable thead th:nth-child(4),
+#bugResultsTable tbody td:nth-child(4) { 
+    width: 20%; 
+} /* Priority */
+
 #bugResultsTable tbody {
     display: block;
     max-height: 240px;
@@ -661,6 +683,7 @@
 
 #bugResultsTable thead {
     display: block;
+    width: calc(100% - 6px); /* 减去滚动条宽度 */
 }
 
 #bugResultsTable thead tr,
@@ -703,6 +726,22 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Bug ID column - 完整显示 */
+#bugResultsTable tbody td:nth-child(1) {
+    white-space: normal;
+    word-break: break-all;
+    font-family: monospace;
+    font-size: 11px;
+}
+
+/* Task name column - 截断显示 */
+#bugResultsTable tbody td:nth-child(2) {
+    max-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 #bugResultsTable tbody tr:last-child td {
     border-bottom: none;
 }
@@ -711,8 +750,26 @@
 #bugResultsTable .empty-state {
     text-align: center;
     color: var(--text-tertiary);
-    padding: 24px;
+    padding: 60px 24px;
     font-size: 12px;
+    width: 100%;
+    height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Empty state row - 特殊处理让它占满宽度和高度 */
+#bugResultsTable tbody tr:has(.empty-state) {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#bugResultsTable tbody tr:has(.empty-state) td {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 /* Bug Status and Priority Badges */

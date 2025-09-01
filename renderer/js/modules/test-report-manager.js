@@ -209,8 +209,8 @@ const TIMELINE_COLORS = {
                     }
                     
                     row.innerHTML = `
-                        <td>${bug['Bug ID'] || '-'}</td>
-                        <td>${bug['Task name'] || '-'}</td>
+                        <td title="${bug['Bug ID'] || ''}">${bug['Bug ID'] || '-'}</td>
+                        <td title="${bug['Task name'] || ''}">${bug['Task name'] || '-'}</td>
                         <td>${statusBadge}</td>
                         <td>${priorityBadge}</td>
                     `;
