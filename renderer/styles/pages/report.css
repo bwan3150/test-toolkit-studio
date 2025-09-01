@@ -571,85 +571,243 @@
     border-color: var(--primary-hover);
 }
 
-/* Bug搜索模块样式 */
-.bug-search-container {
-    padding: 15px;
+/* Bug Search Module - JetBrains Style */
+.bug-search-section {
+    overflow: hidden;
 }
 
-.search-input-group {
+.bug-search-header {
     display: flex;
-    gap: 10px;
-    margin-bottom: 15px;
+    gap: 0;
+    margin-bottom: 12px;
+    position: relative;
 }
 
-.bug-search-input {
+.bug-search-field {
     flex: 1;
-    padding: 8px 12px;
-    background: var(--bg-secondary);
+    padding: 6px 10px;
+    background: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 3px 0 0 3px;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 12px;
+    height: 28px;
+    transition: border-color 0.2s;
 }
 
-.bug-search-input:focus {
+.bug-search-field:focus {
     outline: none;
     border-color: var(--accent-primary);
+    background: var(--bg-primary);
 }
 
-.bug-results-container {
-    max-height: 280px;
-    overflow-y: auto;
+.bug-search-field::placeholder {
+    color: var(--text-tertiary);
+}
+
+.bug-search-button {
+    padding: 0 12px;
+    background: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-left: none;
+    border-radius: 0 3px 3px 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
 }
 
-.bug-results-container::-webkit-scrollbar {
-    width: 8px;
+.bug-search-button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
-.bug-results-container::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
+.bug-search-button:active {
+    background: var(--bg-pressed);
 }
 
-.bug-results-container::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 4px;
+.bug-search-button svg {
+    fill: currentColor;
 }
 
-.bug-results-container::-webkit-scrollbar-thumb:hover {
-    background: var(--text-secondary);
-}
-
+/* Bug Results Table */
 #bugResultsTable {
     width: 100%;
     margin: 0;
 }
 
+#bugResultsTable thead {
+    background: var(--bg-primary);
+}
+
+#bugResultsTable thead th {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: normal;
+    color: var(--text-secondary);
+    font-size: 11px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#bugResultsTable tbody {
+    display: block;
+    max-height: 240px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#bugResultsTable thead {
+    display: block;
+}
+
+#bugResultsTable thead tr,
+#bugResultsTable tbody tr {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+}
+
+#bugResultsTable tbody::-webkit-scrollbar {
+    width: 6px;
+}
+
+#bugResultsTable tbody::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+#bugResultsTable tbody::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+#bugResultsTable tbody::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
 #bugResultsTable tbody tr {
     cursor: pointer;
+    transition: background-color 0.15s;
 }
 
 #bugResultsTable tbody tr:hover {
-    background: rgba(249, 168, 37, 0.1);
+    background: var(--bg-hover);
 }
 
-#bugResultsTable .no-data {
+#bugResultsTable tbody td {
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#bugResultsTable tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Empty state */
+#bugResultsTable .empty-state {
     text-align: center;
-    color: var(--text-secondary);
-    padding: 20px;
-}
-
-.bug-link-btn {
-    padding: 4px 8px;
-    background: var(--accent-primary);
-    color: var(--bg-primary);
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
+    color: var(--text-tertiary);
+    padding: 24px;
     font-size: 12px;
 }
 
-.bug-link-btn:hover {
-    background: var(--accent-secondary);
+/* Bug Status and Priority Badges */
+.bug-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+/* Priority Badges */
+.bug-badge.priority-block {
+    background: rgba(147, 112, 219, 0.15);
+    color: #9370db;
+}
+
+.bug-badge.priority-critical {
+    background: rgba(147, 112, 219, 0.15);
+    color: #9370db;
+}
+
+.bug-badge.priority-high {
+    background: rgba(229, 87, 101, 0.15);
+    color: #e55765;
+}
+
+.bug-badge.priority-normal {
+    background: rgba(255, 218, 185, 0.15);
+    color: #ffa500;
+}
+
+.bug-badge.priority-medium {
+    background: rgba(255, 218, 185, 0.15);
+    color: #ffa500;
+}
+
+.bug-badge.priority-low {
+    background: rgba(189, 183, 107, 0.15);
+    color: #bdb76b;
+}
+
+/* Status Badges */
+.bug-badge.status-done {
+    background: rgba(124, 168, 43, 0.15);
+    color: #7ca82b;
+}
+
+.bug-badge.status-resolved {
+    background: rgba(124, 168, 43, 0.15);
+    color: #7ca82b;
+}
+
+.bug-badge.status-ready-to-merge {
+    background: rgba(101, 154, 210, 0.15);
+    color: #659ad2;
+}
+
+.bug-badge.status-in-review {
+    background: rgba(101, 154, 210, 0.15);
+    color: #659ad2;
+}
+
+.bug-badge.status-in-progress {
+    background: rgba(244, 199, 82, 0.15);
+    color: #f4c752;
+}
+
+.bug-badge.status-todo {
+    background: rgba(240, 159, 91, 0.15);
+    color: #f09f5b;
+}
+
+.bug-badge.status-open {
+    background: rgba(240, 159, 91, 0.15);
+    color: #f09f5b;
+}
+
+.bug-badge.status-new {
+    background: rgba(229, 87, 101, 0.15);
+    color: #e55765;
+}
+
+.bug-badge.status-postpone {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.bug-badge.status-waiting {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.bug-badge.status-waiting-on-external {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
 }

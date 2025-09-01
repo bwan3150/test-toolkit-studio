@@ -954,36 +954,38 @@
 
               <!-- Tables Grid -->
               <div class="report-tables-grid">
-                <!-- Bug搜索模块 -->
+                <!-- Bug Search Module -->
                 <div class="table-card">
-                  <h3>Bug 搜索</h3>
-                  <div class="bug-search-container">
-                    <div class="search-input-group">
+                  <h3>Bug search by task name</h3>
+                  <div class="bug-search-section">
+                    <div class="bug-search-header">
                       <input 
                         type="text" 
                         id="bugSearchInput" 
-                        class="bug-search-input" 
-                        placeholder="输入关键词搜索任务名称..."
+                        class="bug-search-field" 
+                        placeholder="Search task name..."
                       />
-                      <button id="bugSearchBtn" class="btn btn-primary">搜索</button>
+                      <button id="bugSearchBtn" class="bug-search-button">
+                        <svg viewBox="0 0 16 16" width="14" height="14">
+                          <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.027.04.057.078.09.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.09zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+                        </svg>
+                      </button>
                     </div>
-                    <div class="bug-results-container">
-                      <table class="compact-table" id="bugResultsTable">
-                        <thead>
-                          <tr>
-                            <th>Bug ID</th>
-                            <th>任务名称</th>
-                            <th>状态</th>
-                            <th>优先级</th>
-                          </tr>
-                        </thead>
-                        <tbody id="bugResultsBody">
-                          <tr>
-                            <td colspan="4" class="no-data">请输入关键词进行搜索</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                    <table class="compact-table" id="bugResultsTable">
+                      <thead>
+                        <tr>
+                          <th>Bug ID</th>
+                          <th>Task name</th>
+                          <th>Status</th>
+                          <th>Priority</th>
+                        </tr>
+                      </thead>
+                      <tbody id="bugResultsBody">
+                        <tr>
+                          <td colspan="4" class="empty-state">Enter keywords to search</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 

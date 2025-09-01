@@ -156,12 +156,12 @@ const TIMELINE_COLORS = {
         
         // 如果搜索值为空，显示提示
         if (!searchValue) {
-            resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">请输入关键词进行搜索</td></tr>';
+            resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">Enter keywords to search</td></tr>';
             return;
         }
         
         // 显示加载状态
-        resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">搜索中...</td></tr>';
+        resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">Searching...</td></tr>';
         
         try {
             // 构建搜索参数
@@ -188,11 +188,31 @@ const TIMELINE_COLORS = {
                 // 填充搜索结果
                 result.bugs.forEach(bug => {
                     const row = document.createElement('tr');
+                    
+                    // 处理Status和Priority的badge
+                    let statusBadge = '-';
+                    let priorityBadge = '-';
+                    
+                    if (bug['Status']) {
+                        // 处理Status，转换为类名格式（替换空格和斜杠）
+                        const statusClass = `status-${bug['Status'].toLowerCase()
+                            .replace(/\s+/g, '-')
+                            .replace(/\//g, '')
+                            .replace(/^-+|-+$/g, '')}`;
+                        statusBadge = `<span class="bug-badge ${statusClass}">${bug['Status']}</span>`;
+                    }
+                    
+                    if (bug['Priority']) {
+                        // 处理Priority
+                        const priorityClass = `priority-${bug['Priority'].toLowerCase()}`;
+                        priorityBadge = `<span class="bug-badge ${priorityClass}">${bug['Priority']}</span>`;
+                    }
+                    
                     row.innerHTML = `
                         <td>${bug['Bug ID'] || '-'}</td>
                         <td>${bug['Task name'] || '-'}</td>
-                        <td>${bug['Status'] || '-'}</td>
-                        <td>${bug['Priority'] || '-'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${priorityBadge}</td>
                     `;
                     
                     // 添加点击行跳转功能
@@ -213,11 +233,11 @@ const TIMELINE_COLORS = {
                 });
             } else {
                 // 没有搜索结果
-                resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">没有找到相关的Bug记录</td></tr>';
+                resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">No bugs found</td></tr>';
             }
         } catch (error) {
-            console.error('Bug搜索失败:', error);
-            resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">搜索失败，请稍后重试</td></tr>';
+            console.error('Bug search failed:', error);
+            resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">Search failed, please try again</td></tr>';
         }
     }
     
