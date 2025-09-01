@@ -127,16 +127,6 @@ const TIMELINE_COLORS = {
                 apiData.moduleStats = moduleStats.data[today];
             }
             
-            // 4. 获取总Bug数（用于顶部统计）- 应用筛选器
-            const totalBugTrend = await window.BugAnalyzerClient.getTotalBugTrend(1, currentFilters);
-            if (totalBugTrend && totalBugTrend.data) {
-                const dates = Object.keys(totalBugTrend.data);
-                if (dates.length > 0) {
-                    const latestDate = dates[dates.length - 1];
-                    apiData.totalBugs = totalBugTrend.data[latestDate].total || 0;
-                }
-            }
-            
             console.log('API数据加载完成:', apiData);
         } catch (error) {
             console.error('加载真实数据失败:', error);
@@ -1023,9 +1013,16 @@ const TIMELINE_COLORS = {
             projectsValue.textContent = moduleCount;
         }
         
-        if (scansValue && apiData.totalBugs !== undefined) {
-            // 使用总Bug数
-            scansValue.textContent = apiData.totalBugs;
+        if (scansValue) {
+            // 使用与饼图相同的数据源（优先级统计的总数）
+            if (apiData.priorityStats && apiData.priorityStats.total !== undefined) {
+                scansValue.textContent = apiData.priorityStats.total;
+            } else if (apiData.totalBugs !== undefined) {
+                // 备用：使用totalBugs
+                scansValue.textContent = apiData.totalBugs;
+            } else {
+                scansValue.textContent = '0';
+            }
         }
         
         if (coverageValue) {
