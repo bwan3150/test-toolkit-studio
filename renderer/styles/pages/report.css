@@ -421,102 +421,156 @@
     }
 }
 
-/* Filter Modal */
+/* Filter Modal - JetBrains Style */
 .filter-modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1000;
+    backdrop-filter: blur(2px);
 }
 
 .filter-modal-content {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    width: 500px;
-    max-height: 600px;
+    border-radius: 6px;
+    width: 480px;
+    max-height: 70vh;
+    min-height: 400px;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .filter-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
 }
 
 .filter-modal-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 13px;
+    font-weight: normal;
     color: var(--text-primary);
+    letter-spacing: 0.5px;
 }
 
 .close-btn {
     background: transparent;
     border: none;
-    font-size: 24px;
+    font-size: 16px;
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 0;
-    width: 30px;
-    height: 30px;
+    padding: 4px;
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 3px;
+    transition: all 0.2s;
 }
 
 .close-btn:hover {
     color: var(--text-primary);
+    background: var(--bg-hover);
 }
 
 .filter-modal-body {
-    padding: 16px;
+    padding: 0;
     overflow-y: auto;
     flex: 1;
+    background: var(--bg-primary);
 }
 
 .filter-group {
-    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.filter-group:last-child {
+    border-bottom: none;
 }
 
 .filter-group-title {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 8px;
+    color: var(--text-secondary);
+    margin: 0;
+    padding: 12px 16px 8px 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .filter-options {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    padding: 8px 0;
+    background: var(--bg-primary);
 }
 
 .filter-option {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px;
+    gap: 10px;
+    padding: 6px 16px;
     cursor: pointer;
+    transition: background-color 0.15s;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    position: relative;
 }
 
 .filter-option:hover {
     background: var(--bg-hover);
-    border-radius: 4px;
 }
 
+.filter-option:active {
+    background: var(--bg-pressed);
+}
+
+/* Custom checkbox styling */
 .filter-option input[type="checkbox"] {
+    appearance: none;
     width: 14px;
     height: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+    background: var(--bg-primary);
     cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+}
+
+.filter-option input[type="checkbox"]:checked {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.filter-option input[type="checkbox"]:checked::before {
+    content: '✓';
+    position: absolute;
+    color: var(--bg-primary);
+    font-size: 10px;
+    font-weight: bold;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.filter-option input[type="checkbox"]:hover {
+    border-color: var(--accent-primary);
 }
 
 .filter-option label {
@@ -524,14 +578,28 @@
     font-size: 12px;
     color: var(--text-primary);
     flex: 1;
+    margin: 0;
+    padding: 0;
+}
+
+/* Special styling for "All" option */
+.filter-option:has(input[value="all"]) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 4px;
+}
+
+.filter-option:has(input[value="all"]) label {
+    font-weight: 500;
+    color: var(--text-secondary);
 }
 
 .filter-modal-footer {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
-    padding: 16px;
+    padding: 12px 16px;
     border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
 }
 
 .loading-text {
