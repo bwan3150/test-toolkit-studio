@@ -1,6 +1,11 @@
 // Test Report Manager Module - JetBrains Style
 (function() {
     'use strict';
+    
+    // 获取全局变量
+    function getGlobals() {
+        return window.AppGlobals;
+    }
 
     // Module state
     let currentTimeRange = 30;
@@ -140,6 +145,82 @@ const TIMELINE_COLORS = {
         }
     }
     
+    // Bug搜索功能
+    async function performBugSearch() {
+        const searchInput = document.getElementById('bugSearchInput');
+        const resultsBody = document.getElementById('bugResultsBody');
+        
+        if (!searchInput || !resultsBody) return;
+        
+        const searchValue = searchInput.value.trim();
+        
+        // 如果搜索值为空，显示提示
+        if (!searchValue) {
+            resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">请输入关键词进行搜索</td></tr>';
+            return;
+        }
+        
+        // 显示加载状态
+        resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">搜索中...</td></tr>';
+        
+        try {
+            // 构建搜索参数
+            const searchParams = {
+                date: new Date().toISOString().split('T')[0], // 今天的日期
+                search_field: "Task name",
+                search_value: searchValue,
+                return_fields: [
+                    "Bug ID",
+                    "Task name",
+                    "Status",
+                    "Priority",
+                    "Notion_URL"
+                ]
+            };
+            
+            // 调用API搜索
+            const result = await window.BugAnalyzerClient.searchBugs(searchParams);
+            
+            if (result && result.bugs && result.bugs.length > 0) {
+                // 清空表格
+                resultsBody.innerHTML = '';
+                
+                // 填充搜索结果
+                result.bugs.forEach(bug => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${bug['Bug ID'] || '-'}</td>
+                        <td>${bug['Task name'] || '-'}</td>
+                        <td>${bug['Status'] || '-'}</td>
+                        <td>${bug['Priority'] || '-'}</td>
+                    `;
+                    
+                    // 添加点击行跳转功能
+                    if (bug['Notion_URL']) {
+                        row.style.cursor = 'pointer';
+                        row.addEventListener('click', async (e) => {
+                            // 使用ipcRenderer调用主进程打开外部链接
+                            const { ipcRenderer } = getGlobals();
+                            try {
+                                await ipcRenderer.invoke('open-external', bug['Notion_URL']);
+                            } catch (error) {
+                                console.error('打开Notion链接失败:', error);
+                            }
+                        });
+                    }
+                    
+                    resultsBody.appendChild(row);
+                });
+            } else {
+                // 没有搜索结果
+                resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">没有找到相关的Bug记录</td></tr>';
+            }
+        } catch (error) {
+            console.error('Bug搜索失败:', error);
+            resultsBody.innerHTML = '<tr><td colspan="4" class="no-data">搜索失败，请稍后重试</td></tr>';
+        }
+    }
+    
     // Bind event listeners
     function bindEventListeners() {
         const projectSelect = document.getElementById('reportProjectSelect');
@@ -176,6 +257,24 @@ const TIMELINE_COLORS = {
         if (moreFiltersBtn) {
             moreFiltersBtn.addEventListener('click', () => {
                 showFilterModal();
+            });
+        }
+        
+        // Bug搜索功能
+        const bugSearchBtn = document.getElementById('bugSearchBtn');
+        const bugSearchInput = document.getElementById('bugSearchInput');
+        
+        if (bugSearchBtn) {
+            bugSearchBtn.addEventListener('click', () => {
+                performBugSearch();
+            });
+        }
+        
+        if (bugSearchInput) {
+            bugSearchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    performBugSearch();
+                }
             });
         }
     }

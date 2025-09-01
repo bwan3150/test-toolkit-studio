@@ -954,50 +954,37 @@
 
               <!-- Tables Grid -->
               <div class="report-tables-grid">
-                <!-- Projects sorted by problems -->
+                <!-- Bug搜索模块 -->
                 <div class="table-card">
-                  <h3>Projects sorted by number of problems ↓</h3>
-                  <table class="compact-table">
-                    <thead>
-                      <tr>
-                        <th>Project</th>
-                        <th>Problems</th>
-                        <th>Critical severity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>Nest JS</td>
-                        <td class="problem-count">1753</td>
-                        <td class="problem-count">156</td>
-                      </tr>
-                      <tr>
-                        <td>axios</td>
-                        <td class="problem-count">1715</td>
-                        <td class="problem-count">1578</td>
-                      </tr>
-                      <tr>
-                        <td>enzyme</td>
-                        <td class="problem-count">393</td>
-                        <td class="problem-count">162</td>
-                      </tr>
-                      <tr>
-                        <td>playwright-java</td>
-                        <td class="problem-count">62</td>
-                        <td class="problem-count">0</td>
-                      </tr>
-                      <tr>
-                        <td>spring-test</td>
-                        <td class="problem-count">19</td>
-                        <td class="problem-count">1</td>
-                      </tr>
-                      <tr>
-                        <td>FlexInspect</td>
-                        <td class="problem-count">6</td>
-                        <td class="problem-count">0</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <h3>Bug 搜索</h3>
+                  <div class="bug-search-container">
+                    <div class="search-input-group">
+                      <input 
+                        type="text" 
+                        id="bugSearchInput" 
+                        class="bug-search-input" 
+                        placeholder="输入关键词搜索任务名称..."
+                      />
+                      <button id="bugSearchBtn" class="btn btn-primary">搜索</button>
+                    </div>
+                    <div class="bug-results-container">
+                      <table class="compact-table" id="bugResultsTable">
+                        <thead>
+                          <tr>
+                            <th>Bug ID</th>
+                            <th>任务名称</th>
+                            <th>状态</th>
+                            <th>优先级</th>
+                          </tr>
+                        </thead>
+                        <tbody id="bugResultsBody">
+                          <tr>
+                            <td colspan="4" class="no-data">请输入关键词进行搜索</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Problems sorted by severity -->

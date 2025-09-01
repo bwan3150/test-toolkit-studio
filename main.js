@@ -1,5 +1,5 @@
 // Test Toolkit Studio - 主进程
-const { app, BrowserWindow, ipcMain, Menu, Tray, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, Tray, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec, spawn } = require('child_process');
@@ -688,6 +688,17 @@ function registerOtherHandlers() {
         console.error('停止录屏失败:', killError);
         return { success: false, error: '停止录屏失败，可能已经停止或未在录制' };
       }
+    }
+  });
+
+  // 打开外部链接
+  ipcMain.handle('open-external', async (event, url) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      console.error('打开外部链接失败:', error);
+      return { success: false, error: error.message };
     }
   });
 

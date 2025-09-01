@@ -570,3 +570,86 @@
     background: var(--primary-hover);
     border-color: var(--primary-hover);
 }
+
+/* Bug搜索模块样式 */
+.bug-search-container {
+    padding: 15px;
+}
+
+.search-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.bug-search-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.bug-search-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.bug-results-container {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.bug-results-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.bug-results-container::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.bug-results-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.bug-results-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+#bugResultsTable {
+    width: 100%;
+    margin: 0;
+}
+
+#bugResultsTable tbody tr {
+    cursor: pointer;
+}
+
+#bugResultsTable tbody tr:hover {
+    background: rgba(249, 168, 37, 0.1);
+}
+
+#bugResultsTable .no-data {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 20px;
+}
+
+.bug-link-btn {
+    padding: 4px 8px;
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.bug-link-btn:hover {
+    background: var(--accent-secondary);
+}
