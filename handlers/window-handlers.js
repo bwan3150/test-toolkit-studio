@@ -42,7 +42,7 @@ function registerWindowHandlers(mainWindow) {
 
   // 导航到登录页
   ipcMain.handle('navigate-to-login', async () => {
-    mainWindow.loadFile('renderer/login.html');
+    mainWindow.loadFile('renderer/html/login.html');
     return { success: true };
   });
 

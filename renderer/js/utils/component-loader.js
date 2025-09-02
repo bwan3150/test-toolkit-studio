@@ -16,7 +16,7 @@ class ComponentLoader {
         }
 
         try {
-            const response = await fetch(`components/${componentName}.html`);
+            const response = await fetch(`modals/${componentName}.html`);
             if (response.ok) {
                 const html = await response.text();
                 container.innerHTML = html;

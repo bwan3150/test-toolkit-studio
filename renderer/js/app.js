@@ -19,33 +19,38 @@ function loadScript(src) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
+        script.onload = () => {
+            if (window.rLog) window.rLog(`✓ 已加载脚本: ${src}`);
+            resolve();
+        };
+        script.onerror = (error) => {
+            if (window.rError) window.rError(`✗ 脚本加载失败: ${src}`, error);
+            reject(new Error(`Failed to load script: ${src}`));
+        };
         document.head.appendChild(script);
     });
 }
 
 // 应用初始化
 document.addEventListener('DOMContentLoaded', async () => {
-    // console.log('开始应用初始化...'); // 已禁用以减少日志
-    
     try {
-        // 加载所有模块
-        // console.log('正在加载模块...'); // 已禁用以减少日志
-        
         // 0. 首先加载日志控制系统（完全禁用用户控制台日志）
         await loadScript('./js/utils/log-control.js');
         
         // 0.5 加载渲染进程日志模块（用于发送日志到CLI）
         await loadScript('./js/utils/renderer-logger.js');
         
+        // 现在可以使用 renderer logger
+        window.rLog('开始应用初始化...');
+        window.rLog('正在加载模块...');
+        
         // 1. 然后加载核心模块（全局变量）
-        await loadScript('./js/core/globals.js');
+        await loadScript('./js/utils/globals.js');
         // console.log('✓ 核心模块已加载'); // 已禁用以减少日志
         
         // 2. 加载UI模块
-        await loadScript('./js/ui/notifications.js');
-        await loadScript('./js/ui/navigation.js');
+        await loadScript('./js/components/notifications.js');
+        await loadScript('./js/components/navigation.js');
         // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
         // 初始化编辑器管理器
         window.initializeEditorManager();
@@ -59,28 +64,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             ];
             await window.ComponentLoader.loadComponents(components);
         }
-        await loadScript('./js/ui/settings.js');
-        await loadScript('./js/ui/resizable-panels.js');
-        await loadScript('./js/ui/status-bar.js');
+        await loadScript('./js/settings/settings.js');
+        await loadScript('./js/components/resizable-panels.js');
+        await loadScript('./js/components/status-bar.js');
         // console.log('✓ UI模块已加载'); // 已禁用以减少日志
         
         // 3. 加载业务功能模块
-        await loadScript('./js/modules/project-manager.js');
-        await loadScript('./js/modules/xml-parser.js');
-        await loadScript('./js/modules/testcase-manager.js');
-        await loadScript('./js/modules/device-manager.js');
-        await loadScript('./js/modules/locator-manager.js');
-        await loadScript('./js/modules/log-manager.js');
-        await loadScript('./js/modules/bug-analyzer-client.js'); // Bug分析API客户端
-        await loadScript('./js/modules/test-report-manager.js');
+        await loadScript('./js/project/project-manager.js');
+        await loadScript('./js/testcase/toolkit-engine/xml-parser.js');
+        await loadScript('./js/testcase/explorer/testcase-manager.js');
+        await loadScript('./js/device/device-manager.js');
+        await loadScript('./js/testcase/controller/locator-manager.js');
+        await loadScript('./js/logviewer/log-manager.js');
+        await loadScript('./js/services/bug-analyzer-client.js'); // Bug分析API客户端
+        await loadScript('./js/insights/test-report-manager.js');
         
         // 4. 加载TKS脚本引擎模块
-        await loadScript('./js/modules/tks-script-engine.js');
-        await loadScript('./js/modules/tks-integration.js');
+        await loadScript('./js/testcase/toolkit-engine/tks-script-engine.js');
+        await loadScript('./js/testcase/toolkit-engine/tks-integration.js');
         // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
-        await loadScript('./js/utils/api-client.js');
+        await loadScript('./js/services/api-client.js');
         await loadScript('./js/utils/keyboard-shortcuts.js');
         await loadScript('./js/utils/ipc-handlers.js');
         // console.log('✓ 工具模块已加载'); // 已禁用以减少日志
@@ -100,11 +105,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         for (const moduleName of requiredModules) {
             if (!window[moduleName]) {
-                console.error(`模块 ${moduleName} 未正确加载`);
-                console.log('当前可用的window属性:', Object.keys(window).filter(key => key.includes('Module') || key.includes('Client')));
+                window.rError(`模块 ${moduleName} 未正确加载`);
+                window.rError('当前可用的window属性:', Object.keys(window).filter(key => key.includes('Module') || key.includes('Client')));
                 throw new Error(`模块 ${moduleName} 未正确加载`);
             }
-            // console.log(`✓ ${moduleName} 已加载`); // 已禁用以减少日志
+            window.rLog(`✓ ${moduleName} 已加载`);
         }
         
         // 初始化所有功能
@@ -216,6 +221,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.NotificationModule.showNotification('应用已成功加载', 'success');
         
     } catch (error) {
+        window.rError('❌ 应用初始化失败:', error);
+        window.rError('错误堆栈:', error.stack);
         console.error('❌ 应用初始化失败:', error);
         // 显示错误通知
         const toast = document.createElement('div');

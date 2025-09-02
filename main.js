@@ -40,7 +40,7 @@ function createWindow() {
   });
 
   // 加载主页面
-  mainWindow.loadFile('renderer/index.html');
+  mainWindow.loadFile('renderer/html/index.html');
 
   // 监听窗口关闭事件
   mainWindow.on('closed', () => {
