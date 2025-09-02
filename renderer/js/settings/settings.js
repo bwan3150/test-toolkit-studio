@@ -119,28 +119,42 @@ function applyEditorFontSettings(fontFamily, fontSize) {
 // 加载用户信息
 async function loadUserInfo() {
     const { ipcRenderer } = window.AppGlobals;
-    const result = await ipcRenderer.invoke('get-user-info');
     
-    if (result.success && result.data.user) {
-        const user = result.data.user;
+    try {
+        const result = await ipcRenderer.invoke('get-user-info');
         
-        // 更新侧边栏
-        const userAvatar = document.querySelector('.user-avatar');
-        const userName = document.querySelector('.user-name');
-        
-        if (userAvatar) userAvatar.textContent = user.username.charAt(0).toUpperCase();
-        if (userName) userName.textContent = user.username;
-        
-        // 更新设置页面
-        const settingsUsername = document.getElementById('settingsUsername');
-        const settingsEmail = document.getElementById('settingsEmail');
-        const settingsMemberGroup = document.getElementById('settingsMemberGroup');
-        const settingsMemberSince = document.getElementById('settingsMemberSince');
-        
-        if (settingsUsername) settingsUsername.textContent = user.username;
-        if (settingsEmail) settingsEmail.textContent = user.email;
-        if (settingsMemberGroup) settingsMemberGroup.textContent = user.memberGroup;
-        if (settingsMemberSince) settingsMemberSince.textContent = new Date(user.createdAt).toLocaleDateString();
+        if (result.success && result.data.user) {
+            const user = result.data.user;
+            
+            // 更新侧边栏
+            const userAvatar = document.querySelector('.user-avatar');
+            const userName = document.querySelector('.user-name');
+            
+            if (userAvatar) userAvatar.textContent = user.username.charAt(0).toUpperCase();
+            if (userName) userName.textContent = user.username;
+            
+            // 更新设置页面
+            const settingsUsername = document.getElementById('settingsUsername');
+            const settingsEmail = document.getElementById('settingsEmail');
+            const settingsMemberGroup = document.getElementById('settingsMemberGroup');
+            const settingsMemberSince = document.getElementById('settingsMemberSince');
+            
+            if (settingsUsername) settingsUsername.textContent = user.username;
+            if (settingsEmail) settingsEmail.textContent = user.email;
+            if (settingsMemberGroup) settingsMemberGroup.textContent = user.memberGroup;
+            if (settingsMemberSince) settingsMemberSince.textContent = new Date(user.createdAt).toLocaleDateString();
+        } else {
+            // 获取用户信息失败，可能认证过期
+            window.rWarn('获取用户信息失败，可能认证已过期');
+            if (window.ApiClient) {
+                await window.ApiClient.logout();
+            }
+        }
+    } catch (error) {
+        window.rError('获取用户信息时发生错误:', error);
+        if (window.ApiClient) {
+            await window.ApiClient.logout();
+        }
     }
 }
 

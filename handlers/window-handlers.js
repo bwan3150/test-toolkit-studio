@@ -36,7 +36,7 @@ function registerWindowHandlers(mainWindow) {
 
   // 导航到主应用
   ipcMain.handle('navigate-to-app', async () => {
-    mainWindow.loadFile('renderer/index.html');
+    mainWindow.loadFile('renderer/html/index.html');
     return { success: true };
   });
 

@@ -235,9 +235,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             throw error;
         }
         
+        // 检查认证状态
+        window.rLog('检查用户认证状态...');
+        const isAuthenticated = await window.ApiClient.checkAuthStatus();
+        
+        if (!isAuthenticated) {
+            window.rWarn('用户未认证，跳转到登录页面');
+            // 跳转到登录页面
+            const { ipcRenderer } = require('electron');
+            await ipcRenderer.invoke('navigate-to-login');
+            return; // 停止继续初始化
+        }
+        
+        window.rLog('用户认证通过，加载用户信息...');
         // 加载用户信息
         await window.SettingsModule.loadUserInfo();
-        // console.log('✓ 用户信息已加载'); // 已禁用以减少日志
+        window.rLog('✓ 用户信息已加载');
         
         // 加载项目历史而不是自动加载最后一个项目
         await window.ProjectManagerModule.loadProjectHistory();
