@@ -14,6 +14,21 @@
 // 10. utils/keyboard-shortcuts.js - 键盘快捷键
 // 11. utils/ipc-handlers.js - IPC消息处理
 
+// 在最开始就尝试加载 renderer-logger
+(async function() {
+    try {
+        const { ipcRenderer } = require('electron');
+        // 直接发送一条测试日志
+        ipcRenderer.send('renderer-log', {
+            level: 'info',
+            message: 'app.js 文件开始执行',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('无法发送初始测试日志:', error);
+    }
+})();
+
 // 异步加载模块的辅助函数
 function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -24,7 +39,17 @@ function loadScript(src) {
             resolve();
         };
         script.onerror = (error) => {
-            if (window.rError) window.rError(`✗ 脚本加载失败: ${src}`, error);
+            // 使用原生方式发送错误日志，因为 renderer-logger 可能还没加载
+            try {
+                const { ipcRenderer } = require('electron');
+                ipcRenderer.send('renderer-log', {
+                    level: 'error',
+                    message: `✗ 脚本加载失败: ${src}`,
+                    timestamp: new Date().toISOString()
+                });
+            } catch (e) {
+                console.error(`✗ 脚本加载失败: ${src}`, error);
+            }
             reject(new Error(`Failed to load script: ${src}`));
         };
         document.head.appendChild(script);
@@ -33,24 +58,45 @@ function loadScript(src) {
 
 // 应用初始化
 document.addEventListener('DOMContentLoaded', async () => {
+    // 直接发送DOMContentLoaded事件日志
+    const { ipcRenderer } = require('electron');
+    ipcRenderer.send('renderer-log', {
+        level: 'info',
+        message: 'DOMContentLoaded 事件触发',
+        timestamp: new Date().toISOString()
+    });
+    
     try {
+        // 测试日志：开始加载脚本
+        ipcRenderer.send('renderer-log', {
+            level: 'info',
+            message: '开始加载 log-control.js',
+            timestamp: new Date().toISOString()
+        });
+        
         // 0. 首先加载日志控制系统（完全禁用用户控制台日志）
-        await loadScript('./js/utils/log-control.js');
+        await loadScript('../js/utils/log-control.js');
+        
+        ipcRenderer.send('renderer-log', {
+            level: 'info',
+            message: 'log-control.js 加载完成',
+            timestamp: new Date().toISOString()
+        });
         
         // 0.5 加载渲染进程日志模块（用于发送日志到CLI）
-        await loadScript('./js/utils/renderer-logger.js');
+        await loadScript('../js/utils/renderer-logger.js');
         
         // 现在可以使用 renderer logger
         window.rLog('开始应用初始化...');
         window.rLog('正在加载模块...');
         
         // 1. 然后加载核心模块（全局变量）
-        await loadScript('./js/utils/globals.js');
+        await loadScript('../js/utils/globals.js');
         // console.log('✓ 核心模块已加载'); // 已禁用以减少日志
         
         // 2. 加载UI模块
-        await loadScript('./js/components/notifications.js');
-        await loadScript('./js/components/navigation.js');
+        await loadScript('../js/components/notifications.js');
+        await loadScript('../js/components/navigation.js');
         // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
         // 初始化编辑器管理器
         window.initializeEditorManager();
@@ -64,30 +110,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             ];
             await window.ComponentLoader.loadComponents(components);
         }
-        await loadScript('./js/settings/settings.js');
-        await loadScript('./js/components/resizable-panels.js');
-        await loadScript('./js/components/status-bar.js');
+        await loadScript('../js/settings/settings.js');
+        await loadScript('../js/components/resizable-panels.js');
+        await loadScript('../js/components/status-bar.js');
         // console.log('✓ UI模块已加载'); // 已禁用以减少日志
         
         // 3. 加载业务功能模块
-        await loadScript('./js/project/project-manager.js');
-        await loadScript('./js/testcase/toolkit-engine/xml-parser.js');
-        await loadScript('./js/testcase/explorer/testcase-manager.js');
-        await loadScript('./js/device/device-manager.js');
-        await loadScript('./js/testcase/controller/locator-manager.js');
-        await loadScript('./js/logviewer/log-manager.js');
-        await loadScript('./js/services/bug-analyzer-client.js'); // Bug分析API客户端
-        await loadScript('./js/insights/test-report-manager.js');
+        await loadScript('../js/project/project-manager.js');
+        await loadScript('../js/testcase/toolkit-engine/xml-parser.js');
+        await loadScript('../js/testcase/explorer/testcase-manager.js');
+        await loadScript('../js/device/device-manager.js');
+        await loadScript('../js/testcase/controller/locator-manager.js');
+        await loadScript('../js/logviewer/log-manager.js');
+        await loadScript('../js/services/bug-analyzer-client.js'); // Bug分析API客户端
+        await loadScript('../js/insights/test-report-manager.js');
         
         // 4. 加载TKS脚本引擎模块
-        await loadScript('./js/testcase/toolkit-engine/tks-script-engine.js');
-        await loadScript('./js/testcase/toolkit-engine/tks-integration.js');
+        await loadScript('../js/testcase/toolkit-engine/tks-script-engine.js');
+        await loadScript('../js/testcase/toolkit-engine/tks-integration.js');
         // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
-        await loadScript('./js/services/api-client.js');
-        await loadScript('./js/utils/keyboard-shortcuts.js');
-        await loadScript('./js/utils/ipc-handlers.js');
+        await loadScript('../js/services/api-client.js');
+        await loadScript('../js/utils/keyboard-shortcuts.js');
+        await loadScript('../js/utils/ipc-handlers.js');
         // console.log('✓ 工具模块已加载'); // 已禁用以减少日志
         
         // 等待短暂时间确保所有模块都已完全初始化
