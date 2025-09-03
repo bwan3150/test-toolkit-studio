@@ -40,13 +40,14 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "assets/logo/icon.icns",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "signIgnore": [
         "darwin/android-sdk"
       ],
+      "identity": null,
       "asarUnpack": [
         "resources/darwin/**/*"
       ],
