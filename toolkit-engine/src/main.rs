@@ -13,7 +13,7 @@ use tke::{
 #[derive(Parser)]
 #[command(name = "tke")]
 #[command(about = "Toolkit Engine - 自动化测试CLI工具")]
-#[command(version = "1.0.0")]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -223,7 +223,7 @@ async fn main() -> Result<()> {
 }
 
 async fn handle_controller_commands(action: ControllerCommands, device_id: Option<String>) -> Result<()> {
-    let mut controller = Controller::new(device_id)?;
+    let controller = Controller::new(device_id)?;
     
     match action {
         ControllerCommands::Devices => {

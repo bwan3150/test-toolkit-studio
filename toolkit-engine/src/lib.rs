@@ -25,9 +25,12 @@ pub use models::{
     TksScript,
     TksStep,
     TksCommand,
+    TksParam,
     DeviceInfo,
     Point,
     Bounds,
+    ExecutionResult,
+    StepResult,
 };
 
 // 错误类型

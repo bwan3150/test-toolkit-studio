@@ -277,7 +277,7 @@ pub struct ExecutionResult {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StepResult {
     pub index: usize,
     pub command: String,
