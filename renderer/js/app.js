@@ -117,17 +117,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 3. 加载业务功能模块
         await loadScript('../js/project/project-manager.js');
-        await loadScript('../js/testcase/toolkit-engine/xml-parser.js');
+        await loadScript('../js/testcase/toolkit-engine/xml-parser-tke.js');
         await loadScript('../js/testcase/explorer/testcase-manager.js');
         await loadScript('../js/device/device-manager.js');
-        await loadScript('../js/testcase/controller/locator-manager.js');
+        await loadScript('../js/testcase/controller/locator-manager-tke.js');
         await loadScript('../js/logviewer/log-manager.js');
         await loadScript('../js/services/bug-analyzer-client.js'); // Bug分析API客户端
         await loadScript('../js/insights/test-report-manager.js');
         
-        // 4. 加载TKS脚本引擎模块
-        await loadScript('../js/testcase/toolkit-engine/tks-script-engine.js');
-        await loadScript('../js/testcase/toolkit-engine/tks-integration.js');
+        // 4. 加载TKE版本的模块
+        await loadScript('../js/testcase/toolkit-engine/tke-adapter.js');
+        await loadScript('../js/testcase/toolkit-engine/tks-integration-tke.js');
         // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
@@ -145,7 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
-            'NotificationModule', 'AppGlobals', 'TKSScriptModule', 'TKSIntegrationModule'
+            'NotificationModule', 'AppGlobals', 'TKEAdapterModule', 'TKSIntegrationTKEModule'
             // ApiClient 是可选的，稍后单独检查
         ];
         
@@ -201,8 +201,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.error('设置模块初始化失败:', error);
             }
             
-            // 初始化TKS集成模块
-            window.TKSIntegrationModule.initializeTKSIntegration();
+            // 初始化TKS集成模块(TKE版本)
+            window.TKSIntegrationTKEModule.initializeTKSIntegrationTKE();
             // console.log('✓ TKS脚本引擎已初始化'); // 已禁用以减少日志
             
             // 初始化Locator管理器

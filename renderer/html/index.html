@@ -1330,22 +1330,34 @@
               </div>
 
               <div class="settings-section">
-                <h3>Android SDK</h3>
-                <div class="sdk-status">
+                <h3>Built-in Tools</h3>
+                <div class="tools-status">
                   <div class="status-item">
-                    <span>SDK Status:</span>
+                    <span>Android SDK:</span>
                     <span class="status-indicator" id="sdkStatus"
                       >Checking...</span
                     >
                   </div>
                   <div class="status-item">
-                    <span>ADB Status:</span>
+                    <span>ADB:</span>
                     <span class="status-indicator" id="adbStatus"
                       >Checking...</span
                     >
                   </div>
-                  <button class="btn btn-secondary" id="checkSdkBtn">
-                    Check SDK
+                  <div class="status-item">
+                    <span>AAPT:</span>
+                    <span class="status-indicator" id="aaptStatus"
+                      >Checking...</span
+                    >
+                  </div>
+                  <div class="status-item">
+                    <span>Toolkit Engine (TKE):</span>
+                    <span class="status-indicator" id="tkeStatus"
+                      >Checking...</span
+                    >
+                  </div>
+                  <button class="btn btn-secondary" id="checkToolsBtn">
+                    Check All Tools
                   </button>
                 </div>
               </div>

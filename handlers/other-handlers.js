@@ -450,6 +450,78 @@ function registerOtherHandlers(app) {
     }
   });
 
+  // 检查TKE状态
+  ipcMain.handle('check-tke-status', async () => {
+    try {
+      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
+      const tkeBinaryName = process.platform === 'win32' ? 'tke.exe' : 'tke';
+      let tkePath;
+      
+      if (app.isPackaged) {
+        tkePath = path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName);
+      } else {
+        tkePath = path.join(__dirname, '..', 'resources', platform, 'toolkit-engine', tkeBinaryName);
+      }
+
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'TKE binary not found' };
+      }
+      
+      // 测试TKE版本
+      const { stdout, stderr } = await execPromise(`"${tkePath}" --version`);
+      
+      if (stderr) {
+        console.error('TKE stderr:', stderr);
+      }
+      
+      // 解析版本信息
+      const versionMatch = stdout.match(/tke\s+(\d+\.\d+\.\d+)/);
+      const version = versionMatch ? versionMatch[1] : stdout.trim();
+      
+      return { 
+        success: true, 
+        version: version,
+        path: tkePath
+      };
+      
+    } catch (error) {
+      console.error('检查TKE状态失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 检查AAPT状态
+  ipcMain.handle('check-aapt-status', async () => {
+    try {
+      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
+      const aaptName = process.platform === 'win32' ? 'aapt.exe' : 'aapt';
+      let aaptPath;
+      
+      if (app.isPackaged) {
+        aaptPath = path.join(process.resourcesPath, platform, 'android-sdk', 'build-tools', 'aapt', aaptName);
+      } else {
+        aaptPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'build-tools', 'aapt', aaptName);
+      }
+
+      if (!fs.existsSync(aaptPath)) {
+        return { success: false, error: 'AAPT binary not found' };
+      }
+      
+      // 测试AAPT
+      const { stdout, stderr } = await execPromise(`"${aaptPath}" version 2>&1 || echo "Available"`);
+      
+      return { 
+        success: true, 
+        version: stdout.includes('version') ? stdout.trim() : 'Available',
+        path: aaptPath
+      };
+      
+    } catch (error) {
+      console.error('检查AAPT状态失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 清除设备日志
   ipcMain.handle('clear-device-log', async (event, deviceId) => {
     try {
