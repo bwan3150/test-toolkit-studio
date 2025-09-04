@@ -4,6 +4,7 @@ package-lock.json
 # Build outputs
 dist/
 out/
+toolkit-engine/target/
 
 # build的配置文件留着
 build/*
