@@ -8,6 +8,37 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "==============================="
+
+
+# 同步版本号：package.json → Cargo.toml
+PACKAGE_JSON="$SCRIPT_DIR/../package.json"
+if [ ! -f "$PACKAGE_JSON" ]; then
+    echo "Error: package.json not found at $PACKAGE_JSON"
+    exit 1
+fi
+
+PKG_VERSION=$(grep '"version"' "$PACKAGE_JSON" | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+if [ -z "$PKG_VERSION" ]; then
+    echo "Error: cannot extract version from $PACKAGE_JSON"
+    exit 1
+fi
+echo "Sync version: $PKG_VERSION"
+
+CARGO_TOML="$SCRIPT_DIR/Cargo.toml"
+if [ ! -f "$CARGO_TOML" ]; then
+    echo "Error: Cargo.toml not found at $CARGO_TOML"
+    exit 1
+fi
+
+# 跨平台 sed 替换（Linux 用 -i，macOS 用 -i ""）
+if sed --version >/dev/null 2>&1; then
+    # GNU sed (Linux)
+    sed -i -E "s/^version *= *\"[^\"]+\"/version = \"$PKG_VERSION\"/" "$CARGO_TOML"
+else
+    # BSD sed (macOS)
+    sed -i "" -E "s/^version *= *\"[^\"]+\"/version = \"$PKG_VERSION\"/" "$CARGO_TOML"
+fi
+
 echo "Building Toolkit Engine..."
 
 # 构建 release 版本
@@ -56,7 +87,7 @@ mkdir -p "$TARGET_DIR"
 cp "$SOURCE_BINARY" "$TARGET_BINARY"
 
 # 给二进制文件添加执行权限（Linux/macOS）
-if [ "$OS" != "MINGW*" ] && [ "$OS" != "MSYS*" ] && [ "$OS" != "CYGWIN*" ]; then
+if [[ "$OS" != MINGW* && "$OS" != MSYS* && "$OS" != CYGWIN* ]]; then
     chmod +x "$TARGET_BINARY"
 fi
 
