@@ -156,6 +156,26 @@ enum ParserCommands {
         /// 脚本文件路径
         script_path: PathBuf,
     },
+    /// 从XML推断屏幕尺寸
+    InferScreenSize {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
+    /// 优化UI树结构
+    OptimizeUITree {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
+    /// 从UI树提取元素列表
+    ExtractUIElements {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
+    /// 生成UI树的字符串描述
+    GenerateTreeString {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -346,6 +366,8 @@ async fn handle_recognizer_commands(action: RecognizerCommands, project_path: Pa
 }
 
 async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
+    use std::io::Read;
+    
     let parser = ScriptParser::new();
     
     match action {
@@ -384,9 +406,45 @@ async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
             println!("  脚本名: {}", script.script_name);
             println!("  步骤数: {}", script.steps.len());
         }
+        ParserCommands::InferScreenSize { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            if let Some((width, height)) = parser.infer_screen_size_from_xml(&xml)? {
+                println!("{{\"width\": {}, \"height\": {}}}", width, height);
+            } else {
+                println!("null");
+            }
+        }
+        ParserCommands::OptimizeUITree { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            let optimized = parser.optimize_ui_tree(&xml)?;
+            println!("{}", optimized);
+        }
+        ParserCommands::ExtractUIElements { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            let elements = parser.extract_ui_elements(&xml)?;
+            let elements_json = serde_json::to_string(&elements)?;
+            println!("{}", elements_json);
+        }
+        ParserCommands::GenerateTreeString { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            let tree_string = parser.generate_tree_string(&xml)?;
+            println!("{}", tree_string);
+        }
     }
     
     Ok(())
+}
+
+fn get_xml_content(xml_content: Option<String>) -> Result<String> {
+    match xml_content {
+        Some(content) => Ok(content),
+        None => {
+            // 从stdin读取XML内容
+            let mut buffer = String::new();
+            std::io::stdin().read_to_string(&mut buffer)?;
+            Ok(buffer)
+        }
+    }
 }
 
 async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_id: Option<String>) -> Result<()> {

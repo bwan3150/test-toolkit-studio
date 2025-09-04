@@ -1193,7 +1193,7 @@ async function enableXmlOverlay(deviceId) {
         
         // 2. 初始化XML解析器
         if (!xmlParser) {
-            xmlParser = window.XMLParserModule.createParser();
+            xmlParser = window.XMLParserTKEModule.createParser();
         }
         
         // 设置屏幕尺寸
@@ -1704,8 +1704,8 @@ window.selectElementByIndex = function(index) {
 window.saveElementToLocatorFromList = async function(index) {
     const element = currentUIElements.find(el => el.index === index);
     if (element) {
-        if (window.LocatorManager && window.LocatorManager.instance) {
-            await window.LocatorManager.instance.saveElement(element);
+        if (window.LocatorManagerTKEModule && window.LocatorManagerTKEModule.instance) {
+            await window.LocatorManagerTKEModule.instance.saveElement(element);
         } else {
             console.error('Locator管理器未初始化');
             window.NotificationModule.showNotification('Locator管理器未初始化', 'error');
@@ -1853,8 +1853,8 @@ function initializeUIElementsPanel() {
                 case 'locator-lib':
                     targetPane = document.getElementById('locatorLibPane');
                     // 加载Locator库
-                    if (window.LocatorManager && window.LocatorManager.instance) {
-                        window.LocatorManager.instance.loadLocators();
+                    if (window.LocatorManagerTKEModule && window.LocatorManagerTKEModule.instance) {
+                        window.LocatorManagerTKEModule.instance.loadLocators();
                     }
                     break;
                 case 'console-output':
@@ -2666,8 +2666,8 @@ const ScreenModeManager = {
             window.NotificationModule.showNotification(`图片定位器 "${alias}" 已保存`, 'success');
             
             // 刷新Locator库显示
-            if (window.LocatorManagerModule) {
-                window.LocatorManagerModule.loadLocators();
+            if (window.LocatorManagerTKEModule) {
+                window.LocatorManagerTKEModule.loadLocators();
             }
             
             // 刷新编辑器中的图片定位器显示

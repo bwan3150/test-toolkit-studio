@@ -99,7 +99,10 @@ class XMLParserTKE {
         
         try {
             // 获取TKE适配器
-            this.tkeAdapter = await window.TKEAdapterModule.getTKEAdapter();
+            const tkeAdapter = await window.TKEAdapterModule.getTKEAdapter();
+            // 创建XML解析相关的适配器
+            this.scriptParserAdapter = new window.TKEAdapterModule.TKEScriptParserAdapter(tkeAdapter);
+            this.locatorFetcherAdapter = new window.TKEAdapterModule.TKELocatorFetcherAdapter(tkeAdapter, '');
             this.initialized = true;
             window.rLog('XMLParser TKE版本已初始化');
         } catch (error) {
