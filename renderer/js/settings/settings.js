@@ -32,6 +32,9 @@ function initializeSettingsPage() {
         checkToolsBtn.addEventListener('click', checkAllToolsStatus);
     }
     
+    // 自动检查工具状态
+    checkAllToolsStatus();
+    
     if (updateBaseUrlBtn) {
         updateBaseUrlBtn.addEventListener('click', async () => {
             await ipcRenderer.invoke('store-set', 'base_url', settingsBaseUrl.value);
@@ -166,11 +169,23 @@ async function checkAllToolsStatus() {
     const aaptStatus = document.getElementById('aaptStatus');
     const tkeStatus = document.getElementById('tkeStatus');
     
-    // 重置所有状态为检查中
-    if (sdkStatus) sdkStatus.textContent = 'Checking...';
-    if (adbStatus) adbStatus.textContent = 'Checking...';
-    if (aaptStatus) aaptStatus.textContent = 'Checking...';
-    if (tkeStatus) tkeStatus.textContent = 'Checking...';
+    // 设置所有状态为检查中
+    if (sdkStatus) {
+        sdkStatus.textContent = 'Checking...';
+        sdkStatus.className = 'status-indicator checking';
+    }
+    if (adbStatus) {
+        adbStatus.textContent = 'Checking...';
+        adbStatus.className = 'status-indicator checking';
+    }
+    if (aaptStatus) {
+        aaptStatus.textContent = 'Checking...';
+        aaptStatus.className = 'status-indicator checking';
+    }
+    if (tkeStatus) {
+        tkeStatus.textContent = 'Checking...';
+        tkeStatus.className = 'status-indicator checking';
+    }
     
     const platform = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux';
     
@@ -179,12 +194,23 @@ async function checkAllToolsStatus() {
         const adbResult = await ipcRenderer.invoke('adb-devices');
         
         if (adbResult.success) {
-            if (adbStatus) {
-                adbStatus.textContent = `Available`;
-                adbStatus.className = 'status-indicator success';
+            // 获取ADB版本
+            try {
+                const adbVersionResult = await ipcRenderer.invoke('check-adb-version');
+                if (adbStatus) {
+                    const versionText = adbVersionResult.success ? `Available (${adbVersionResult.version})` : 'Available';
+                    adbStatus.textContent = versionText;
+                    adbStatus.className = 'status-indicator success';
+                }
+            } catch (error) {
+                if (adbStatus) {
+                    adbStatus.textContent = 'Available';
+                    adbStatus.className = 'status-indicator success';
+                }
             }
+            
             if (sdkStatus) {
-                sdkStatus.textContent = `Built-in (${platform})`;
+                sdkStatus.textContent = `Available (${platform})`;
                 sdkStatus.className = 'status-indicator success';
             }
         } else {
@@ -213,7 +239,8 @@ async function checkAllToolsStatus() {
         const aaptResult = await ipcRenderer.invoke('check-aapt-status');
         if (aaptResult && aaptResult.success) {
             if (aaptStatus) {
-                aaptStatus.textContent = `Available`;
+                const versionText = aaptResult.version && aaptResult.version !== 'Available' ? `Available (${aaptResult.version})` : 'Available';
+                aaptStatus.textContent = versionText;
                 aaptStatus.className = 'status-indicator success';
             }
         } else {

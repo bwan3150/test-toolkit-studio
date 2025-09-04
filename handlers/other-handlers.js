@@ -490,6 +490,38 @@ function registerOtherHandlers(app) {
     }
   });
 
+  // 检查ADB版本
+  ipcMain.handle('check-adb-version', async () => {
+    try {
+      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
+      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
+      let adbPath;
+      
+      if (app.isPackaged) {
+        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
+      } else {
+        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
+      }
+
+      if (!fs.existsSync(adbPath)) {
+        return { success: false, error: 'ADB binary not found' };
+      }
+      
+      const { stdout } = await execPromise(`"${adbPath}" version`);
+      const versionMatch = stdout.match(/Version (\d+\.\d+\.\d+)/);
+      const version = versionMatch ? versionMatch[1] : 'Unknown';
+      
+      return { 
+        success: true, 
+        version: version,
+        path: adbPath
+      };
+      
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // 检查AAPT状态
   ipcMain.handle('check-aapt-status', async () => {
     try {
@@ -498,9 +530,19 @@ function registerOtherHandlers(app) {
       let aaptPath;
       
       if (app.isPackaged) {
-        aaptPath = path.join(process.resourcesPath, platform, 'android-sdk', 'build-tools', 'aapt', aaptName);
+        // 对于不同平台使用不同的路径结构
+        if (platform === 'darwin') {
+          aaptPath = path.join(process.resourcesPath, platform, 'android-sdk', 'build-tools', '33.0.2', aaptName);
+        } else {
+          aaptPath = path.join(process.resourcesPath, platform, 'android-sdk', 'build-tools', 'aapt', aaptName);
+        }
       } else {
-        aaptPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'build-tools', 'aapt', aaptName);
+        // 对于不同平台使用不同的路径结构  
+        if (platform === 'darwin') {
+          aaptPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'build-tools', '33.0.2', aaptName);
+        } else {
+          aaptPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'build-tools', 'aapt', aaptName);
+        }
       }
 
       if (!fs.existsSync(aaptPath)) {
