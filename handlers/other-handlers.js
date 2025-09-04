@@ -552,9 +552,16 @@ function registerOtherHandlers(app) {
       // 测试AAPT
       const { stdout, stderr } = await execPromise(`"${aaptPath}" version 2>&1 || echo "Available"`);
       
+      // 从输出中提取版本号，例如：Android Asset Packaging Tool, v0.2-9420752
+      let version = 'Available';
+      const versionMatch = stdout.match(/v([\d\.\-\w]+)/);
+      if (versionMatch) {
+        version = versionMatch[1]; // 提取v后面的版本号
+      }
+      
       return { 
         success: true, 
-        version: stdout.includes('version') ? stdout.trim() : 'Available',
+        version: version,
         path: aaptPath
       };
       
