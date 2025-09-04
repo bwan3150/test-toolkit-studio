@@ -336,7 +336,7 @@ impl ScriptParser {
 }
 
 // 语法高亮信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SyntaxHighlight {
     pub line: usize,
     pub start: usize,
@@ -344,7 +344,7 @@ pub struct SyntaxHighlight {
     pub token_type: TokenType,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub enum TokenType {
     Keyword,
     Command,

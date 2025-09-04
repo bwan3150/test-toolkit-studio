@@ -70,16 +70,15 @@ impl LocatorFetcher {
         
         let mut elements = Vec::new();
         let mut buf = Vec::new();
-        let mut element_index = 0;
         
         loop {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
                     if e.name().as_ref() == b"node" {
-                        if let Some(element) = self.parse_node(&e, element_index) {
-                            if self.should_include_element(&element) {
+                        if let Some(element) = self.parse_node(&e, elements.len()) {
+                            // 使用JavaScript版本的筛选逻辑：更宽松的条件
+                            if self.should_include_element_js_style(&element) {
                                 elements.push(element);
-                                element_index += 1;
                             }
                         }
                     }
@@ -181,7 +180,40 @@ impl LocatorFetcher {
         }
     }
     
-    // 判断是否应该包含该元素
+    // JavaScript风格的元素筛选逻辑 - 完全匹配原版
+    fn should_include_element_js_style(&self, element: &UIElement) -> bool {
+        // 检查是否是需要过滤的系统UI
+        if let Some(ref resource_id) = element.resource_id {
+            for filtered_id in &self.filtered_resource_ids {
+                if resource_id.contains(filtered_id) {
+                    return false;
+                }
+            }
+        }
+        
+        // 基本的可见性检查
+        if !element.is_visible() {
+            return false;
+        }
+        
+        // JavaScript版本的宽松条件：任何有文本、可点击、可聚焦的元素都包含
+        let clickable = element.clickable;
+        let focusable = element.focusable;
+        let has_text = element.text.as_ref().map_or(false, |t| !t.trim().is_empty());
+        let has_content_desc = element.content_desc.as_ref().map_or(false, |t| !t.trim().is_empty());
+        let has_hint = element.hint.as_ref().map_or(false, |t| !t.trim().is_empty());
+        
+        if clickable || focusable || has_text || has_content_desc || has_hint {
+            // 确保元素有有效的尺寸
+            if element.bounds.x2 > element.bounds.x1 && element.bounds.y2 > element.bounds.y1 {
+                return true;
+            }
+        }
+        
+        false
+    }
+    
+    // 判断是否应该包含该元素（原版方法，保留作备用）
     fn should_include_element(&self, element: &UIElement) -> bool {
         // 检查是否是需要过滤的系统UI
         if let Some(ref resource_id) = element.resource_id {
@@ -241,7 +273,7 @@ impl LocatorFetcher {
     }
     
     // 推断屏幕尺寸从XML内容
-    pub fn infer_screen_size_from_xml(&self, xml_content: &str) -> Option<(u32, u32)> {
+    pub fn infer_screen_size_from_xml(&self, xml_content: &str) -> Result<Option<(u32, u32)>> {
         let mut reader = Reader::from_str(xml_content);
         reader.config_mut().trim_text(true);
         
@@ -267,6 +299,7 @@ impl LocatorFetcher {
                     }
                 }
                 Ok(Event::Eof) => break,
+                Err(e) => return Err(TkeError::XmlError(format!("解析XML失败: {}", e))),
                 _ => {}
             }
             
@@ -275,9 +308,126 @@ impl LocatorFetcher {
         
         if max_x > 0 && max_y > 0 {
             debug!("从XML推断的屏幕尺寸: {}x{}", max_x, max_y);
-            Some((max_x as u32, max_y as u32))
+            Ok(Some((max_x as u32, max_y as u32)))
         } else {
-            None
+            Ok(None)
+        }
+    }
+    
+    // 优化UI树结构 - 移除不必要的节点和属性
+    pub fn optimize_ui_tree(&self, xml_content: &str) -> Result<String> {
+        // 简化版本：移除不可见元素和不必要的属性
+        let elements = self.fetch_elements_from_xml(xml_content)?;
+        
+        let mut optimized_xml = String::new();
+        optimized_xml.push_str("<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>\n");
+        optimized_xml.push_str("<hierarchy>\n");
+        
+        for element in elements {
+            if element.is_visible() {
+                optimized_xml.push_str(&format!(
+                    "  <node class=\"{}\" bounds=\"[{},{}][{},{}]\"", 
+                    element.class_name, 
+                    element.bounds.x1, element.bounds.y1,
+                    element.bounds.x2, element.bounds.y2
+                ));
+                
+                if let Some(ref text) = element.text {
+                    optimized_xml.push_str(&format!(" text=\"{}\"", text));
+                }
+                if let Some(ref content_desc) = element.content_desc {
+                    optimized_xml.push_str(&format!(" content-desc=\"{}\"", content_desc));
+                }
+                if let Some(ref resource_id) = element.resource_id {
+                    optimized_xml.push_str(&format!(" resource-id=\"{}\"", resource_id));
+                }
+                
+                if element.clickable {
+                    optimized_xml.push_str(" clickable=\"true\"");
+                }
+                if element.focusable {
+                    optimized_xml.push_str(" focusable=\"true\"");
+                }
+                
+                optimized_xml.push_str("/>\n");
+            }
+        }
+        
+        optimized_xml.push_str("</hierarchy>\n");
+        Ok(optimized_xml)
+    }
+    
+    // 从XML内容提取UI元素（使用默认屏幕尺寸）
+    pub fn extract_ui_elements(&self, xml_content: &str) -> Result<Vec<UIElement>> {
+        self.fetch_elements_from_xml(xml_content)
+    }
+    
+    // 从XML内容提取UI元素（指定屏幕尺寸）
+    pub fn extract_ui_elements_with_size(&self, xml_content: &str, width: i32, height: i32) -> Result<Vec<UIElement>> {
+        let mut fetcher = Self::new();
+        fetcher.set_screen_size(width as u32, height as u32);
+        fetcher.fetch_elements_from_xml(xml_content)
+    }
+    
+    // 生成UI树的字符串表示
+    pub fn generate_tree_string(&self, xml_content: &str) -> Result<String> {
+        let elements = self.fetch_elements_from_xml(xml_content)?;
+        
+        let mut tree_string = String::new();
+        tree_string.push_str("UI Tree Structure:\n");
+        tree_string.push_str("=================\n\n");
+        
+        for (i, element) in elements.iter().enumerate() {
+            let indent = "  ".repeat(self.get_element_depth(&element));
+            let class_name = element.class_name.split('.').last().unwrap_or(&element.class_name);
+            
+            tree_string.push_str(&format!("{}[{}] {}", indent, i, class_name));
+            
+            if let Some(ref text) = element.text {
+                if !text.trim().is_empty() {
+                    tree_string.push_str(&format!(" \"{}\"", text));
+                }
+            }
+            
+            if let Some(ref content_desc) = element.content_desc {
+                if !content_desc.trim().is_empty() {
+                    tree_string.push_str(&format!(" ({})", content_desc));
+                }
+            }
+            
+            if element.clickable || element.focusable {
+                let attrs = vec![
+                    if element.clickable { Some("clickable") } else { None },
+                    if element.focusable { Some("focusable") } else { None },
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(", ");
+                
+                if !attrs.is_empty() {
+                    tree_string.push_str(&format!(" [{}]", attrs));
+                }
+            }
+            
+            tree_string.push('\n');
+        }
+        
+        Ok(tree_string)
+    }
+    
+    // 简单的深度计算（基于bounds位置）
+    fn get_element_depth(&self, element: &UIElement) -> usize {
+        // 简化版本：根据元素位置和大小估算深度
+        let area = (element.bounds.x2 - element.bounds.x1) * (element.bounds.y2 - element.bounds.y1);
+        let screen_area = (self.screen_width * self.screen_height) as i32;
+        
+        if area >= screen_area / 2 {
+            0  // 大元素，可能是容器
+        } else if area >= screen_area / 10 {
+            1  // 中等元素
+        } else {
+            2  // 小元素，可能是子控件
         }
     }
 }

@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use std::io::Read;
 use tracing::{info, error, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -123,6 +124,32 @@ enum FetcherCommands {
     Interactive,
     /// 过滤有文本的元素
     Text,
+    /// 从XML推断屏幕尺寸
+    InferScreenSize {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
+    /// 优化UI树结构
+    OptimizeUITree {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
+    /// 从UI树提取元素列表
+    ExtractUIElements {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+        /// 屏幕宽度
+        #[arg(long)]
+        width: Option<i32>,
+        /// 屏幕高度
+        #[arg(long)]
+        height: Option<i32>,
+    },
+    /// 生成UI树的字符串描述
+    GenerateTreeString {
+        /// XML内容 (从stdin读取如果未提供)
+        xml_content: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -156,25 +183,10 @@ enum ParserCommands {
         /// 脚本文件路径
         script_path: PathBuf,
     },
-    /// 从XML推断屏幕尺寸
-    InferScreenSize {
-        /// XML内容 (从stdin读取如果未提供)
-        xml_content: Option<String>,
-    },
-    /// 优化UI树结构
-    OptimizeUITree {
-        /// XML内容 (从stdin读取如果未提供)
-        xml_content: Option<String>,
-    },
-    /// 从UI树提取元素列表
-    ExtractUIElements {
-        /// XML内容 (从stdin读取如果未提供)
-        xml_content: Option<String>,
-    },
-    /// 生成UI树的字符串描述
-    GenerateTreeString {
-        /// XML内容 (从stdin读取如果未提供)
-        xml_content: Option<String>,
+    /// 获取语法高亮信息
+    Highlight {
+        /// 脚本文件路径
+        script_path: PathBuf,
     },
 }
 
@@ -339,6 +351,34 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
                 println!("  [{}] {}", element.index, element.to_ai_text());
             }
         }
+        FetcherCommands::InferScreenSize { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            if let Some((width, height)) = fetcher.infer_screen_size_from_xml(&xml)? {
+                println!("{{\"width\": {}, \"height\": {}}}", width, height);
+            } else {
+                println!("null");
+            }
+        }
+        FetcherCommands::OptimizeUITree { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            let optimized = fetcher.optimize_ui_tree(&xml)?;
+            println!("{}", optimized);
+        }
+        FetcherCommands::ExtractUIElements { xml_content, width, height } => {
+            let xml = get_xml_content(xml_content)?;
+            let elements = if let (Some(w), Some(h)) = (width, height) {
+                fetcher.extract_ui_elements_with_size(&xml, w, h)?
+            } else {
+                fetcher.extract_ui_elements(&xml)?
+            };
+            let elements_json = serde_json::to_string(&elements)?;
+            println!("{}", elements_json);
+        }
+        FetcherCommands::GenerateTreeString { xml_content } => {
+            let xml = get_xml_content(xml_content)?;
+            let tree_string = fetcher.generate_tree_string(&xml)?;
+            println!("{}", tree_string);
+        }
     }
     
     Ok(())
@@ -366,8 +406,6 @@ async fn handle_recognizer_commands(action: RecognizerCommands, project_path: Pa
 }
 
 async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
-    use std::io::Read;
-    
     let parser = ScriptParser::new();
     
     match action {
@@ -406,29 +444,14 @@ async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
             println!("  脚本名: {}", script.script_name);
             println!("  步骤数: {}", script.steps.len());
         }
-        ParserCommands::InferScreenSize { xml_content } => {
-            let xml = get_xml_content(xml_content)?;
-            if let Some((width, height)) = parser.infer_screen_size_from_xml(&xml)? {
-                println!("{{\"width\": {}, \"height\": {}}}", width, height);
-            } else {
-                println!("null");
-            }
-        }
-        ParserCommands::OptimizeUITree { xml_content } => {
-            let xml = get_xml_content(xml_content)?;
-            let optimized = parser.optimize_ui_tree(&xml)?;
-            println!("{}", optimized);
-        }
-        ParserCommands::ExtractUIElements { xml_content } => {
-            let xml = get_xml_content(xml_content)?;
-            let elements = parser.extract_ui_elements(&xml)?;
-            let elements_json = serde_json::to_string(&elements)?;
-            println!("{}", elements_json);
-        }
-        ParserCommands::GenerateTreeString { xml_content } => {
-            let xml = get_xml_content(xml_content)?;
-            let tree_string = parser.generate_tree_string(&xml)?;
-            println!("{}", tree_string);
+        ParserCommands::Highlight { script_path } => {
+            let content = std::fs::read_to_string(&script_path)
+                .map_err(|e| TkeError::IoError(e))?;
+            let highlights = parser.get_syntax_highlights(&content);
+            
+            // 输出JSON格式的语法高亮信息
+            let json_output = serde_json::to_string(&highlights)?;
+            println!("{}", json_output);
         }
     }
     

@@ -100,8 +100,7 @@ class XMLParserTKE {
         try {
             // 获取TKE适配器
             const tkeAdapter = await window.TKEAdapterModule.getTKEAdapter();
-            // 创建XML解析相关的适配器
-            this.scriptParserAdapter = new window.TKEAdapterModule.TKEScriptParserAdapter(tkeAdapter);
+            // 创建LocatorFetcher适配器用于XML处理
             this.locatorFetcherAdapter = new window.TKEAdapterModule.TKELocatorFetcherAdapter(tkeAdapter, '');
             this.initialized = true;
             window.rLog('XMLParser TKE版本已初始化');
@@ -121,8 +120,8 @@ class XMLParserTKE {
         try {
             await this.init();
             
-            // 调用TKE的XML解析功能来推断屏幕尺寸
-            const result = await this.tkeAdapter.callTKE('script-parser', ['infer-screen-size'], xmlString);
+            // 调用TKE的LocatorFetcher来推断屏幕尺寸
+            const result = await this.locatorFetcherAdapter.inferScreenSizeFromXml(xmlString);
             
             if (result.success && result.data) {
                 const { width, height } = result.data;
@@ -149,8 +148,8 @@ class XMLParserTKE {
             
             window.rLog('开始使用TKE优化UI树...');
             
-            // 调用TKE的XML解析优化功能
-            const result = await this.tkeAdapter.callTKE('script-parser', ['optimize-ui-tree'], xmlString);
+            // 调用TKE的LocatorFetcher优化UI树功能
+            const result = await this.locatorFetcherAdapter.optimizeUITree(xmlString);
             
             if (result.success && result.data) {
                 window.rLog('TKE UI树优化成功');
@@ -182,9 +181,9 @@ class XMLParserTKE {
                 return [];
             }
             
-            // 调用TKE的UI元素提取功能
-            const result = await this.tkeAdapter.callTKE('script-parser', ['extract-ui-elements'], 
-                JSON.stringify({ xml: xmlInput, screenWidth: this.screenWidth, screenHeight: this.screenHeight }));
+            // 调用TKE的LocatorFetcher提取UI元素
+            const result = await this.locatorFetcherAdapter.extractUIElements(
+                xmlInput, this.screenWidth, this.screenHeight);
             
             if (result.success && result.data && Array.isArray(result.data.elements)) {
                 const elements = result.data.elements.map((elementData, index) => {
@@ -244,8 +243,7 @@ class XMLParserTKE {
             await this.init();
             
             // 调用TKE生成树形字符串
-            const result = await this.tkeAdapter.callTKE('script-parser', ['generate-tree-string'], 
-                JSON.stringify({ input: nodeOrXml, depth: depth }));
+            const result = await this.locatorFetcherAdapter.generateTreeString(nodeOrXml);
             
             if (result.success && result.data && result.data.treeString) {
                 return result.data.treeString;

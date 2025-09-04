@@ -194,6 +194,67 @@
         setLogCallback(callback) {
             this.logCallback = callback;
         }
+
+        /**
+         * 执行带stdin输入的TKE命令
+         */
+        async executeTKECommandWithStdin(args, stdinInput, options = {}) {
+            if (!this.isInitialized) {
+                throw new Error('TKE适配器未初始化');
+            }
+
+            return new Promise((resolve, reject) => {
+                const child = spawn(this.tkeExecutable, args, { 
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    ...options 
+                });
+
+                let stdout = '';
+                let stderr = '';
+
+                child.stdout.on('data', (data) => {
+                    const text = data.toString();
+                    stdout += text;
+                    
+                    // 实时日志输出
+                    if (this.logCallback) {
+                        this.logCallback(text.trim(), 'info');
+                    }
+                });
+
+                child.stderr.on('data', (data) => {
+                    const text = data.toString();
+                    stderr += text;
+                    
+                    // 实时错误输出
+                    if (this.logCallback) {
+                        this.logCallback(text.trim(), 'error');
+                    }
+                });
+
+                child.on('close', (code) => {
+                    if (code === 0) {
+                        resolve({
+                            success: true,
+                            stdout: stdout.trim(),
+                            stderr: stderr.trim()
+                        });
+                    } else {
+                        reject(new Error(`TKE命令失败 (退出码 ${code}): ${stderr || stdout}`));
+                    }
+                });
+
+                child.on('error', (error) => {
+                    reject(new Error(`执行TKE命令失败: ${error.message}`));
+                });
+
+                // 写入stdin内容并关闭stdin
+                if (stdinInput) {
+                    child.stdin.write(stdinInput, 'utf8');
+                }
+                child.stdin.end();
+            });
+        }
     }
 
     /**
@@ -396,6 +457,69 @@
             }
             
             return elements;
+        }
+
+        /**
+         * 从XML推断屏幕尺寸
+         */
+        async inferScreenSizeFromXml(xmlContent) {
+            const result = await this.tkeAdapter.executeTKECommandWithStdin(
+                ['fetcher', 'infer-screen-size'], 
+                xmlContent
+            );
+            
+            try {
+                const parsed = JSON.parse(result.stdout.trim());
+                return { success: true, data: parsed };
+            } catch (error) {
+                if (result.stdout.trim() === 'null') {
+                    return { success: true, data: null };
+                }
+                return { success: false, error: `解析输出失败: ${error.message}` };
+            }
+        }
+
+        /**
+         * 优化UI树结构
+         */
+        async optimizeUITree(xmlContent) {
+            const result = await this.tkeAdapter.executeTKECommandWithStdin(
+                ['fetcher', 'optimize-ui-tree'], 
+                xmlContent
+            );
+            
+            return { success: true, data: result.stdout };
+        }
+
+        /**
+         * 从XML内容提取UI元素
+         */
+        async extractUIElements(xmlContent, screenWidth = null, screenHeight = null) {
+            const args = ['fetcher', 'extract-ui-elements'];
+            if (screenWidth && screenHeight) {
+                args.push('--width', screenWidth.toString(), '--height', screenHeight.toString());
+            }
+            
+            const result = await this.tkeAdapter.executeTKECommandWithStdin(args, xmlContent);
+            
+            try {
+                const elements = JSON.parse(result.stdout.trim());
+                return { success: true, data: { elements } };
+            } catch (error) {
+                return { success: false, error: `解析UI元素失败: ${error.message}` };
+            }
+        }
+
+        /**
+         * 生成UI树的字符串表示
+         */
+        async generateTreeString(xmlContent) {
+            const result = await this.tkeAdapter.executeTKECommandWithStdin(
+                ['fetcher', 'generate-tree-string'], 
+                xmlContent
+            );
+            
+            return { success: true, data: { treeString: result.stdout } };
         }
     }
 
