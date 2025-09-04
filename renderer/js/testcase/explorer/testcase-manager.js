@@ -1200,7 +1200,7 @@ async function enableXmlOverlay(deviceId) {
         let screenSize = result.screenSize;
         if (!screenSize && result.xml) {
             // 从XML推断屏幕尺寸
-            screenSize = xmlParser.inferScreenSizeFromXML(result.xml);
+            screenSize = await xmlParser.inferScreenSizeFromXML(result.xml);
         }
         
         if (screenSize) {
@@ -1214,7 +1214,7 @@ async function enableXmlOverlay(deviceId) {
         }
         
         // 3. 解析XML并提取UI元素
-        let optimizedTree = xmlParser.optimizeUITree(result.xml);
+        let optimizedTree = await xmlParser.optimizeUITree(result.xml);
         if (!optimizedTree) {
             console.warn('UI树优化失败，尝试使用原始XML');
             // 备用方案：直接解析原始XML
@@ -1231,7 +1231,7 @@ async function enableXmlOverlay(deviceId) {
         }
         
         // 如果优化失败，传递原始XML作为回退
-        currentUIElements = xmlParser.extractUIElements(optimizedTree, result.xml);
+        currentUIElements = await xmlParser.extractUIElements(optimizedTree, result.xml);
         console.log('提取的UI元素:', currentUIElements);
         
         // 暴露到全局，供TKS集成模块使用

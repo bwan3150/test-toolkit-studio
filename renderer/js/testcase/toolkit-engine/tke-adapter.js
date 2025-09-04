@@ -64,6 +64,7 @@
             // 获取平台信息，参考ADB的做法
             const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
             const tkeBinaryName = process.platform === 'win32' ? 'tke.exe' : 'tke';
+            const fs = require('fs');
             
             let app;
             
@@ -97,6 +98,8 @@
             
             // 开发模式的备用路径
             possiblePaths.push(
+                // 首先尝试已部署的资源路径
+                path.join(__dirname, '..', '..', '..', '..', '..', 'resources', platform, 'toolkit-engine', tkeBinaryName),
                 // 当前构建的路径
                 path.join(__dirname, '..', '..', '..', '..', '..', 'toolkit-engine', 'target', 'release', tkeBinaryName),
                 path.join(__dirname, '..', '..', '..', '..', '..', 'toolkit-engine', 'target', 'debug', tkeBinaryName),
@@ -105,9 +108,24 @@
                 path.join(process.cwd(), 'toolkit-engine', 'target', 'debug', tkeBinaryName)
             );
             
-            // 返回第一个路径（稍后在实际使用时再检查是否存在）
+            // 遍历所有路径，找到第一个存在的文件
+            for (const possiblePath of possiblePaths) {
+                try {
+                    if (fs.existsSync(possiblePath)) {
+                        if (window.rLog) {
+                            window.rLog('找到TKE可执行文件:', possiblePath);
+                        }
+                        return possiblePath;
+                    }
+                } catch (error) {
+                    // 忽略访问错误，继续尝试下一个路径
+                }
+            }
+            
+            // 如果没找到存在的文件，返回第一个路径作为默认值
             if (window.rLog) {
                 window.rLog('TKE可执行文件候选路径:', possiblePaths[0]);
+                window.rLog('警告：没有找到存在的TKE文件，使用默认路径');
             }
             return possiblePaths[0];
         }
@@ -503,7 +521,35 @@
             const result = await this.tkeAdapter.executeTKECommandWithStdin(args, xmlContent);
             
             try {
-                const elements = JSON.parse(result.stdout.trim());
+                const rawElements = JSON.parse(result.stdout.trim());
+                
+                // 转换TKE返回的数据格式到前端期望的格式
+                const elements = rawElements.map((tkeElement, index) => {
+                    return {
+                        index: index,
+                        className: tkeElement.class_name || '',
+                        bounds: [
+                            tkeElement.bounds.x1,
+                            tkeElement.bounds.y1,
+                            tkeElement.bounds.x2,
+                            tkeElement.bounds.y2
+                        ],
+                        text: tkeElement.text || '',
+                        contentDesc: tkeElement.content_desc || '',
+                        resourceId: tkeElement.resource_id || '',
+                        hint: tkeElement.hint || '',
+                        clickable: tkeElement.clickable || false,
+                        checkable: tkeElement.checkable || false,
+                        checked: tkeElement.checked || false,
+                        focusable: tkeElement.focusable || false,
+                        focused: tkeElement.focused || false,
+                        scrollable: tkeElement.scrollable || false,
+                        selected: tkeElement.selected || false,
+                        enabled: tkeElement.enabled !== false,
+                        xpath: tkeElement.xpath || ''
+                    };
+                });
+                
                 return { success: true, data: { elements } };
             } catch (error) {
                 return { success: false, error: `解析UI元素失败: ${error.message}` };

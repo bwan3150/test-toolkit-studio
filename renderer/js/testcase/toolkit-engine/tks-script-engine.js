@@ -575,7 +575,7 @@ class TKSScriptExecutor {
             const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', this.deviceId);
             if (uiDumpResult.success && uiDumpResult.xml) {
                 // 解析UI树并缓存元素
-                const parser = new window.XMLParser();
+                const parser = window.XMLParserTKEModule.createParser();
                 if (uiDumpResult.screenSize) {
                     parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
                 }
@@ -583,11 +583,11 @@ class TKSScriptExecutor {
                 // console.log(`TKS执行器: XML长度: ${uiDumpResult.xml.length}`); // 已禁用以减少日志  
                 // console.log(`TKS执行器: XML前200字符:`, uiDumpResult.xml.substring(0, 200)); // 已禁用以减少日志
                 
-                const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
+                const optimizedTree = await parser.optimizeUITree(uiDumpResult.xml);
                 // console.log(`TKS执行器: 优化后的树:`, optimizedTree ? '成功' : '失败'); // 已禁用以减少日志
                 
                 // 如果优化失败，传递原始XML作为回退
-                const elements = parser.extractUIElements(optimizedTree, uiDumpResult.xml);
+                const elements = await parser.extractUIElements(optimizedTree, uiDumpResult.xml);
                 // console.log(`TKS执行器: 提取到 ${elements.length} 个元素`); // 已禁用以减少日志
                 
                 // 4. 更新实例状态
@@ -635,13 +635,13 @@ class TKSScriptExecutor {
         const uiDumpResult = await ipcRenderer.invoke('adb-ui-dump-enhanced', this.deviceId);
         if (uiDumpResult.success) {
             // 解析UI树并缓存元素供后续查找使用
-            const parser = new window.XMLParser();
+            const parser = window.XMLParserTKEModule.createParser();
             if (uiDumpResult.screenSize) {
                 parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
             }
             
-            const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
-            const elements = parser.extractUIElements(optimizedTree || uiDumpResult.xml);
+            const optimizedTree = await parser.optimizeUITree(uiDumpResult.xml);
+            const elements = await parser.extractUIElements(optimizedTree || uiDumpResult.xml);
             
             // 缓存元素供后续使用
             this.currentElements = elements;
@@ -662,16 +662,16 @@ class TKSScriptExecutor {
             
             if (uiDumpResult.success && uiDumpResult.xml) {
                 // 解析UI树并缓存元素
-                const parser = new window.XMLParser();
+                const parser = window.XMLParserTKEModule.createParser();
                 if (uiDumpResult.screenSize) {
                     parser.setScreenSize(uiDumpResult.screenSize.width, uiDumpResult.screenSize.height);
                 }
                 
                 console.log(`TKS执行器: XML长度: ${uiDumpResult.xml.length}`);
                 
-                const optimizedTree = parser.optimizeUITree(uiDumpResult.xml);
+                const optimizedTree = await parser.optimizeUITree(uiDumpResult.xml);
                 // 如果优化失败，传递原始XML作为回退
-                const elements = parser.extractUIElements(optimizedTree, uiDumpResult.xml);
+                const elements = await parser.extractUIElements(optimizedTree, uiDumpResult.xml);
                 
                 console.log(`TKS执行器: 解析得到 ${elements.length} 个UI元素`);
                 

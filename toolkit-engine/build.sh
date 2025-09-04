@@ -7,7 +7,8 @@ set -e  # 遇到错误立即退出
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-echo "开始构建 Toolkit Engine (TKE)..."
+echo "==============================="
+echo "Building Toolkit Engine..."
 
 # 构建 release 版本
 cargo build --release
@@ -28,12 +29,12 @@ case "$OS" in
         BINARY_NAME="tke.exe"
         ;;
     *)
-        echo "不支持的平台: $OS"
+        echo "Not supported for: $OS"
         exit 1
         ;;
 esac
 
-echo "检测到平台: $PLATFORM"
+echo "OS: $PLATFORM"
 
 # 源文件路径
 SOURCE_BINARY="$SCRIPT_DIR/target/release/$BINARY_NAME"
@@ -44,7 +45,7 @@ TARGET_BINARY="$TARGET_DIR/$BINARY_NAME"
 
 # 检查源文件是否存在
 if [ ! -f "$SOURCE_BINARY" ]; then
-    echo "错误：构建失败，找不到二进制文件: $SOURCE_BINARY"
+    echo "Error：build fault, cannot find: $SOURCE_BINARY"
     exit 1
 fi
 
@@ -59,13 +60,13 @@ if [ "$OS" != "MINGW*" ] && [ "$OS" != "MSYS*" ] && [ "$OS" != "CYGWIN*" ]; then
     chmod +x "$TARGET_BINARY"
 fi
 
-echo "构建完成！"
-echo "二进制文件已复制到: $TARGET_BINARY"
-echo "文件大小: $(du -h "$TARGET_BINARY" | cut -f1)"
+echo "Build successfully"
+echo "Cp to: $TARGET_BINARY"
+echo "Szie: $(du -h "$TARGET_BINARY" | cut -f1)"
 
 # 验证二进制文件能否运行
 if "$TARGET_BINARY" --version > /dev/null 2>&1; then
-    echo "✅ TKE 二进制文件验证通过"
+    echo "tke --version successful"
 else
-    echo "⚠️  警告：TKE 二进制文件可能无法正常运行"
+    echo "Warning: tke might not be executable"
 fi
