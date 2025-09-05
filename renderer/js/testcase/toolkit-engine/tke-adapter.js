@@ -783,7 +783,7 @@
                     spawn = cp.spawn;
                 }
                 
-                console.log('TKE执行命令:', this.tkeAdapter.tkeExecutable, args);
+                window.rLog('TKE执行命令:', this.tkeAdapter.tkeExecutable, args);
                 const child = spawn(this.tkeAdapter.tkeExecutable, args);
                 this.currentProcess = child;
                 
@@ -799,35 +799,41 @@
                     // 解析实时输出
                     const lines = output.split('\n');
                     for (const line of lines) {
-                        const trimmed = line.trim();
+                        // 移除ANSI颜色代码
+                        const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '');
+                        const trimmed = cleanLine.trim();
                         if (!trimmed) continue;
                         
                         // 日志输出回调
                         if (callbacks.onLog) {
                             callbacks.onLog(trimmed);
                         } else {
-                            console.log('TKE输出:', trimmed);
+                            window.rLog('TKE输出:', trimmed);
                         }
                         
-                        // 步骤执行检测
+                        // 步骤执行检测 - 匹配TKE实际输出格式
                         const stepMatch = trimmed.match(/执行步骤\s+(\d+)\/(\d+):\s*(.+)/);
                         if (stepMatch) {
                             const stepNum = parseInt(stepMatch[1]);
                             const totalSteps = parseInt(stepMatch[2]);
                             const stepDesc = stepMatch[3];
                             
+                            window.rLog(`TKE步骤检测: 步骤${stepNum}/${totalSteps} - ${stepDesc}`);
+                            
+                            // 先标记上一个步骤完成（如果有的话）
+                            if (currentStep >= 0 && currentStep < stepNum - 1) {
+                                if (callbacks.onStepComplete) {
+                                    callbacks.onStepComplete(currentStep, true);
+                                }
+                            }
+                            currentStep = stepNum - 1;
+                            
                             if (callbacks.onStepStart) {
                                 callbacks.onStepStart(stepNum - 1, stepDesc, totalSteps);
                             }
                         }
                         
-                        // 步骤完成检测 (通过下一步开始或成功日志推断)
-                        if (stepMatch && currentStep < parseInt(stepMatch[1]) - 1) {
-                            if (callbacks.onStepComplete) {
-                                callbacks.onStepComplete(currentStep, true);
-                            }
-                            currentStep = parseInt(stepMatch[1]) - 1;
-                        }
+                        // 已经在上面的stepMatch中处理步骤完成检测
                         
                         // UI状态已捕获 - 刷新截图
                         if (trimmed.includes('UI状态已捕获并保存到workarea')) {
@@ -858,6 +864,14 @@
                 // 处理进程退出
                 child.on('close', (code) => {
                     this.currentProcess = null;
+                    
+                    // 标记最后一个步骤完成
+                    if (currentStep >= 0) {
+                        const success = code === 0;
+                        if (callbacks.onStepComplete) {
+                            callbacks.onStepComplete(currentStep, success, success ? null : stderr);
+                        }
+                    }
                     
                     if (code === 0) {
                         const result = this.parseExecutionResult(stdout);
