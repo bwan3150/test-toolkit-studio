@@ -191,7 +191,7 @@ async function loadProject(projectPath) {
     }
     
     // 为testcase页面加载文件树
-    await window.TestcaseManagerModule.loadFileTree();
+    await window.TestcaseController.loadFileTree();
     
     // 加载保存的设备
     await window.DeviceManagerModule.loadSavedDevices();
@@ -613,7 +613,7 @@ async function navigateToTestcase(record, index) {
         document.querySelector('[data-page="testcase"]').click();
         
         // 重新加载文件树
-        await window.TestcaseManagerModule.loadFileTree();
+        await window.TestcaseController.loadFileTree();
         
         // 显示通知
         window.NotificationModule.showNotification(`已跳转到测试用例页面: ${caseName}`, 'info');
@@ -621,10 +621,10 @@ async function navigateToTestcase(record, index) {
         // 尝试展开对应的case文件夹
         setTimeout(() => {
             const caseContainer = document.querySelector(`[data-case-path*="${caseName}"]`);
-            if (caseContainer && window.TestcaseManagerModule.toggleCaseFolder) {
+            if (caseContainer && window.TestcaseController.toggleCaseFolder) {
                 const scriptsContainer = caseContainer.querySelector('.scripts-container');
                 if (scriptsContainer && scriptsContainer.classList.contains('collapsed')) {
-                    window.TestcaseManagerModule.toggleCaseFolder(caseContainer);
+                    window.TestcaseController.toggleCaseFolder(caseContainer);
                 }
             }
         }, 500);
@@ -747,7 +747,7 @@ async function createTestCase(record, index) {
         document.querySelector('[data-page="testcase"]').click();
         
         // 重新加载文件树
-        await window.TestcaseManagerModule.loadFileTree();
+        await window.TestcaseController.loadFileTree();
         
         window.NotificationModule.showNotification(`Created test case: ${caseName}`, 'success');
     } catch (error) {

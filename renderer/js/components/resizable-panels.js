@@ -114,10 +114,10 @@ function initializeResizablePanels() {
             if (bottomPanelResizer) bottomPanelResizer.classList.remove('dragging');
             
             // 面板调整完成后，重新计算XML标记位置
-            if (window.TestcaseManagerModule && window.TestcaseManagerModule.recalculateXmlMarkersPosition) {
+            if (window.TestcaseController && window.TestcaseController.recalculateXmlMarkersPosition) {
                 // 延迟一下等DOM更新完成，使用更短的延迟提高响应性
                 setTimeout(() => {
-                    window.TestcaseManagerModule.recalculateXmlMarkersPosition();
+                    window.TestcaseController.recalculateXmlMarkersPosition();
                 }, 16); // 约1帧的时间
             }
         }

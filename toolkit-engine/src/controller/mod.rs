@@ -112,6 +112,23 @@ impl Controller {
         Ok(())
     }
     
+    // 获取UI XML内容作为字符串
+    pub async fn get_ui_xml(&self) -> Result<String> {
+        let temp_path = "/sdcard/ui_dump.xml";
+        
+        // 在设备上dump UI
+        self.run_adb_command(&["shell", "uiautomator", "dump", temp_path])?;
+        
+        // 读取XML内容
+        let xml_content = self.run_adb_command_output(&["shell", "cat", temp_path])?;
+        
+        // 删除设备上的临时文件
+        self.run_adb_command(&["shell", "rm", temp_path])?;
+        
+        debug!("获取UI XML内容，长度: {}", xml_content.len());
+        Ok(xml_content)
+    }
+    
     // 指令2: 转发ADB基础指令
     
     // 点击坐标

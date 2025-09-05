@@ -2,7 +2,7 @@
 const { ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
 
@@ -800,6 +800,7 @@ function registerAdbHandlers(app) {
           return { 
             success: true, 
             data: imageData.toString('base64'),
+            imagePath: screenshotPath,
             screenshotPath: screenshotPath
           };
         } catch (saveError) {
@@ -808,7 +809,12 @@ function registerAdbHandlers(app) {
         }
       }
       
-      return { success: true, data: imageData.toString('base64') };
+      // 临时截图路径
+      return { 
+        success: true, 
+        data: imageData.toString('base64'),
+        imagePath: tempPath
+      };
     } catch (error) {
       console.error('截图失败:', error);
       return { success: false, error: error.message };
@@ -1104,6 +1110,165 @@ function registerAdbHandlers(app) {
       return { success: false, error: error.message };
     }
   });
+
+  // 获取设备UI XML结构 - 使用TKE方法
+  ipcMain.handle('adb-get-ui-xml', async (event, options) => {
+    try {
+      const { deviceId, projectPath, options: uiOptions = {}, metadata = {} } = options;
+
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      // 获取 TKE 可执行文件路径
+      const tkePath = getTkePath(app);
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'TKE可执行文件未找到' };
+      }
+
+      // 构建 TKE 命令：tke --device <deviceId> controller get-xml
+      const args = ['--device', deviceId, 'controller', 'get-xml'];
+      
+      // 执行 TKE 命令获取 XML
+      const { stdout: xmlContent } = await execPromise(`"${tkePath}" ${args.join(' ')}`);
+      
+      // 获取屏幕尺寸（如果需要的话）
+      let screenSize = metadata.screenSize;
+      if (!screenSize) {
+        // 可以从 XML 中推断屏幕尺寸，或者使用默认值
+        screenSize = { width: 1080, height: 1920 };
+      }
+      
+      // 如果提供了项目路径，保存XML到工作区
+      if (projectPath) {
+        try {
+          const workareaPath = path.join(projectPath, 'workarea');
+          
+          // 确保workarea目录存在
+          if (!fs.existsSync(workareaPath)) {
+            fs.mkdirSync(workareaPath, { recursive: true });
+          }
+          
+          // 保存XML到工作区
+          const xmlPath = path.join(workareaPath, 'current_ui_tree.xml');
+          fs.writeFileSync(xmlPath, xmlContent, 'utf8');
+          
+          console.log('已通过TKE保存UI XML到workspace:', xmlPath);
+        } catch (saveError) {
+          console.warn('保存UI XML到workspace失败:', saveError.message);
+        }
+      }
+      
+      return { 
+        success: true, 
+        xml: xmlContent,
+        screenSize: screenSize,
+        timestamp: Date.now()
+      };
+      
+    } catch (error) {
+      console.error('TKE获取UI XML失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 使用TKE提取UI元素 - 用于XML overlay
+  ipcMain.handle('execute-tke-extract-elements', async (event, options) => {
+    try {
+      const { deviceId, projectPath, screenWidth, screenHeight } = options;
+
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      if (!projectPath) {
+        return { success: false, error: '请提供项目路径' };
+      }
+
+      // 获取 TKE 可执行文件路径
+      const tkePath = getTkePath(app);
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'TKE可执行文件未找到' };
+      }
+
+      // XML文件路径
+      const xmlPath = path.join(projectPath, 'workarea', 'current_ui_tree.xml');
+      
+      // 检查XML文件是否存在
+      if (!fs.existsSync(xmlPath)) {
+        return { success: false, error: 'UI XML文件不存在，请先截图' };
+      }
+
+      // 构建 TKE 命令：tke fetcher extract-ui-elements --width <width> --height <height> < xml_file
+      const args = [
+        'fetcher', 'extract-ui-elements', 
+        '--width', screenWidth.toString(), 
+        '--height', screenHeight.toString()
+      ];
+      
+      // 执行 TKE 命令，通过stdin传入XML文件内容
+      const xmlContent = fs.readFileSync(xmlPath, 'utf8');
+      const child = spawn(tkePath, args, { 
+        stdio: ['pipe', 'pipe', 'pipe'] 
+      });
+      
+      // 写入XML内容到stdin
+      child.stdin.write(xmlContent);
+      child.stdin.end();
+      
+      let stdout = '';
+      let stderr = '';
+      
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      const exitCode = await new Promise((resolve) => {
+        child.on('close', resolve);
+      });
+      
+      if (exitCode !== 0) {
+        console.error('TKE extract-ui-elements 命令失败:', stderr);
+        return { success: false, error: `TKE命令失败: ${stderr}` };
+      }
+      
+      try {
+        // 解析JSON输出
+        const elements = JSON.parse(stdout);
+        console.log(`TKE成功提取了 ${elements.length} 个UI元素`);
+        
+        return { 
+          success: true, 
+          elements: elements,
+          count: elements.length
+        };
+        
+      } catch (parseError) {
+        console.error('解析TKE输出JSON失败:', parseError, 'stdout:', stdout);
+        return { success: false, error: `解析TKE输出失败: ${parseError.message}` };
+      }
+      
+    } catch (error) {
+      console.error('执行TKE extract-ui-elements失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+}
+
+// 获取TKE可执行文件路径
+function getTkePath(app) {
+  const platform = process.platform;
+  if (platform === 'win32') {
+    return path.join(app.getAppPath(), 'resources', 'win32', 'toolkit-engine', 'tke.exe');
+  } else if (platform === 'darwin') {
+    return path.join(app.getAppPath(), 'resources', 'darwin', 'toolkit-engine', 'tke');
+  } else {
+    return path.join(app.getAppPath(), 'resources', 'linux', 'toolkit-engine', 'tke');
+  }
 }
 
 module.exports = {

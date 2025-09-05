@@ -109,6 +109,8 @@ enum ControllerCommands {
     Back,
     /// 主页键
     Home,
+    /// 获取UI XML内容
+    GetXml,
 }
 
 #[derive(Subcommand)]
@@ -312,6 +314,10 @@ async fn handle_controller_commands(action: ControllerCommands, device_id: Optio
         ControllerCommands::Home => {
             controller.home()?;
             println!("已按主页键");
+        }
+        ControllerCommands::GetXml => {
+            let xml_content = controller.get_ui_xml().await?;
+            println!("{}", xml_content);
         }
     }
     

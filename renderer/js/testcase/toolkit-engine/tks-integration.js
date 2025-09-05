@@ -129,8 +129,8 @@ class TKSScriptRunner {
         this.updateRunButton(true);
         
         // 设置屏幕模式管理器为测试运行状态（自动切换到纯屏幕模式并禁用切换）
-        if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
-            window.TestcaseManagerModule.ScreenModeManager.setTestRunning(true);
+        if (window.TestcaseController && window.TestcaseController.ScreenModeManager) {
+            window.TestcaseController.ScreenModeManager.setTestRunning(true);
         }
         
         try {
@@ -163,7 +163,7 @@ class TKSScriptRunner {
                 throw new Error('无法获取项目路径。请确保已打开一个项目（Project页面 -> Open Project或Create Project）');
             }
 
-            window.TestcaseManagerModule.ConsoleManager.addLog('开始执行TKS脚本...', 'info');
+            window.TestcaseController.ConsoleManager.addLog('开始执行TKS脚本...', 'info');
             
             // 使用TKS引擎执行脚本
             if (window.TKSScriptModule && window.TKSScriptModule.Executor) {
@@ -241,10 +241,10 @@ class TKSScriptRunner {
                 
                 if (result.success) {
                     const executedSteps = result.steps ? result.steps.length : 0;
-                    window.TestcaseManagerModule.ConsoleManager.addLog(`脚本执行完成，共执行 ${executedSteps} 步`, 'success');
+                    window.TestcaseController.ConsoleManager.addLog(`脚本执行完成，共执行 ${executedSteps} 步`, 'success');
                     window.NotificationModule.showNotification('脚本执行成功', 'success');
                 } else {
-                    window.TestcaseManagerModule.ConsoleManager.addLog(`脚本执行失败: ${result.error}`, 'error');
+                    window.TestcaseController.ConsoleManager.addLog(`脚本执行失败: ${result.error}`, 'error');
                     window.NotificationModule.showNotification('脚本执行失败', 'error');
                 }
                 
@@ -254,7 +254,7 @@ class TKSScriptRunner {
             
         } catch (error) {
             console.error('执行脚本时出错:', error);
-            window.TestcaseManagerModule.ConsoleManager.addLog(`执行出错: ${error.message}`, 'error');
+            window.TestcaseController.ConsoleManager.addLog(`执行出错: ${error.message}`, 'error');
             throw error;
         } finally {
             this.isRunning = false;
@@ -268,8 +268,8 @@ class TKSScriptRunner {
             }
             
             // 恢复屏幕模式切换功能
-            if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
-                window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
+            if (window.TestcaseController && window.TestcaseController.ScreenModeManager) {
+                window.TestcaseController.ScreenModeManager.setTestRunning(false);
             }
             
             // 更新状态栏显示
@@ -303,11 +303,11 @@ class TKSScriptRunner {
         }
         
         // 恢复屏幕模式切换功能
-        if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
-            window.TestcaseManagerModule.ScreenModeManager.setTestRunning(false);
+        if (window.TestcaseController && window.TestcaseController.ScreenModeManager) {
+            window.TestcaseController.ScreenModeManager.setTestRunning(false);
         }
         
-        window.TestcaseManagerModule.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
+        window.TestcaseController.ConsoleManager.addLog('用户停止了脚本执行', 'warning');
         window.NotificationModule.showNotification('已停止执行', 'info');
     }
     

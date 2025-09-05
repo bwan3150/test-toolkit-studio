@@ -37,9 +37,9 @@ function initializeNavigation() {
                 }
             } else if (targetPage === 'testcase') {
                 // 确保底部面板正确初始化和显示
-                if (window.TestcaseManagerModule && window.TestcaseManagerModule.initializeBottomPanelDisplay) {
+                if (window.TestcaseController && window.TestcaseController.initializeBottomPanelDisplay) {
                     setTimeout(() => {
-                        window.TestcaseManagerModule.initializeBottomPanelDisplay();
+                        window.TestcaseController.initializeBottomPanelDisplay();
                     }, 100);
                 }
             }

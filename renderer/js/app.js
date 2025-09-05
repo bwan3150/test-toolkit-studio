@@ -9,7 +9,7 @@
 // 5. ui/settings.js - 设置页面
 // 6. ui/resizable-panels.js - 可调整面板
 // 7. modules/project-manager.js - 项目管理
-// 8. modules/testcase-manager.js - 测试用例管理
+// 8. testcase/testcase-controller.js - 测试用例控制器
 // 9. modules/device-manager.js - 设备管理
 // 10. utils/keyboard-shortcuts.js - 键盘快捷键
 // 11. utils/ipc-handlers.js - IPC消息处理
@@ -118,7 +118,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 3. 加载业务功能模块
         await loadScript('../js/project/project-manager.js');
         await loadScript('../js/testcase/toolkit-engine/xml-parser-tke.js');
-        await loadScript('../js/testcase/explorer/testcase-manager.js');
+        
+        // 加载拆分的 testcase 子模块
+        await loadScript('../js/testcase/explorer/testcase-explorer.js');
+        await loadScript('../js/testcase/screen/device-screen-manager.js');
+        await loadScript('../js/testcase/screen/screen-mode-manager.js');
+        
+        // 加载主控制器（依赖上面的子模块）
+        await loadScript('../js/testcase/testcase-controller.js');
         await loadScript('../js/device/device-manager.js');
         await loadScript('../js/testcase/controller/locator-manager-tke.js');
         await loadScript('../js/logviewer/log-manager.js');
@@ -143,7 +150,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // console.log('检查模块加载状态...'); // 已禁用以减少日志
         const requiredModules = [
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
-            'ProjectManagerModule', 'TestcaseManagerModule', 'DeviceManagerModule',
+            'ProjectManagerModule', 'TestcaseController', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'NotificationModule', 'AppGlobals', 'TKEAdapterModule', 'TKSIntegrationTKEModule'
             // ApiClient 是可选的，稍后单独检查
@@ -181,7 +188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.ProjectManagerModule.initializeProjectPage();
             // console.log('✓ 项目管理模块已初始化'); // 已禁用以减少日志
             
-            window.TestcaseManagerModule.initializeTestcasePage();
+            window.TestcaseController.initializeTestcasePage();
             // console.log('✓ 测试用例模块已初始化'); // 已禁用以减少日志
             
             window.DeviceManagerModule.initializeDevicePage();

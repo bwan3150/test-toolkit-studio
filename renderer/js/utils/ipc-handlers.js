@@ -16,7 +16,7 @@ function initializeIpcHandlers() {
 
     ipcRenderer.on('menu-run-test', () => {
         if (document.getElementById('testcasePage').classList.contains('active')) {
-            window.TestcaseManagerModule.runCurrentTest();
+            window.TestcaseController.runCurrentTest();
         }
     });
 
@@ -26,7 +26,7 @@ function initializeIpcHandlers() {
 
     ipcRenderer.on('menu-refresh-device', () => {
         if (document.getElementById('testcasePage').classList.contains('active')) {
-            window.TestcaseManagerModule.refreshDeviceScreen();
+            window.TestcaseController.refreshDeviceScreen();
         }
     });
 }
