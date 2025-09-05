@@ -179,7 +179,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.ResizablePanelsModule.initializeResizablePanels();
             // console.log('✓ 面板模块已初始化'); // 已禁用以减少日志
         } catch (error) {
-            console.error('UI组件初始化失败:', error);
+            window.rError('UI组件初始化失败:', error);
             throw error;
         }
         
@@ -196,21 +196,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             try {
                 await window.LogManagerModule.initializeLogPage();
-                console.log('✓ 日志管理模块已初始化');
+                window.rLog('✓ 日志管理模块已初始化');
             } catch (error) {
-                console.error('日志管理模块初始化失败:', error);
+                window.rError('日志管理模块初始化失败:', error);
             }
             
             try {
                 window.SettingsModule.initializeSettingsPage();
-                console.log('✓ 设置模块已初始化');
+                window.rLog('✓ 设置模块已初始化');
             } catch (error) {
-                console.error('设置模块初始化失败:', error);
+                window.rError('设置模块初始化失败:', error);
             }
             
             // 初始化TKS集成模块(TKE版本)
-            window.TKSIntegrationTKEModule.initializeTKSIntegrationTKE();
-            // console.log('✓ TKS脚本引擎已初始化'); // 已禁用以减少日志
+            await window.TKSIntegrationTKEModule.initializeTKSIntegrationTKE();
+            window.rLog('✓ TKS脚本引擎(TKE版本)已初始化');
             
             // 初始化Locator管理器
             if (window.LocatorManager) {
@@ -218,7 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // console.log('✓ Locator管理器已初始化'); // 已禁用以减少日志
             }
         } catch (error) {
-            console.error('业务功能初始化失败:', error);
+            window.rError('业务功能初始化失败:', error);
             throw error;
         }
         
@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await window.ApiClient.initialize();
                 // console.log('✓ API客户端已初始化'); // 已禁用以减少日志
             } else {
-                console.warn('ApiClient模块未加载，跳过初始化');
+                window.rWarn('ApiClient模块未加载，跳过初始化');
             }
             
             window.KeyboardShortcutsModule.initializeKeyboardShortcuts();
@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.IpcHandlersModule.initializeIpcHandlers();
             // console.log('✓ IPC处理模块已初始化'); // 已禁用以减少日志
         } catch (error) {
-            console.error('工具功能初始化失败:', error);
+            window.rError('工具功能初始化失败:', error);
             throw error;
         }
         
@@ -267,12 +267,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (window.TestReportModule) {
             try {
                 await window.TestReportModule.initializeReportPage();
-                console.log('✓ 测试报告模块已初始化');
+                window.rLog('✓ 测试报告模块已初始化');
             } catch (error) {
-                console.error('测试报告模块初始化失败:', error);
+                window.rError('测试报告模块初始化失败:', error);
             }
         } else {
-            console.error('TestReportModule未加载');
+            window.rError('TestReportModule未加载');
         }
         
         // 最后初始化状态栏，确保能获取到正确的项目信息
@@ -289,7 +289,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         window.rError('❌ 应用初始化失败:', error);
         window.rError('错误堆栈:', error.stack);
-        console.error('❌ 应用初始化失败:', error);
         // 显示错误通知
         const toast = document.createElement('div');
         toast.className = 'notification notification-error';
@@ -318,4 +317,4 @@ window.AppDebug = {
     // 添加更多调试辅助函数...
 };
 
-console.log('App.js 模块化版本加载完成');
+window.rLog('App.js 模块化版本加载完成');

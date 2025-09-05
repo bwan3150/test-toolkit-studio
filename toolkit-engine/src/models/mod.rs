@@ -152,38 +152,57 @@ pub enum LocatorType {
     Image,
 }
 
-// Locator定义
+// Locator定义 - 按照element.json格式
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Locator {
     #[serde(rename = "type")]
     pub locator_type: LocatorType,
     
-    // XML定位器字段
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // XML定位器字段 - 使用element.json的字段名
+    #[serde(rename = "className", skip_serializing_if = "Option::is_none")]
     pub class_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub bounds: Option<Bounds>,
+    pub bounds: Option<Vec<i32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content_desc: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "resourceId", skip_serializing_if = "Option::is_none")]
     pub resource_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<String>,
+    pub clickable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focusable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scrollable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checked: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub xpath: Option<String>,
+    #[serde(rename = "addedAt", skip_serializing_if = "Option::is_none")]
+    pub added_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "centerX", skip_serializing_if = "Option::is_none")]
+    pub center_x: Option<i32>,
+    #[serde(rename = "centerY", skip_serializing_if = "Option::is_none")]
+    pub center_y: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<i32>,
+    #[serde(rename = "matchStrategy", skip_serializing_if = "Option::is_none")]
+    pub match_strategy: Option<String>,
     
     // 图像定位器字段
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
-    
-    // 元数据
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub added_at: Option<String>,
 }
+
 
 // 设备信息
 #[derive(Debug, Clone, Serialize, Deserialize)]

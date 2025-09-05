@@ -696,11 +696,22 @@ window.selectElementByIndex = selectElementByIndex;
 window.saveElementToLocatorFromList = async function(index) {
     const element = currentUIElements.find(el => el.index === index);
     if (element) {
-        if (window.LocatorManagerTKEModule && window.LocatorManagerTKEModule.instance) {
-            await window.LocatorManagerTKEModule.instance.saveElement(element);
+        if (window.LocatorManagerTKEModule) {
+            try {
+                // 先确保Locator管理器已初始化
+                let locatorManager = window.LocatorManagerTKEModule.getInstance();
+                if (!locatorManager) {
+                    // 如果还未初始化，先初始化
+                    locatorManager = await window.LocatorManagerTKEModule.initializeLocatorManagerTKE();
+                }
+                await locatorManager.saveElement(element);
+            } catch (error) {
+                window.rError('保存元素到Locator库失败:', error);
+                window.NotificationModule.showNotification('保存失败: ' + error.message, 'error');
+            }
         } else {
-            window.rError('Locator管理器未初始化');
-            window.NotificationModule.showNotification('Locator管理器未初始化', 'error');
+            window.rError('LocatorManagerTKEModule未加载');
+            window.NotificationModule.showNotification('Locator库未加载', 'error');
         }
     } else {
         window.rError('未找到指定索引的元素:', index);

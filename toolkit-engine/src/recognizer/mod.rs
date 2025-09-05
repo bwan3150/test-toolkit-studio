@@ -78,24 +78,59 @@ impl Recognizer {
     
     // 根据locator定义查找元素
     fn find_element_by_locator(&self, elements: &[UIElement], locator: &Locator) -> Result<UIElement> {
-        // 策略1: 精确匹配
+        debug!("开始查找元素，locator: {:?}", locator);
+        debug!("当前有{}个UI元素可供匹配", elements.len());
+        
+        // 策略1: 根据matchStrategy优先匹配
+        if let Some(ref strategy) = locator.match_strategy {
+            debug!("使用匹配策略: {}", strategy);
+            match strategy.as_str() {
+                "resourceId" => {
+                    if let Some(ref resource_id) = locator.resource_id {
+                        if let Some(element) = self.find_by_resource_id(elements, resource_id) {
+                            debug!("通过resource_id匹配找到元素");
+                            return Ok(element);
+                        }
+                    }
+                }
+                "className" => {
+                    if let Some(ref class_name) = locator.class_name {
+                        if let Some(element) = self.find_by_class_name(elements, class_name) {
+                            debug!("通过class_name匹配找到元素");
+                            return Ok(element);
+                        }
+                    }
+                }
+                "text" => {
+                    if let Some(ref text) = locator.text {
+                        if let Some(element) = self.find_by_text(elements, text) {
+                            debug!("通过text匹配找到元素");
+                            return Ok(element);
+                        }
+                    }
+                }
+                "xpath" => {
+                    if let Some(ref xpath) = locator.xpath {
+                        if let Some(element) = self.find_by_xpath(elements, xpath) {
+                            debug!("通过xpath匹配找到元素");
+                            return Ok(element);
+                        }
+                    }
+                }
+                _ => debug!("未知的匹配策略: {}", strategy),
+            }
+        }
+        
+        // 策略2: 精确匹配
         if let Some(element) = self.find_by_exact_match(elements, locator) {
             debug!("通过精确匹配找到元素");
             return Ok(element);
         }
         
-        // 策略2: resource_id匹配
+        // 策略3: resource_id匹配
         if let Some(ref resource_id) = locator.resource_id {
             if let Some(element) = self.find_by_resource_id(elements, resource_id) {
                 debug!("通过resource_id匹配找到元素");
-                return Ok(element);
-            }
-        }
-        
-        // 策略3: content_desc匹配
-        if let Some(ref content_desc) = locator.content_desc {
-            if let Some(element) = self.find_by_content_desc(elements, content_desc) {
-                debug!("通过content_desc匹配找到元素");
                 return Ok(element);
             }
         }
@@ -109,10 +144,13 @@ impl Recognizer {
         }
         
         // 策略5: 类名和位置的模糊匹配
-        if let (Some(ref class_name), Some(ref bounds)) = (&locator.class_name, &locator.bounds) {
-            if let Some(element) = self.find_by_class_and_position(elements, class_name, bounds) {
-                debug!("通过类名和位置模糊匹配找到元素");
-                return Ok(element);
+        if let (Some(ref class_name), Some(ref bounds_vec)) = (&locator.class_name, &locator.bounds) {
+            if bounds_vec.len() == 4 {
+                let bounds = Bounds::new(bounds_vec[0], bounds_vec[1], bounds_vec[2], bounds_vec[3]);
+                if let Some(element) = self.find_by_class_and_position(elements, class_name, &bounds) {
+                    debug!("通过类名和位置模糊匹配找到元素");
+                    return Ok(element);
+                }
             }
         }
         
@@ -124,6 +162,15 @@ impl Recognizer {
             }
         }
         
+        // 策略7: xpath匹配
+        if let Some(ref xpath) = locator.xpath {
+            if let Some(element) = self.find_by_xpath(elements, xpath) {
+                debug!("通过xpath匹配找到元素");
+                return Ok(element);
+            }
+        }
+        
+        debug!("所有匹配策略都未找到元素");
         Err(TkeError::ElementNotFound("所有匹配策略都未找到元素".to_string()))
     }
     
@@ -133,7 +180,6 @@ impl Recognizer {
             (locator.text.is_none() || e.text == locator.text) &&
             (locator.resource_id.is_none() || e.resource_id == locator.resource_id) &&
             (locator.class_name.is_none() || Some(&e.class_name) == locator.class_name.as_ref()) &&
-            (locator.content_desc.is_none() || e.content_desc == locator.content_desc) &&
             (locator.xpath.is_none() || e.xpath == locator.xpath)
         }).cloned()
     }
@@ -149,11 +195,11 @@ impl Recognizer {
         }).cloned()
     }
     
-    // content_desc匹配
-    fn find_by_content_desc(&self, elements: &[UIElement], content_desc: &str) -> Option<UIElement> {
+    // xpath匹配
+    fn find_by_xpath(&self, elements: &[UIElement], xpath: &str) -> Option<UIElement> {
         elements.iter().find(|e| {
-            if let Some(ref desc) = e.content_desc {
-                desc == content_desc || desc.contains(content_desc) || content_desc.contains(desc)
+            if let Some(ref e_xpath) = e.xpath {
+                e_xpath == xpath
             } else {
                 false
             }

@@ -236,12 +236,11 @@ impl ScriptParser {
             }
         }
         
-        // 解析时间（纯数字，毫秒）
-        if let Ok(ms) = param.parse::<u32>() {
-            // 根据上下文判断是否为持续时间
-            // 这里假设大于100的数字为毫秒数
-            if ms > 100 {
-                return TksParam::Duration(ms);
+        // 解析时间（纯数字，秒数 - 与JS版本保持一致）
+        if let Ok(seconds) = param.parse::<u32>() {
+            // 如果是纯数字且看起来像秒数（小于等于3600秒），则转换为毫秒
+            if seconds <= 3600 {
+                return TksParam::Duration(seconds * 1000);
             }
         }
         

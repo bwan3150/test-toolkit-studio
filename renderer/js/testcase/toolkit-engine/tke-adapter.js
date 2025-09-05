@@ -714,14 +714,14 @@
         }
 
         /**
-         * 运行脚本文件
+         * 运行脚本文件 (实时版本)
          */
-        async runScriptFile(scriptPath) {
+        async runScriptFile(scriptPath, callbacks = {}) {
             if (this.isRunning) {
                 throw new Error('脚本正在运行中');
             }
 
-            const args = ['--project', this.projectPath, 'run', 'script', scriptPath];
+            const args = ['-v', '--project', this.projectPath, 'run', 'script', scriptPath];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
@@ -729,8 +729,7 @@
             this.isRunning = true;
             
             try {
-                const result = await this.tkeAdapter.executeTKECommand(args);
-                return this.parseExecutionResult(result.stdout);
+                return await this.executeScriptWithCallbacks(args, callbacks);
             } finally {
                 this.isRunning = false;
                 this.currentProcess = null;
@@ -738,14 +737,27 @@
         }
 
         /**
-         * 运行脚本内容
+         * 运行脚本文件 (简单版本，兼容现有代码)
          */
-        async runScriptContent(content) {
+        async runScriptFileSimple(scriptPath) {
+            const args = ['--project', this.projectPath, 'run', 'script', scriptPath];
+            if (this.deviceId) {
+                args.unshift('--device', this.deviceId);
+            }
+            
+            const result = await this.tkeAdapter.executeTKECommand(args);
+            return this.parseExecutionResult(result.stdout);
+        }
+
+        /**
+         * 运行脚本内容 (实时版本)
+         */
+        async runScriptContent(content, callbacks = {}) {
             if (this.isRunning) {
                 throw new Error('脚本正在运行中');
             }
 
-            const args = ['--project', this.projectPath, 'run', 'content', content];
+            const args = ['-v', '--project', this.projectPath, 'run', 'content', content];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
@@ -753,12 +765,124 @@
             this.isRunning = true;
             
             try {
-                const result = await this.tkeAdapter.executeTKECommand(args);
-                return this.parseExecutionResult(result.stdout);
+                return await this.executeScriptWithCallbacks(args, callbacks);
             } finally {
                 this.isRunning = false;
                 this.currentProcess = null;
             }
+        }
+
+        /**
+         * 实时执行脚本
+         */
+        async executeScriptWithCallbacks(args, callbacks) {
+            return new Promise((resolve, reject) => {
+                // 确保spawn已加载
+                if (!spawn) {
+                    const cp = require('child_process');
+                    spawn = cp.spawn;
+                }
+                
+                console.log('TKE执行命令:', this.tkeAdapter.tkeExecutable, args);
+                const child = spawn(this.tkeAdapter.tkeExecutable, args);
+                this.currentProcess = child;
+                
+                let stdout = '';
+                let stderr = '';
+                let currentStep = 0;
+                
+                // 处理标准输出
+                child.stdout.on('data', (data) => {
+                    const output = data.toString();
+                    stdout += output;
+                    
+                    // 解析实时输出
+                    const lines = output.split('\n');
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        
+                        // 日志输出回调
+                        if (callbacks.onLog) {
+                            callbacks.onLog(trimmed);
+                        } else {
+                            console.log('TKE输出:', trimmed);
+                        }
+                        
+                        // 步骤执行检测
+                        const stepMatch = trimmed.match(/执行步骤\s+(\d+)\/(\d+):\s*(.+)/);
+                        if (stepMatch) {
+                            const stepNum = parseInt(stepMatch[1]);
+                            const totalSteps = parseInt(stepMatch[2]);
+                            const stepDesc = stepMatch[3];
+                            
+                            if (callbacks.onStepStart) {
+                                callbacks.onStepStart(stepNum - 1, stepDesc, totalSteps);
+                            }
+                        }
+                        
+                        // 步骤完成检测 (通过下一步开始或成功日志推断)
+                        if (stepMatch && currentStep < parseInt(stepMatch[1]) - 1) {
+                            if (callbacks.onStepComplete) {
+                                callbacks.onStepComplete(currentStep, true);
+                            }
+                            currentStep = parseInt(stepMatch[1]) - 1;
+                        }
+                        
+                        // UI状态已捕获 - 刷新截图
+                        if (trimmed.includes('UI状态已捕获并保存到workarea')) {
+                            if (callbacks.onScreenshotUpdated) {
+                                callbacks.onScreenshotUpdated();
+                            }
+                        }
+                        
+                        // 错误检测
+                        if (trimmed.includes('ERROR') || trimmed.includes('失败')) {
+                            if (callbacks.onStepComplete && currentStep >= 0) {
+                                callbacks.onStepComplete(currentStep, false, trimmed);
+                            }
+                        }
+                    }
+                });
+                
+                // 处理标准错误
+                child.stderr.on('data', (data) => {
+                    const output = data.toString();
+                    stderr += output;
+                    
+                    if (callbacks.onLog) {
+                        callbacks.onLog(output, 'error');
+                    }
+                });
+                
+                // 处理进程退出
+                child.on('close', (code) => {
+                    this.currentProcess = null;
+                    
+                    if (code === 0) {
+                        const result = this.parseExecutionResult(stdout);
+                        if (callbacks.onComplete) {
+                            callbacks.onComplete(result);
+                        }
+                        resolve(result);
+                    } else {
+                        const error = new Error(`TKE执行失败，退出码: ${code}\n${stderr}`);
+                        if (callbacks.onComplete) {
+                            callbacks.onComplete(null, error);
+                        }
+                        reject(error);
+                    }
+                });
+                
+                // 处理启动错误
+                child.on('error', (error) => {
+                    this.currentProcess = null;
+                    if (callbacks.onComplete) {
+                        callbacks.onComplete(null, error);
+                    }
+                    reject(new Error(`启动TKE失败: ${error.message}`));
+                });
+            });
         }
 
         /**

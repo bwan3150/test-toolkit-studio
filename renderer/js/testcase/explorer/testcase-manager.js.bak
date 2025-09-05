@@ -1092,15 +1092,103 @@ async function refreshDeviceScreen() {
         return;
     }
     
+    // 检查当前模式
+    const currentMode = window.TestcaseManagerModule?.ScreenModeManager?.currentMode || 'normal';
+    
+    if (currentMode === 'normal') {
+        // 使用scrcpy投屏模式
+        await startScrcpyMirroring(deviceSelect.value);
+    } else {
+        // 其他模式使用截图
+        await captureScreenshot(deviceSelect.value);
+    }
+}
+
+// scrcpy投屏模式
+async function startScrcpyMirroring(deviceId) {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        // 启动scrcpy
+        const result = await ipcRenderer.invoke('start-scrcpy', deviceId, {
+            maxSize: 800, // 限制分辨率以提升性能
+            bitRate: '4M', // 4Mbps
+            maxFps: 30
+        });
+        
+        if (result.success) {
+            // 隐藏截图元素，显示投屏提示
+            const img = document.getElementById('deviceScreenshot');
+            const placeholder = document.querySelector('.screen-placeholder');
+            
+            if (img) img.style.display = 'none';
+            if (placeholder) {
+                placeholder.innerHTML = `
+                    <div class="mirroring-indicator">
+                        <svg class="mirroring-icon" viewBox="0 0 24 24" width="48" height="48">
+                            <path d="M20,18c1.1,0,2-0.9,2-2V6c0-1.1-0.9-2-2-2H4C2.9,4,2,4.9,2,6v10c0,1.1,0.9,2,2,2H0v2h24v-2H20z M4,6h16v10H4V6z" fill="currentColor"/>
+                        </svg>
+                        <div class="mirroring-text">
+                            <div class="mirroring-title">设备投屏已启动</div>
+                            <div class="mirroring-subtitle">Device: ${deviceId}</div>
+                            <button class="btn btn-outline btn-small" onclick="window.TestcaseManagerModule.stopScrcpyMirroring()">停止投屏</button>
+                        </div>
+                    </div>
+                `;
+                placeholder.style.display = 'flex';
+            }
+            
+            window.NotificationModule.showNotification('设备投屏已启动', 'success');
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        console.error('启动投屏失败:', error);
+        window.NotificationModule.showNotification(`启动投屏失败: ${error.message}`, 'error');
+        // 失败时回退到截图模式
+        await captureScreenshot(deviceId);
+    }
+}
+
+// 停止scrcpy投屏
+async function stopScrcpyMirroring() {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        const result = await ipcRenderer.invoke('stop-scrcpy');
+        if (result.success) {
+            // 恢复到截图模式
+            const deviceSelect = document.getElementById('deviceSelect');
+            if (deviceSelect && deviceSelect.value) {
+                await captureScreenshot(deviceSelect.value);
+            }
+            window.NotificationModule.showNotification('投屏已停止', 'info');
+        }
+    } catch (error) {
+        console.error('停止投屏失败:', error);
+        window.NotificationModule.showNotification(`停止投屏失败: ${error.message}`, 'error');
+    }
+}
+
+// 截图模式（用于XML overlay、裁切和坐标模式）
+async function captureScreenshot(deviceId) {
+    const { ipcRenderer } = getGlobals();
+    
     // 传递当前项目路径，以便自动保存截图和XML到工作区
     const projectPath = window.AppGlobals.currentProject;
-    const result = await ipcRenderer.invoke('adb-screenshot', deviceSelect.value, projectPath);
+    const result = await ipcRenderer.invoke('adb-screenshot', deviceId, projectPath);
     
     if (result.success) {
         const img = document.getElementById('deviceScreenshot');
-        img.src = `data:image/png;base64,${result.data}`;
-        img.style.display = 'block';
-        document.querySelector('.screen-placeholder').style.display = 'none';
+        const placeholder = document.querySelector('.screen-placeholder');
+        
+        if (img) {
+            img.src = `data:image/png;base64,${result.data}`;
+            img.style.display = 'block';
+        }
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
         
         // 显示缩放控制
         if (window.TestcaseManagerModule && window.TestcaseManagerModule.ScreenModeManager) {
@@ -2200,27 +2288,45 @@ const ScreenModeManager = {
         
         switch(mode) {
             case 'normal':
-                // 纯屏幕模式，不显示任何覆盖层
+                // 纯屏幕模式，使用scrcpy投屏
                 xmlOverlayEnabled = false;
+                // 切换到投屏模式需要重新刷新屏幕
+                const deviceSelectNormal = document.getElementById('deviceSelect');
+                if (deviceSelectNormal?.value) {
+                    refreshDeviceScreen();
+                }
                 break;
                 
             case 'xml':
-                // 启用XML overlay
+                // 启用XML overlay，需要截图模式
                 xmlOverlayEnabled = true;
-                const deviceSelect = document.getElementById('deviceSelect');
-                if (deviceSelect?.value) {
-                    enableXmlOverlay(deviceSelect.value);
+                const deviceSelectXml = document.getElementById('deviceSelect');
+                if (deviceSelectXml?.value) {
+                    // 先切换到截图模式，然后启用XML overlay
+                    captureScreenshot(deviceSelectXml.value).then(() => {
+                        enableXmlOverlay(deviceSelectXml.value);
+                    });
                 }
                 break;
                 
             case 'screenshot':
                 screenContent.classList.add('screenshot-mode');
                 xmlOverlayEnabled = false;
+                // 切换到截图模式
+                const deviceSelectScreenshot = document.getElementById('deviceSelect');
+                if (deviceSelectScreenshot?.value) {
+                    captureScreenshot(deviceSelectScreenshot.value);
+                }
                 break;
                 
             case 'coordinate':
                 screenContent.classList.add('coordinate-mode');
                 xmlOverlayEnabled = false;
+                // 切换到截图模式（坐标模式需要截图）
+                const deviceSelectCoord = document.getElementById('deviceSelect');
+                if (deviceSelectCoord?.value) {
+                    captureScreenshot(deviceSelectCoord.value);
+                }
                 break;
         }
         
@@ -2770,6 +2876,9 @@ window.TestcaseManagerModule = {
     openFile,
     runCurrentTest,
     refreshDeviceScreen,
+    startScrcpyMirroring,
+    stopScrcpyMirroring,
+    captureScreenshot,
     toggleXmlOverlay,
     toggleCaseFolder,
     initializeUIElementsPanel,
