@@ -657,15 +657,16 @@
 .ui-elements-bottom-panel {
     border-top: 1px solid var(--border-color);
     background: var(--bg-secondary);
-    max-height: 300px;
+    height: 300px; /* 使用固定高度而不是max-height */
+    min-height: 40px;
     display: flex;
     flex-direction: column;
-    transition: max-height 0.3s ease;
+    transition: height 0.3s ease;
     position: relative;
 }
 
 .ui-elements-bottom-panel.collapsed {
-    max-height: 40px;
+    height: 40px !important;
 }
 
 .ui-elements-bottom-panel.collapsed .tab-content {
@@ -677,6 +678,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    flex: 1; /* 确保占满父容器 */
 }
 
 .elements-tabs .tab-header {
@@ -724,13 +726,17 @@
 .elements-tabs .tab-content {
     flex: 1;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .elements-tabs .tab-pane {
+    flex: 1;
     height: 100%;
-    display: flex;
+    display: none;
     flex-direction: column;
     padding: 12px;
+    overflow: hidden;
 }
 
 .elements-tabs .tab-pane:not(.active) {
@@ -738,7 +744,7 @@
 }
 
 .elements-tabs .tab-pane.active {
-    display: flex;
+    display: flex !important;
     flex-direction: column;
 }
 
@@ -756,8 +762,7 @@
 .elements-list-container {
     flex: 1;
     overflow-y: auto;
-    min-height: 100px;
-    max-height: 100%;
+    min-height: 0; /* 允许收缩 */
 }
 
 .elements-list-container .element-item {
@@ -817,8 +822,7 @@
     flex: 1;
     overflow-y: auto;
     font-size: 12px;
-    min-height: 100px;
-    max-height: 100%;
+    min-height: 0; /* 允许收缩 */
 }
 
 .element-props-container .props-section {
@@ -892,8 +896,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 200px;
-    /* 移除height: 100%，避免强制拉伸父容器 */
+    flex: 1; /* 占满父容器可用空间 */
+    min-height: 100px;
 }
 
 /* 针对locator库的empty-state，不设置最小高度 */

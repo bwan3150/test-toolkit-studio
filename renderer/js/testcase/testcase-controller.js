@@ -145,31 +145,88 @@ function initializeInputFocusProtection() {
 // 初始化UI元素面板
 function initializeUIElementsPanel() {
     const clearConsoleBtn = document.getElementById('clearConsoleBtn');
-    const uiElementsPanel = document.getElementById('uiElementsPanel');
-    const uiElementsList = document.getElementById('uiElementsList');
-    const elementSearchInput = document.getElementById('elementSearchInput');
     
     // 清空控制台按钮事件
     if (clearConsoleBtn) {
         clearConsoleBtn.addEventListener('click', () => {
-            ConsoleManager.clearLogs();
+            if (window.ConsolePanel && window.ConsolePanel.clearConsole) {
+                window.ConsolePanel.clearConsole();
+            }
         });
     }
     
-    // UI元素面板初始化
-    if (uiElementsPanel && uiElementsList) {
-        // 搜索功能
-        if (elementSearchInput) {
-            elementSearchInput.addEventListener('input', (e) => {
-                const searchText = e.target.value.toLowerCase();
-                const items = uiElementsList.querySelectorAll('.ui-element-item');
-                
-                items.forEach(item => {
-                    const text = item.textContent.toLowerCase();
-                    item.style.display = text.includes(searchText) ? 'flex' : 'none';
-                });
-            });
+    // 初始化标签页切换
+    initializeTabSwitching();
+    
+    // 确保底部面板可见并设置正确的高度
+    const bottomPanel = document.getElementById('uiElementsBottomPanel');
+    if (bottomPanel) {
+        bottomPanel.style.display = 'flex';
+        bottomPanel.style.height = '300px'; // 设置初始高度
+        bottomPanel.classList.remove('collapsed');
+        
+        // 确保第一个面板内容可见
+        const firstPane = document.getElementById('elementsListPane');
+        if (firstPane) {
+            firstPane.style.display = 'flex';
+            firstPane.classList.add('active');
         }
+    }
+}
+
+// 初始化标签页切换功能
+function initializeTabSwitching() {
+    const tabBtns = document.querySelectorAll('.ui-elements-bottom-panel .tab-btn');
+    const tabPanes = document.querySelectorAll('.ui-elements-bottom-panel .tab-pane');
+    
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-tab');
+            
+            // 更新标签按钮状态
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // 切换内容面板
+            tabPanes.forEach(pane => {
+                const paneId = pane.id;
+                // 根据data-tab属性匹配对应的面板ID
+                let shouldShow = false;
+                switch(tabId) {
+                    case 'elements-list':
+                        shouldShow = paneId === 'elementsListPane';
+                        break;
+                    case 'element-props':
+                        shouldShow = paneId === 'elementPropsPane';
+                        break;
+                    case 'locator-lib':
+                        shouldShow = paneId === 'locatorLibPane';
+                        break;
+                    case 'console-output':
+                        shouldShow = paneId === 'consoleOutputPane';
+                        break;
+                }
+                
+                if (shouldShow) {
+                    pane.style.display = 'block';
+                    pane.classList.add('active');
+                } else {
+                    pane.style.display = 'none';
+                    pane.classList.remove('active');
+                }
+            });
+            
+            window.rLog(`切换到标签: ${tabId}`);
+        });
+    });
+    
+    // 默认激活第一个标签
+    const firstTabBtn = tabBtns[0];
+    const firstTabPane = tabPanes[0];
+    if (firstTabBtn && firstTabPane) {
+        firstTabBtn.classList.add('active');
+        firstTabPane.style.display = 'block';
+        firstTabPane.classList.add('active');
     }
 }
 

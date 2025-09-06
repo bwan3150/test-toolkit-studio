@@ -615,84 +615,13 @@ function renderUIElements(overlay, elements, screenSize) {
 // ============================================
 
 function displayUIElementList(elements) {
-    // 使用嵌入式UI面板
-    const bottomPanel = document.getElementById('uiElementsBottomPanel');
-    const elementsContainer = document.getElementById('elementsListContainer');
-    
-    if (!bottomPanel || !elementsContainer) {
-        window.rError('嵌入式UI面板元素未找到');
-        return;
-    }
-    
-    window.rLog(`准备显示 ${elements.length} 个UI元素到UI库中`);
-    
-    // 确保底部面板可见
-    bottomPanel.style.display = 'flex';
-    bottomPanel.classList.remove('collapsed');
-    bottomPanel.style.maxHeight = '300px';
-    
-    // 确保tab内容可见
-    const tabContent = document.getElementById('uiElementsPanelContent');
-    const elementsListPane = document.getElementById('elementsListPane');
-    if (tabContent) tabContent.style.display = 'block';
-    if (elementsListPane) {
-        elementsListPane.style.display = 'block';
-        elementsListPane.classList.add('active');
-    }
-    
-    // 计算每个元素的尺寸和位置信息
-    const elementsWithSize = elements.map(el => {
-        const width = el.bounds ? (el.bounds[2] - el.bounds[0]) : (el.width || 0);
-        const height = el.bounds ? (el.bounds[3] - el.bounds[1]) : (el.height || 0);
-        const centerX = el.bounds ? Math.round((el.bounds[0] + el.bounds[2]) / 2) : (el.centerX || 0);
-        const centerY = el.bounds ? Math.round((el.bounds[1] + el.bounds[3]) / 2) : (el.centerY || 0);
-        
-        return { ...el, width, height, centerX, centerY };
+    // 触发自定义事件，通知UI元素列表面板更新
+    const event = new CustomEvent('uiElementsUpdated', {
+        detail: { elements }
     });
+    document.dispatchEvent(event);
     
-    // 生成元素列表HTML
-    if (elements.length > 0) {
-        const elementsHTML = elementsWithSize.map(el => `
-            <div class="element-item" data-index="${el.index}">
-                <div class="element-main" onclick="selectElementByIndex(${el.index})">
-                    <div class="element-header">
-                        <span class="element-index">[${el.index}]</span>
-                        <span class="element-type">${el.className ? el.className.split('.').pop() : 'Unknown'}</span>
-                    </div>
-                    ${el.text ? `<div class="element-text">文本: ${el.text}</div>` : ''}
-                    ${el.contentDesc ? `<div class="element-desc">描述: ${el.contentDesc}</div>` : ''}
-                    ${el.hint ? `<div class="element-hint">提示: ${el.hint}</div>` : ''}
-                    <div class="element-size">${el.width}×${el.height} @ (${el.centerX},${el.centerY})</div>
-                </div>
-                <div class="element-actions">
-                    <button class="btn-icon-small save-to-locator-btn" 
-                            onclick="event.stopPropagation(); saveElementToLocatorFromList(${el.index})" 
-                            title="入库"
-                            style="background: transparent; border: none; padding: 4px;">
-                        <svg viewBox="0 0 24 24" width="20" height="20">
-                            <path fill="#FF9800" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('');
-        
-        elementsContainer.innerHTML = elementsHTML;
-        window.rLog(`✅ 已将 ${elements.length} 个UI元素显示在UI库中`);
-        
-        // 滚动到底部面板
-        setTimeout(() => {
-            bottomPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 100);
-        
-    } else {
-        // 显示空状态
-        const emptyStateHTML = !ScreenState.xmlOverlayEnabled 
-            ? '<div class="empty-state"><div class="empty-state-text">XML Overlay未启用</div></div>'
-            : '<div class="empty-state"><div class="empty-state-text">暂无UI元素</div></div>';
-        
-        elementsContainer.innerHTML = emptyStateHTML;
-    }
+    window.rLog(`触发UI元素更新事件，元素数量: ${elements.length}`);
 }
 
 // ============================================
@@ -718,37 +647,22 @@ function selectElement(index) {
         });
     }
     
-    // 高亮列表中的元素
-    const listItems = document.querySelectorAll('.element-item');
-    listItems.forEach((item, i) => {
-        if (i === index) {
-            item.classList.add('selected');
-            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        } else {
-            item.classList.remove('selected');
-        }
-    });
-    
-    // 显示元素详情
-    if (ScreenState.currentUIElements[index]) {
-        const element = ScreenState.currentUIElements[index];
+    // 获取选中的元素
+    const element = ScreenState.currentUIElements[index];
+    if (element) {
+        // 触发自定义事件，通知其他模块
+        const event = new CustomEvent('elementSelected', {
+            detail: { element, index }
+        });
+        document.dispatchEvent(event);
+        
         window.rLog('选中元素详情:', element);
     }
 }
 
-// 从列表选择元素
+// 从列表选择元素（保留给全局使用）
 window.selectElementByIndex = function(index) {
     selectElement(index);
-};
-
-// 保存元素到定位器库
-window.saveElementToLocatorFromList = function(index) {
-    const element = ScreenState.currentUIElements[index];
-    if (element) {
-        window.rLog('保存元素到定位器库:', element);
-        // TODO: 实现保存逻辑
-        window.NotificationModule.showNotification('元素已保存到定位器库', 'success');
-    }
 };
 
 // ============================================
