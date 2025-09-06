@@ -754,8 +754,21 @@
 }
 
 #consoleOutputPane.active {
+    display: flex !important;
+    flex-direction: column;
+}
+
+/* 统一的面板内容容器样式 */
+.panel-content-wrapper {
+    flex: 1;
     display: flex;
     flex-direction: column;
+    padding: 12px;
+    overflow: hidden;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    margin: 8px;
+    border: 1px solid var(--border-color);
 }
 
 /* 元素列表容器 */
@@ -763,15 +776,17 @@
     flex: 1;
     overflow-y: auto;
     min-height: 0; /* 允许收缩 */
+    padding: 0; /* 移除padding让内容填满 */
+    background: transparent; /* 直接使用面板背景 */
 }
 
 .elements-list-container .element-item {
-    padding: 8px 12px;
+    padding: 10px;
     margin: 4px 0;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
     transition: all 0.2s ease;
-    background: var(--bg-primary);
+    background: rgba(255, 255, 255, 0.02);
     font-size: 12px;
     display: flex;
     align-items: flex-start;
@@ -823,6 +838,8 @@
     overflow-y: auto;
     font-size: 12px;
     min-height: 0; /* 允许收缩 */
+    padding: 0; /* 移除padding让内容填满 */
+    background: transparent; /* 直接使用面板背景 */
 }
 
 .element-props-container .props-section {
@@ -898,6 +915,7 @@
     justify-content: center;
     flex: 1; /* 占满父容器可用空间 */
     min-height: 100px;
+    opacity: 0.6;
 }
 
 /* 针对locator库的empty-state，不设置最小高度 */
@@ -914,17 +932,16 @@
 
 .console-output {
     flex: 1;
-    padding: 16px;
+    padding: 0; /* 移除padding让内容填满 */
     overflow-y: auto;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.4;
-    background: var(--bg-primary);
+    background: transparent; /* 直接使用面板背景 */
     color: var(--text-primary);
     white-space: pre-wrap;
     word-wrap: break-word;
     height: 100%;
-    max-height: 100%;
 }
 
 .console-welcome {
@@ -1079,32 +1096,34 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    padding: 8px;
+    padding: 0; /* 移除padding让内容填满 */
 }
 
 .locator-list {
     flex: 1;
     overflow-y: auto;
     overflow-x: visible;
-    padding: 8px 0;
-    /* 使用CSS Grid实现卡片网格布局 */
+    padding: 0; /* 移除padding让内容填满 */
+    background: transparent; /* 直接使用面板背景 */
+    /* 恢复Grid布局显示卡片 */
     display: grid !important;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 4px; /* 固定的网格间距 */
-    align-content: start; /* 确保内容从顶部开始，不分散 */
+    gap: 8px;
+    align-content: start;
 }
 
 .locator-search-bar {
-    margin-bottom: 8px;
+    margin: 0;
+    padding: 0;
 }
 
 .locator-search-bar input {
     width: 100%;
-    padding: 6px 12px;
-    background: #1e1e1e;
-    border: 1px solid #444;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: #fff;
+    color: var(--text-primary);
     font-size: 13px;
 }
 
@@ -1973,8 +1992,8 @@
 
 /* 新的Locator卡片样式 */
 .locator-card {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 6px;
     padding: 12px;
     cursor: move;
@@ -1983,7 +2002,7 @@
     align-items: center;
     gap: 12px;
     user-select: none;
-    height: 60px;
+    min-height: 60px;
     flex-shrink: 0;
     /* Grid布局不需要margin，gap统一处理间距 */
 }

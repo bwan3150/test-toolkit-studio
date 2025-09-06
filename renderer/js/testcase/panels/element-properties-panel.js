@@ -119,11 +119,11 @@ const ElementPropertiesPanel = {
     },
     
     // 复制元素信息到剪贴板
-    async copyElementInfo(index) {
-        // 从ElementsListPanel获取元素
-        const element = window.ElementsListPanel?.currentElements[index];
+    async copyElementInfo(elementIndex) {
+        // 从ElementsListPanel获取元素，使用元素的index属性而不是数组索引
+        const element = window.ElementsListPanel?.currentElements.find(el => el.index === elementIndex);
         if (!element) {
-            window.rError('无法获取元素信息');
+            window.rError(`无法获取index为${elementIndex}的元素信息`);
             return;
         }
         

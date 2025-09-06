@@ -84,14 +84,15 @@ const LocatorLibraryPanel = {
     },
     
     // 保存元素到定位器库
-    async saveElementToLocator(index) {
-        // 从当前UI元素列表获取元素
+    async saveElementToLocator(elementIndex) {
+        // 从当前UI元素列表获取元素，使用元素的index属性而不是数组索引
         let element;
         if (window.ElementsListPanel && window.ElementsListPanel.currentElements) {
-            element = window.ElementsListPanel.currentElements[index];
+            element = window.ElementsListPanel.currentElements.find(el => el.index === elementIndex);
         }
         
         if (!element) {
+            window.rError(`无法找到index为${elementIndex}的元素`);
             window.NotificationModule.showNotification('元素不存在', 'error');
             return;
         }
@@ -134,23 +135,112 @@ const LocatorLibraryPanel = {
     
     // 提示输入定位器名称
     async promptForLocatorName(element) {
-        // 生成默认名称
-        const defaultName = element.text || element.contentDesc || 
-                          element.className?.split('.').pop() || 
-                          `element_${Date.now()}`;
-        
-        // 使用简单的prompt（实际可以用更好的模态框）
-        const name = prompt('请输入定位器名称:', defaultName);
-        
-        if (!name) return null;
-        
-        // 检查是否已存在
-        if (this.locators[name]) {
-            const overwrite = confirm(`定位器 "${name}" 已存在，是否覆盖？`);
-            if (!overwrite) return null;
-        }
-        
-        return name;
+        return new Promise((resolve) => {
+            // 生成默认名称
+            const defaultName = element.text || element.contentDesc || 
+                              element.className?.split('.').pop() || 
+                              `element_${Date.now()}`;
+            
+            // 创建模态框
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+            `;
+
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog';
+            dialog.style.cssText = `
+                background: var(--bg-secondary);
+                border-radius: 8px;
+                padding: 20px;
+                width: 400px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            `;
+
+            dialog.innerHTML = `
+                <h3 style="margin: 0 0 15px 0; color: var(--text-primary);">保存元素到定位器库</h3>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">定位器名称：</label>
+                    <input type="text" id="locator-name-input" value="${this.escapeHtml(defaultName)}" 
+                           style="width: 100%; padding: 8px; background: var(--bg-primary); 
+                                  border: 1px solid var(--border-color); color: var(--text-primary); 
+                                  border-radius: 4px; font-size: 13px;">
+                </div>
+                ${element.text ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">文本: ${this.escapeHtml(element.text)}</div>` : ''}
+                ${element.contentDesc ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">描述: ${this.escapeHtml(element.contentDesc)}</div>` : ''}
+                ${element.className ? `<div style="margin-bottom: 15px; color: var(--text-secondary); font-size: 11px;">类型: ${this.escapeHtml(element.className)}</div>` : ''}
+                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                    <button id="cancel-btn" style="padding: 6px 16px; background: var(--bg-tertiary); 
+                                                   border: 1px solid var(--border-color); color: var(--text-primary); 
+                                                   border-radius: 4px; cursor: pointer;">取消</button>
+                    <button id="save-btn" style="padding: 6px 16px; background: var(--accent-primary); 
+                                                border: none; color: white; border-radius: 4px; cursor: pointer;">保存</button>
+                </div>
+            `;
+
+            modal.appendChild(dialog);
+            document.body.appendChild(modal);
+
+            // 自动聚焦输入框并选中文本
+            const input = dialog.querySelector('#locator-name-input');
+            setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 100);
+
+            // 事件处理
+            const handleSave = async () => {
+                const name = input.value.trim();
+                if (!name) {
+                    window.NotificationModule.showNotification('请输入定位器名称', 'warning');
+                    return;
+                }
+                
+                // 检查是否已存在
+                if (this.locators[name]) {
+                    if (!confirm(`定位器 "${name}" 已存在，是否覆盖？`)) {
+                        return;
+                    }
+                }
+                
+                document.body.removeChild(modal);
+                resolve(name);
+            };
+
+            const handleCancel = () => {
+                document.body.removeChild(modal);
+                resolve(null);
+            };
+
+            dialog.querySelector('#save-btn').addEventListener('click', handleSave);
+            dialog.querySelector('#cancel-btn').addEventListener('click', handleCancel);
+            
+            // 回车保存，ESC取消
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    handleSave();
+                } else if (e.key === 'Escape') {
+                    handleCancel();
+                }
+            });
+            
+            // 点击模态框外部取消
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    handleCancel();
+                }
+            });
+        });
     },
     
     // 渲染定位器列表
@@ -170,31 +260,176 @@ const LocatorLibraryPanel = {
             return;
         }
         
-        const locatorsHTML = locatorsToRender.map(([name, locator]) => `
-            <div class="locator-card ${locator.type}-type" data-name="${name}">
-                <div class="locator-header">
-                    <span class="locator-name">${this.escapeHtml(name)}</span>
-                    <span class="locator-type">${locator.type === 'xml' ? 'XML' : '图像'}</span>
-                </div>
-                <div class="locator-info">
-                    ${locator.type === 'xml' ? `
-                        ${locator.className ? `<div class="info-item">类型: ${locator.className.split('.').pop()}</div>` : ''}
-                        ${locator.resourceId ? `<div class="info-item">ID: ${locator.resourceId}</div>` : ''}
-                        ${locator.text ? `<div class="info-item">文本: ${this.escapeHtml(locator.text)}</div>` : ''}
-                        ${locator.contentDesc ? `<div class="info-item">描述: ${this.escapeHtml(locator.contentDesc)}</div>` : ''}
-                    ` : `
-                        <div class="info-item">图像定位器</div>
-                        ${locator.threshold ? `<div class="info-item">阈值: ${locator.threshold}</div>` : ''}
-                    `}
-                </div>
-                <div class="locator-actions">
-                    <button class="btn-small" onclick="window.LocatorLibraryPanel.useLocator('${name}')">使用</button>
-                    <button class="btn-small" onclick="window.LocatorLibraryPanel.deleteLocator('${name}')">删除</button>
-                </div>
-            </div>
-        `).join('');
+        // 使用原有的卡片样式和拖拽功能
+        const locatorsHTML = locatorsToRender.map(([name, locator]) => {
+            if (locator.type === 'image') {
+                const { path: PathModule } = window.AppGlobals;
+                const projectPath = window.AppGlobals.currentProject;
+                const imagePath = locator.path ? (projectPath ? PathModule.join(projectPath, locator.path) : locator.path) : '';
+                
+                return `
+                    <div class="locator-card image-type" draggable="true" data-name="${name}" data-type="image">
+                        <div class="card-thumbnail">
+                            ${imagePath ? `<img src="${imagePath}" alt="${name}">` : '<div class="no-image">图片</div>'}
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">${this.escapeHtml(name)}</div>
+                            <div class="card-type">image</div>
+                        </div>
+                    </div>
+                `;
+            } else if (locator.type === 'xml') {
+                return `
+                    <div class="locator-card xml-type" draggable="true" data-name="${name}" data-type="xml">
+                        <div class="card-icon">
+                            <svg viewBox="0 0 24 24" width="24" height="24">
+                                <path fill="currentColor" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
+                            </svg>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">${this.escapeHtml(name)}</div>
+                            <div class="card-info">
+                                ${locator.text ? `<div class="card-text">${this.escapeHtml(locator.text)}</div>` : ''}
+                                ${locator.resourceId ? `<div class="card-id">${this.escapeHtml(locator.resourceId.split('/').pop())}</div>` : ''}
+                                <div class="card-type">${locator.className ? this.escapeHtml(locator.className.split('.').pop()) : 'Element'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            return '';
+        }).filter(html => html !== '').join('');
         
         locatorList.innerHTML = locatorsHTML;
+        
+        // 为每个卡片添加拖拽事件
+        locatorList.querySelectorAll('.locator-card').forEach(item => {
+            this.setupItemDragEvents(item);
+            this.setupItemContextMenu(item);
+        });
+    },
+    
+    // 设置拖拽事件
+    setupItemDragEvents(item) {
+        item.addEventListener('dragstart', (e) => {
+            const name = item.dataset.name;
+            const type = item.dataset.type || 'xml';
+            e.dataTransfer.effectAllowed = 'copy';
+            
+            // 设置拖拽数据，支持新TKS语法
+            if (type === 'image') {
+                // 图片元素：@{图片名称}
+                e.dataTransfer.setData('text/plain', `@{${name}}`);
+            } else {
+                // XML元素：{元素名称}
+                e.dataTransfer.setData('text/plain', `{${name}}`);
+            }
+            
+            // 设置JSON格式数据供编辑器使用
+            e.dataTransfer.setData('application/json', JSON.stringify({
+                type: 'locator',
+                name: name,
+                locatorType: type,
+                data: this.locators[name]
+            }));
+            
+            item.style.opacity = '0.5';
+        });
+        
+        item.addEventListener('dragend', (e) => {
+            item.style.opacity = '';
+        });
+    },
+    
+    // 设置右键菜单
+    setupItemContextMenu(item) {
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const name = item.dataset.name;
+            this.showContextMenu(e, name);
+        });
+    },
+    
+    // 显示右键菜单
+    showContextMenu(event, name) {
+        // 移除已存在的菜单
+        const existingMenu = document.querySelector('.locator-context-menu');
+        if (existingMenu) {
+            existingMenu.remove();
+        }
+        
+        // 创建菜单
+        const menu = document.createElement('div');
+        menu.className = 'locator-context-menu';
+        menu.style.cssText = `
+            position: fixed;
+            top: ${event.clientY}px;
+            left: ${event.clientX}px;
+            z-index: 10000;
+        `;
+        
+        menu.innerHTML = `
+            <div class="context-menu-item" data-action="use">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M14,10H2V12H14V10M14,6H2V8H14V6M2,16H10V14H2V16M21.5,11.5L23,13L16,20L11.5,15.5L13,14L16,17L21.5,11.5Z"/>
+                </svg>
+                使用
+            </div>
+            <div class="context-menu-item" data-action="rename">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+                重命名
+            </div>
+            <div class="context-menu-item" data-action="delete">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+                删除
+            </div>
+        `;
+        
+        // 添加点击事件
+        menu.addEventListener('click', async (e) => {
+            const action = e.target.closest('.context-menu-item')?.dataset.action;
+            if (action === 'use') {
+                this.useLocator(name);
+            } else if (action === 'rename') {
+                await this.renameLocator(name);
+            } else if (action === 'delete') {
+                await this.deleteLocator(name);
+            }
+            menu.remove();
+        });
+        
+        // 点击其他地方关闭菜单
+        const closeMenu = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+        
+        document.body.appendChild(menu);
+    },
+    
+    // 重命名定位器
+    async renameLocator(oldName) {
+        const newName = prompt(`重命名定位器 "${oldName}"`, oldName);
+        if (!newName || newName === oldName) return;
+        
+        if (this.locators[newName]) {
+            window.NotificationModule.showNotification('该名称已存在', 'error');
+            return;
+        }
+        
+        this.locators[newName] = this.locators[oldName];
+        delete this.locators[oldName];
+        
+        await this.saveLocators();
+        this.renderLocators();
+        window.NotificationModule.showNotification('重命名成功', 'success');
     },
     
     // 使用定位器（插入到编辑器）

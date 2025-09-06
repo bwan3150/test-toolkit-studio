@@ -93,7 +93,7 @@ const ElementsListPanel = {
                 </div>
                 <div class="element-actions">
                     <button class="btn-icon-small save-to-locator-btn" 
-                            onclick="event.stopPropagation(); window.LocatorLibraryPanel.saveElementToLocator(${idx})" 
+                            onclick="event.stopPropagation(); window.LocatorLibraryPanel.saveElementToLocator(${el.index})" 
                             title="入库"
                             style="background: transparent; border: none; padding: 4px;">
                         <svg viewBox="0 0 24 24" width="20" height="20">
