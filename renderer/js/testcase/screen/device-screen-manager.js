@@ -399,15 +399,23 @@ async function createUIOverlay(elements, screenSize) {
         existingOverlay.remove();
     }
     
-    // 创建新的覆盖层
+    // 获取图片的实际显示位置和大小
+    const imgRect = deviceImage.getBoundingClientRect();
+    const containerRect = screenContent.getBoundingClientRect();
+    
+    // 计算图片相对于容器的偏移
+    const offsetLeft = imgRect.left - containerRect.left;
+    const offsetTop = imgRect.top - containerRect.top;
+    
+    // 创建新的覆盖层，直接覆盖在图片上
     const overlay = document.createElement('div');
     overlay.className = 'ui-overlay';
     overlay.style.cssText = `
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        top: ${offsetTop}px;
+        left: ${offsetLeft}px;
+        width: ${imgRect.width}px;
+        height: ${imgRect.height}px;
         pointer-events: none;
         z-index: 10;
     `;
@@ -445,12 +453,9 @@ function setupResizeObserver(screenContent, deviceImage) {
         
         // 检查条件并更新
         if (ScreenState.xmlOverlayEnabled && ScreenState.currentUIElements.length > 0) {
-            window.rLog('✅ 条件满足，重新渲染 XML overlay');
-            // 直接重新渲染所有元素以适应新尺寸
-            const overlay = document.querySelector('.ui-overlay');
-            if (overlay) {
-                renderUIElements(overlay, ScreenState.currentUIElements, ScreenState.currentScreenSize);
-            }
+            window.rLog('✅ 条件满足，更新 overlay 位置和元素');
+            // 调用updateOverlayPosition来更新overlay位置和重新渲染元素
+            updateOverlayPosition();
         } else {
             window.rLog(`❌ 条件不满足:`, {
                 xmlOverlayEnabled: ScreenState.xmlOverlayEnabled,
@@ -473,11 +478,26 @@ function updateOverlayPosition() {
     window.rLog('🎯 updateOverlayPosition 被调用');
     
     const screenContent = document.getElementById('screenContent');
+    const deviceImage = document.getElementById('deviceScreenshot');
     const overlay = screenContent?.querySelector('.ui-overlay');
     
-    if (!overlay || !ScreenState.currentUIElements.length) {
+    if (!overlay || !deviceImage || !ScreenState.currentUIElements.length) {
         return;
     }
+    
+    // 重新计算图片位置并更新overlay位置
+    const imgRect = deviceImage.getBoundingClientRect();
+    const containerRect = screenContent.getBoundingClientRect();
+    
+    // 计算图片相对于容器的偏移
+    const offsetLeft = imgRect.left - containerRect.left;
+    const offsetTop = imgRect.top - containerRect.top;
+    
+    // 更新overlay的位置和大小
+    overlay.style.left = `${offsetLeft}px`;
+    overlay.style.top = `${offsetTop}px`;
+    overlay.style.width = `${imgRect.width}px`;
+    overlay.style.height = `${imgRect.height}px`;
     
     // 重新渲染元素框
     renderUIElements(overlay, ScreenState.currentUIElements, ScreenState.currentScreenSize);
