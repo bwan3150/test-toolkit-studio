@@ -1,5 +1,6 @@
 // 控制台面板管理器
 // 负责显示命令执行输出和日志
+// 统一管理所有日志输出，避免多个输入源混乱
 
 const ConsolePanel = {
     // 最大日志条数
@@ -8,48 +9,70 @@ const ConsolePanel = {
     // 日志列表
     logs: [],
     
+    // 是否已初始化
+    initialized: false,
+    
+    // 原始console方法
+    originalConsole: {},
+    
     // 初始化
     init() {
-        this.setupConsoleInterceptor();
+        if (this.initialized) return;
+        this.initialized = true;
+        
+        // 保存原始console方法
+        this.originalConsole = {
+            log: console.log,
+            error: console.error,
+            warn: console.warn,
+            info: console.info
+        };
+        
+        this.setupUnifiedLogger();
         this.clearConsole();
     },
     
-    // 设置控制台拦截器
-    setupConsoleInterceptor() {
-        // 保存原始的console方法
-        const originalLog = console.log;
-        const originalError = console.error;
-        const originalWarn = console.warn;
-        const originalInfo = console.info;
+    // 设置统一的日志系统
+    setupUnifiedLogger() {
+        // 重写window.rLog等方法，直接输出到控制台面板
+        window.rLog = (...args) => this.log(...args);
+        window.rInfo = (...args) => this.info(...args);
+        window.rWarn = (...args) => this.warn(...args);
+        window.rError = (...args) => this.error(...args);
+        window.rDebug = (...args) => this.debug(...args);
         
-        // 拦截console.log
-        console.log = (...args) => {
-            this.addLog('log', args);
-            originalLog.apply(console, args);
-        };
-        
-        // 拦截console.error
-        console.error = (...args) => {
-            this.addLog('error', args);
-            originalError.apply(console, args);
-        };
-        
-        // 拦截console.warn
-        console.warn = (...args) => {
-            this.addLog('warn', args);
-            originalWarn.apply(console, args);
-        };
-        
-        // 拦截console.info
-        console.info = (...args) => {
-            this.addLog('info', args);
-            originalInfo.apply(console, args);
-        };
+        // 不再拦截console方法，避免重复
+        // 让console保持原样用于开发调试
+    },
+    
+    // 统一的日志输出方法
+    log(...args) {
+        this.addLog('log', args);
+    },
+    
+    info(...args) {
+        this.addLog('info', args);
+    },
+    
+    warn(...args) {
+        this.addLog('warn', args);
+    },
+    
+    error(...args) {
+        this.addLog('error', args);
+    },
+    
+    debug(...args) {
+        this.addLog('debug', args);
     },
     
     // 添加日志
-    addLog(type, args) {
-        const timestamp = new Date().toLocaleTimeString();
+    addLog(type, args, source = 'app') {
+        // 格式化时间戳 HH:MM:SS.mmm
+        const now = new Date();
+        const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+        
+        // 格式化消息
         const message = args.map(arg => {
             if (typeof arg === 'object') {
                 try {
@@ -65,6 +88,7 @@ const ConsolePanel = {
             type,
             message,
             timestamp,
+            source,
             id: Date.now() + Math.random()
         };
         
@@ -77,6 +101,11 @@ const ConsolePanel = {
         
         // 更新显示
         this.appendLogToUI(log);
+        
+        // 同时输出到开发者控制台（用于调试）
+        if (this.originalConsole[type]) {
+            this.originalConsole[type](`[${timestamp}]`, ...args);
+        }
     },
     
     // 将日志添加到UI
@@ -86,11 +115,26 @@ const ConsolePanel = {
         
         const logElement = document.createElement('div');
         logElement.className = `console-log console-${log.type}`;
-        logElement.innerHTML = `
-            <span class="console-timestamp">${log.timestamp}</span>
-            <span class="console-type">[${log.type.toUpperCase()}]</span>
-            <span class="console-message">${this.escapeHtml(log.message)}</span>
-        `;
+        
+        // 创建时间戳元素
+        const timestampElement = document.createElement('span');
+        timestampElement.className = 'console-timestamp';
+        timestampElement.textContent = log.timestamp;
+        
+        // 创建类型标签元素
+        const typeElement = document.createElement('span');
+        typeElement.className = `console-type console-type-${log.type}`;
+        typeElement.textContent = log.type.toUpperCase().padEnd(5);
+        
+        // 创建消息元素
+        const messageElement = document.createElement('span');
+        messageElement.className = 'console-message';
+        messageElement.textContent = log.message;
+        
+        // 组装日志元素
+        logElement.appendChild(timestampElement);
+        logElement.appendChild(typeElement);
+        logElement.appendChild(messageElement);
         
         consoleOutput.appendChild(logElement);
         
@@ -110,23 +154,23 @@ const ConsolePanel = {
         if (consoleOutput) {
             consoleOutput.innerHTML = '';
         }
-        this.addSystemLog('控制台已清空');
+        this.addSystemLog('控制台已初始化');
     },
     
     // 添加系统日志
     addSystemLog(message) {
-        this.addLog('system', [message]);
+        this.addLog('system', [message], 'system');
     },
     
     // 添加命令执行结果
     addCommandResult(command, result, success = true) {
         const type = success ? 'info' : 'error';
-        this.addLog(type, [`> ${command}`, result]);
+        this.addLog(type, [`> ${command}`, result], 'command');
     },
     
     // 执行命令（与TKE集成）
     async executeCommand(command) {
-        this.addSystemLog(`执行命令: ${command}`);
+        this.addLog('info', [`执行命令: ${command}`], 'command');
         
         try {
             // 这里可以调用TKE执行命令
