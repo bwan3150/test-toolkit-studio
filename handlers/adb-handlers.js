@@ -1252,8 +1252,28 @@ function registerAdbHandlers(app) {
       
       try {
         // 解析JSON输出
-        const elements = JSON.parse(stdout);
-        console.log(`TKE成功提取了 ${elements.length} 个UI元素`);
+        const rawElements = JSON.parse(stdout);
+        console.log(`TKE成功提取了 ${rawElements.length} 个UI元素`);
+        
+        // 转换格式以匹配前端期望的格式
+        const elements = rawElements.map(el => ({
+          index: el.index,
+          className: el.class_name || '',
+          bounds: el.bounds ? [el.bounds.x1, el.bounds.y1, el.bounds.x2, el.bounds.y2] : [0, 0, 0, 0],
+          text: el.text || '',
+          contentDesc: el.content_desc || '',
+          resourceId: el.resource_id || '',
+          hint: el.hint || '',
+          clickable: el.clickable || false,
+          checkable: el.checkable || false,
+          checked: el.checked || false,
+          focusable: el.focusable || false,
+          focused: el.focused || false,
+          scrollable: el.scrollable || false,
+          selected: el.selected || false,
+          enabled: el.enabled || false,
+          xpath: el.xpath || ''
+        }));
         
         return { 
           success: true, 
