@@ -230,12 +230,14 @@ class EditorManager {
         const editor = this.getActiveEditor();
         if (!editor || !this.activeTabId) {
             console.warn('没有活动的编辑器');
-            return;
+            return Promise.reject(new Error('没有活动的编辑器'));
         }
         
         const content = editor.getValue();
         const tabElement = document.getElementById(this.activeTabId);
-        if (!tabElement) return;
+        if (!tabElement) {
+            return Promise.reject(new Error('找不到标签元素'));
+        }
         
         const filePath = tabElement.querySelector('.tab-label').title;
         

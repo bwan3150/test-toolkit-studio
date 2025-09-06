@@ -726,8 +726,7 @@ async function createTestCase(record, index) {
         const sampleScript = `用例: ${caseName}
 脚本名: script_001
 详情: 
-    appPackage: ${record.appPackage || 'com.example.app'}
-    appActivity: ${record.appActivity || '.MainActivity'}
+    请在这里描述此测试脚本信息
 步骤:
     启动 [${record.appPackage || 'com.example.app'}, ${record.appActivity || '.MainActivity'}]
     等待 [2000]

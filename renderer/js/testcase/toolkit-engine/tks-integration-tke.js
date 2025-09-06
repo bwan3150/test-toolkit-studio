@@ -543,7 +543,7 @@ class TKSScriptRunnerTKE {
                 <svg class="btn-icon" viewBox="0 0 24 24">
                     <path d="M6 6h12v12H6z"/>
                 </svg>
-                Stop Test (TKE)
+                Stop Test
             `;
             newBtn.className = 'btn btn-danger btn-block';
             newBtn.addEventListener('click', () => {
@@ -556,7 +556,7 @@ class TKSScriptRunnerTKE {
                 <svg class="btn-icon" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z"/>
                 </svg>
-                Run Test (TKE)
+                Run Test
             `;
             newBtn.className = 'btn btn-primary btn-block';
             newBtn.addEventListener('click', () => {

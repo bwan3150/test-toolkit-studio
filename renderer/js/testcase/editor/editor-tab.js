@@ -1304,6 +1304,11 @@ class EditorTab {
     }
     
     getValue() {
+        // 如果是文本模式且有文本编辑器元素，直接从DOM获取内容
+        if (this.currentMode === 'text' && this.textContentEl) {
+            return this.textContentEl.textContent || '';
+        }
+        // 否则从script对象获取
         return this.script.toTKSCode();
     }
     
@@ -2070,37 +2075,13 @@ class ScriptModel {
     }
     
     toTKSCode() {
-        if (this.commands.length === 0) {
-            return `用例: 新测试用例
-脚本名: new_test
-详情:
-    appPackage: com.example.app
-    appActivity: .MainActivity
-步骤:
-    启动 [com.example.app, .MainActivity]
-    等待 [2000]
-    点击 [{示例按钮}]
-    断言 [{示例元素}, 存在]`;
+        // 如果有原始内容，直接返回原始内容（像记事本一样）
+        if (this.originalLines && this.originalLines.length > 0) {
+            return this.originalLines.join('\n');
         }
         
-        const commandLines = this.commands.map(command => {
-            const commandName = this.getCommandName(command.type);
-            const params = this.getCommandParams(command);
-            
-            if (params.length > 0) {
-                return `    ${commandName} [${params.join(', ')}]`;
-            } else {
-                return `    ${commandName}`;
-            }
-        }).join('\n');
-        
-        return `用例: 测试用例
-脚本名: test_script
-详情:
-    appPackage: com.example.app
-    appActivity: .MainActivity
-步骤:
-${commandLines}`;
+        // 只有在完全没有内容时才返回空字符串
+        return '';
     }
     
     getCommandName(type) {
