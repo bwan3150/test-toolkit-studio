@@ -55,6 +55,17 @@ async function refreshDeviceScreen() {
         return;
     }
 
+    // 如果XML overlay已启用，先移除overlay UI（但保持状态）
+    const wasXmlOverlayEnabled = ScreenState.xmlOverlayEnabled;
+    if (wasXmlOverlayEnabled) {
+        window.rLog('🔄 刷新前先移除XML overlay UI');
+        const screenContent = document.getElementById('screenContent');
+        const existingOverlay = screenContent?.querySelector('.ui-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+    }
+
     window.rLog('开始截图，设备:', deviceSelect.value, '项目路径:', projectPath);
     const result = await ipcRenderer.invoke('adb-screenshot', deviceSelect.value, projectPath);
     
@@ -67,15 +78,21 @@ async function refreshDeviceScreen() {
             return;
         }
         
-        img.src = `file://${result.imagePath}?t=${Date.now()}`;
-        img.style.display = 'block';
-        
-        const placeholder = document.querySelector('.screen-placeholder');
-        if (placeholder) {
-            placeholder.style.display = 'none';
-        }
-        
-        window.rLog('截图显示成功');
+        // 等待图片加载完成
+        await new Promise((resolve) => {
+            img.onload = () => {
+                img.style.display = 'block';
+                const placeholder = document.querySelector('.screen-placeholder');
+                if (placeholder) {
+                    placeholder.style.display = 'none';
+                }
+                window.rLog('截图显示成功');
+                
+                // 给浏览器一点时间完成布局
+                setTimeout(resolve, 50);
+            };
+            img.src = `file://${result.imagePath}?t=${Date.now()}`;
+        });
         
         // 更新设备信息并获取UI结构
         await updateDeviceInfoAndGetUIStructure();
@@ -165,10 +182,29 @@ async function updateDeviceInfoAndGetUIStructure() {
                 // 显示UI元素列表
                 displayUIElementList(elements);
                 
-                // 如果XML overlay 已启用，更新 overlay
+                // 如果XML overlay 已启用，重新创建overlay UI
                 if (ScreenState.xmlOverlayEnabled) {
-                    window.rLog('📊 XML overlay 已启用，更新覆盖层');
-                    await updateXmlOverlay(elements, result.screenSize);
+                    window.rLog('📊 重新创建XML overlay UI');
+                    
+                    // 从元素推断屏幕尺寸（如果有根节点）
+                    let screenSize = result.screenSize || { width: 1080, height: 1920 };
+                    if (elements.length > 0 && elements[0].bounds && elements[0].bounds.length === 4) {
+                        const rootBounds = elements[0].bounds;
+                        const inferredWidth = rootBounds[2] - rootBounds[0];
+                        const inferredHeight = rootBounds[3] - rootBounds[1];
+                        
+                        if (inferredWidth >= 800 && inferredHeight >= 600) {
+                            screenSize = { width: inferredWidth, height: inferredHeight };
+                            window.rLog(`从XML根节点推断屏幕尺寸: ${screenSize.width}x${screenSize.height}`);
+                        }
+                    }
+                    
+                    // 更新状态
+                    ScreenState.currentUIElements = elements;
+                    ScreenState.currentScreenSize = screenSize;
+                    
+                    // 创建新的overlay
+                    await createUIOverlay(elements, screenSize);
                 }
                 
                 // 存储当前屏幕尺寸
@@ -372,6 +408,16 @@ async function updateXmlOverlay(elements, screenSize) {
     // 更新状态
     ScreenState.currentUIElements = elements;
     ScreenState.currentScreenSize = screenSize;
+    
+    // 先移除旧的overlay
+    const screenContent = document.getElementById('screenContent');
+    const existingOverlay = screenContent?.querySelector('.ui-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+    
+    // 等待一帧，确保DOM更新完成
+    await new Promise(resolve => requestAnimationFrame(resolve));
     
     // 重新创建 overlay
     await createUIOverlay(elements, screenSize);
