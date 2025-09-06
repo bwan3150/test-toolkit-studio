@@ -116,14 +116,18 @@ impl Controller {
     pub async fn get_ui_xml(&self) -> Result<String> {
         let temp_path = "/sdcard/ui_dump.xml";
         
-        // 在设备上dump UI
-        self.run_adb_command(&["shell", "uiautomator", "dump", temp_path])?;
+        // 在设备上dump UI - 忽略输出，因为有些设备会返回非标准输出
+        let dump_output = self.run_adb_command_output(&["shell", "uiautomator", "dump", temp_path])?;
+        debug!("uiautomator dump输出: {}", dump_output);
+        
+        // 等待一下让文件写入完成
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         
         // 读取XML内容
         let xml_content = self.run_adb_command_output(&["shell", "cat", temp_path])?;
         
-        // 删除设备上的临时文件
-        self.run_adb_command(&["shell", "rm", temp_path])?;
+        // 删除设备上的临时文件（忽略错误）
+        let _ = self.run_adb_command(&["shell", "rm", temp_path]);
         
         debug!("获取UI XML内容，长度: {}", xml_content.len());
         Ok(xml_content)

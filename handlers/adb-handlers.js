@@ -2,6 +2,7 @@
 const { ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
@@ -1126,11 +1127,24 @@ function registerAdbHandlers(app) {
         return { success: false, error: 'TKE可执行文件未找到' };
       }
 
-      // 构建 TKE 命令：tke --device <deviceId> controller get-xml
-      const args = ['--device', deviceId, 'controller', 'get-xml'];
+      // 创建临时文件路径
+      const tempXmlPath = path.join(os.tmpdir(), `tke_ui_dump_${Date.now()}.xml`);
       
-      // 执行 TKE 命令获取 XML
-      const { stdout: xmlContent } = await execPromise(`"${tkePath}" ${args.join(' ')}`);
+      // 构建 TKE 命令：tke --device <deviceId> controller get-xml --output <file>
+      const args = ['--device', deviceId, 'controller', 'get-xml', '--output', tempXmlPath];
+      
+      // 执行 TKE 命令（现在会保存到文件而不是输出到stdout）
+      await execPromise(`"${tkePath}" ${args.join(' ')}`);
+      
+      // 读取生成的XML文件
+      const xmlContent = fs.readFileSync(tempXmlPath, 'utf8');
+      
+      // 删除临时文件
+      try {
+        fs.unlinkSync(tempXmlPath);
+      } catch (e) {
+        // 忽略删除错误
+      }
       
       // 获取屏幕尺寸（如果需要的话）
       let screenSize = metadata.screenSize;

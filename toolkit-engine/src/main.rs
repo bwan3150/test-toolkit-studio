@@ -109,8 +109,12 @@ enum ControllerCommands {
     Back,
     /// 主页键
     Home,
-    /// 获取UI XML内容
-    GetXml,
+    /// 获取UI XML内容并保存到文件
+    GetXml {
+        /// 输出文件路径（可选，默认为当前目录的ui_dump.xml）
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -315,9 +319,17 @@ async fn handle_controller_commands(action: ControllerCommands, device_id: Optio
             controller.home()?;
             println!("已按主页键");
         }
-        ControllerCommands::GetXml => {
+        ControllerCommands::GetXml { output } => {
             let xml_content = controller.get_ui_xml().await?;
-            println!("{}", xml_content);
+            
+            // 确定输出文件路径
+            let output_path = output.unwrap_or_else(|| PathBuf::from("ui_dump.xml"));
+            
+            // 保存XML到文件
+            std::fs::write(&output_path, xml_content)?;
+            
+            // 输出成功消息到stdout（不是XML内容）
+            println!("XML已保存到: {}", output_path.display());
         }
     }
     
