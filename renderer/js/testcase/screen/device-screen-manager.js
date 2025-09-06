@@ -591,6 +591,12 @@ function renderUIElements(overlay, elements, screenSize) {
             height: ${height}px;
         `;
         
+        // 添加元素索引标签
+        const label = document.createElement('div');
+        label.className = 'element-label';
+        label.textContent = element.index || index;  // 显示元素的index
+        elementBox.appendChild(label);
+        
         // CSS已经处理了悬停效果，不需要JS
         
         // 添加点击事件
