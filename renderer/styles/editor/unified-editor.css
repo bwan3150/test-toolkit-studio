@@ -77,9 +77,9 @@
     background: transparent;
     border: none;
     outline: none;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    overflow: auto;
+    white-space: pre; /* 不自动换行，保持原始空白字符 */
+    overflow-wrap: normal; /* 不强制换行 */
+    overflow: auto; /* 允许水平和垂直滚动 */
     caret-color: var(--accent-color);
 }
 

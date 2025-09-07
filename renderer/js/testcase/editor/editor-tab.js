@@ -462,8 +462,8 @@ class EditorTab {
         
         // 如果当前是文本模式，需要先保存文本编辑器的内容到buffer
         if (this.currentMode === 'text' && this.textContentEl) {
-            const textContent = this.textContentEl.textContent || '';
-            window.rLog('保存文本模式内容到buffer:', textContent.length, '字符');
+            const textContent = this.textContentEl.innerText || '';
+            window.rLog('保存文本模式内容到buffer:', textContent.length, '字符', '包含换行:', textContent.includes('\n'));
             
             // 更新buffer内容，这会触发TKE重新解析
             try {
@@ -802,8 +802,10 @@ class EditorTab {
         this.textContentEl.addEventListener('input', () => {
             if (this.isTestRunning) return;
             
-            // 从文本更新脚本模型
-            const tksCode = this.textContentEl.textContent || '';
+            // 从文本更新脚本模型 - 使用innerText保留换行符
+            const tksCode = this.textContentEl.innerText || '';
+            window.rLog(`文本编辑器输入事件，内容长度: ${tksCode.length}，包含换行: ${tksCode.includes('\n')}`);
+            
             // ScriptModel 已移除，直接使用 TKEEditorBuffer
             this.updateLineNumbers();
             this.triggerChange();
@@ -864,7 +866,7 @@ class EditorTab {
                         selection.addRange(range);
                         
                         // 更新脚本模型
-                        const tksCode = this.textContentEl.textContent || '';
+                        const tksCode = this.textContentEl.innerText || '';
                         // ScriptModel 已移除，直接使用 TKEEditorBuffer
                         this.updateLineNumbers();
                         this.triggerChange();
@@ -885,7 +887,7 @@ class EditorTab {
                         selection.addRange(range);
                         
                         // 更新脚本模型
-                        const tksCode = this.textContentEl.textContent || '';
+                        const tksCode = this.textContentEl.innerText || '';
                         // ScriptModel 已移除，直接使用 TKEEditorBuffer
                         this.updateLineNumbers();
                         this.triggerChange();
@@ -1637,7 +1639,7 @@ class EditorTab {
     updateLineNumbers() {
         if (!this.lineNumbersEl || !this.textContentEl) return;
         
-        const text = this.textContentEl.textContent || '';
+        const text = this.textContentEl.innerText || '';
         const lines = text.split('\n');
         const lineNumbersHtml = lines.map((_, index) => 
             `<div class="line-number">${index + 1}</div>`
@@ -1738,7 +1740,7 @@ class EditorTab {
                 this.triggerChange();
             } else {
                 // 如果没有选区，追加到末尾
-                this.textContentEl.textContent += text;
+                this.textContentEl.innerText += text;
                 // ScriptModel 已移除，直接使用 TKEEditorBuffer
                 this.updateLineNumbers();
                 this.triggerChange();
