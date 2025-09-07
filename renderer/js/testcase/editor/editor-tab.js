@@ -621,27 +621,32 @@ class EditorTab {
             }
             
             // 获取拖拽数据
-            const locatorDataStr = e.dataTransfer.getData('application/x-locator');
+            const locatorDataStr = e.dataTransfer.getData('application/json');
             const textData = e.dataTransfer.getData('text/plain');
             
-            console.log('拖拽数据:', { locatorDataStr, textData });
+            window.rLog(`🔄 块编辑器接收拖拽数据: textData="${textData}", locatorDataStr="${locatorDataStr}"`);
             
             if (textData) {
                 // 更新参数值
                 const command = this.script.getCommands()[commandIndex];
                 if (command) {
-                    console.log('更新参数:', commandIndex, paramName, textData);
+                    window.rLog(`🔧 块编辑器拖拽更新参数: 命令${commandIndex}, 参数${paramName}, 值${textData}, 原值${command.params[paramName]}`);
                     command.params[paramName] = textData;
                     
                     // 重新渲染块以显示可视化元素
                     this.renderBlocks();
                     this.setupBlockModeListeners();
+                    
+                    // 触发保存
+                    window.rLog('💾 块编辑器触发保存...');
                     this.triggerChange();
+                    
+                    window.rLog('✅ 块编辑器参数更新完成');
                 } else {
-                    console.warn('未找到命令:', commandIndex);
+                    window.rError(`❌ 未找到命令: ${commandIndex}, 可用命令数: ${this.script.getCommands().length}`);
                 }
             } else {
-                console.warn('未获取到拖拽数据');
+                window.rError(`❌ 块编辑器未获取到拖拽数据，locatorDataStr: ${locatorDataStr}`);
             }
         };
         
@@ -1282,6 +1287,8 @@ class EditorTab {
     }
     
     triggerChange() {
+        window.rLog(`📤 triggerChange 被调用，模式: ${this.currentMode}`);
+        
         this.listeners.forEach(listener => {
             if (listener.type === 'change') {
                 listener.callback(this.script.toTKSCode());
@@ -1291,10 +1298,16 @@ class EditorTab {
         // 自动保存
         clearTimeout(this.saveTimeout);
         this.saveTimeout = setTimeout(() => {
+            window.rLog('💾 执行自动保存...');
             if (window.EditorManager && window.EditorManager.saveCurrentFile) {
-                window.EditorManager.saveCurrentFile();
+                const result = window.EditorManager.saveCurrentFile();
+                window.rLog(`💾 自动保存结果: ${result}`);
+            } else {
+                window.rError('❌ EditorManager.saveCurrentFile 不可用');
             }
         }, 1000);
+        
+        window.rLog('⏰ 自动保存已设置，1秒后执行');
     }
     
     // 公共API

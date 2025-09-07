@@ -19,7 +19,8 @@ const LocatorLibraryPanel = {
         }
         
         // 监听项目变更事件
-        document.addEventListener('projectChanged', () => {
+        document.addEventListener('project-changed', () => {
+            window.rLog('项目变更事件触发，重新加载locators');
             this.loadLocators();
         });
     },
@@ -101,17 +102,20 @@ const LocatorLibraryPanel = {
         const name = await this.promptForLocatorName(element);
         if (!name) return;
         
-        // 创建定位器对象
+        // 创建定位器对象，兼容toolkit-engine格式
         const locator = {
             type: 'xml',
+            locator_type: 'XML',  // 兼容toolkit-engine
             name: name,
-            className: element.className || '',
-            text: element.text || '',
-            contentDesc: element.contentDesc || '',
-            resourceId: element.resourceId || '',
+            class_name: element.className || '',  // 使用下划线格式兼容toolkit-engine
+            text: element.text || null,
+            content_desc: element.contentDesc || null,  // 使用下划线格式
+            resource_id: element.resourceId || null,
             bounds: element.bounds || [],
             clickable: element.clickable || false,
             enabled: element.enabled || false,
+            xpath: element.xpath || null,  // 添加xpath支持
+            match_strategy: null,  // 可选的匹配策略
             createdAt: new Date().toISOString()
         };
         
@@ -179,6 +183,7 @@ const LocatorLibraryPanel = {
                 ${element.text ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">文本: ${this.escapeHtml(element.text)}</div>` : ''}
                 ${element.contentDesc ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">描述: ${this.escapeHtml(element.contentDesc)}</div>` : ''}
                 ${element.className ? `<div style="margin-bottom: 15px; color: var(--text-secondary); font-size: 11px;">类型: ${this.escapeHtml(element.className)}</div>` : ''}
+                ${element.resourceId ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">资源ID: ${this.escapeHtml(element.resourceId)}</div>` : ''}
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
                     <button id="cancel-btn" style="padding: 6px 16px; background: var(--bg-tertiary); 
                                                    border: 1px solid var(--border-color); color: var(--text-primary); 
@@ -290,8 +295,8 @@ const LocatorLibraryPanel = {
                             <div class="card-title">${this.escapeHtml(name)}</div>
                             <div class="card-info">
                                 ${locator.text ? `<div class="card-text">${this.escapeHtml(locator.text)}</div>` : ''}
-                                ${locator.resourceId ? `<div class="card-id">${this.escapeHtml(locator.resourceId.split('/').pop())}</div>` : ''}
-                                <div class="card-type">${locator.className ? this.escapeHtml(locator.className.split('.').pop()) : 'Element'}</div>
+                                ${(locator.resource_id || locator.resourceId) ? `<div class="card-id">${this.escapeHtml((locator.resource_id || locator.resourceId).split('/').pop())}</div>` : ''}
+                                <div class="card-type">${(locator.class_name || locator.className) ? this.escapeHtml((locator.class_name || locator.className).split('.').pop()) : 'Element'}</div>
                             </div>
                         </div>
                     </div>
@@ -440,12 +445,15 @@ const LocatorLibraryPanel = {
         // 生成定位器代码
         let code = '';
         if (locator.type === 'xml') {
-            if (locator.resourceId) {
-                code = `click_element_by_id("${locator.resourceId}")`;
+            const resourceId = locator.resource_id || locator.resourceId;
+            const contentDesc = locator.content_desc || locator.contentDesc;
+            
+            if (resourceId) {
+                code = `click_element_by_id("${resourceId}")`;
             } else if (locator.text) {
                 code = `click_element_by_text("${locator.text}")`;
-            } else if (locator.contentDesc) {
-                code = `click_element_by_desc("${locator.contentDesc}")`;
+            } else if (contentDesc) {
+                code = `click_element_by_desc("${contentDesc}")`;
             } else {
                 code = `click_element_by_locator("${name}")`;
             }
@@ -468,17 +476,28 @@ const LocatorLibraryPanel = {
     async deleteLocator(name) {
         if (!confirm(`确定要删除定位器 "${name}" 吗？`)) return;
         
+        const locator = this.locators[name];
+        
         // 如果是图像定位器，删除图像文件
-        if (this.locators[name].type === 'image') {
+        if (locator && locator.type === 'image') {
             try {
                 const fs = window.nodeRequire('fs');
                 const path = window.AppGlobals.path;
                 const projectPath = window.AppGlobals.currentProject;
-                const imgPath = path.join(projectPath, 'locator', 'img', `${name}.png`);
+                
+                // 使用定位器中的路径信息，或者默认路径
+                let imgPath;
+                if (locator.path) {
+                    imgPath = path.join(projectPath, locator.path);
+                } else {
+                    imgPath = path.join(projectPath, 'locator', 'img', `${name}.png`);
+                }
                 
                 if (fs.existsSync(imgPath)) {
                     fs.unlinkSync(imgPath);
                     window.rLog(`删除图像文件: ${imgPath}`);
+                } else {
+                    window.rLog(`图像文件不存在，跳过删除: ${imgPath}`);
                 }
             } catch (error) {
                 window.rError('删除图像文件失败:', error);
@@ -503,8 +522,8 @@ const LocatorLibraryPanel = {
         const filtered = Object.entries(this.locators).filter(([name, locator]) => {
             return name.toLowerCase().includes(searchLower) ||
                    (locator.text && locator.text.toLowerCase().includes(searchLower)) ||
-                   (locator.contentDesc && locator.contentDesc.toLowerCase().includes(searchLower)) ||
-                   (locator.className && locator.className.toLowerCase().includes(searchLower));
+                   ((locator.content_desc || locator.contentDesc) && (locator.content_desc || locator.contentDesc).toLowerCase().includes(searchLower)) ||
+                   ((locator.class_name || locator.className) && (locator.class_name || locator.className).toLowerCase().includes(searchLower));
         });
         
         this.renderLocators(filtered);

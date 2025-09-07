@@ -557,42 +557,57 @@ const ScreenModeManager = {
         const { fs, path } = getGlobals();
         const projectPath = window.AppGlobals.currentProject;
         
-        if (!projectPath || !window.AppGlobals.currentScript) {
-            window.NotificationModule.showNotification('请先选择脚本文件', 'error');
+        if (!projectPath) {
+            window.NotificationModule.showNotification('请先打开项目', 'error');
             return false;
         }
         
         try {
-            // 确保images目录存在
-            const imagesDir = path.join(projectPath, 'images');
-            await fs.mkdir(imagesDir, { recursive: true });
+            // 确保locator/img目录存在
+            const locatorDir = path.join(projectPath, 'locator');
+            const imgDir = path.join(locatorDir, 'img');
+            await fs.mkdir(imgDir, { recursive: true });
             
-            // 生成唯一的图片文件名
-            const timestamp = Date.now();
-            const imageFileName = `${alias}_${timestamp}.png`;
-            const imagePath = path.join(imagesDir, imageFileName);
-            
-            // 检查别名是否已经存在
-            const existingFiles = await fs.readdir(imagesDir);
-            const existingAliases = existingFiles
-                .filter(file => file.startsWith(alias + '_') && file.endsWith('.png'))
-                .map(file => file.replace(/_\d+\.png$/, ''));
-            
-            if (existingAliases.includes(alias)) {
-                window.NotificationModule.showNotification(`别名 "${alias}" 已存在，请使用其他名称`, 'error');
+            // 检查别名是否已经存在于LocatorLibraryPanel中
+            if (window.LocatorLibraryPanel && window.LocatorLibraryPanel.locators[alias]) {
+                window.NotificationModule.showNotification(`定位器名称 "${alias}" 已存在，请使用其他名称`, 'error');
                 return false;
             }
+            
+            // 生成图片文件名
+            const imageFileName = `${alias}.png`;
+            const imagePath = path.join(imgDir, imageFileName);
             
             // 保存图片文件
             const imageBuffer = Buffer.from(base64Image.split(',')[1], 'base64');
             await fs.writeFile(imagePath, imageBuffer);
             
-            // 刷新定位器列表
-            if (window.LocatorManagerModule && window.LocatorManagerModule.refreshImageLocatorList) {
-                window.LocatorManagerModule.refreshImageLocatorList();
+            // 创建图像定位器对象
+            const locator = {
+                type: 'image',
+                locator_type: 'Image',  // 兼容toolkit-engine
+                name: alias,
+                path: `locator/img/${imageFileName}`,  // 相对于项目根目录的路径
+                createdAt: new Date().toISOString()
+            };
+            
+            // 添加到LocatorLibraryPanel并保存到element.json
+            if (window.LocatorLibraryPanel) {
+                window.LocatorLibraryPanel.locators[alias] = locator;
+                await window.LocatorLibraryPanel.saveLocators();
+                
+                // 重新渲染定位器列表
+                window.LocatorLibraryPanel.renderLocators();
+                
+                // 切换到Locator库标签
+                const locatorTab = document.getElementById('locatorLibTab');
+                if (locatorTab) {
+                    locatorTab.click();
+                }
             }
             
-            window.NotificationModule.showNotification(`截图定位器 "${alias}" 已保存`, 'success');
+            window.NotificationModule.showNotification(`图像定位器 "${alias}" 已保存`, 'success');
+            window.rLog(`图像定位器已保存: ${imagePath}`);
             return true;
             
         } catch (error) {

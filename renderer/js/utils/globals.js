@@ -39,7 +39,11 @@ window.AppGlobals = {
     setCurrentProject: (project) => { 
         currentProject = project; 
         window.AppGlobals.currentProject = project; 
-        console.log('✅ 项目路径已更新:', project);
+        window.rLog(`✅ 项目路径已更新: ${project}`);
+        
+        // 触发项目变更事件
+        document.dispatchEvent(new CustomEvent('project-changed', { detail: { projectPath: project } }));
+        
         // 同时更新状态栏显示
         if (window.StatusBarModule) {
             window.StatusBarModule.updateProjectPath(project);
