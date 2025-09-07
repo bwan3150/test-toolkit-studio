@@ -1,16 +1,18 @@
 // Recognizer模块 - 负责元素识别(XML匹配和图像匹配)
 
+mod fast_matcher;
+
 use crate::{Result, TkeError, UIElement, Locator, LocatorType, Point, Bounds};
-use image::{DynamicImage, GenericImageView, Rgb};
-use imageproc::template_matching::{find_extremes, match_template, MatchTemplateMethod};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
+use fast_matcher::FastMatcher;
 
 pub struct Recognizer {
     project_path: PathBuf,
     locators: HashMap<String, Locator>,
     confidence_threshold: f32,
+    fast_matcher: FastMatcher,
 }
 
 impl Recognizer {
@@ -18,10 +20,14 @@ impl Recognizer {
         // 加载locator定义
         let locators = Self::load_locators(&project_path)?;
         
+        let mut fast_matcher = FastMatcher::new();
+        fast_matcher.set_confidence_threshold(0.75);
+        
         Ok(Self {
             project_path,
             locators,
             confidence_threshold: 0.8,
+            fast_matcher,
         })
     }
     
@@ -53,6 +59,7 @@ impl Recognizer {
     // 设置置信度阈值
     pub fn set_confidence_threshold(&mut self, threshold: f32) {
         self.confidence_threshold = threshold;
+        self.fast_matcher.set_confidence_threshold(threshold);
     }
     
     // 指令1: 根据XML locator查找元素
@@ -289,49 +296,8 @@ impl Recognizer {
         
         let screenshot_path = self.project_path.join("workarea").join("current_screenshot.png");
         
-        // 执行模板匹配
-        self.template_match(&screenshot_path, &template_path)
-    }
-    
-    // 模板匹配
-    fn template_match(&self, screenshot_path: &PathBuf, template_path: &PathBuf) -> Result<Point> {
-        // 加载图像
-        let screenshot = image::open(screenshot_path)
-            .map_err(|e| TkeError::ImageError(format!("加载截图失败: {}", e)))?;
-        let template = image::open(template_path)
-            .map_err(|e| TkeError::ImageError(format!("加载模板失败: {}", e)))?;
-        
-        // 转换为灰度图进行匹配
-        let screenshot_gray = screenshot.to_luma8();
-        let template_gray = template.to_luma8();
-        
-        // 执行模板匹配
-        let result = match_template(
-            &screenshot_gray,
-            &template_gray,
-            MatchTemplateMethod::CrossCorrelationNormalized
-        );
-        
-        // 找到最佳匹配位置
-        let extremes = find_extremes(&result);
-        
-        // 检查置信度
-        if extremes.max_value < self.confidence_threshold {
-            return Err(TkeError::ElementNotFound(
-                format!("图像匹配置信度不足: {:.3} < {:.3}", 
-                       extremes.max_value, self.confidence_threshold)
-            ));
-        }
-        
-        // 计算中心坐标
-        let (x, y) = extremes.max_value_location;
-        let center_x = x as i32 + template.width() as i32 / 2;
-        let center_y = y as i32 + template.height() as i32 / 2;
-        
-        info!("图像匹配成功，中心坐标: ({}, {}), 置信度: {:.3}", 
-              center_x, center_y, extremes.max_value);
-        
-        Ok(Point::new(center_x, center_y))
+        // 使用快速匹配器执行模板匹配
+        self.fast_matcher.match_template(&screenshot_path, &template_path)
     }
     
     // 直接根据文本查找元素

@@ -1612,6 +1612,7 @@ dependencies = [
  "image",
  "imageproc",
  "quick-xml",
+ "rayon",
  "regex",
  "serde",
  "serde_json",
