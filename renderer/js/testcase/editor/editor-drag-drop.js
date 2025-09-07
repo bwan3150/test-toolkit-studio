@@ -17,6 +17,13 @@ const EditorDragDrop = {
         
         // 使用事件委托，在块容器上监听拖拽事件
         this.dragOverHandler = (e) => {
+            // 检查是否正在拖拽块（排序），如果是则不处理
+            const draggingBlock = this.blocksContainer.querySelector('.workspace-block.dragging');
+            if (draggingBlock) {
+                // 正在进行块排序拖拽，不处理locator拖拽
+                return;
+            }
+            
             // 查找拖拽目标
             const dropTarget = this.findDropTarget(e.target);
             if (!dropTarget) return;
@@ -36,6 +43,12 @@ const EditorDragDrop = {
         };
         
         this.dragLeaveHandler = (e) => {
+            // 检查是否正在拖拽块（排序），如果是则不处理
+            const draggingBlock = this.blocksContainer.querySelector('.workspace-block.dragging');
+            if (draggingBlock) {
+                return;
+            }
+            
             const dropTarget = this.findDropTarget(e.target);
             if (!dropTarget) return;
             
@@ -50,6 +63,12 @@ const EditorDragDrop = {
         };
         
         this.dropHandler = async (e) => {
+            // 检查是否正在拖拽块（排序），如果是则不处理
+            const draggingBlock = this.blocksContainer.querySelector('.workspace-block.dragging');
+            if (draggingBlock) {
+                return;
+            }
+            
             const dropTarget = this.findDropTarget(e.target);
             if (!dropTarget) return;
             

@@ -211,8 +211,6 @@ class EditorTab {
     
     // 解析TKS命令文本，提取命令和参数
     parseTKSCommandText(commandText) {
-        window.rLog(`🔧 解析TKS命令文本: "${commandText}"`);
-        
         // 去除首尾空白
         commandText = commandText.trim();
         
@@ -249,7 +247,7 @@ class EditorTab {
             params.target = `@{${imageMatch[1]}}`;
         }
         
-        // 解析XML元素引用 {elementName}
+        // 解析XML元素引用 {elementName}  
         const xmlMatch = commandText.match(/(?<!@)\{([^}]+)\}/);
         if (xmlMatch && !imageMatch) {
             params.target = `{${xmlMatch[1]}}`;
@@ -267,9 +265,7 @@ class EditorTab {
             }
         }
         
-        const result = { type, params };
-        window.rLog(`🔧 解析结果:`, result);
-        return result;
+        return { type, params };
     }
     
     // TKS命令名到类型的映射
@@ -1150,21 +1146,88 @@ class EditorTab {
     }
     
     // 重新排序命令
-    reorderCommand(fromIndex, toIndex) {
+    async reorderCommand(fromIndex, toIndex) {
         if (fromIndex === toIndex) return;
         
-        // 调整索引以适应移动后的位置
-        let adjustedToIndex = toIndex;
-        if (fromIndex < toIndex) {
-            adjustedToIndex = toIndex - 1;
+        window.rLog(`开始移动命令：从位置 ${fromIndex} 到位置 ${toIndex}`);
+        
+        if (!this.buffer) {
+            window.rError('TKE缓冲区未初始化，无法重排命令');
+            return;
         }
         
-        // TODO: 重构为通过 TKEEditorBuffer 操作
-        // this.script.reorderCommand(fromIndex, adjustedToIndex);
-        this.renderBlocks();
-        this.triggerChange();
-        
-        window.rLog(`已移动命令：从位置 ${fromIndex} 到位置 ${adjustedToIndex}`);
+        try {
+            // 获取当前TKS内容并分行
+            const content = this.buffer.getRawContent();
+            const lines = content.split('\n');
+            
+            // 找到步骤区域的起始行
+            let stepsStartIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === '步骤:') {
+                    stepsStartIndex = i + 1;
+                    break;
+                }
+            }
+            
+            if (stepsStartIndex === -1) {
+                window.rError('未找到步骤区域');
+                return;
+            }
+            
+            // 收集所有命令行及其索引
+            const commandLines = [];
+            for (let i = stepsStartIndex; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (this.isCommandLine(line)) {
+                    commandLines.push({ lineIndex: i, content: lines[i] });
+                }
+            }
+            
+            if (fromIndex >= commandLines.length || toIndex >= commandLines.length) {
+                window.rError(`索引超出范围: fromIndex=${fromIndex}, toIndex=${toIndex}, 总命令数=${commandLines.length}`);
+                return;
+            }
+            
+            // 调整索引以适应移动后的位置
+            let adjustedToIndex = toIndex;
+            if (fromIndex < toIndex) {
+                adjustedToIndex = toIndex - 1;
+            }
+            
+            // 移动命令行
+            const movedCommand = commandLines.splice(fromIndex, 1)[0];
+            commandLines.splice(adjustedToIndex, 0, movedCommand);
+            
+            // 重建lines数组，先移除所有旧的命令行
+            const commandLineIndices = [];
+            for (let i = stepsStartIndex; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (this.isCommandLine(line)) {
+                    commandLineIndices.push(i);
+                }
+            }
+            
+            // 从后往前删除，避免索引变化
+            for (let i = commandLineIndices.length - 1; i >= 0; i--) {
+                lines.splice(commandLineIndices[i], 1);
+            }
+            
+            // 插入重排后的命令行
+            let insertIndex = stepsStartIndex;
+            for (const cmd of commandLines) {
+                lines.splice(insertIndex, 0, cmd.content);
+                insertIndex++;
+            }
+            
+            // 更新内容
+            const newContent = lines.join('\n');
+            await this.buffer.updateContent(newContent);
+            
+            window.rLog(`✅ 成功移动命令：从位置 ${fromIndex} 到位置 ${adjustedToIndex}`);
+        } catch (error) {
+            window.rError(`❌ 移动命令失败: ${error.message}`);
+        }
     }
     
     // 显示右键菜单
@@ -1300,21 +1363,66 @@ class EditorTab {
         };
     }
     
-    removeCommand(index) {
+    async removeCommand(index) {
         window.rLog(`开始删除命令，索引: ${index}`);
         const commandsBefore = this.getCommands().length;
         window.rLog(`删除前命令数量: ${commandsBefore}`);
-        window.rLog('删除前的命令列表:', this.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
         
-        // TODO: 重构为通过 TKEEditorBuffer 操作
-        // this.script.removeCommand(index);
+        if (!this.buffer) {
+            window.rError('TKE缓冲区未初始化，无法删除命令');
+            return;
+        }
         
-        const commandsAfter = this.getCommands().length;
-        window.rLog(`删除后命令数量: ${commandsAfter}`);
-        window.rLog('删除后的命令列表:', this.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
-        
-        this.renderBlocks();
-        this.triggerChange();
+        try {
+            // 获取当前TKS内容并分行
+            const content = this.buffer.getRawContent();
+            const lines = content.split('\n');
+            
+            // 找到步骤区域的起始行
+            let stepsStartIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim() === '步骤:') {
+                    stepsStartIndex = i + 1;
+                    break;
+                }
+            }
+            
+            if (stepsStartIndex === -1) {
+                window.rError('未找到步骤区域');
+                return;
+            }
+            
+            // 找到命令行（跳过非命令行）
+            let commandCount = -1;
+            let targetLineIndex = -1;
+            
+            for (let i = stepsStartIndex; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (this.isCommandLine(line)) {
+                    commandCount++;
+                    if (commandCount === index) {
+                        targetLineIndex = i;
+                        break;
+                    }
+                }
+            }
+            
+            if (targetLineIndex === -1) {
+                window.rError(`未找到索引为 ${index} 的命令行`);
+                return;
+            }
+            
+            // 删除该行
+            lines.splice(targetLineIndex, 1);
+            
+            // 更新内容
+            const newContent = lines.join('\n');
+            await this.buffer.updateContent(newContent);
+            
+            window.rLog(`✅ 成功删除命令，索引: ${index}`);
+        } catch (error) {
+            window.rError(`❌ 删除命令失败: ${error.message}`);
+        }
     }
     
     
