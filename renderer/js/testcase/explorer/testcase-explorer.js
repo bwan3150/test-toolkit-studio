@@ -299,6 +299,7 @@ async function openFile(filePath) {
             const tab = {
                 id: tabId,
                 path: filePath,
+                filePath: filePath, // 兼容EditorManager的期望
                 name: fileName,
                 content: result.content
             };

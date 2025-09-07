@@ -15,14 +15,14 @@ class EditorManager {
         this.editorContainer = document.getElementById('editorWorkspace');
         
         if (!this.tabsContainer || !this.editorContainer) {
-            console.error('编辑器容器未找到');
+            window.rError('编辑器容器未找到');
             return;
         }
         
         // 设置全局快捷键监听器
         this.setupGlobalKeyboardShortcuts();
         
-        console.log('编辑器管理器初始化完成');
+        window.rLog('编辑器管理器初始化完成');
     }
     
     setupGlobalKeyboardShortcuts() {
@@ -41,7 +41,7 @@ class EditorManager {
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 
-                console.log('全局快捷键触发模式切换');
+                window.rLog('全局快捷键触发模式切换');
                 this.toggleGlobalEditMode();
                 return false;
             }
@@ -53,10 +53,10 @@ class EditorManager {
     
     // 创建新标签和编辑器实例
     createTab(tab) {
-        console.log('创建标签:', tab);
+        window.rLog('创建标签:', tab);
         
         if (!this.tabsContainer) {
-            console.error('找不到标签容器');
+            window.rError('找不到标签容器');
             return;
         }
         
@@ -74,9 +74,11 @@ class EditorManager {
         
         this.editors.set(tab.id, editorTab);
         
-        // 设置编辑器内容
-        if (tab.content) {
-            editorTab.setValue(tab.content);
+        // 设置编辑器文件（使用TKE缓冲区）
+        if (tab.filePath) {
+            editorTab.setFile(tab.filePath).catch(error => {
+                window.rError(`❌ 设置编辑器文件失败: ${error.message}`);
+            });
         }
         
         // 设置变更监听器
@@ -84,7 +86,7 @@ class EditorManager {
             this.handleContentChange(tab.id, content);
         });
         
-        console.log('标签创建完成:', tab.id);
+        window.rLog('标签创建完成:', tab.id);
     }
     
     // 创建标签DOM元素
@@ -119,7 +121,7 @@ class EditorManager {
     
     // 选择标签
     selectTab(tabId) {
-        console.log('选择标签:', tabId);
+        window.rLog('选择标签:', tabId);
         
         // 隐藏所有编辑器容器
         this.editorContainer.querySelectorAll('.editor-tab-container').forEach(container => {
@@ -156,19 +158,19 @@ class EditorManager {
         const tabData = window.AppGlobals.openTabs.find(t => t.id === tabId);
         if (tabData) {
             window.AppGlobals.currentTab = tabData;
-            console.log('已更新 AppGlobals.currentTab:', tabData);
+            window.rLog('已更新 AppGlobals.currentTab:', tabData);
         }
         
         // 触发标签变化事件
         const event = new CustomEvent('tabChanged', { detail: { tabId } });
         document.dispatchEvent(event);
         
-        console.log('标签选择完成:', tabId);
+        window.rLog('标签选择完成:', tabId);
     }
     
     // 关闭标签
     closeTab(tabId) {
-        console.log('关闭标签:', tabId);
+        window.rLog('关闭标签:', tabId);
         
         const tabElement = document.getElementById(tabId);
         if (!tabElement) return;
@@ -196,7 +198,7 @@ class EditorManager {
             const tabIndex = window.AppGlobals.openTabs.findIndex(t => t.id === tabId);
             if (tabIndex !== -1) {
                 window.AppGlobals.openTabs.splice(tabIndex, 1);
-                console.log('已从 openTabs 中移除标签:', tabId);
+                window.rLog('已从 openTabs 中移除标签:', tabId);
             }
         }
         
@@ -212,7 +214,7 @@ class EditorManager {
             }
         }
         
-        console.log('标签关闭完成:', tabId);
+        window.rLog('标签关闭完成:', tabId);
     }
     
     // 获取指定标签的编辑器
@@ -229,26 +231,31 @@ class EditorManager {
     saveCurrentFile() {
         const editor = this.getActiveEditor();
         if (!editor || !this.activeTabId) {
-            console.warn('没有活动的编辑器');
+            window.rError('没有活动的编辑器');
             return Promise.reject(new Error('没有活动的编辑器'));
         }
         
         const content = editor.getValue();
+        window.rLog(`🔍 获取编辑器内容长度: ${content.length}`);
+        
         const tabElement = document.getElementById(this.activeTabId);
         if (!tabElement) {
+            window.rError('找不到标签元素');
             return Promise.reject(new Error('找不到标签元素'));
         }
         
         const filePath = tabElement.querySelector('.tab-label').title;
+        window.rLog(`💾 准备保存文件: ${filePath}`);
         
         // 通过IPC保存文件
         const { ipcRenderer } = window.AppGlobals;
         return ipcRenderer.invoke('save-file', filePath, content)
-            .then(() => {
-                console.log('文件保存成功:', filePath);
+            .then((result) => {
+                window.rLog(`✅ 文件保存成功: ${filePath}`);
+                return result;
             })
             .catch(error => {
-                console.error('文件保存失败:', error);
+                window.rError(`❌ 文件保存失败: ${error.message}`);
                 throw error;
             });
     }
@@ -385,7 +392,7 @@ class EditorManager {
     toggleGlobalEditMode() {
         // 切换全局模式
         this.globalEditMode = this.globalEditMode === 'block' ? 'text' : 'block';
-        console.log('切换全局编辑模式为:', this.globalEditMode);
+        window.rLog('切换全局编辑模式为:', this.globalEditMode);
         
         // 同步到所有打开的编辑器
         this.editors.forEach((editor, tabId) => {
@@ -395,7 +402,7 @@ class EditorManager {
                 } else {
                     editor.switchToBlockMode();
                 }
-                console.log('同步 tab', tabId, '到模式:', this.globalEditMode);
+                window.rLog('同步 tab', tabId, '到模式:', this.globalEditMode);
             }
         });
     }
@@ -432,7 +439,7 @@ function initializeEditorManager() {
         // 更新全局AppGlobals的编辑器引用 - 直接使用EditorManager
         window.AppGlobals.setCodeEditor(editorManagerInstance);
         
-        console.log('编辑器管理器初始化完成');
+        window.rLog('编辑器管理器初始化完成');
         
         // 初始化后立即加载字体设置
         setTimeout(() => {
