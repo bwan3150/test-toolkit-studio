@@ -435,8 +435,10 @@ class EditorTab {
         }
     }
     
-    switchToTextMode() {
+    async switchToTextMode() {
         window.rLog('切换到文本模式');
+        
+        // 如果当前是块模式，不需要特别保存，因为块模式的修改已经通过TKE自动同步到buffer
         
         // 保存当前高亮状态
         const savedHighlightLine = this.currentHighlightedLine;
@@ -455,8 +457,22 @@ class EditorTab {
         }
     }
     
-    switchToBlockMode() {
+    async switchToBlockMode() {
         window.rLog('切换到块编程模式');
+        
+        // 如果当前是文本模式，需要先保存文本编辑器的内容到buffer
+        if (this.currentMode === 'text' && this.textContentEl) {
+            const textContent = this.textContentEl.textContent || '';
+            window.rLog('保存文本模式内容到buffer:', textContent.length, '字符');
+            
+            // 更新buffer内容，这会触发TKE重新解析
+            try {
+                await this.buffer.updateFromText(textContent);
+                window.rLog('✅ 文本内容已同步到buffer');
+            } catch (error) {
+                window.rError('❌ 同步文本内容到buffer失败:', error.message);
+            }
+        }
         
         // 保存当前高亮状态
         const savedHighlightLine = this.currentHighlightedLine;
@@ -930,36 +946,27 @@ class EditorTab {
             if (block) {
                 block.classList.remove('dragging');
             }
-            // 清除所有拖拽高亮
+            // 清除所有拖拽高亮和插入提示
             this.blocksContainer.querySelectorAll('.drag-over').forEach(el => {
                 el.classList.remove('drag-over');
             });
+            this.clearDragInsertIndicator();
         });
         
         this.container.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             
-            // 找到最近的块并高亮
-            const block = e.target.closest('.workspace-block.command-block');
-            if (block && !block.classList.contains('dragging')) {
-                // 清除之前的高亮
-                this.blocksContainer.querySelectorAll('.drag-over').forEach(el => {
-                    el.classList.remove('drag-over');
-                });
-                
-                // 添加新的高亮
-                const rect = block.getBoundingClientRect();
-                const midY = rect.top + rect.height / 2;
-                if (e.clientY < midY) {
-                    block.classList.add('drag-over');
-                } else {
-                    // 高亮下一个块的上边缘
-                    const nextBlock = block.nextElementSibling;
-                    if (nextBlock && nextBlock.classList.contains('command-block')) {
-                        nextBlock.classList.add('drag-over');
-                    }
-                }
+            // 清除之前的插入提示
+            this.clearDragInsertIndicator();
+            
+            // 使用统一的位置计算方法
+            const insertInfo = this.calculateNearestInsertPosition(e.clientY);
+            
+            if (insertInfo && insertInfo.block) {
+                this.showDragInsertIndicator(insertInfo.block, insertInfo.position);
+            } else if (insertInfo && insertInfo.position === 'container-start') {
+                this.showDragInsertIndicator(null, 'container-start');
             }
         });
         
@@ -969,19 +976,14 @@ class EditorTab {
             
             const data = JSON.parse(e.dataTransfer.getData('text/plain'));
             if (data.type === 'reorder') {
-                const targetBlock = e.target.closest('.workspace-block.command-block');
-                if (targetBlock && !targetBlock.classList.contains('dragging')) {
-                    const toIndex = parseInt(targetBlock.dataset.index);
-                    const rect = targetBlock.getBoundingClientRect();
-                    const midY = rect.top + rect.height / 2;
-                    
-                    // 确定插入位置
-                    let insertIndex = toIndex;
-                    if (e.clientY >= midY) {
-                        insertIndex = toIndex + 1;
-                    }
-                    
-                    this.reorderCommand(data.fromIndex, insertIndex);
+                // 使用与dragover相同的逻辑计算最近的插入位置
+                const insertInfo = this.calculateNearestInsertPosition(e.clientY, data.fromIndex);
+                
+                if (insertInfo) {
+                    window.rLog(`执行重排: 从索引 ${data.fromIndex} 移动到索引 ${insertInfo.insertIndex}`);
+                    this.reorderCommand(data.fromIndex, insertInfo.insertIndex);
+                } else {
+                    window.rLog('未找到有效的插入位置');
                 }
             }
         });
@@ -1030,6 +1032,143 @@ class EditorTab {
         
         // 重新设置拖拽监听器（确保删除元素后拖拽功能仍然可用）
         this.setupLocatorInputDragDrop();
+    }
+    
+    // 显示拖拽插入提示横杠
+    showDragInsertIndicator(block, position) {
+        // 清除之前的提示
+        this.clearDragInsertIndicator();
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'drag-insert-indicator';
+        indicator.id = 'drag-insert-indicator';
+        
+        const containerRect = this.blocksContainer.getBoundingClientRect();
+        let top;
+        
+        if (position === 'before' && block) {
+            // 在块上方显示 - 计算与前一个块的中间位置
+            const blockRect = block.getBoundingClientRect();
+            const allBlocks = Array.from(this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)'));
+            const blockIndex = allBlocks.indexOf(block);
+            
+            if (blockIndex > 0) {
+                // 有前一个块，显示在两块中间
+                const prevBlock = allBlocks[blockIndex - 1];
+                const prevRect = prevBlock.getBoundingClientRect();
+                top = (prevRect.bottom + blockRect.top) / 2 - containerRect.top;
+            } else {
+                // 第一个块，显示在块上方
+                top = blockRect.top - containerRect.top - 8;
+            }
+        } else if (position === 'after' && block) {
+            // 在块下方显示 - 计算与下一个块的中间位置
+            const blockRect = block.getBoundingClientRect();
+            const allBlocks = Array.from(this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)'));
+            const blockIndex = allBlocks.indexOf(block);
+            
+            if (blockIndex < allBlocks.length - 1) {
+                // 有下一个块，显示在两块中间
+                const nextBlock = allBlocks[blockIndex + 1];
+                const nextRect = nextBlock.getBoundingClientRect();
+                top = (blockRect.bottom + nextRect.top) / 2 - containerRect.top;
+            } else {
+                // 最后一个块，显示在块下方
+                top = blockRect.bottom - containerRect.top + 8;
+            }
+        } else if (position === 'container-start') {
+            // 在容器顶部显示
+            top = 8;
+        }
+        
+        indicator.style.top = `${top}px`;
+        this.blocksContainer.appendChild(indicator);
+        
+        window.rLog(`显示拖拽插入提示 - 位置: ${position}, top: ${top}px`);
+    }
+    
+    // 清除拖拽插入提示横杠
+    clearDragInsertIndicator() {
+        const indicator = this.blocksContainer.querySelector('#drag-insert-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+    
+    // 计算鼠标位置最近的插入位置（供dragover和drop使用）
+    calculateNearestInsertPosition(mouseY, draggingFromIndex = -1) {
+        // 获取所有非拖拽中的块
+        const allBlocks = Array.from(this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)'));
+        
+        if (allBlocks.length === 0) {
+            return { insertIndex: 0, block: null, position: 'container-start' };
+        }
+        
+        // 找到鼠标位置最近的插入位置
+        let closestDistance = Infinity;
+        let closestBlock = null;
+        let closestPosition = 'after';
+        let closestInsertIndex = 0;
+        
+        // 检查每个块的上方和下方
+        allBlocks.forEach((block, index) => {
+            const rect = block.getBoundingClientRect();
+            const blockIndex = parseInt(block.dataset.index);
+            
+            // 检查块上方的插入位置（除了第一个块）
+            if (index > 0) {
+                const prevBlock = allBlocks[index - 1];
+                const prevRect = prevBlock.getBoundingClientRect();
+                const insertY = (prevRect.bottom + rect.top) / 2; // 两块之间的中点
+                const distance = Math.abs(mouseY - insertY);
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestBlock = block;
+                    closestPosition = 'before';
+                    closestInsertIndex = blockIndex;
+                }
+            }
+            
+            // 检查块下方的插入位置
+            const insertY = index === allBlocks.length - 1 ? 
+                rect.bottom + 8 : // 最后一个块下方
+                (rect.bottom + allBlocks[index + 1].getBoundingClientRect().top) / 2; // 与下一块的中点
+            
+            const distance = Math.abs(mouseY - insertY);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestBlock = block;
+                closestPosition = 'after';
+                closestInsertIndex = blockIndex + 1;
+            }
+        });
+        
+        // 检查第一个块上方的插入位置
+        if (allBlocks.length > 0) {
+            const firstBlock = allBlocks[0];
+            const firstRect = firstBlock.getBoundingClientRect();
+            const insertY = firstRect.top - 8;
+            const distance = Math.abs(mouseY - insertY);
+            
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestBlock = firstBlock;
+                closestPosition = 'before';
+                closestInsertIndex = parseInt(firstBlock.dataset.index);
+            }
+        }
+        
+        // 如果拖拽的元素原本在插入位置之前，需要调整插入索引
+        if (draggingFromIndex !== -1 && draggingFromIndex < closestInsertIndex) {
+            closestInsertIndex--;
+        }
+        
+        return {
+            insertIndex: closestInsertIndex,
+            block: closestBlock,
+            position: closestPosition
+        };
     }
     
     // 显示命令选择菜单

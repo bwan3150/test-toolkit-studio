@@ -188,6 +188,7 @@
     padding: 16px;
     overflow-y: auto;
     min-height: 0;
+    position: relative; /* 为拖拽提示伪元素提供定位基准 */
 }
 
 /* 块插入区域 */
@@ -387,8 +388,29 @@
     z-index: 1000;
 }
 
-.workspace-block.command-block.drag-over {
-    border-top: 3px solid #ffc107;
+/* 拖拽插入提示横杠 - 独立元素 */
+.drag-insert-indicator {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    height: 3px;
+    background: linear-gradient(90deg, #ffc107, #ffeb3b, #ffc107);
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
+    z-index: 999;
+    animation: drag-hint-glow 1s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+@keyframes drag-hint-glow {
+    0% {
+        opacity: 0.8;
+        transform: scaleX(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scaleX(1);
+    }
 }
 
 .workspace-block.command-block:hover {
