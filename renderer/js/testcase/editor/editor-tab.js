@@ -4,6 +4,7 @@ class EditorTab {
         this.editorManager = editorManager; // 保存管理器引用
         this.currentMode = editorManager ? editorManager.getGlobalEditMode() : 'block'; // 从管理器读取模式
         this.buffer = null; // 基于TKE的编辑器缓冲区
+        this.script = new ScriptModel(); // 使用独立的脚本模型
         this.listeners = [];
         this.saveTimeout = null;
         this.isTestRunning = false;
@@ -172,16 +173,44 @@ class EditorTab {
             }
         };
         
+        // 确保模块方法已混合
+        this.ensureModulesMixed();
+        
         this.init();
     }
     
+    // 确保所有模块方法都已混合到原型中
+    ensureModulesMixed() {
+        if (!this.setupLocatorInputDragDrop && typeof window.mixinEditorModules === 'function') {
+            if (window.rLog) window.rLog('🔧 EditorTab实例化时检测到方法缺失，尝试混合模块...');
+            window.mixinEditorModules();
+        }
+    }
+    
     init() {
-        console.log('EditorTab 初始化中...');
+        window.rLog('EditorTab 初始化中...');
         this.createEditor();
         this.setupEventListeners();
-        // 默认渲染为块模式
-        this.render();
-        console.log('EditorTab 初始化完成，当前模式:', this.currentMode);
+        // 显示初始占位界面
+        this.renderPlaceholder();
+        window.rLog('EditorTab 初始化完成，当前模式:', this.currentMode);
+    }
+    
+    renderPlaceholder() {
+        if (this.editorContainer) {
+            this.editorContainer.innerHTML = `
+                <div class="editor-loading-placeholder" style="
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100%;
+                    color: #666;
+                    font-size: 14px;
+                ">
+                    正在加载文件...
+                </div>
+            `;
+        }
     }
     
     createEditor() {
@@ -213,7 +242,7 @@ class EditorTab {
     }
     
     switchToTextMode() {
-        console.log('切换到文本模式');
+        window.rLog('切换到文本模式');
         
         // 保存当前高亮状态
         const savedHighlightLine = this.currentHighlightedLine;
@@ -224,7 +253,7 @@ class EditorTab {
         
         // 恢复高亮状态
         if (savedHighlightLine !== null && wasTestRunning) {
-            console.log('恢复文本模式高亮:', savedHighlightLine);
+            window.rLog('恢复文本模式高亮:', savedHighlightLine);
             // 延迟一点确保DOM已完全渲染
             setTimeout(() => {
                 this.highlightExecutingLine(savedHighlightLine);
@@ -233,7 +262,7 @@ class EditorTab {
     }
     
     switchToBlockMode() {
-        console.log('切换到块编程模式');
+        window.rLog('切换到块编程模式');
         
         // 保存当前高亮状态
         const savedHighlightLine = this.currentHighlightedLine;
@@ -244,7 +273,7 @@ class EditorTab {
         
         // 恢复高亮状态
         if (savedHighlightLine !== null && wasTestRunning) {
-            console.log('恢复块模式高亮:', savedHighlightLine);
+            window.rLog('恢复块模式高亮:', savedHighlightLine);
             // 延迟一点确保DOM已完全渲染
             setTimeout(() => {
                 this.highlightExecutingLine(savedHighlightLine);
@@ -261,7 +290,7 @@ class EditorTab {
     }
     
     renderTextMode() {
-        console.log('渲染文本模式...');
+        window.rLog('渲染文本模式...');
         const tksCode = this.script.toTKSCode();
         
         const lineNumbersId = `${this.uniqueId}-lines`;
@@ -286,13 +315,13 @@ class EditorTab {
             // 更新状态指示器
             this.updateStatusIndicator();
         } else {
-            console.error('找不到编辑器容器');
+            window.rError('找不到编辑器容器');
         }
         
         this.textContentEl = this.editorContainer.querySelector('.text-content');
         this.lineNumbersEl = this.editorContainer.querySelector('.line-numbers');
         
-        console.log('文本模式DOM元素:', {
+        window.rLog('文本模式DOM元素:', {
             textContentEl: this.textContentEl,
             lineNumbersEl: this.lineNumbersEl,
             statusIndicatorEl: this.statusIndicatorEl
@@ -321,7 +350,7 @@ class EditorTab {
         
         this.blocksContainer = this.editorContainer.querySelector('.blocks-container');
         
-        console.log('块编辑器DOM元素:', {
+        window.rLog('块编辑器DOM元素:', {
             editorContainer: this.editorContainer,
             blocksContainer: this.blocksContainer
         });
@@ -330,12 +359,13 @@ class EditorTab {
             this.renderBlocks();
             this.setupBlockModeListeners();
         } else {
-            console.error('无法找到块编辑器DOM元素');
+            window.rError('无法找到块编辑器DOM元素');
         }
     }
     
     
     renderBlocks() {
+        // 获取命令
         const commands = this.script.getCommands();
         let blocksHtml = '';
         
@@ -554,7 +584,7 @@ class EditorTab {
         // 获取文本内容元素
         this.textContentEl = this.editorContainer.querySelector('.text-content');
         if (!this.textContentEl) {
-            console.warn('textContent元素未找到');
+            window.rLog('textContent元素未找到');
             return;
         }
         
@@ -655,28 +685,32 @@ class EditorTab {
     }
     
     setupBlockModeListeners() {
-        // 不再使用全局标记，因为每次重新渲染后都需要重新绑定事件
+        // 先移除之前的事件监听器，避免重复绑定
+        if (this.blockClickHandler) {
+            this.container.removeEventListener('click', this.blockClickHandler);
+        }
         
         // 点击事件处理器
-        this.container.addEventListener('click', (e) => {
+        this.blockClickHandler = (e) => {
             if (e.target.classList.contains('block-delete')) {
                 e.preventDefault();
                 e.stopPropagation();
                 const index = parseInt(e.target.dataset.index);
-                console.log(`删除命令块，索引: ${index}, 当前命令数量: ${this.script.getCommands().length}`);
+                window.rLog(`删除命令块，索引: ${index}, 当前命令数量: ${this.script.getCommands().length}`);
                 
                 // 验证索引有效性
                 if (index >= 0 && index < this.script.getCommands().length) {
                     this.removeCommand(index);
                 } else {
-                    console.warn(`无效的删除索引: ${index}`);
+                    window.rLog(`无效的删除索引: ${index}`);
                 }
             } else if (e.target.classList.contains('block-insert-btn') || e.target.closest('.block-insert-btn')) {
                 const insertArea = e.target.closest('.block-insert-area');
                 const insertIndex = parseInt(insertArea.dataset.insertIndex);
                 this.showCommandMenu(insertArea, insertIndex);
             }
-        });
+        };
+        this.container.addEventListener('click', this.blockClickHandler);
         
         // 拖拽事件
         this.container.addEventListener('dragstart', (e) => {
@@ -759,12 +793,12 @@ class EditorTab {
         
         // 右键菜单
         this.container.addEventListener('contextmenu', (e) => {
-            console.log('右键菜单事件触发');
+            window.rLog('右键菜单事件触发');
             const block = e.target.closest('.workspace-block.command-block');
-            console.log('找到的块元素:', !!block);
+            window.rLog('找到的块元素:', !!block);
             if (block) {
-                console.log('块索引:', block.dataset.index);
-                console.log('测试运行状态:', this.isTestRunning);
+                window.rLog('块索引:', block.dataset.index);
+                window.rLog('测试运行状态:', this.isTestRunning);
                 e.preventDefault();
                 this.showContextMenu(e.clientX, e.clientY, parseInt(block.dataset.index));
             }
@@ -805,15 +839,15 @@ class EditorTab {
     
     // 显示命令选择菜单
     showCommandMenu(insertArea, insertIndex) {
-        console.log(`showCommandMenu 被调用，插入位置: ${insertIndex}, 插入区域存在: ${!!insertArea}`);
+        window.rLog(`showCommandMenu 被调用，插入位置: ${insertIndex}, 插入区域存在: ${!!insertArea}`);
         
         if (this.isTestRunning) {
-            console.log('测试运行中，无法显示命令菜单');
+            window.rLog('测试运行中，无法显示命令菜单');
             return;
         }
         
         if (!insertArea) {
-            console.error('插入区域不存在，无法显示命令菜单');
+            window.rError('插入区域不存在，无法显示命令菜单');
             return;
         }
         
@@ -833,7 +867,7 @@ class EditorTab {
             });
         });
         
-        console.log(`创建了 ${menuItems.length} 个菜单项`);
+        window.rLog(`创建了 ${menuItems.length} 个菜单项`);
         
         const menuHtml = `
             <div class="command-menu" id="commandMenu">
@@ -842,18 +876,18 @@ class EditorTab {
         `;
         
         // 插入菜单到插入区域
-        console.log('将菜单HTML插入到插入区域');
+        window.rLog('将菜单HTML插入到插入区域');
         insertArea.insertAdjacentHTML('beforeend', menuHtml);
         this.currentMenu = insertArea.querySelector('.command-menu');
         
         if (this.currentMenu) {
-            console.log('菜单元素创建成功，菜单项数量:', this.currentMenu.querySelectorAll('.command-menu-item').length);
+            window.rLog('菜单元素创建成功，菜单项数量:', this.currentMenu.querySelectorAll('.command-menu-item').length);
             // 确保菜单可见
             this.currentMenu.style.display = 'block';
             this.currentMenu.style.visibility = 'visible';
-            console.log('菜单样式:', window.getComputedStyle(this.currentMenu).display, window.getComputedStyle(this.currentMenu).visibility);
+            window.rLog('菜单样式:', window.getComputedStyle(this.currentMenu).display, window.getComputedStyle(this.currentMenu).visibility);
         } else {
-            console.error('菜单元素创建失败');
+            window.rError('菜单元素创建失败');
         }
         
         // 绑定菜单项点击事件
@@ -930,12 +964,12 @@ class EditorTab {
         this.renderBlocks();
         this.triggerChange();
         
-        console.log(`已移动命令：从位置 ${fromIndex} 到位置 ${adjustedToIndex}`);
+        window.rLog(`已移动命令：从位置 ${fromIndex} 到位置 ${adjustedToIndex}`);
     }
     
     // 显示右键菜单
     showContextMenu(x, y, blockIndex) {
-        console.log(`显示右键菜单，位置: (${x}, ${y}), 块索引: ${blockIndex}`);
+        window.rLog(`显示右键菜单，位置: (${x}, ${y}), 块索引: ${blockIndex}`);
         
         // 移除现有菜单
         this.hideContextMenu();
@@ -959,15 +993,15 @@ class EditorTab {
         document.body.insertAdjacentHTML('beforeend', updatedMenuHtml);
         this.currentContextMenu = document.querySelector(`#${menuId}`);
         
-        console.log('右键菜单DOM元素已创建:', !!this.currentContextMenu);
+        window.rLog('右键菜单DOM元素已创建:', !!this.currentContextMenu);
         if (this.currentContextMenu) {
-            console.log('菜单位置:', this.currentContextMenu.style.left, this.currentContextMenu.style.top);
-            console.log('菜单尺寸:', this.currentContextMenu.offsetWidth, 'x', this.currentContextMenu.offsetHeight);
+            window.rLog('菜单位置:', this.currentContextMenu.style.left, this.currentContextMenu.style.top);
+            window.rLog('菜单尺寸:', this.currentContextMenu.offsetWidth, 'x', this.currentContextMenu.offsetHeight);
         }
         
         // 绑定菜单项点击事件
         this.currentContextMenu.addEventListener('click', (e) => {
-            console.log('右键菜单项被点击');
+            window.rLog('右键菜单项被点击');
             e.preventDefault();
             e.stopPropagation(); // 防止事件冒泡到document，导致菜单立即隐藏
             
@@ -975,11 +1009,11 @@ class EditorTab {
             if (menuItem) {
                 const action = menuItem.dataset.action;
                 const index = parseInt(menuItem.dataset.index);
-                console.log(`菜单项动作: ${action}, 索引: ${index}`);
+                window.rLog(`菜单项动作: ${action}, 索引: ${index}`);
                 
                 if (action === 'insert-below') {
                     // 显示命令选择菜单在指定块下方
-                    console.log(`尝试在块 ${index} 下方插入命令（插入位置: ${index + 1}）`);
+                    window.rLog(`尝试在块 ${index} 下方插入命令（插入位置: ${index + 1}）`);
                     this.hideContextMenu(); // 先隐藏右键菜单
                     
                     // 使用 setTimeout 延迟执行，避免立即被全局点击事件隐藏
@@ -1006,16 +1040,16 @@ class EditorTab {
     
     // 在指定块下方显示插入菜单
     showInsertMenuAtBlock(insertIndex) {
-        console.log(`showInsertMenuAtBlock 被调用，插入位置: ${insertIndex}`);
+        window.rLog(`showInsertMenuAtBlock 被调用，插入位置: ${insertIndex}`);
         
         const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block');
-        console.log(`找到 ${blocks.length} 个命令块`);
+        window.rLog(`找到 ${blocks.length} 个命令块`);
         
         let targetBlock = null;
         
         if (insertIndex > 0 && insertIndex - 1 < blocks.length) {
             targetBlock = blocks[insertIndex - 1];
-            console.log(`目标块索引: ${insertIndex - 1}, 找到目标块:`, !!targetBlock);
+            window.rLog(`目标块索引: ${insertIndex - 1}, 找到目标块:`, !!targetBlock);
         }
         
         // 创建临时插入区域
@@ -1030,24 +1064,24 @@ class EditorTab {
             </button>
         `;
         
-        console.log('临时插入区域已创建');
+        window.rLog('临时插入区域已创建');
         
         // 插入临时区域
         if (targetBlock) {
             targetBlock.insertAdjacentElement('afterend', tempInsertArea);
-            console.log('临时区域已插入到目标块后面');
+            window.rLog('临时区域已插入到目标块后面');
         } else {
             this.blocksContainer.insertBefore(tempInsertArea, this.blocksContainer.firstChild);
-            console.log('临时区域已插入到容器开头');
+            window.rLog('临时区域已插入到容器开头');
         }
         
         // 验证临时区域是否成功插入到DOM
-        console.log('临时区域是否在DOM中:', document.contains(tempInsertArea));
-        console.log('临时区域的父元素:', tempInsertArea.parentElement);
-        console.log('临时区域位置:', tempInsertArea.getBoundingClientRect());
+        window.rLog('临时区域是否在DOM中:', document.contains(tempInsertArea));
+        window.rLog('临时区域的父元素:', tempInsertArea.parentElement);
+        window.rLog('临时区域位置:', tempInsertArea.getBoundingClientRect());
         
         // 立即显示菜单
-        console.log('准备显示命令菜单');
+        window.rLog('准备显示命令菜单');
         this.showCommandMenu(tempInsertArea, insertIndex);
         
         // 菜单关闭时移除临时区域
@@ -1057,7 +1091,7 @@ class EditorTab {
             
             // 移除临时插入区域
             if (tempInsertArea && tempInsertArea.parentNode) {
-                console.log('移除临时插入区域');
+                window.rLog('移除临时插入区域');
                 tempInsertArea.remove();
             }
             
@@ -1067,16 +1101,16 @@ class EditorTab {
     }
     
     removeCommand(index) {
-        console.log(`开始删除命令，索引: ${index}`);
+        window.rLog(`开始删除命令，索引: ${index}`);
         const commandsBefore = this.script.getCommands().length;
-        console.log(`删除前命令数量: ${commandsBefore}`);
-        console.log('删除前的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
+        window.rLog(`删除前命令数量: ${commandsBefore}`);
+        window.rLog('删除前的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
         
         this.script.removeCommand(index);
         
         const commandsAfter = this.script.getCommands().length;
-        console.log(`删除后命令数量: ${commandsAfter}`);
-        console.log('删除后的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
+        window.rLog(`删除后命令数量: ${commandsAfter}`);
+        window.rLog('删除后的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
         
         this.renderBlocks();
         this.triggerChange();
@@ -1150,35 +1184,48 @@ class EditorTab {
     triggerChange() {
         window.rLog(`📤 triggerChange 被调用，模式: ${this.currentMode}`);
         
+        // 获取当前内容
+        const content = this.script.toTKSCode();
+        
+        // 通知监听器
         this.listeners.forEach(listener => {
             if (listener.type === 'change') {
-                const content = this.buffer ? this.buffer.getRawContent() : '';
                 listener.callback(content);
             }
         });
         
-        // TKE缓冲区会自动处理保存，这里不需要手动保存
+        // 异步保存到文件
         if (this.buffer) {
-            window.rLog('💾 TKE缓冲区将自动保存');
-        } else {
-            window.rError('❌ TKE缓冲区未初始化');
+            this.buffer.updateFromText(content).catch(error => {
+                window.rError(`❌ 保存文件失败: ${error.message}`);
+            });
         }
+        
+        // 自动保存
+        clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(() => {
+            if (window.EditorManager && window.EditorManager.saveCurrentFile) {
+                window.EditorManager.saveCurrentFile();
+            }
+        }, 1000);
     }
     
     // 公共API - 设置文件路径并加载内容
     async setFile(filePath) {
         try {
-            // 创建TKE缓冲区
+            // 创建TKE缓冲区用于文件操作
             this.buffer = new window.TKEEditorBuffer(filePath);
             await this.buffer.initialize();
             
-            // 设置监听器
-            this.buffer.addListener((eventType, data) => {
-                this.handleBufferEvent(eventType, data);
-            });
-            
             // 加载文件内容
             await this.buffer.loadFromFile();
+            
+            // 将内容加载到ScriptModel
+            const content = this.buffer.getRawContent();
+            this.script.fromTKSCode(content);
+            
+            // 渲染编辑器
+            this.render();
             
             window.rLog(`📁 EditorTab文件设置完成: ${filePath}`);
         } catch (error) {
@@ -1187,43 +1234,10 @@ class EditorTab {
         }
     }
     
-    // 处理缓冲区事件
-    handleBufferEvent(eventType, data) {
-        switch (eventType) {
-            case 'loaded':
-            case 'content-changed':
-                this.render(); // 重新渲染
-                break;
-            case 'saved':
-                window.rLog('💾 文件已保存');
-                break;
-        }
-    }
-    
     getValue() {
-        if (!this.buffer) {
-            window.rError('❌ TKE缓冲区未初始化');
-            return '';
-        }
-        
-        // 如果是文本模式且有DOM更改，先同步到缓冲区
-        if (this.currentMode === 'text' && this.textContentEl) {
-            const domContent = this.textContentEl.textContent || '';
-            const bufferContent = this.buffer.getRawContent();
-            
-            if (domContent !== bufferContent) {
-                window.rLog('📝 文本模式内容有变更，同步到缓冲区');
-                // 异步更新缓冲区，但立即返回DOM内容
-                this.buffer.updateFromText(domContent).catch(error => {
-                    window.rError(`❌ 同步文本内容失败: ${error.message}`);
-                });
-                return domContent;
-            }
-        }
-        
-        // 从缓冲区获取最新内容
-        const content = this.buffer.getRawContent();
-        window.rLog(`📖 从TKE缓冲区获取内容长度: ${content.length}`);
+        // 从ScriptModel获取TKS代码
+        const content = this.script.toTKSCode();
+        window.rLog(`📖 从ScriptModel获取内容长度: ${content.length}`);
         return content;
     }
     
@@ -1275,13 +1289,13 @@ class EditorTab {
  
     
     updateStatusIndicator() {
-        console.log('更新状态指示器 - 运行状态:', this.isTestRunning, '当前模式:', this.currentMode);
+        window.rLog('更新状态指示器 - 运行状态:', this.isTestRunning, '当前模式:', this.currentMode);
         
         const statusBar = document.querySelector('.status-bar');
         const modeText = document.getElementById('editorModeText');
         
         if (!statusBar || !modeText) {
-            console.error('找不到状态栏或模式文本元素');
+            window.rError('找不到状态栏或模式文本元素');
             return;
         }
         
@@ -1302,13 +1316,13 @@ class EditorTab {
             // 不添加任何类，保持默认样式
         }
         
-        console.log('状态栏已更新:', modeText.textContent || '普通模式');
+        window.rLog('状态栏已更新:', modeText.textContent || '普通模式');
     }
     
     createRunningIndicator() {
         // 在块模式下运行时，更新状态栏
         this.updateStatusIndicator();
-        console.log('块模式运行指示器已更新到状态栏');
+        window.rLog('块模式运行指示器已更新到状态栏');
     }
     
  
@@ -1365,7 +1379,58 @@ class EditorTab {
     }
 }
 
-// 旧的ScriptModel已被TKEEditorBuffer完全替代，所有.tks解析和处理都由TKE负责
-
 // 导出到全局
 window.EditorTab = EditorTab;
+
+// 将拆分的模块方法混入到EditorTab原型中
+// 必须在类导出后立即混入，以确保方法可用
+function mixinEditorModules() {
+    // 使用安全的日志记录方式
+    if (window.rLog) {
+        window.rLog('🔧 开始混入模块，可用模块:', {
+            EditorHighlighting: !!window.EditorHighlighting,
+            EditorLineMapping: !!window.EditorLineMapping,
+            EditorFontSettings: !!window.EditorFontSettings,
+            EditorDragDrop: !!window.EditorDragDrop
+        });
+    }
+
+    if (window.EditorHighlighting) {
+        Object.assign(EditorTab.prototype, window.EditorHighlighting);
+        if (window.rLog) window.rLog('✅ EditorHighlighting 模块已混入');
+    }
+
+    if (window.EditorLineMapping) {
+        Object.assign(EditorTab.prototype, window.EditorLineMapping);
+        if (window.rLog) window.rLog('✅ EditorLineMapping 模块已混入');
+    }
+
+    if (window.EditorFontSettings) {
+        Object.assign(EditorTab.prototype, window.EditorFontSettings);
+        if (window.rLog) window.rLog('✅ EditorFontSettings 模块已混入');
+    }
+
+    if (window.EditorDragDrop) {
+        Object.assign(EditorTab.prototype, window.EditorDragDrop);
+        if (window.rLog) {
+            window.rLog('✅ EditorDragDrop 模块已混入');
+            window.rLog('EditorDragDrop 模块包含的方法:', Object.keys(window.EditorDragDrop));
+        }
+    }
+}
+
+// 将混合函数暴露到全局，以便实例化时调用
+window.mixinEditorModules = mixinEditorModules;
+
+// 立即尝试混合模块
+mixinEditorModules();
+
+// 如果第一次混合失败，使用 setTimeout 延迟混合
+if (!EditorTab.prototype.setupLocatorInputDragDrop) {
+    setTimeout(() => {
+        if (window.rLog) window.rLog('🔧 延迟混合执行...');
+        mixinEditorModules();
+    }, 0);
+}
+
+// 旧的ScriptModel已被TKEEditorBuffer完全替代，所有.tks解析和处理都由TKE负责

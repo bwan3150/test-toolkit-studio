@@ -1,6 +1,8 @@
+// 拖拽功能模块 - 作为EditorTab的扩展方法
+const EditorDragDrop = {
     // 为locator类型的输入框添加拖放支持
     setupLocatorInputDragDrop() {
-        console.log('设置拖拽监听器...');
+        window.rLog('设置拖拽监听器...');
         
         // 移除之前的拖拽监听器（如果存在）
         if (this.dragOverHandler) {
@@ -30,7 +32,7 @@
             
             // 添加当前目标的高亮
             dropTarget.classList.add('drag-over');
-            console.log('拖拽悬停在:', dropTarget, '数据:', dropTarget.dataset);
+            window.rLog('拖拽悬停在:', dropTarget, '数据:', dropTarget.dataset);
         };
         
         this.dragLeaveHandler = (e) => {
@@ -47,14 +49,14 @@
             }
         };
         
-        this.dropHandler = (e) => {
+        this.dropHandler = async (e) => {
             const dropTarget = this.findDropTarget(e.target);
             if (!dropTarget) return;
             
             e.preventDefault();
             e.stopPropagation();
             
-            console.log('拖拽放置在:', dropTarget);
+            window.rLog('拖拽放置在:', dropTarget);
             
             // 清除高亮
             dropTarget.classList.remove('drag-over');
@@ -64,7 +66,7 @@
             const paramName = dropTarget.dataset.param;
             
             if (isNaN(commandIndex) || !paramName) {
-                console.warn('无法获取命令索引或参数名:', { commandIndex, paramName, dataset: dropTarget.dataset });
+                window.rLog('无法获取命令索引或参数名:', { commandIndex, paramName, dataset: dropTarget.dataset });
                 return;
             }
             
@@ -104,10 +106,10 @@
         
         // 统计当前可拖拽目标数量
         const dropTargets = this.getAllDropTargets();
-        console.log(`已设置拖拽监听器，找到 ${dropTargets.length} 个可拖拽目标:`, dropTargets);
-    }
+        window.rLog(`已设置拖拽监听器，找到 ${dropTargets.length} 个可拖拽目标:`, dropTargets);
+    },
 
-       // 构造更新后的命令行（临时实现）
+    // 构造更新后的命令行（临时实现）
     constructUpdatedCommandLine(commandIndex, paramName, newValue) {
         if (!this.buffer) return null;
         
@@ -127,9 +129,8 @@
         }
         
         return null;
-    }
-
-       
+    },
+    
     // 更新命令行中的参数（临时实现，应该由TKE提供）
     updateCommandLineParameter(commandLine, paramName, newValue) {
         // 根据TKS语法规范更新命令行
@@ -148,9 +149,8 @@
         
         // 其他参数类型的处理...
         return commandLine;
-    }
-
-       
+    },
+    
     // 判断是否是命令行（与TKE缓冲区中的实现保持一致）
     isCommandLine(line) {
         if (!line || line.startsWith('#') || line.startsWith('用例:') || 
@@ -159,9 +159,8 @@
             return false;
         }
         return true;
-    }
-
-       
+    },
+    
     // 查找有效的拖拽目标
     findDropTarget(element) {
         let current = element;
@@ -171,7 +170,7 @@
                 (current.classList.contains('param-hole-container') && current.dataset.type === 'element') ||
                 current.matches('input[data-param-type="element"]')) {
                 
-                console.log('找到拖拽目标:', current, {
+                window.rLog('找到拖拽目标:', current, {
                     classList: current.classList.toString(),
                     dataset: current.dataset,
                     tagName: current.tagName
@@ -180,13 +179,17 @@
             }
             current = current.parentElement;
         }
-        console.log('未找到拖拽目标，检查的元素:', element);
+        window.rLog('未找到拖拽目标，检查的元素:', element);
         return null;
-    }
-
-       // 获取所有可拖拽目标（用于调试）
+    },
+    
+    // 获取所有可拖拽目标（用于调试）
     getAllDropTargets() {
         return this.blocksContainer.querySelectorAll(
             'input[data-param-type="element"], .param-hole[data-param-type="element"], .param-hole-container[data-type="element"]'
         );
     }
+};
+
+// 导出到全局
+window.EditorDragDrop = EditorDragDrop;
