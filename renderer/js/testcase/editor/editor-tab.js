@@ -3,8 +3,7 @@ class EditorTab {
         this.container = container;
         this.editorManager = editorManager; // 保存管理器引用
         this.currentMode = editorManager ? editorManager.getGlobalEditMode() : 'block'; // 从管理器读取模式
-        this.buffer = null; // 基于TKE的编辑器缓冲区
-        this.script = new ScriptModel(); // 使用独立的脚本模型
+        this.buffer = null; // 基于TKE的编辑器缓冲区 - 唯一的数据源
         this.listeners = [];
         this.saveTimeout = null;
         this.isTestRunning = false;
@@ -187,6 +186,205 @@ class EditorTab {
         }
     }
     
+    // 临时适配方法：获取命令列表
+    getCommands() {
+        if (!this.buffer || !this.buffer.parsedStructure || !this.buffer.parsedStructure.steps) {
+            return [];
+        }
+        
+        const steps = this.buffer.parsedStructure.steps;
+        
+        // 将TKE的解析结果转换为编辑器期望的格式
+        return steps.map((step, index) => {
+            // TKE返回格式：{ index, command: "启动 [com.example.test_toolkit, .MainActivity]", lineNumber }
+            const commandText = step.command;
+            if (!commandText) {
+                window.rError('🔍 step中没有command字段:', step);
+                return { type: 'unknown', params: {} };
+            }
+            
+            // 解析TKS命令文本
+            const parsed = this.parseTKSCommandText(commandText);
+            return parsed;
+        });
+    }
+    
+    // 解析TKS命令文本，提取命令和参数
+    parseTKSCommandText(commandText) {
+        window.rLog(`🔧 解析TKS命令文本: "${commandText}"`);
+        
+        // 去除首尾空白
+        commandText = commandText.trim();
+        
+        // 解析命令名（第一个单词）
+        const parts = commandText.split(/\s+/);
+        const commandName = parts[0];
+        
+        // 映射到类型
+        const type = this.tksCommandToType(commandName);
+        
+        // 解析参数
+        const params = {};
+        
+        // 解析方括号中的参数 [param1, param2]
+        const bracketMatch = commandText.match(/\[([^\]]*)\]/);
+        if (bracketMatch) {
+            const bracketContent = bracketMatch[1];
+            const bracketParams = bracketContent.split(',').map(p => p.trim());
+            
+            // 根据命令类型分配参数
+            const definition = this.findCommandDefinition(type);
+            if (definition && definition.params) {
+                definition.params.forEach((paramDef, index) => {
+                    if (bracketParams[index]) {
+                        params[paramDef.name] = bracketParams[index];
+                    }
+                });
+            }
+        }
+        
+        // 解析图片引用 @{imageName}
+        const imageMatch = commandText.match(/@\{([^}]+)\}/);
+        if (imageMatch) {
+            params.target = `@{${imageMatch[1]}}`;
+        }
+        
+        // 解析XML元素引用 {elementName}
+        const xmlMatch = commandText.match(/(?<!@)\{([^}]+)\}/);
+        if (xmlMatch && !imageMatch) {
+            params.target = `{${xmlMatch[1]}}`;
+        }
+        
+        // 解析坐标 {x,y}
+        const coordMatch = commandText.match(/\{(\d+\s*,\s*\d+)\}/);
+        if (coordMatch) {
+            // 坐标可能用于不同参数，根据命令类型判断
+            if (type === 'swipe') {
+                // 滑动命令可能有起点和终点坐标
+                params.startPoint = `{${coordMatch[1]}}`;
+            } else {
+                params.target = `{${coordMatch[1]}}`;
+            }
+        }
+        
+        const result = { type, params };
+        window.rLog(`🔧 解析结果:`, result);
+        return result;
+    }
+    
+    // TKS命令名到类型的映射
+    tksCommandToType(tksCommand) {
+        const mapping = {
+            '启动': 'launch',
+            '关闭': 'close', 
+            '点击': 'click',
+            '按压': 'press',
+            '滑动': 'swipe',
+            '拖动': 'drag',
+            '定向拖动': 'directional_drag',
+            '输入': 'input',
+            '清理': 'clear',
+            '隐藏键盘': 'hide_keyboard',
+            '等待': 'wait',
+            '返回': 'back',
+            '断言': 'assert',
+            '读取': 'read'
+        };
+        
+        return mapping[tksCommand] || 'unknown';
+    }
+    
+    // 临时适配方法：获取TKS代码
+    getTKSCode() {
+        return this.buffer ? this.buffer.getRawContent() : '';
+    }
+    
+    // 将命令对象转换为TKS文本行
+    commandToTKSLine(command) {
+        const definition = this.findCommandDefinition(command.type);
+        if (!definition) return null;
+        
+        const commandName = definition.tksCommand;
+        const params = [];
+        
+        // 根据命令类型构造参数
+        definition.params.forEach(param => {
+            const value = command.params[param.name];
+            if (value) {
+                params.push(value);
+            }
+        });
+        
+        // 构造TKS命令行
+        if (params.length > 0) {
+            return `    ${commandName} [${params.join(', ')}]`;
+        } else {
+            return `    ${commandName}`;
+        }
+    }
+    
+    // 通过 TKEEditorBuffer 添加命令
+    async addCommandToBuffer(command) {
+        if (!this.buffer) return;
+        
+        const tksLine = this.commandToTKSLine(command);
+        if (!tksLine) return;
+        
+        window.rLog('添加TKS命令行:', tksLine);
+        
+        // 获取当前内容并添加新行
+        const currentContent = this.buffer.getRawContent();
+        const newContent = currentContent + '\n' + tksLine;
+        
+        // 更新缓冲区内容
+        await this.buffer.updateContent(newContent);
+    }
+    
+    // 通过 TKEEditorBuffer 插入命令
+    async insertCommandToBuffer(command, index) {
+        if (!this.buffer) return;
+        
+        const tksLine = this.commandToTKSLine(command);
+        if (!tksLine) return;
+        
+        window.rLog(`插入TKS命令行到位置 ${index}:`, tksLine);
+        
+        // 获取当前内容并在指定位置插入
+        const lines = this.buffer.getRawContent().split('\n');
+        
+        // 找到第 index 个命令行的位置
+        let commandCount = 0;
+        let insertPosition = lines.length; // 默认插入到末尾
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (this.isCommandLine(line)) {
+                if (commandCount === index) {
+                    insertPosition = i;
+                    break;
+                }
+                commandCount++;
+            }
+        }
+        
+        // 在指定位置插入新命令行
+        lines.splice(insertPosition, 0, tksLine);
+        const newContent = lines.join('\n');
+        
+        // 更新缓冲区内容
+        await this.buffer.updateContent(newContent);
+    }
+    
+    // 判断是否是命令行（与 TKEEditorBuffer 保持一致）
+    isCommandLine(line) {
+        if (!line || line.startsWith('#') || line.startsWith('用例:') || 
+            line.startsWith('脚本名:') || line === '详情:' || line === '步骤:' ||
+            line.includes('appPackage:') || line.includes('appActivity:')) {
+            return false;
+        }
+        return true;
+    }
+    
     init() {
         window.rLog('EditorTab 初始化中...');
         this.createEditor();
@@ -291,7 +489,7 @@ class EditorTab {
     
     renderTextMode() {
         window.rLog('渲染文本模式...');
-        const tksCode = this.script.toTKSCode();
+        const tksCode = this.buffer ? this.buffer.getRawContent() : '';
         
         const lineNumbersId = `${this.uniqueId}-lines`;
         const textContentId = `${this.uniqueId}-text`;
@@ -366,7 +564,8 @@ class EditorTab {
     
     renderBlocks() {
         // 获取命令
-        const commands = this.script.getCommands();
+        const commands = this.getCommands();
+        
         let blocksHtml = '';
         
         // 为每个命令块生成HTML，包括块间的插入按钮
@@ -514,7 +713,7 @@ class EditorTab {
         visualElements.forEach(element => {
             const commandIndex = parseInt(element.dataset.commandIndex);
             const paramName = element.dataset.param;
-            const command = this.script.getCommands()[commandIndex];
+            const command = this.getCommands()[commandIndex];
             
             if (command && command.params[paramName]) {
                 const value = command.params[paramName];
@@ -566,7 +765,7 @@ class EditorTab {
                 const paramName = btn.dataset.param;
                 
                 // 清空参数值
-                const command = this.script.getCommands()[commandIndex];
+                const command = this.getCommands()[commandIndex];
                 if (command) {
                     command.params[paramName] = '';
                     this.renderBlocks();
@@ -593,7 +792,7 @@ class EditorTab {
             
             // 从文本更新脚本模型
             const tksCode = this.textContentEl.textContent || '';
-            this.script.fromTKSCode(tksCode);
+            // ScriptModel 已移除，直接使用 TKEEditorBuffer
             this.updateLineNumbers();
             this.triggerChange();
         });
@@ -654,7 +853,7 @@ class EditorTab {
                         
                         // 更新脚本模型
                         const tksCode = this.textContentEl.textContent || '';
-                        this.script.fromTKSCode(tksCode);
+                        // ScriptModel 已移除，直接使用 TKEEditorBuffer
                         this.updateLineNumbers();
                         this.triggerChange();
                     }
@@ -675,7 +874,7 @@ class EditorTab {
                         
                         // 更新脚本模型
                         const tksCode = this.textContentEl.textContent || '';
-                        this.script.fromTKSCode(tksCode);
+                        // ScriptModel 已移除，直接使用 TKEEditorBuffer
                         this.updateLineNumbers();
                         this.triggerChange();
                     }
@@ -696,10 +895,10 @@ class EditorTab {
                 e.preventDefault();
                 e.stopPropagation();
                 const index = parseInt(e.target.dataset.index);
-                window.rLog(`删除命令块，索引: ${index}, 当前命令数量: ${this.script.getCommands().length}`);
+                window.rLog(`删除命令块，索引: ${index}, 当前命令数量: ${this.getCommands().length}`);
                 
                 // 验证索引有效性
-                if (index >= 0 && index < this.script.getCommands().length) {
+                if (index >= 0 && index < this.getCommands().length) {
                     this.removeCommand(index);
                 } else {
                     window.rLog(`无效的删除索引: ${index}`);
@@ -925,8 +1124,8 @@ class EditorTab {
             command.params[param.name] = param.default || '';
         });
         
-        this.script.addCommand(command);
-        this.renderBlocks();
+        // 通过 TKEEditorBuffer 添加命令
+        this.addCommandToBuffer(command);
         this.triggerChange();
     }
     
@@ -945,8 +1144,8 @@ class EditorTab {
             command.params[param.name] = param.default || '';
         });
         
-        this.script.insertCommand(command, index);
-        this.renderBlocks();
+        // 通过 TKEEditorBuffer 插入命令
+        this.insertCommandToBuffer(command, index);
         this.triggerChange();
     }
     
@@ -960,7 +1159,8 @@ class EditorTab {
             adjustedToIndex = toIndex - 1;
         }
         
-        this.script.reorderCommand(fromIndex, adjustedToIndex);
+        // TODO: 重构为通过 TKEEditorBuffer 操作
+        // this.script.reorderCommand(fromIndex, adjustedToIndex);
         this.renderBlocks();
         this.triggerChange();
         
@@ -1102,15 +1302,16 @@ class EditorTab {
     
     removeCommand(index) {
         window.rLog(`开始删除命令，索引: ${index}`);
-        const commandsBefore = this.script.getCommands().length;
+        const commandsBefore = this.getCommands().length;
         window.rLog(`删除前命令数量: ${commandsBefore}`);
-        window.rLog('删除前的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
+        window.rLog('删除前的命令列表:', this.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
         
-        this.script.removeCommand(index);
+        // TODO: 重构为通过 TKEEditorBuffer 操作
+        // this.script.removeCommand(index);
         
-        const commandsAfter = this.script.getCommands().length;
+        const commandsAfter = this.getCommands().length;
         window.rLog(`删除后命令数量: ${commandsAfter}`);
-        window.rLog('删除后的命令列表:', this.script.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
+        window.rLog('删除后的命令列表:', this.getCommands().map((cmd, i) => `${i}: ${cmd.type}`));
         
         this.renderBlocks();
         this.triggerChange();
@@ -1118,7 +1319,8 @@ class EditorTab {
     
     
     updateCommandParam(index, param, value) {
-        this.script.updateCommandParam(index, param, value);
+        // TODO: 重构为通过 TKEEditorBuffer 操作
+        // this.script.updateCommandParam(index, param, value);
         this.triggerChange();
     }
     
@@ -1185,7 +1387,7 @@ class EditorTab {
         window.rLog(`📤 triggerChange 被调用，模式: ${this.currentMode}`);
         
         // 获取当前内容
-        const content = this.script.toTKSCode();
+        const content = this.getTKSCode();
         
         // 通知监听器
         this.listeners.forEach(listener => {
@@ -1220,9 +1422,16 @@ class EditorTab {
             // 加载文件内容
             await this.buffer.loadFromFile();
             
-            // 将内容加载到ScriptModel
-            const content = this.buffer.getRawContent();
-            this.script.fromTKSCode(content);
+            // 监听缓冲区内容变化事件
+            this.buffer.on('content-changed', (event) => {
+                window.rLog('📝 TKEEditorBuffer内容变化:', event.source);
+                
+                // 重新渲染编辑器
+                this.render();
+                
+                // 触发变化事件
+                this.triggerChange();
+            });
             
             // 渲染编辑器
             this.render();
@@ -1236,7 +1445,7 @@ class EditorTab {
     
     getValue() {
         // 从ScriptModel获取TKS代码
-        const content = this.script.toTKSCode();
+        const content = this.getTKSCode();
         window.rLog(`📖 从ScriptModel获取内容长度: ${content.length}`);
         return content;
     }
@@ -1262,13 +1471,13 @@ class EditorTab {
                 
                 // 更新脚本模型
                 const tksCode = this.textContentEl.textContent || '';
-                this.script.fromTKSCode(tksCode);
+                // ScriptModel 已移除，直接使用 TKEEditorBuffer
                 this.updateLineNumbers();
                 this.triggerChange();
             } else {
                 // 如果没有选区，追加到末尾
                 this.textContentEl.textContent += text;
-                this.script.fromTKSCode(this.textContentEl.textContent);
+                // ScriptModel 已移除，直接使用 TKEEditorBuffer
                 this.updateLineNumbers();
                 this.triggerChange();
             }

@@ -123,6 +123,28 @@ class TKEEditorBuffer {
         });
     }
     
+    // 直接更新内容
+    async updateContent(newContent) {
+        try {
+            this.rawContent = newContent;
+            
+            // 重新解析验证
+            await this.parseWithTKE();
+            
+            this.markDirty();
+            this.notifyListeners('content-changed', {
+                source: 'direct',
+                content: this.rawContent,
+                structure: this.parsedStructure
+            });
+            
+            window.rLog('🔄 内容直接更新成功');
+        } catch (error) {
+            window.rError(`❌ 内容直接更新失败: ${error.message}`);
+            throw error;
+        }
+    }
+    
     // 从块编辑器更新内容
     async updateFromBlocks(blockUpdates) {
         // 这里我们需要重新构造TKS内容
@@ -254,6 +276,22 @@ class TKEEditorBuffer {
     
     // 移除监听器
     removeListener(callback) {
+        this.listeners.delete(callback);
+    }
+    
+    // 添加事件监听器 (兼容.on()调用方式)
+    on(eventType, callback) {
+        const wrappedCallback = (type, data) => {
+            if (type === eventType) {
+                callback(data);
+            }
+        };
+        this.listeners.add(wrappedCallback);
+        return wrappedCallback; // 返回用于取消监听
+    }
+    
+    // 移除事件监听器
+    off(callback) {
         this.listeners.delete(callback);
     }
     
