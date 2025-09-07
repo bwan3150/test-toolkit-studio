@@ -388,6 +388,38 @@ async function loadSavedDevices() {
                     </div>
                 `;
                 
+                // 为保存的设备卡片也添加拖拽功能
+                // 根据平台类型获取设备标识符
+                let deviceIdentifier = null;
+                
+                if (config.platform === 'ios') {
+                    // iOS设备使用udid
+                    deviceIdentifier = config.udid;
+                } else {
+                    // Android设备使用deviceId，如果没有deviceId，尝试使用其他标识
+                    deviceIdentifier = config.deviceId;
+                    
+                    // 如果没有deviceId但是连接设备，尝试从连接的设备中查找
+                    if (!deviceIdentifier && isConnected && connectedDevices.length > 0) {
+                        // 尝试找到对应的连接设备
+                        const connectedDevice = connectedDevices.find(d => 
+                            d.status === 'device' && config.deviceName && 
+                            (config.deviceName.includes(d.id.substring(0, 8)) || 
+                             (config.ipAddress && d.id.includes(config.ipAddress)))
+                        );
+                        if (connectedDevice) {
+                            deviceIdentifier = connectedDevice.id;
+                        }
+                    }
+                }
+                
+                if (deviceIdentifier) {
+                    setupDragAndDropForDevice(card, deviceIdentifier);
+                    window.rLog('为保存的设备添加拖拽功能:', config.deviceName, deviceIdentifier);
+                } else {
+                    window.rLog('无法为设备添加拖拽功能（缺少设备标识）:', config.deviceName);
+                }
+                
                 savedDevicesGrid.appendChild(card);
             }
         }
@@ -1601,8 +1633,26 @@ function setupDragAndDropForDevice(deviceCard, deviceId) {
             return;
         }
         
+        // 获取文件路径 - 使用Electron的webUtils.getPathForFile()方法
+        let filePath = null;
+        
+        try {
+            const { webUtils } = require('electron');
+            filePath = webUtils.getPathForFile(file);
+        } catch (error) {
+            window.rError('无法获取文件路径:', error.message);
+            window.NotificationModule.showNotification('无法获取文件路径，请确保应用有文件访问权限', 'error');
+            return;
+        }
+        
+        if (!filePath) {
+            window.rError('文件路径为空');
+            window.NotificationModule.showNotification('无法获取文件路径', 'error');
+            return;
+        }
+        
         // 安装APK
-        await installApkToDevice(deviceId, file.path);
+        await installApkToDevice(deviceId, filePath);
     });
 }
 
@@ -1614,8 +1664,6 @@ async function installApkToDevice(deviceId, apkPath) {
         window.NotificationModule.showNotification('设备ID或APK路径无效', 'error');
         return;
     }
-    
-    console.log('开始安装APK:', deviceId, apkPath);
     
     // 显示loading modal
     showApkInstallLoading('正在处理APK...', '');
