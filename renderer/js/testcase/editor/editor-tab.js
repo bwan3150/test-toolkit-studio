@@ -1286,12 +1286,23 @@ class EditorTab {
     
     // 重新排序命令
     async reorderCommand(fromIndex, toIndex) {
-        if (fromIndex === toIndex) return;
+        if (fromIndex === toIndex) {
+            window.rLog(`⚠️ 跳过无效重排: 源索引 ${fromIndex} 与目标索引 ${toIndex} 相同`);
+            return;
+        }
         
+        // 防止并发重排操作
+        if (this._isReordering) {
+            window.rLog(`⚠️ 重排操作正在进行中，跳过重复请求: ${fromIndex} -> ${toIndex}`);
+            return;
+        }
+        
+        this._isReordering = true;
         window.rLog(`开始移动命令：从位置 ${fromIndex} 到位置 ${toIndex}`);
         
         if (!this.buffer) {
             window.rError('TKE缓冲区未初始化，无法重排命令');
+            this._isReordering = false;
             return;
         }
         
@@ -1311,6 +1322,7 @@ class EditorTab {
             
             if (stepsStartIndex === -1) {
                 window.rError('未找到步骤区域');
+                this._isReordering = false;
                 return;
             }
             
@@ -1325,6 +1337,7 @@ class EditorTab {
             
             if (fromIndex >= commandLines.length || toIndex >= commandLines.length) {
                 window.rError(`索引超出范围: fromIndex=${fromIndex}, toIndex=${toIndex}, 总命令数=${commandLines.length}`);
+                this._isReordering = false;
                 return;
             }
             
@@ -1366,6 +1379,8 @@ class EditorTab {
             window.rLog(`✅ 成功移动命令：从位置 ${fromIndex} 到位置 ${adjustedToIndex}`);
         } catch (error) {
             window.rError(`❌ 移动命令失败: ${error.message}`);
+        } finally {
+            this._isReordering = false;
         }
     }
     
