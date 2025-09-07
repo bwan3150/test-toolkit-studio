@@ -1048,31 +1048,86 @@ function registerAdbHandlers(app) {
   });
 
   // 二维码和配对相关
-  ipcMain.handle('generate-qr-code', async (event, data) => {
+  ipcMain.handle('generate-qr-code', async (event, data, options = {}) => {
     try {
-      // 这里应该使用二维码生成库，暂时返回模拟数据
+      const QRCode = require('qrcode');
+      
+      // 设置QR码选项
+      const qrOptions = {
+        width: options.width || 200,
+        height: options.height || 200,
+        margin: options.margin || 1,
+        color: {
+          dark: options.darkColor || '#000000',
+          light: options.lightColor || '#FFFFFF'
+        },
+        errorCorrectionLevel: 'M'
+      };
+      
+      // 生成QR码的Data URL（base64格式的图片）
+      const dataURL = await QRCode.toDataURL(data, qrOptions);
+      
       return {
         success: true,
-        qrData: data,
+        dataURL: dataURL,
         message: 'QR code generated successfully'
       };
     } catch (error) {
+      console.error('生成QR码失败:', error);
       return { success: false, error: error.message };
     }
   });
 
-  ipcMain.handle('generate-qr-pairing-data', async (event, ipAddress, port = 5555) => {
+  ipcMain.handle('generate-qr-pairing-data', async (event) => {
     try {
-      const pairingData = {
+      // 生成随机的配对码（6位数字）
+      const pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // 生成随机的配对端口（在合理范围内）
+      const pairingPort = Math.floor(30000 + Math.random() * 10000);
+      
+      // 生成服务名称（用于mDNS广播）
+      const serviceName = `adb-pairing-${Date.now()}`;
+      
+      // 获取本机IP地址
+      const os = require('os');
+      const networkInterfaces = os.networkInterfaces();
+      let localIP = '127.0.0.1';
+      
+      // 查找本地IP地址（优先选择IPv4地址）
+      for (const interfaceName in networkInterfaces) {
+        const interfaces = networkInterfaces[interfaceName];
+        for (const iface of interfaces) {
+          if (iface.family === 'IPv4' && !iface.internal) {
+            localIP = iface.address;
+            break;
+          }
+        }
+        if (localIP !== '127.0.0.1') break;
+      }
+      
+      // 生成QR码数据
+      const qrData = JSON.stringify({
         type: 'adb_pairing',
-        ip: ipAddress,
-        port: port,
+        service: serviceName,
+        code: pairingCode,
+        ip: localIP,
+        port: pairingPort,
         timestamp: Date.now()
-      };
+      });
+      
+      // 设置过期时间（10分钟）
+      const expiryTime = Date.now() + 10 * 60 * 1000;
       
       return {
         success: true,
-        data: JSON.stringify(pairingData)
+        serviceName: serviceName,
+        pairingCode: pairingCode,
+        qrData: qrData,
+        expiryTime: expiryTime,
+        localIP: localIP,
+        pairingPort: pairingPort,
+        adbPort: 5555  // 默认ADB端口
       };
     } catch (error) {
       return { success: false, error: error.message };
