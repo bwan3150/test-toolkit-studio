@@ -7,7 +7,7 @@ const { promisify } = require('util');
 const execPromise = promisify(exec);
 
 // 导入处理器模块
-const { registerAdbHandlers, getBuiltInAdbPath, getBuiltInScrcpyPath, getBuiltInStbPath } = require('./handlers/adb-handlers');
+const { registerAdbHandlers, getBuiltInScrcpyPath, getBuiltInStbPath, getTkePath, buildTkeAdbCommand } = require('./handlers/adb-handlers');
 const { registerWindowHandlers } = require('./handlers/window-handlers');
 const { registerStoreHandlers } = require('./handlers/store-handlers');
 const { registerOtherHandlers: registerMiscHandlers } = require('./handlers/other-handlers');
@@ -534,10 +534,10 @@ function registerOtherHandlers() {
   // 截图功能
   ipcMain.handle('take-screenshot', async (event, deviceId) => {
     try {
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'Toolkit Engine未找到' };
       }
 
       if (!deviceId) {
@@ -557,15 +557,15 @@ function registerOtherHandlers() {
       const remotePath = '/sdcard/screenshot.png';
 
       // 在设备上截图
-      const screenshotCommand = `"${adbPath}" -s ${deviceId} shell screencap -p ${remotePath}`;
+      const screenshotCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'screencap', '-p', remotePath]);
       await execPromise(screenshotCommand);
 
       // 拉取截图到本地
-      const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
+      const pullCommand = buildTkeAdbCommand(tkePath, deviceId, ['pull', remotePath, `"${localPath}"`]);
       await execPromise(pullCommand);
 
       // 删除设备上的截图
-      const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
+      const deleteCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'rm', remotePath]);
       await execPromise(deleteCommand);
 
       return { 
@@ -584,10 +584,10 @@ function registerOtherHandlers() {
   // 录屏功能
   ipcMain.handle('start-recording', async (event, deviceId, duration = 180) => {
     try {
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'Toolkit Engine未找到' };
       }
 
       if (!deviceId) {
@@ -607,18 +607,18 @@ function registerOtherHandlers() {
       const remotePath = '/sdcard/recording.mp4';
 
       // 开始录屏
-      const recordCommand = `"${adbPath}" -s ${deviceId} shell screenrecord --time-limit ${duration} ${remotePath}`;
+      const recordCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'screenrecord', '--time-limit', duration.toString(), remotePath]);
       
       // 异步执行录屏命令
       exec(recordCommand, async (error) => {
         if (!error) {
           // 录屏完成，拉取文件
           try {
-            const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
+            const pullCommand = buildTkeAdbCommand(tkePath, deviceId, ['pull', remotePath, `"${localPath}"`]);
             await execPromise(pullCommand);
 
             // 删除设备上的录屏文件
-            const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
+            const deleteCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'rm', remotePath]);
             await execPromise(deleteCommand);
 
             // 通知前端录屏完成
@@ -658,10 +658,10 @@ function registerOtherHandlers() {
   // 停止录屏
   ipcMain.handle('stop-recording', async (event, deviceId) => {
     try {
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'Toolkit Engine未找到' };
       }
 
       if (!deviceId) {
@@ -669,7 +669,7 @@ function registerOtherHandlers() {
       }
 
       // 停止录屏（通过杀死screenrecord进程）
-      const stopCommand = `"${adbPath}" -s ${deviceId} shell pkill -2 screenrecord`;
+      const stopCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'pkill', '-2', 'screenrecord']);
       await execPromise(stopCommand);
 
       return { 
@@ -680,8 +680,8 @@ function registerOtherHandlers() {
     } catch (error) {
       // pkill可能不存在，尝试其他方法
       try {
-        const adbPath = getBuiltInAdbPath(app);
-        const killCommand = `"${adbPath}" -s ${deviceId} shell "ps | grep screenrecord | awk '{print $2}' | xargs kill -2"`;
+        const tkePath = getTkePath(app);
+        const killCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', '"ps | grep screenrecord | awk \'{print $2}\' | xargs kill -2"']);
         await execPromise(killCommand);
         return { success: true, message: '录屏已停止' };
       } catch (killError) {
@@ -707,23 +707,24 @@ function registerOtherHandlers() {
 // 初始化环境
 function initializeEnvironment() {
   // 输出各个工具的路径信息
-  console.log('ADB路径:', getBuiltInAdbPath(app));
+  console.log('TKE路径:', getTkePath(app));
   console.log('Scrcpy路径:', getBuiltInScrcpyPath(app));
   console.log('STB路径:', getBuiltInStbPath(app));
   
   // 检查工具是否存在
-  const adbExists = fs.existsSync(getBuiltInAdbPath(app));
+  const tkeExists = fs.existsSync(getTkePath(app));
   const scrcpyExists = fs.existsSync(getBuiltInScrcpyPath(app));
   const stbExists = fs.existsSync(getBuiltInStbPath(app));
   
-  console.log('ADB存在:', adbExists);
+  console.log('TKE存在:', tkeExists);
   console.log('Scrcpy存在:', scrcpyExists);
   console.log('STB存在:', stbExists);
   
   // 启动ADB服务器
-  if (adbExists) {
-    const adbPath = getBuiltInAdbPath(app);
-    exec(`"${adbPath}" start-server`, (error, stdout, stderr) => {
+  if (tkeExists) {
+    const tkePath = getTkePath(app);
+    const startServerCommand = buildTkeAdbCommand(tkePath, null, ['start-server']);
+    exec(startServerCommand, (error, stdout, stderr) => {
       if (error) {
         console.error('启动ADB服务器失败:', error);
       } else {

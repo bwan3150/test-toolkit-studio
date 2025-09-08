@@ -3,22 +3,12 @@ const { ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { getTkePath, buildTkeAdbCommand } = require('./adb-handlers');
 
 // 全局变量存储logcat进程
 const logcatProcesses = new Map();
 const logcatBuffers = new Map();
 
-// 获取内置ADB路径
-function getBuiltInAdbPath(app) {
-  const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-  const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-  
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-  } else {
-    return path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-  }
-}
 
 // 注册Logcat相关的IPC处理器
 function registerLogcatHandlers(app, mainWindow) {
@@ -26,7 +16,7 @@ function registerLogcatHandlers(app, mainWindow) {
   ipcMain.handle('start-logcat', async (event, options) => {
     try {
       const { device, format = 'long', buffer = 'all' } = options;
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
       // 如果该设备已有logcat进程在运行，先停止它
       if (logcatProcesses.has(device)) {
@@ -35,9 +25,9 @@ function registerLogcatHandlers(app, mainWindow) {
         logcatProcesses.delete(device);
       }
       
-      // 构建adb logcat命令
-      const command = adbPath;
-      let args = ['-s', device, 'logcat'];
+      // 构建 tke adb logcat 命令
+      const command = tkePath;
+      let args = ['--device', device, 'adb', 'logcat'];
       
       // 添加格式参数
       if (format === 'long') {

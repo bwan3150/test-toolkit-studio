@@ -6,6 +6,7 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
 const Store = require('electron-store');
+const { getTkePath, buildTkeAdbCommand, execTkeAdbCommand } = require('./adb-handlers');
 
 // 初始化store
 const store = new Store();
@@ -30,23 +31,8 @@ function registerOtherHandlers(app) {
 
   // 获取连接的设备（兼容旧版本的调用）
   ipcMain.handle('get-connected-devices', async () => {
-    // 重新实现设备获取逻辑
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, devices: [], error: '内置Android SDK未找到' };
-      }
-      
-      const { stdout, stderr } = await execPromise(`"${adbPath}" devices -l`);
+      const { stdout, stderr } = await execTkeAdbCommand(app, null, ['devices', '-l']);
       
       if (stderr && !stderr.includes('daemon')) {
         console.error('ADB错误:', stderr);
@@ -94,23 +80,8 @@ function registerOtherHandlers(app) {
 
   // adb-devices（兼容旧版本的调用）
   ipcMain.handle('adb-devices', async () => {
-    // 直接复制get-connected-devices的逻辑，避免循环调用
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, devices: [], error: '内置Android SDK未找到' };
-      }
-      
-      const { stdout, stderr } = await execPromise(`"${adbPath}" devices -l`);
+      const { stdout, stderr } = await execTkeAdbCommand(app, null, ['devices', '-l']);
       
       const lines = stdout.split('\n');
       const devices = [];
@@ -148,39 +119,25 @@ function registerOtherHandlers(app) {
   // 获取设备信息
   ipcMain.handle('get-device-info', async (event, deviceId) => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
       // 获取设备基本信息
       const commands = [
-        { key: 'model', cmd: `"${adbPath}" -s ${deviceId} shell getprop ro.product.model` },
-        { key: 'brand', cmd: `"${adbPath}" -s ${deviceId} shell getprop ro.product.brand` },
-        { key: 'androidVersion', cmd: `"${adbPath}" -s ${deviceId} shell getprop ro.build.version.release` },
-        { key: 'sdkVersion', cmd: `"${adbPath}" -s ${deviceId} shell getprop ro.build.version.sdk` },
-        { key: 'resolution', cmd: `"${adbPath}" -s ${deviceId} shell wm size` },
-        { key: 'density', cmd: `"${adbPath}" -s ${deviceId} shell wm density` }
+        { key: 'model', args: ['shell', 'getprop', 'ro.product.model'] },
+        { key: 'brand', args: ['shell', 'getprop', 'ro.product.brand'] },
+        { key: 'androidVersion', args: ['shell', 'getprop', 'ro.build.version.release'] },
+        { key: 'sdkVersion', args: ['shell', 'getprop', 'ro.build.version.sdk'] },
+        { key: 'resolution', args: ['shell', 'wm', 'size'] },
+        { key: 'density', args: ['shell', 'wm', 'density'] }
       ];
 
       const deviceInfo = {};
       
-      for (const { key, cmd } of commands) {
+      for (const { key, args } of commands) {
         try {
-          const { stdout } = await execPromise(cmd);
+          const { stdout } = await execTkeAdbCommand(app, deviceId, args);
           deviceInfo[key] = stdout.trim();
           
           // 解析特殊格式
@@ -207,22 +164,8 @@ function registerOtherHandlers(app) {
   // 检查配对状态
   ipcMain.handle('check-pairing-status', async () => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       // 获取当前设备列表
-      const { stdout } = await execPromise(`"${adbPath}" devices`);
+      const { stdout } = await execTkeAdbCommand(app, null, ['devices']);
       const lines = stdout.split('\n');
       const deviceCount = lines.filter(line => 
         line.includes('device') && !line.startsWith('List of devices')
@@ -247,26 +190,12 @@ function registerOtherHandlers(app) {
   // 获取应用列表
   ipcMain.handle('get-app-list', async (event, deviceId) => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
       // 获取所有已安装的包
-      const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell pm list packages`);
+      const { stdout } = await execTkeAdbCommand(app, deviceId, ['shell', 'pm', 'list', 'packages']);
       
       const packages = stdout
         .split('\n')
@@ -289,26 +218,12 @@ function registerOtherHandlers(app) {
   // 获取第三方应用列表
   ipcMain.handle('get-third-party-apps', async (event, deviceId) => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
       // 获取第三方应用
-      const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell pm list packages -3`);
+      const { stdout } = await execTkeAdbCommand(app, deviceId, ['shell', 'pm', 'list', 'packages', '-3']);
       
       const packages = stdout
         .split('\n')
@@ -331,26 +246,11 @@ function registerOtherHandlers(app) {
   // 重启设备
   ipcMain.handle('reboot-device', async (event, deviceId) => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      const rebootCommand = `"${adbPath}" -s ${deviceId} reboot`;
-      await execPromise(rebootCommand);
+      await execTkeAdbCommand(app, deviceId, ['reboot']);
 
       return { 
         success: true, 
@@ -366,26 +266,11 @@ function registerOtherHandlers(app) {
   // 获取设备日志
   ipcMain.handle('get-device-log', async (event, deviceId, lines = 100) => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      const logCommand = `"${adbPath}" -s ${deviceId} logcat -t ${lines}`;
-      const { stdout } = await execPromise(logCommand);
+      const { stdout } = await execTkeAdbCommand(app, deviceId, ['logcat', '-t', lines.toString()]);
 
       return { 
         success: true, 
@@ -490,31 +375,17 @@ function registerOtherHandlers(app) {
     }
   });
 
-  // 检查ADB版本
+  // 检查ADB版本（通过TKE内嵌ADB）
   ipcMain.handle('check-adb-version', async () => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: 'ADB binary not found' };
-      }
-      
-      const { stdout } = await execPromise(`"${adbPath}" version`);
+      const { stdout } = await execTkeAdbCommand(app, null, ['version']);
       const versionMatch = stdout.match(/Version (\d+\.\d+\.\d+)/);
       const version = versionMatch ? versionMatch[1] : 'Unknown';
       
       return { 
         success: true, 
         version: version,
-        path: adbPath
+        path: 'TKE内嵌ADB'
       };
       
     } catch (error) {
@@ -574,26 +445,11 @@ function registerOtherHandlers(app) {
   // 清除设备日志
   ipcMain.handle('clear-device-log', async (event, deviceId) => {
     try {
-      const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-      const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
-      let adbPath;
-      
-      if (app.isPackaged) {
-        adbPath = path.join(process.resourcesPath, platform, 'android-sdk', 'platform-tools', adbName);
-      } else {
-        adbPath = path.join(__dirname, '..', 'resources', platform, 'android-sdk', 'platform-tools', adbName);
-      }
-
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      const clearCommand = `"${adbPath}" -s ${deviceId} logcat -c`;
-      await execPromise(clearCommand);
+      await execTkeAdbCommand(app, deviceId, ['logcat', '-c']);
 
       return { 
         success: true, 
