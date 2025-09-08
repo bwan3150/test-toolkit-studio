@@ -1,6 +1,6 @@
 // Controller模块 - 负责ADB控制
 
-use crate::{Result, TkeError, DeviceInfo};
+use crate::{Result, TkeError, DeviceInfo, AdbManager};
 use std::path::PathBuf;
 use std::process::Command;
 use tracing::{debug, info, error};
@@ -8,18 +8,20 @@ use anyhow::Context;
 
 pub struct Controller {
     device_id: Option<String>,
-    adb_path: PathBuf,
+    adb_manager: AdbManager,
 }
 
 impl Controller {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        // 查找ADB路径
-        let adb_path = which::which("adb")
-            .map_err(|_| TkeError::AdbError("ADB未找到，请确保ADB已安装并在PATH中".to_string()))?;
+        // 使用 AdbManager 来获取 ADB
+        let adb_manager = AdbManager::new()?;
+        
+        // 验证 ADB 可用性
+        adb_manager.verify_adb()?;
         
         Ok(Self {
             device_id,
-            adb_path,
+            adb_manager,
         })
     }
     
@@ -30,7 +32,7 @@ impl Controller {
     
     // 获取连接的设备列表
     pub fn get_devices(&self) -> Result<Vec<String>> {
-        let output = Command::new(&self.adb_path)
+        let output = Command::new(self.adb_manager.adb_path())
             .arg("devices")
             .output()
             .map_err(|e| TkeError::AdbError(format!("执行adb devices失败: {}", e)))?;
@@ -267,7 +269,7 @@ impl Controller {
     
     // 执行ADB命令
     fn run_adb_command(&self, args: &[&str]) -> Result<()> {
-        let mut cmd = Command::new(&self.adb_path);
+        let mut cmd = Command::new(self.adb_manager.adb_path());
         
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {
@@ -289,7 +291,7 @@ impl Controller {
     
     // 执行ADB命令并获取输出
     fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
-        let mut cmd = Command::new(&self.adb_path);
+        let mut cmd = Command::new(self.adb_manager.adb_path());
         
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {

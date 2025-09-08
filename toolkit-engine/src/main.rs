@@ -59,6 +59,12 @@ enum Commands {
         #[command(subcommand)]
         action: RunCommands,
     },
+    /// ADB - 直通 ADB 命令
+    Adb {
+        /// ADB 命令参数
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -216,40 +222,53 @@ enum RunCommands {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
     
-    // 初始化日志
-    let level = if cli.verbose {
-        tracing::Level::DEBUG
+    // 检查是否是 ADB 直通命令
+    let is_adb_command = matches!(cli.command, Commands::Adb { .. });
+    
+    // 对于 ADB 直通命令，完全跳过日志初始化和项目信息输出
+    let project_path = if !is_adb_command {
+        // 初始化日志
+        let level = if cli.verbose {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        };
+        
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| format!("{}", level).into()),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+        
+        // 获取项目路径
+        let project_path = cli.project.unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        });
+        
+        // 对于Fetcher命令，将日志输出到stderr以避免干扰JSON输出
+        let is_fetcher_command = matches!(cli.command, Commands::Fetcher { .. });
+        
+        if is_fetcher_command {
+            eprintln!("项目路径: {:?}", project_path);
+            if let Some(ref device) = cli.device {
+                eprintln!("目标设备: {}", device);
+            }
+        } else {
+            info!("项目路径: {:?}", project_path);
+            if let Some(ref device) = cli.device {
+                info!("目标设备: {}", device);
+            }
+        }
+        
+        project_path
     } else {
-        tracing::Level::INFO
+        // ADB 直通模式：获取项目路径但不输出任何信息
+        cli.project.unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        })
     };
-    
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| format!("{}", level).into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-    
-    // 获取项目路径
-    let project_path = cli.project.unwrap_or_else(|| {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-    });
-    
-    // 对于Fetcher命令，将日志输出到stderr以避免干扰JSON输出
-    let is_fetcher_command = matches!(cli.command, Commands::Fetcher { .. });
-    
-    if is_fetcher_command {
-        eprintln!("项目路径: {:?}", project_path);
-        if let Some(ref device) = cli.device {
-            eprintln!("目标设备: {}", device);
-        }
-    } else {
-        info!("项目路径: {:?}", project_path);
-        if let Some(ref device) = cli.device {
-            info!("目标设备: {}", device);
-        }
-    }
     
     match cli.command {
         Commands::Controller { action } => {
@@ -266,6 +285,9 @@ async fn main() -> Result<()> {
         }
         Commands::Run { action } => {
             handle_run_commands(action, project_path, cli.device).await
+        }
+        Commands::Adb { args } => {
+            handle_adb_command(args, cli.device).await
         }
     }
 }
@@ -561,6 +583,47 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
             if let Some(ref error) = result.error {
                 println!("错误信息: {}", error);
             }
+        }
+    }
+    
+    Ok(())
+}
+
+// ADB 直通命令处理
+async fn handle_adb_command(args: Vec<String>, device_id: Option<String>) -> Result<()> {
+    use std::process::Command;
+    
+    // 创建静默模式的 AdbManager 来获取 ADB 路径
+    let adb_manager = tke::AdbManager::new_with_verbosity(false)?;
+    
+    // 静默验证 ADB，只有失败时才报错
+    adb_manager.verify_adb_verbose(false)?;
+    
+    // 构建 ADB 命令
+    let mut cmd = Command::new(adb_manager.adb_path());
+    
+    // 如果指定了设备ID，添加 -s 参数
+    if let Some(ref device) = device_id {
+        cmd.arg("-s").arg(device);
+    }
+    
+    // 添加用户提供的参数
+    cmd.args(&args);
+    
+    // 执行命令并继承标准输入输出（完全透明传递）
+    let status = cmd
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| TkeError::AdbError(format!("执行 ADB 命令失败: {}", e)))?;
+    
+    // 只有在失败时才返回错误，成功时静默
+    if !status.success() {
+        if let Some(code) = status.code() {
+            return Err(TkeError::AdbError(format!("ADB 命令执行失败，退出码: {}", code)));
+        } else {
+            return Err(TkeError::AdbError("ADB 命令被信号终止".to_string()));
         }
     }
     

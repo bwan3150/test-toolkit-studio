@@ -8,6 +8,7 @@ pub mod script_interpreter;
 pub mod script_parser;
 pub mod runner;
 pub mod models;
+pub mod adb_manager;
 
 // 导出主要类型和功能
 pub use controller::Controller;
@@ -16,6 +17,7 @@ pub use recognizer::Recognizer;
 pub use script_interpreter::ScriptInterpreter;
 pub use script_parser::ScriptParser;
 pub use runner::Runner;
+pub use adb_manager::AdbManager;
 
 // 导出模型
 pub use models::{
