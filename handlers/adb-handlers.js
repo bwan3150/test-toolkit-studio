@@ -1351,12 +1351,14 @@ function registerAdbHandlers(app) {
 // 获取TKE可执行文件路径
 function getTkePath(app) {
   const platform = process.platform;
-  if (platform === 'win32') {
-    return path.join(app.getAppPath(), 'resources', 'win32', 'toolkit-engine', 'tke.exe');
-  } else if (platform === 'darwin') {
-    return path.join(app.getAppPath(), 'resources', 'darwin', 'toolkit-engine', 'tke');
+  const tkeBinaryName = platform === 'win32' ? 'tke.exe' : 'tke';
+  
+  if (app.isPackaged) {
+    // 生产模式：process.resourcesPath/[platform]/toolkit-engine/tke
+    return path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName);
   } else {
-    return path.join(app.getAppPath(), 'resources', 'linux', 'toolkit-engine', 'tke');
+    // 开发模式：resources/[platform]/toolkit-engine/tke
+    return path.join(app.getAppPath(), 'resources', platform, 'toolkit-engine', tkeBinaryName);
   }
 }
 
