@@ -19,11 +19,23 @@ class TKEEditorBuffer {
     // 初始化TKE连接
     async initialize() {
         try {
+            window.rLog('🔧 开始初始化TKE连接...');
+            
+            if (!window.TKEAdapterModule) {
+                throw new Error('TKEAdapterModule未加载');
+            }
+            
             this.tkeAdapter = await window.TKEAdapterModule.getTKEAdapter();
+            window.rLog('📡 TKE适配器获取成功');
+            
             this.scriptParser = new window.TKEAdapterModule.TKEScriptParserAdapter(this.tkeAdapter);
+            window.rLog('📜 TKE ScriptParser创建成功');
+            
             window.rLog('✅ TKE连接已建立');
         } catch (error) {
-            window.rError(`❌ TKE连接失败: ${error.message}`);
+            window.rError(`❌ TKE连接失败:`, error);
+            window.rError(`错误详情: ${error.message}`);
+            window.rError(`错误堆栈: ${error.stack}`);
             throw error;
         }
     }
@@ -56,8 +68,10 @@ class TKEEditorBuffer {
         try {
             // 先保存原始内容到临时文件，让TKE解析
             const tempFile = await this.saveToTempFile();
+            window.rLog(`📄 临时文件创建: ${tempFile}`);
             
             // 调用TKE解析
+            window.rLog(`🚀 开始调用TKE解析文件...`);
             this.parsedStructure = await this.scriptParser.parseScriptFile(tempFile);
             
             window.rLog(`🔍 TKE解析完成: ${this.parsedStructure.stepsCount}个步骤`);
@@ -67,7 +81,9 @@ class TKEEditorBuffer {
             
             this.notifyListeners('parsed', { structure: this.parsedStructure });
         } catch (error) {
-            window.rError(`❌ TKE解析失败: ${error.message}`);
+            window.rError(`❌ TKE解析失败:`, error);
+            window.rError(`错误详情: ${error.message}`);
+            window.rError(`错误堆栈: ${error.stack}`);
             this.parsedStructure = null;
         }
     }

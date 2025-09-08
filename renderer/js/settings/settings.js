@@ -8,6 +8,8 @@ function initializeSettingsPage() {
     const updateBaseUrlBtn = document.getElementById('updateBaseUrlBtn');
     const settingsBaseUrl = document.getElementById('settingsBaseUrl');
     const aboutVersion = document.getElementById('about-version');
+    const exportLogsBtn = document.getElementById('exportLogsBtn');
+    const exportLogStatus = document.getElementById('exportLogStatus');
     
     // 编辑器字体设置
     const editorFontFamily = document.getElementById('editorFontFamily');
@@ -48,6 +50,60 @@ function initializeSettingsPage() {
             settingsBaseUrl.value = url;
         }
     });
+    
+    // 导出日志按钮
+    if (exportLogsBtn) {
+        exportLogsBtn.addEventListener('click', async () => {
+            try {
+                // 禁用按钮防止重复点击
+                exportLogsBtn.disabled = true;
+                
+                // 显示正在导出状态
+                if (exportLogStatus) {
+                    exportLogStatus.textContent = 'Exporting...';
+                    exportLogStatus.style.display = 'inline';
+                }
+                
+                // 调用日志导出功能
+                const result = await window.RendererLogger.exportLogs();
+                
+                if (result.success) {
+                    if (exportLogStatus) {
+                        exportLogStatus.textContent = 'Succeed';
+                        exportLogStatus.style.color = '#4ec9b0';
+                    }
+                    window.NotificationModule.showNotification('Log Export Successfully', 'success');
+                } else {
+                    if (exportLogStatus) {
+                        exportLogStatus.textContent = result.message || 'Failed';
+                        exportLogStatus.style.color = '#f48771';
+                    }
+                    if (result.message !== 'Cancelled') {
+                        window.NotificationModule.showNotification(result.message || 'Failed', 'error');
+                    }
+                }
+                
+                // 3秒后隐藏状态
+                setTimeout(() => {
+                    if (exportLogStatus) {
+                        exportLogStatus.style.display = 'none';
+                    }
+                }, 3000);
+                
+            } catch (error) {
+                window.rError('导出日志失败:', error);
+                window.NotificationModule.showNotification(`Failed: ${error.message}`, 'error');
+                if (exportLogStatus) {
+                    exportLogStatus.textContent = 'Failed';
+                    exportLogStatus.style.color = '#f48771';
+                    exportLogStatus.style.display = 'inline';
+                }
+            } finally {
+                // 重新启用按钮
+                exportLogsBtn.disabled = false;
+            }
+        });
+    }
     
     // 应用字体设置
     if (applyFontSettings) {

@@ -1287,12 +1287,12 @@
               </div>
 
               <div class="settings-section">
-                <h3>编辑器设置</h3>
+                <h3>Editor Setting</h3>
                 <div class="form-group">
-                  <label>字体设置</label>
+                  <label>Font</label>
                   <div style="display: flex; gap: 10px; align-items: center">
                     <select id="editorFontFamily" style="flex: 1">
-                      <option value="var(--font-mono)">应用默认字体</option>
+                      <option value="var(--font-mono)">Default Font</option>
                       <option value="Consolas, 'Courier New', monospace">
                         Consolas
                       </option>
@@ -1324,7 +1324,7 @@
                     <span>px</span>
                   </div>
                   <button class="btn btn-secondary" id="applyFontSettings">
-                    应用字体设置
+                    Apply
                   </button>
                 </div>
               </div>
@@ -1357,7 +1357,7 @@
                     >
                   </div>
                   <button class="btn btn-secondary" id="checkToolsBtn">
-                    Check All Tools
+                    Check
                   </button>
                 </div>
               </div>
@@ -1367,6 +1367,19 @@
                 <div class="about-info">
                   <p><strong>Toolkit Studio</strong></p>
                   <p id="about-version">Version: loading...</p>
+                </div>
+              </div>
+
+              <div class="settings-section">
+                <h3>Dev Tools</h3>
+                <div class="debug-tools">
+                  <button class="btn btn-secondary" id="exportLogsBtn">
+                    <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                      <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,19L8,15H10.5V12H13.5V15H16L12,19Z"/>
+                    </svg>
+                    Export Log
+                  </button>
+                  <span id="exportLogStatus" style="margin-left: 10px; color: #569cd6; display: none;"></span>
                 </div>
               </div>
 

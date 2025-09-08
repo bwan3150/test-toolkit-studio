@@ -9,6 +9,8 @@
         constructor() {
             this.enabled = true;
             this.prefix = '[Renderer]';
+            this.logBuffer = []; // 缓存日志
+            this.maxBufferSize = 10000; // 最大缓存10000条日志
         }
         
         // 基础日志方法
@@ -27,13 +29,23 @@
                 return String(arg);
             }).join(' ');
             
+            const logEntry = {
+                level: level,
+                message: message,
+                timestamp: new Date().toISOString()
+            };
+            
+            // 添加到缓存
+            this.logBuffer.push(logEntry);
+            
+            // 限制缓存大小
+            if (this.logBuffer.length > this.maxBufferSize) {
+                this.logBuffer.shift(); // 移除最旧的日志
+            }
+            
             // 发送到主进程
             try {
-                ipcRenderer.send('renderer-log', {
-                    level: level,
-                    message: message,
-                    timestamp: new Date().toISOString()
-                });
+                ipcRenderer.send('renderer-log', logEntry);
             } catch (error) {
                 // 如果IPC失败，至少在控制台输出
                 console.error('Failed to send log to main process:', error);
@@ -77,6 +89,43 @@
         
         disable() {
             this.enabled = false;
+        }
+        
+        // 导出日志到文件
+        async exportLogs() {
+            try {
+                // 准备日志数据
+                const logData = {
+                    timestamp: new Date().toISOString(),
+                    platform: process.platform,
+                    nodeVersion: process.versions.node,
+                    electronVersion: process.versions.electron,
+                    resourcesPath: process.resourcesPath || 'N/A',
+                    dirname: __dirname,
+                    logs: this.logBuffer
+                };
+                
+                // 通过 IPC 调用主进程导出日志
+                const result = await ipcRenderer.invoke('export-logs', logData);
+                
+                return result;
+            } catch (error) {
+                console.error('导出日志失败:', error);
+                return { 
+                    success: false, 
+                    message: `导出失败: ${error.message}` 
+                };
+            }
+        }
+        
+        // 获取日志缓存
+        getLogs() {
+            return this.logBuffer;
+        }
+        
+        // 清空日志缓存
+        clearLogs() {
+            this.logBuffer = [];
         }
     }
     

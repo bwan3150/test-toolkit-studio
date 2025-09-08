@@ -30,27 +30,41 @@
          * 初始化TKE适配器
          */
         async initialize() {
-            if (this.isInitialized) return;
+            if (this.isInitialized) {
+                if (window.rLog) {
+                    window.rLog('TKE适配器已初始化，跳过重复初始化');
+                }
+                return;
+            }
             
             try {
+                if (window.rLog) {
+                    window.rLog('🚀 开始初始化TKE适配器...');
+                }
+                
                 // 查找TKE可执行文件路径
                 this.tkeExecutable = this.findTKEExecutable();
                 
                 if (window.rLog) {
-                    window.rLog('TKE可执行文件路径:', this.tkeExecutable);
+                    window.rLog('📍 TKE可执行文件路径:', this.tkeExecutable);
                 }
                 
                 // 测试TKE是否可用
+                if (window.rLog) {
+                    window.rLog('🧪 测试TKE连接...');
+                }
                 await this.testTKEConnection();
                 
                 this.isInitialized = true;
                 
                 if (window.rLog) {
-                    window.rLog('TKE适配器初始化完成');
+                    window.rLog('✅ TKE适配器初始化成功');
                 }
             } catch (error) {
                 if (window.rError) {
-                    window.rError('TKE适配器初始化失败:', error);
+                    window.rError('❌ TKE适配器初始化失败:', error);
+                    window.rError('错误详情:', error.message);
+                    window.rError('错误堆栈:', error.stack);
                 }
                 // 不要抛出错误，让模块加载继续
                 this.isInitialized = false;
@@ -58,47 +72,35 @@
         }
 
         /**
-         * 查找TKE可执行文件 - 参考ADB的路径处理方式
+         * 查找TKE可执行文件 - 参考主进程的getTkePath实现
          */
         findTKEExecutable() {
-            // 获取平台信息，参考ADB的做法
+            // 获取平台信息
             const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
             const tkeBinaryName = process.platform === 'win32' ? 'tke.exe' : 'tke';
             const fs = require('fs');
             
-            let app;
-            
-            // 尝试获取Electron app实例
-            try {
-                const { remote } = require('electron');
-                app = remote && remote.app ? remote.app : null;
-            } catch (e) {
-                try {
-                    const remote = require('@electron/remote');
-                    app = remote && remote.app ? remote.app : null;
-                } catch (e2) {
-                    // 无法获取app实例的情况，使用开发模式路径
-                    app = null;
-                }
-            }
-            
             // 构建可能的路径列表
             const possiblePaths = [];
             
-            if (app) {
-                // 按照ADB的路径模式：resources/[platform]/toolkit-engine/tke
-                if (app.isPackaged) {
-                    // 生产模式：process.resourcesPath/[platform]/toolkit-engine/tke
-                    possiblePaths.push(path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName));
-                } else {
-                    // 开发模式：resources/[platform]/toolkit-engine/tke
-                    possiblePaths.push(path.join(__dirname, '..', '..', '..', '..', '..', 'resources', platform, 'toolkit-engine', tkeBinaryName));
-                }
+            // 判断是否是打包模式
+            // 在渲染进程中，我们通过检查 process.resourcesPath 来判断
+            // 打包后的应用，resourcesPath 通常是 /Applications/XXX.app/Contents/Resources
+            const isPackaged = process.resourcesPath && (
+                process.resourcesPath.includes('.app/Contents/Resources') || // macOS
+                process.resourcesPath.includes('\\resources\\app.asar') || // Windows
+                process.resourcesPath.endsWith('/resources') // Linux
+            );
+            
+            if (isPackaged || process.resourcesPath) {
+                // 生产模式：与主进程保持一致
+                // process.resourcesPath/[platform]/toolkit-engine/tke
+                possiblePaths.push(path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName));
             }
             
-            // 开发模式的备用路径
+            // 开发模式路径作为备选
             possiblePaths.push(
-                // 首先尝试已部署的资源路径
+                // 开发模式的资源路径
                 path.join(__dirname, '..', '..', '..', '..', '..', 'resources', platform, 'toolkit-engine', tkeBinaryName),
                 // 当前构建的路径
                 path.join(__dirname, '..', '..', '..', '..', '..', 'toolkit-engine', 'target', 'release', tkeBinaryName),
@@ -108,24 +110,40 @@
                 path.join(process.cwd(), 'toolkit-engine', 'target', 'debug', tkeBinaryName)
             );
             
+            // 输出调试信息
+            if (window.rLog) {
+                window.rLog('TKE路径查找调试信息:');
+                window.rLog('- 平台:', platform);
+                window.rLog('- 二进制名称:', tkeBinaryName);
+                window.rLog('- 是否打包模式:', isPackaged);
+                window.rLog('- process.resourcesPath:', process.resourcesPath);
+                window.rLog('- __dirname:', __dirname);
+                window.rLog('- 候选路径列表:', possiblePaths);
+            }
+            
             // 遍历所有路径，找到第一个存在的文件
             for (const possiblePath of possiblePaths) {
                 try {
                     if (fs.existsSync(possiblePath)) {
                         if (window.rLog) {
-                            window.rLog('找到TKE可执行文件:', possiblePath);
+                            window.rLog('✅ 找到TKE可执行文件:', possiblePath);
                         }
                         return possiblePath;
+                    } else {
+                        if (window.rLog) {
+                            window.rLog('❌ 路径不存在:', possiblePath);
+                        }
                     }
                 } catch (error) {
-                    // 忽略访问错误，继续尝试下一个路径
+                    if (window.rLog) {
+                        window.rLog('⚠️ 访问路径出错:', possiblePath, error.message);
+                    }
                 }
             }
             
             // 如果没找到存在的文件，返回第一个路径作为默认值
             if (window.rLog) {
-                window.rLog('TKE可执行文件候选路径:', possiblePaths[0]);
-                window.rLog('警告：没有找到存在的TKE文件，使用默认路径');
+                window.rLog('⚠️ 警告：没有找到存在的TKE文件，使用默认路径:', possiblePaths[0]);
             }
             return possiblePaths[0];
         }
