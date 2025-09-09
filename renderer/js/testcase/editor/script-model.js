@@ -198,8 +198,7 @@ class ScriptModel {
             return `用例: 新测试用例
 脚本名: new_test
 详情:
-    appPackage: com.example.app
-    appActivity: .MainActivity
+    请在此处输入详情
 步骤:
     启动 [com.example.app, .MainActivity]
     等待 [2000]

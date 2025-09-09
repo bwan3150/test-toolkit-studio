@@ -28,7 +28,7 @@ function registerOtherHandlers(app) {
     try {
       // 生成默认文件名
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const defaultFileName = `toolkit-studio-logs-${timestamp}.txt`;
+      const defaultFileName = `toolkit-studio-${timestamp}`;
       
       // 显示保存对话框
       const result = await dialog.showSaveDialog({

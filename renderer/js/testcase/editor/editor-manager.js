@@ -315,8 +315,25 @@ class EditorManager {
     // 设置测试运行状态
     setTestRunning(isRunning, clearHighlight = false) {
         const activeEditor = this.getActiveEditor();
+        window.rLog('EditorManager.setTestRunning 调用:', {
+            isRunning,
+            clearHighlight,
+            activeTabId: this.activeTabId,
+            hasActiveEditor: !!activeEditor,
+            activeEditorType: activeEditor ? activeEditor.constructor.name : 'null',
+            hasSetTestRunning: activeEditor ? typeof activeEditor.setTestRunning : 'no editor'
+        });
+        
         if (activeEditor) {
-            activeEditor.setTestRunning(isRunning, clearHighlight);
+            if (typeof activeEditor.setTestRunning === 'function') {
+                activeEditor.setTestRunning(isRunning, clearHighlight);
+            } else {
+                window.rError('activeEditor 没有 setTestRunning 方法!', {
+                    editorMethods: Object.getOwnPropertyNames(Object.getPrototypeOf(activeEditor))
+                });
+            }
+        } else {
+            window.rWarn('没有活动的编辑器');
         }
     }
     

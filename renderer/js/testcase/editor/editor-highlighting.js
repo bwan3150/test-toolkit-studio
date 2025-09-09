@@ -1,4 +1,4 @@
-   // 行高亮功能模块 - 作为EditorTab的扩展方法
+// 行高亮功能模块 - 作为EditorTab的扩展方法
 const EditorHighlighting = {
     // 行高亮功能
     highlightExecutingLine(tksOriginalLineNumber) {
@@ -85,9 +85,7 @@ const EditorHighlighting = {
                 hasBlocksContainer: !!this.blocksContainer
             });
         }
-    }
-
-
+    },
     
     highlightErrorLine(tksOriginalLineNumber) {
         window.rLog('收到错误高亮请求 - TKS原始行号:', tksOriginalLineNumber, '当前模式:', this.currentMode);
@@ -137,9 +135,8 @@ const EditorHighlighting = {
                 hasBlocksContainer: !!this.blocksContainer
             });
         }
-    }
-
-       
+    },
+    
     clearExecutionHighlight() {
         window.rLog('清除执行高亮');
         this.currentHighlightedLine = null; // 重置当前高亮行号
@@ -183,9 +180,8 @@ const EditorHighlighting = {
         }
         
         window.rLog('已清除所有高亮');
-    }
-
-       
+    },
+    
     // 块模式高亮功能
     highlightExecutingBlock(commandIndex, type) {
         window.rLog('块模式高亮请求:', commandIndex, type, '容器存在:', !!this.blocksContainer);
@@ -258,9 +254,7 @@ const EditorHighlighting = {
         } else {
             window.rLog('无效的块索引:', commandIndex, '有效范围: 1-' + blocks.length);
         }
-    }
-
-
+    },
     
     addLineHighlight(lineNumber, type) {
         window.rLog('添加行高亮:', lineNumber, type);
@@ -325,9 +319,8 @@ const EditorHighlighting = {
         window.rLog('文本高亮已添加到:', targetContainer.className);
         window.rLog('高亮div样式:', highlightDiv.style.cssText);
         window.rLog('高亮div实际父元素:', highlightDiv.parentElement);
-    }
-
-       
+    },
+    
     setTestRunning(isRunning, clearHighlight = false) {
         window.rLog('设置测试运行状态:', isRunning, '清除高亮:', clearHighlight, '当前模式:', this.currentMode);
         this.isTestRunning = isRunning;
@@ -354,3 +347,19 @@ const EditorHighlighting = {
 
 // 导出到全局
 window.EditorHighlighting = EditorHighlighting;
+
+// 记录模块加载（延迟到 rLog 可用时）
+if (window.rLog) {
+    window.rLog('✅ EditorHighlighting 模块已加载，包含方法:', Object.keys(EditorHighlighting));
+    window.rLog('检查 setTestRunning 方法:', {
+        exists: 'setTestRunning' in EditorHighlighting,
+        type: typeof EditorHighlighting.setTestRunning
+    });
+} else {
+    // 如果 rLog 还不可用，使用 console.log
+    console.log('✅ EditorHighlighting 模块已加载，包含方法:', Object.keys(EditorHighlighting));
+    console.log('检查 setTestRunning 方法:', {
+        exists: 'setTestRunning' in EditorHighlighting,
+        type: typeof EditorHighlighting.setTestRunning
+    });
+}

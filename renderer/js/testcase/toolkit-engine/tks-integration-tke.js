@@ -147,9 +147,24 @@ class TKSScriptRunnerTKE {
         this.updateRunButton(true);
         
         // 3. 更新状态栏为运行中
-        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
-            window.AppGlobals.codeEditor.setTestRunning(true);
-            window.rLog('✓ 状态栏已设置为运行中');
+        if (window.AppGlobals.codeEditor) {
+            if (typeof window.AppGlobals.codeEditor.setTestRunning === 'function') {
+                window.AppGlobals.codeEditor.setTestRunning(true);
+                window.rLog('✓ 状态栏已设置为运行中');
+            } else {
+                window.rWarn('编辑器存在但 setTestRunning 方法不可用', {
+                    editorType: window.AppGlobals.codeEditor.constructor.name,
+                    hasMethod: typeof window.AppGlobals.codeEditor.setTestRunning
+                });
+                // 尝试直接获取活动编辑器
+                if (window.EditorManager) {
+                    const activeEditor = window.EditorManager.getActiveEditor();
+                    if (activeEditor && typeof activeEditor.setTestRunning === 'function') {
+                        activeEditor.setTestRunning(true);
+                        window.rLog('✓ 通过直接访问活动编辑器设置状态栏');
+                    }
+                }
+            }
         } else {
             window.rWarn('编辑器不可用，无法设置状态栏');
         }
@@ -159,6 +174,7 @@ class TKSScriptRunnerTKE {
             window.TestcaseController.ScreenModeManager.setTestRunning(true);
         }
         
+        let executionSuccess = false;
         try {
             // 获取项目路径
             let projectPath = window.AppGlobals.getCurrentProjectPath();
@@ -174,8 +190,11 @@ class TKSScriptRunnerTKE {
             window.TestcaseController.ConsoleManager.addLog('获取当前设备屏幕...', 'info');
             await this.captureInitialScreen(deviceId, projectPath);
             
-            // 步骤3: 开始执行TKE脚本，带实时回调
-            await this.executeScriptWithRealTimeCallbacks(scriptPath, projectPath, deviceId);
+            // 步骤3: 逐行执行脚本
+            await this.executeScriptLineByLine(scriptPath, projectPath, deviceId);
+            
+            // 执行成功
+            executionSuccess = true;
             
         } catch (error) {
             window.rError('执行脚本时出错:', error);
@@ -188,11 +207,23 @@ class TKSScriptRunnerTKE {
             this.updateRunButton(false);
             
             // 恢复编辑器交互状态和状态栏
-            if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
+            if (window.AppGlobals.codeEditor) {
                 window.rLog('TKS集成: 恢复编辑器交互状态和状态栏');
-                // 第二个参数true表示清除高亮（成功完成时）
-                const clearHighlight = !error; // 如果没有错误则清除高亮
-                window.AppGlobals.codeEditor.setTestRunning(false, clearHighlight);
+                // 成功执行则清除高亮，失败则保持错误高亮
+                const clearHighlight = executionSuccess;
+                
+                if (typeof window.AppGlobals.codeEditor.setTestRunning === 'function') {
+                    window.AppGlobals.codeEditor.setTestRunning(false, clearHighlight);
+                } else {
+                    // 尝试直接获取活动编辑器
+                    if (window.EditorManager) {
+                        const activeEditor = window.EditorManager.getActiveEditor();
+                        if (activeEditor && typeof activeEditor.setTestRunning === 'function') {
+                            activeEditor.setTestRunning(false, clearHighlight);
+                            window.rLog('✓ 通过直接访问活动编辑器恢复状态');
+                        }
+                    }
+                }
             }
             
             // 恢复屏幕模式切换功能
@@ -200,6 +231,164 @@ class TKSScriptRunnerTKE {
                 window.TestcaseController.ScreenModeManager.setTestRunning(false);
             }
         }
+    }
+    
+    /**
+     * 逐行执行脚本 - 新的执行方式
+     */
+    async executeScriptLineByLine(scriptPath, projectPath, deviceId) {
+        window.rLog('📋 开始逐行执行脚本');
+        
+        // 先解析脚本获取所有步骤
+        const parseResult = await this.parseScript(scriptPath);
+        if (!parseResult || !parseResult.success || !parseResult.steps || parseResult.steps.length === 0) {
+            throw new Error('脚本解析失败或没有可执行的步骤');
+        }
+        
+        const steps = parseResult.steps;
+        window.TestcaseController.ConsoleManager.addLog(`准备执行 ${steps.length} 个步骤`, 'info');
+        
+        // 逐个执行每个步骤
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            const stepNum = i + 1;
+            
+            try {
+                // 1. 高亮当前要执行的行
+                this.highlightExecutingStep(i);
+                
+                // 2. 在控制台显示正在执行的步骤
+                window.TestcaseController.ConsoleManager.addLog(
+                    `🚀 [步骤 ${stepNum}/${steps.length}] ${step.command}`, 
+                    'info'
+                );
+                
+                // 3. 执行单个步骤
+                await this.executeSingleStep(step, deviceId, projectPath, i);
+                
+                // 4. 步骤执行成功，更新截图
+                await this.refreshDeviceScreenAfterStep(stepNum);
+                
+                // 5. 记录步骤完成
+                window.TestcaseController.ConsoleManager.addLog(
+                    `✅ [步骤 ${stepNum}] 执行成功`, 
+                    'success'
+                );
+                
+                // 6. 等待一下让用户看到执行效果
+                await this.delay(500);
+                
+            } catch (error) {
+                // 步骤执行失败
+                window.rError(`步骤 ${stepNum} 执行失败:`, error);
+                window.TestcaseController.ConsoleManager.addLog(
+                    `❌ [步骤 ${stepNum}] 执行失败: ${error.message}`, 
+                    'error'
+                );
+                
+                // 高亮错误行
+                this.highlightErrorStep(i);
+                
+                // 抛出错误停止执行
+                throw error;
+            }
+        }
+        
+        // 所有步骤执行完成
+        window.TestcaseController.ConsoleManager.addLog('=== 脚本执行完成 ===', 'success');
+        window.NotificationModule.showNotification('脚本执行成功', 'success');
+    }
+    
+    /**
+     * 解析脚本文件
+     */
+    async parseScript(scriptPath) {
+        const { spawn } = require('child_process');
+        
+        return new Promise((resolve, reject) => {
+            const child = spawn(this.tkeAdapter.tkeExecutable, ['parser', 'parse', scriptPath]);
+            
+            let stdout = '';
+            let stderr = '';
+            
+            child.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+            
+            child.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+            
+            child.on('close', (code) => {
+                if (code === 0) {
+                    try {
+                        const result = JSON.parse(stdout);
+                        resolve(result);
+                    } catch (e) {
+                        reject(new Error('解析结果失败'));
+                    }
+                } else {
+                    reject(new Error(stderr || '脚本解析失败'));
+                }
+            });
+        });
+    }
+    
+    /**
+     * 执行单个步骤
+     */
+    async executeSingleStep(step, deviceId, projectPath, stepIndex) {
+        const { spawn } = require('child_process');
+        
+        // 构建单个步骤的脚本内容
+        const singleStepScript = `步骤:\n    ${step.command}`;
+        
+        // 使用 TKE 的 run content 命令来执行单个步骤
+        const args = [
+            '--device', deviceId,
+            '--project', projectPath,
+            'run', 'content', singleStepScript
+        ];
+        
+        return new Promise((resolve, reject) => {
+            const child = spawn(this.tkeAdapter.tkeExecutable, args);
+            
+            let stdout = '';
+            let stderr = '';
+            
+            child.stdout.on('data', (data) => {
+                const output = data.toString();
+                stdout += output;
+                
+                // 输出执行日志
+                const lines = output.split('\n');
+                for (const line of lines) {
+                    const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
+                    if (cleanLine) {
+                        window.TestcaseController.ConsoleManager.addLog(cleanLine, 'info');
+                    }
+                }
+            });
+            
+            child.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+            
+            child.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    reject(new Error(stderr || `步骤执行失败，退出码: ${code}`));
+                }
+            });
+        });
+    }
+    
+    /**
+     * 延迟函数
+     */
+    async delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
     
     /**
@@ -219,158 +408,7 @@ class TKSScriptRunnerTKE {
         }
     }
     
-    /**
-     * 执行脚本带实时回调 - 直接使用TKE执行，不通过adapter
-     */
-    async executeScriptWithRealTimeCallbacks(scriptPath, projectPath, deviceId) {
-        window.rLog('📋 开始TKE脚本执行，项目路径:', projectPath, '设备:', deviceId);
-        
-        // 直接调用TKE执行脚本
-        const args = [
-            '--device', deviceId,
-            '-v',
-            '--project', projectPath,
-            'run', 'script', scriptPath
-        ];
-        
-        return new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            const child = spawn(this.tkeAdapter.tkeExecutable, args);
-            this.currentProcess = child;
-            
-            let stdout = '';
-            let stderr = '';
-            let currentStep = -1;
-            let totalSteps = 0;
-            
-            // 处理标准输出
-            child.stdout.on('data', (data) => {
-                const output = data.toString();
-                stdout += output;
-                
-                // 解析实时输出
-                const lines = output.split('\n');
-                for (const line of lines) {
-                    // 移除ANSI颜色代码
-                    const cleanLine = line.replace(/\x1b\[[0-9;]*m/g, '');
-                    const trimmed = cleanLine.trim();
-                    if (!trimmed) continue;
-                    
-                    // 输出所有日志到控制台UI
-                    window.TestcaseController.ConsoleManager.addLog(trimmed, 'info');
-                    
-                    // 步骤执行检测
-                    const stepMatch = trimmed.match(/执行步骤\s+(\d+)\/(\d+):\s*(.+)/);
-                    if (stepMatch) {
-                        const stepNum = parseInt(stepMatch[1]);
-                        totalSteps = parseInt(stepMatch[2]);
-                        const stepDesc = stepMatch[3];
-                        
-                        // 标记上一个步骤完成
-                        if (currentStep >= 0) {
-                            this.onStepComplete(currentStep, true);
-                        }
-                        
-                        currentStep = stepNum - 1;
-                        this.onStepStart(currentStep, stepDesc, totalSteps);
-                    }
-                    
-                    // UI状态已捕获 - 刷新截图
-                    if (trimmed.includes('UI状态已捕获并保存到workarea')) {
-                        this.refreshDeviceScreenAfterStep();
-                    }
-                    
-                    // 错误检测
-                    if (trimmed.includes('ERROR') || trimmed.includes('失败') || trimmed.includes('错误')) {
-                        if (currentStep >= 0) {
-                            this.onStepComplete(currentStep, false, trimmed);
-                        }
-                    }
-                }
-            });
-            
-            // 处理标准错误
-            child.stderr.on('data', (data) => {
-                const output = data.toString();
-                stderr += output;
-                window.TestcaseController.ConsoleManager.addLog(output, 'error');
-            });
-            
-            // 处理进程退出
-            child.on('close', (code) => {
-                this.currentProcess = null;
-                
-                // 标记最后一个步骤完成
-                if (currentStep >= 0) {
-                    const success = code === 0;
-                    this.onStepComplete(currentStep, success, success ? null : stderr);
-                }
-                
-                // 清除代码高亮
-                this.clearExecutionHighlight();
-                
-                const result = {
-                    success: code === 0,
-                    totalSteps: totalSteps,
-                    successfulSteps: code === 0 ? totalSteps : Math.max(0, currentStep),
-                    error: code === 0 ? null : stderr || 'TKE执行失败'
-                };
-                
-                if (code === 0) {
-                    window.TestcaseController.ConsoleManager.addLog('=== 脚本执行完成 ===', 'success');
-                    window.NotificationModule.showNotification('脚本执行成功', 'success');
-                } else {
-                    window.TestcaseController.ConsoleManager.addLog('=== 脚本执行失败 ===', 'error');
-                    window.NotificationModule.showNotification('脚本执行失败', 'error');
-                }
-                
-                resolve(result);
-            });
-            
-            // 处理启动错误
-            child.on('error', (error) => {
-                this.currentProcess = null;
-                window.TestcaseController.ConsoleManager.addLog(`TKE启动失败: ${error.message}`, 'error');
-                reject(error);
-            });
-        });
-    }
     
-    /**
-     * 步骤开始回调
-     */
-    onStepStart(stepIndex, stepDesc, totalSteps) {
-        window.rLog(`📍 步骤 ${stepIndex + 1}/${totalSteps} 开始: ${stepDesc}`);
-        
-        // 在控制台显示当前执行步骤
-        window.TestcaseController.ConsoleManager.addLog(
-            `🚀 [步骤 ${stepIndex + 1}/${totalSteps}] ${stepDesc}`, 
-            'info'
-        );
-        
-        // 高亮当前执行步骤的代码行
-        this.highlightExecutingStep(stepIndex);
-    }
-    
-    /**
-     * 步骤完成回调
-     */
-    onStepComplete(stepIndex, success, error = null) {
-        const status = success ? '✅' : '❌';
-        const level = success ? 'success' : 'error';
-        let message = `${status} [步骤 ${stepIndex + 1}] 完成`;
-        
-        if (error) {
-            message += ` - ${error}`;
-            // 如果失败，将该行高亮为红色
-            this.highlightErrorStep(stepIndex);
-        }
-        
-        window.TestcaseController.ConsoleManager.addLog(message, level);
-        
-        // 步骤完成后刷新设备截图
-        this.refreshDeviceScreenAfterStep(stepIndex + 1);
-    }
     
     /**
      * 高亮正在执行的步骤
@@ -417,27 +455,27 @@ class TKSScriptRunnerTKE {
     }
     
     /**
-     * 步骤完成后刷新设备截图
+     * 步骤完成后刷新设备截图 (同步版本)
      */
-    refreshDeviceScreenAfterStep(stepNum = null) {
+    async refreshDeviceScreenAfterStep(stepNum = null) {
         const message = stepNum ? `📸 步骤${stepNum}完成，刷新设备截图...` : '📸 刷新设备截图...';
         window.rLog(message);
         
-        // 延迟一点时间确保设备状态稳定后再截图
-        setTimeout(async () => {
-            try {
-                if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                    await window.DeviceScreenManagerModule.refreshDeviceScreen();
-                    const successMsg = stepNum ? `✓ 设备截图已更新 (步骤 ${stepNum} 完成)` : '✓ 设备截图已更新';
-                    window.TestcaseController.ConsoleManager.addLog(successMsg, 'info');
-                } else {
-                    window.rWarn('设备屏幕管理器不可用');
-                }
-            } catch (error) {
-                window.rError('刷新设备截图失败:', error);
-                window.TestcaseController.ConsoleManager.addLog(`⚠ 刷新截图失败: ${error.message}`, 'warning');
+        // 等待一点时间确保设备状态稳定后再截图
+        await this.delay(800);
+        
+        try {
+            if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
+                await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                const successMsg = stepNum ? `✓ 设备截图已更新 (步骤 ${stepNum} 完成)` : '✓ 设备截图已更新';
+                window.TestcaseController.ConsoleManager.addLog(successMsg, 'info');
+            } else {
+                window.rWarn('设备屏幕管理器不可用');
             }
-        }, 800); // 800ms延迟确保设备状态稳定
+        } catch (error) {
+            window.rError('刷新设备截图失败:', error);
+            window.TestcaseController.ConsoleManager.addLog(`⚠ 刷新截图失败: ${error.message}`, 'warning');
+        }
     }
 
 
@@ -462,10 +500,21 @@ class TKSScriptRunnerTKE {
         this.updateRunButton(false);
         
         // 恢复编辑器交互状态和状态栏
-        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.setTestRunning) {
+        if (window.AppGlobals.codeEditor) {
             window.rLog('TKSScriptRunnerTKE: 恢复编辑器交互状态和状态栏');
             // 停止执行时保持错误高亮显示，不清除高亮
-            window.AppGlobals.codeEditor.setTestRunning(false, false);
+            if (typeof window.AppGlobals.codeEditor.setTestRunning === 'function') {
+                window.AppGlobals.codeEditor.setTestRunning(false, false);
+            } else {
+                // 尝试直接获取活动编辑器
+                if (window.EditorManager) {
+                    const activeEditor = window.EditorManager.getActiveEditor();
+                    if (activeEditor && typeof activeEditor.setTestRunning === 'function') {
+                        activeEditor.setTestRunning(false, false);
+                        window.rLog('✓ 通过直接访问活动编辑器恢复状态（停止执行）');
+                    }
+                }
+            }
         }
         
         // 恢复屏幕模式切换功能

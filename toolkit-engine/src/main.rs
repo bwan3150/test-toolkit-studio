@@ -461,18 +461,22 @@ async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
     match action {
         ParserCommands::Parse { script_path } => {
             let script = parser.parse_file(&script_path)?;
-            println!("脚本解析成功:");
-            println!("  用例ID: {}", script.case_id);
-            println!("  脚本名: {}", script.script_name);
-            println!("  详情数: {}", script.details.len());
-            println!("  步骤数: {}", script.steps.len());
             
-            if !script.steps.is_empty() {
-                println!("\n步骤列表:");
-                for (i, step) in script.steps.iter().enumerate() {
-                    println!("  {}. {} (行号: {})", i + 1, step.raw, step.line_number);
-                }
-            }
+            // 输出JSON格式的解析结果
+            let json_output = serde_json::json!({
+                "success": true,
+                "case_id": script.case_id,
+                "script_name": script.script_name,
+                "details": script.details,
+                "steps": script.steps.iter().map(|step| serde_json::json!({
+                    "command": step.raw,
+                    "line_number": step.line_number,
+                    "command_type": step.command,
+                    "params": step.params
+                })).collect::<Vec<_>>()
+            });
+            
+            println!("{}", serde_json::to_string(&json_output)?);
         }
         ParserCommands::Validate { script_path } => {
             let script = parser.parse_file(&script_path)?;
@@ -593,11 +597,14 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
 async fn handle_adb_command(args: Vec<String>, device_id: Option<String>) -> Result<()> {
     use std::process::Command;
     
-    // 创建静默模式的 AdbManager 来获取 ADB 路径
-    let adb_manager = tke::AdbManager::new_with_verbosity(false)?;
-    
-    // 静默验证 ADB，只有失败时才报错
-    adb_manager.verify_adb_verbose(false)?;
+    // 创建静默模式的 AdbManager 来获取 ADB 路径，不输出任何信息
+    let adb_manager = match tke::AdbManager::new_with_verbosity(false) {
+        Ok(manager) => manager,
+        Err(_) => {
+            // 如果获取ADB失败，直接退出，不输出错误信息
+            std::process::exit(1);
+        }
+    };
     
     // 构建 ADB 命令
     let mut cmd = Command::new(adb_manager.adb_path());
@@ -611,21 +618,17 @@ async fn handle_adb_command(args: Vec<String>, device_id: Option<String>) -> Res
     cmd.args(&args);
     
     // 执行命令并继承标准输入输出（完全透明传递）
+    // 直接传递退出码，不做任何处理
     let status = cmd
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
-        .map_err(|e| TkeError::AdbError(format!("执行 ADB 命令失败: {}", e)))?;
+        .unwrap_or_else(|_| {
+            // 如果执行失败，静默退出
+            std::process::exit(1)
+        });
     
-    // 只有在失败时才返回错误，成功时静默
-    if !status.success() {
-        if let Some(code) = status.code() {
-            return Err(TkeError::AdbError(format!("ADB 命令执行失败，退出码: {}", code)));
-        } else {
-            return Err(TkeError::AdbError("ADB 命令被信号终止".to_string()));
-        }
-    }
-    
-    Ok(())
+    // 直接使用ADB的退出码退出，不做任何额外处理
+    std::process::exit(status.code().unwrap_or(1));
 }

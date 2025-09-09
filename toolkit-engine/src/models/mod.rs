@@ -216,7 +216,7 @@ pub struct DeviceInfo {
 }
 
 // TKS脚本命令类型
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TksCommand {
     Launch,      // 启动
     Close,       // 关闭
@@ -253,7 +253,7 @@ impl TksCommand {
 }
 
 // TKS脚本参数
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TksParam {
     Text(String),           // 纯文本
     Number(i32),            // 数字
