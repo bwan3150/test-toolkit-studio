@@ -566,17 +566,31 @@ class EditorTab {
             window.rError('找不到编辑器容器');
         }
         
-        this.textContentEl = this.editorContainer.querySelector('.text-content');
-        this.lineNumbersEl = this.editorContainer.querySelector('.line-numbers');
-        
-        window.rLog('文本模式DOM元素:', {
-            textContentEl: this.textContentEl,
-            lineNumbersEl: this.lineNumbersEl,
-            statusIndicatorEl: this.statusIndicatorEl
-        });
-        
-        this.setupTextModeListeners();
-        this.updateLineNumbers();
+        // 确保DOM元素在下一个事件循环中被查询，以便HTML完全渲染
+        setTimeout(() => {
+            this.textContentEl = this.editorContainer.querySelector('.text-content');
+            this.lineNumbersEl = this.editorContainer.querySelector('.line-numbers');
+            
+            window.rLog('文本模式DOM元素:', {
+                textContentEl: this.textContentEl,
+                lineNumbersEl: this.lineNumbersEl,
+                statusIndicatorEl: this.statusIndicatorEl,
+                textContentElExists: !!this.textContentEl,
+                lineNumbersElExists: !!this.lineNumbersEl
+            });
+            
+            // 在DOM元素获取后才设置监听器和更新行号
+            if (this.textContentEl && this.lineNumbersEl) {
+                this.setupTextModeListeners();
+                this.updateLineNumbers();
+            } else {
+                window.rError('DOM元素获取失败:', {
+                    textContentEl: !!this.textContentEl,
+                    lineNumbersEl: !!this.lineNumbersEl,
+                    containerHTML: this.editorContainer.innerHTML.substring(0, 200)
+                });
+            }
+        }, 0);
         
         // 更新状态指示器
         this.updateStatusIndicator();
