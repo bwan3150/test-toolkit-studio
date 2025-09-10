@@ -225,6 +225,7 @@ class TKSScriptRunnerTKE {
                 window.rLog('TKS集成: 恢复编辑器交互状态和状态栏');
                 // 成功执行则清除高亮，失败则保持错误高亮
                 const clearHighlight = executionSuccess;
+                window.rLog('执行结果 - executionSuccess:', executionSuccess, 'clearHighlight:', clearHighlight);
                 
                 if (typeof window.AppGlobals.codeEditor.setTestRunning === 'function') {
                     window.AppGlobals.codeEditor.setTestRunning(false, clearHighlight);
@@ -233,6 +234,7 @@ class TKSScriptRunnerTKE {
                     if (window.EditorManager) {
                         const activeEditor = window.EditorManager.getActiveEditor();
                         if (activeEditor && typeof activeEditor.setTestRunning === 'function') {
+                            window.rLog('通过EditorManager设置 - clearHighlight:', clearHighlight);
                             activeEditor.setTestRunning(false, clearHighlight);
                             window.rLog('✓ 通过直接访问活动编辑器恢复状态');
                         }
@@ -409,10 +411,31 @@ class TKSScriptRunnerTKE {
                 window.rLog('stdout:', stdout);
                 window.rLog('stderr:', stderr);
                 
-                if (code === 0) {
+                // 检查输出中是否包含失败信息
+                const outputText = stdout + stderr;
+                const hasError = outputText.includes('脚本执行失败') || 
+                                outputText.includes('步骤执行失败') ||
+                                outputText.includes('ERROR') ||
+                                outputText.includes('元素未找到') ||
+                                outputText.includes('_FAIL.json');
+                
+                if (code === 0 && !hasError) {
                     resolve();
                 } else {
-                    const errorMsg = stderr || stdout || `步骤执行失败，退出码: ${code}`;
+                    // 从输出中提取错误信息
+                    let errorMsg = `步骤执行失败，退出码: ${code}`;
+                    
+                    // 尝试从输出中提取具体的错误信息
+                    const errorMatch = outputText.match(/元素未找到[：:]\s*([^\n]+)/);
+                    if (errorMatch) {
+                        errorMsg = errorMatch[1].trim();
+                    } else if (outputText.includes('脚本执行失败')) {
+                        const failMatch = outputText.match(/脚本执行失败[：:]\s*[^-\n]*[-]\s*([^\n]+)/);
+                        if (failMatch) {
+                            errorMsg = failMatch[1].trim();
+                        }
+                    }
+                    
                     reject(new Error(errorMsg));
                 }
             });

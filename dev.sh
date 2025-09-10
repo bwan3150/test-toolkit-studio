@@ -8,7 +8,7 @@ pkill -f "electron" 2>/dev/null || true
 sleep 1
 
 if [ ! -d "node_modules" ]; then
-    echo "Dependacy installing..."
+    echo "Dependency installing..."
     npm install
 fi
 
