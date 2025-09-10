@@ -456,6 +456,42 @@ function registerAdbHandlers(app) {
     }
   });
 
+  // 执行通用ADB命令(现在adb直接运行不再使用了, 为了兼容渲染进程, 这个handler同样转发命令给tke运行内封adb)
+  ipcMain.handle('execute-adb-command', async (event, deviceId, args) => {
+    try {
+      console.log('执行ADB命令:', args, '设备:', deviceId);
+      
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, args);
+      
+      return { 
+        success: true, 
+        output: stdout,
+        error: stderr
+      };
+    } catch (error) {
+      console.error('执行ADB命令失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 执行TKE ADB命令（通过TKE）
+  ipcMain.handle('execute-tke-adb-command', async (event, deviceId, args) => {
+    try {
+      console.log('执行TKE ADB命令:', args, '设备:', deviceId);
+      
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, args);
+      
+      return { 
+        success: true, 
+        output: stdout,
+        error: stderr
+      };
+    } catch (error) {
+      console.error('执行TKE ADB命令失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 批量执行ADB命令
   ipcMain.handle('adb-batch-commands', async (event, commands, deviceId = null) => {
     const results = [];
