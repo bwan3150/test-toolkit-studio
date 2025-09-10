@@ -8,9 +8,9 @@ pkill -f "electron" 2>/dev/null || true
 sleep 1
 
 if [ ! -d "node_modules" ]; then
-    echo "安装依赖中..."
+    echo "Dependacy installing..."
     npm install
 fi
 
-echo "正在启动App..."
+echo "Running Toolkit Studio(Electron) in Dev..."
 npm start
