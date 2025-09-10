@@ -176,8 +176,11 @@ class TKSScriptRunnerTKE {
         
         let executionSuccess = false;
         try {
+            window.rLog('开始执行脚本流程...');
+            
             // 获取项目路径
             let projectPath = window.AppGlobals.getCurrentProjectPath();
+            window.rLog('项目路径:', projectPath);
             
             if (!projectPath) {
                 throw new Error('无法获取项目路径。请确保已打开一个项目');
@@ -188,9 +191,15 @@ class TKSScriptRunnerTKE {
             
             // 步骤2: 先获取当前屏幕截图到项目目录展示
             window.TestcaseController.ConsoleManager.addLog('获取当前设备屏幕...', 'info');
-            await this.captureInitialScreen(deviceId, projectPath);
+            
+            try {
+                await this.captureInitialScreen(deviceId, projectPath);
+            } catch (screenError) {
+                window.rError('获取初始截图失败，继续执行:', screenError);
+            }
             
             // 步骤3: 逐行执行脚本
+            window.rLog('准备执行逐行脚本, scriptPath:', scriptPath);
             await this.executeScriptLineByLine(scriptPath, projectPath, deviceId);
             
             // 执行成功
@@ -198,7 +207,12 @@ class TKSScriptRunnerTKE {
             
         } catch (error) {
             window.rError('执行脚本时出错:', error);
-            window.TestcaseController.ConsoleManager.addLog(`执行出错: ${error.message}`, 'error');
+            window.rError('错误类型:', typeof error);
+            window.rError('错误详情:', JSON.stringify(error));
+            window.rError('错误堆栈:', error.stack);
+            
+            const errorMessage = error.message || '未知错误';
+            window.TestcaseController.ConsoleManager.addLog(`执行出错: ${errorMessage}`, 'error');
             throw error;
         } finally {
             // 步骤4: 恢复正常模式
@@ -322,10 +336,13 @@ class TKSScriptRunnerTKE {
             child.on('close', (code) => {
                 if (code === 0) {
                     try {
-                        const result = JSON.parse(stdout);
+                        const result = JSON.parse(stdout.trim());
+                        window.rLog('📋 脚本解析成功:', result);
                         resolve(result);
                     } catch (e) {
-                        reject(new Error('解析结果失败'));
+                        window.rError('JSON解析错误:', e);
+                        window.rError('原始输出:', stdout);
+                        reject(new Error(`解析结果失败: ${e.message}`));
                     }
                 } else {
                     reject(new Error(stderr || '脚本解析失败'));
@@ -340,8 +357,13 @@ class TKSScriptRunnerTKE {
     async executeSingleStep(step, deviceId, projectPath, stepIndex) {
         const { spawn } = require('child_process');
         
-        // 构建单个步骤的脚本内容
-        const singleStepScript = `步骤:\n    ${step.command}`;
+        // 构建单个步骤的脚本内容，需要包含完整的脚本格式
+        const singleStepScript = `用例: 临时测试
+脚本名: temp_script
+步骤:
+    ${step.command}`;
+        
+        window.rLog(`执行单步骤 ${stepIndex + 1}:`, step.command);
         
         // 使用 TKE 的 run content 命令来执行单个步骤
         const args = [
@@ -349,6 +371,8 @@ class TKSScriptRunnerTKE {
             '--project', projectPath,
             'run', 'content', singleStepScript
         ];
+        
+        window.rLog('TKE执行命令:', this.tkeAdapter.tkeExecutable, args);
         
         return new Promise((resolve, reject) => {
             const child = spawn(this.tkeAdapter.tkeExecutable, args);
@@ -372,13 +396,24 @@ class TKSScriptRunnerTKE {
             
             child.stderr.on('data', (data) => {
                 stderr += data.toString();
+                window.rError('TKE stderr:', data.toString());
+            });
+            
+            child.on('error', (error) => {
+                window.rError('TKE进程错误:', error);
+                reject(error);
             });
             
             child.on('close', (code) => {
+                window.rLog(`TKE进程退出，退出码: ${code}`);
+                window.rLog('stdout:', stdout);
+                window.rLog('stderr:', stderr);
+                
                 if (code === 0) {
                     resolve();
                 } else {
-                    reject(new Error(stderr || `步骤执行失败，退出码: ${code}`));
+                    const errorMsg = stderr || stdout || `步骤执行失败，退出码: ${code}`;
+                    reject(new Error(errorMsg));
                 }
             });
         });
@@ -414,16 +449,21 @@ class TKSScriptRunnerTKE {
      * 高亮正在执行的步骤
      */
     highlightExecutingStep(stepIndex) {
-        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.highlightExecutingLine) {
-            const lineNumber = this.getLineNumberFromStepIndex(stepIndex);
-            if (lineNumber > 0) {
-                window.rLog('🎯 高亮执行步骤:', stepIndex, '行号:', lineNumber);
-                window.AppGlobals.codeEditor.highlightExecutingLine(lineNumber);
+        try {
+            if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.highlightExecutingLine) {
+                const lineNumber = this.getLineNumberFromStepIndex(stepIndex);
+                if (lineNumber > 0) {
+                    window.rLog('🎯 高亮执行步骤:', stepIndex, '行号:', lineNumber);
+                    window.AppGlobals.codeEditor.highlightExecutingLine(lineNumber);
+                } else {
+                    window.rError('获取行号失败，无法高亮步骤:', stepIndex);
+                }
             } else {
-                window.rError('获取行号失败，无法高亮步骤:', stepIndex);
+                window.rError('编辑器不可用或缺少高亮方法');
             }
-        } else {
-            window.rError('编辑器不可用或缺少高亮方法');
+        } catch (highlightError) {
+            window.rError('高亮执行步骤时出错:', highlightError);
+            // 高亮失败不应该阻止脚本执行流程
         }
     }
     
@@ -431,16 +471,21 @@ class TKSScriptRunnerTKE {
      * 高亮出错的步骤（红色）
      */
     highlightErrorStep(stepIndex) {
-        if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.highlightErrorLine) {
-            const lineNumber = this.getLineNumberFromStepIndex(stepIndex);
-            if (lineNumber > 0) {
-                window.rLog('❌ 高亮错误步骤:', stepIndex, '行号:', lineNumber);
-                window.AppGlobals.codeEditor.highlightErrorLine(lineNumber);
+        try {
+            if (window.AppGlobals.codeEditor && window.AppGlobals.codeEditor.highlightErrorLine) {
+                const lineNumber = this.getLineNumberFromStepIndex(stepIndex);
+                if (lineNumber > 0) {
+                    window.rLog('❌ 高亮错误步骤:', stepIndex, '行号:', lineNumber);
+                    window.AppGlobals.codeEditor.highlightErrorLine(lineNumber);
+                } else {
+                    window.rError('获取错误步骤行号失败:', stepIndex);
+                }
             } else {
-                window.rError('获取错误步骤行号失败:', stepIndex);
+                window.rError('编辑器不可用或缺少错误高亮方法');
             }
-        } else {
-            window.rError('编辑器不可用或缺少错误高亮方法');
+        } catch (highlightError) {
+            window.rError('高亮错误步骤时出错:', highlightError);
+            // 高亮失败不应该阻止脚本执行流程
         }
     }
     

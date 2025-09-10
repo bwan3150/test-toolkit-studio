@@ -675,52 +675,37 @@
         }
 
         /**
-         * 解析脚本输出信息 - 支持新的JSON格式
+         * 解析脚本输出信息 - 纯JSON格式
          */
         parseScriptOutput(output) {
             try {
-                // 尝试解析JSON输出（新格式）
-                // 需要提取JSON部分，因为可能包含日志信息
-                const lines = output.split('\n');
-                let jsonLine = '';
+                // 直接解析纯JSON输出
+                const jsonResult = JSON.parse(output.trim());
                 
-                for (const line of lines) {
-                    const trimmed = line.trim();
-                    if (trimmed.startsWith('{') && trimmed.includes('"success"')) {
-                        jsonLine = trimmed;
-                        break;
-                    }
-                }
+                // 转换为兼容的格式
+                const result = {
+                    success: jsonResult.success,
+                    caseId: jsonResult.case_id,
+                    scriptName: jsonResult.script_name,
+                    detailsCount: Object.keys(jsonResult.details || {}).length,
+                    stepsCount: jsonResult.steps ? jsonResult.steps.length : 0,
+                    steps: jsonResult.steps ? jsonResult.steps.map((step, index) => ({
+                        index: index,
+                        command: step.command,
+                        lineNumber: step.line_number,
+                        commandType: step.command_type,
+                        params: step.params
+                    })) : []
+                };
                 
-                if (jsonLine) {
-                    const jsonResult = JSON.parse(jsonLine);
-                    
-                    // 转换为兼容的格式
-                    const result = {
-                        success: jsonResult.success,
-                        caseId: jsonResult.case_id,
-                        scriptName: jsonResult.script_name,
-                        detailsCount: Object.keys(jsonResult.details || {}).length,
-                        stepsCount: jsonResult.steps ? jsonResult.steps.length : 0,
-                        steps: jsonResult.steps ? jsonResult.steps.map((step, index) => ({
-                            index: index,
-                            command: step.command,
-                            lineNumber: step.line_number,
-                            commandType: step.command_type,
-                            params: step.params
-                        })) : []
-                    };
-                    
-                    window.rLog('🎯 JSON解析成功:', result);
-                    return result;
-                }
+                window.rLog('🎯 JSON解析成功:', result);
+                return result;
                 
             } catch (error) {
                 window.rWarn('JSON解析失败，尝试使用旧格式解析:', error);
+                // 回退到旧格式解析（兼容性）
+                return this.parseScriptOutputLegacy(output);
             }
-            
-            // 回退到旧格式解析（兼容性）
-            return this.parseScriptOutputLegacy(output);
         }
 
         /**

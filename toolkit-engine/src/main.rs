@@ -247,14 +247,12 @@ async fn main() -> Result<()> {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         });
         
-        // 对于Fetcher命令，将日志输出到stderr以避免干扰JSON输出
-        let is_fetcher_command = matches!(cli.command, Commands::Fetcher { .. });
+        // 对于Fetcher和Parser命令，将日志输出到stderr以避免干扰JSON输出
+        let is_json_output_command = matches!(cli.command, Commands::Fetcher { .. } | Commands::Parser { .. });
         
-        if is_fetcher_command {
-            eprintln!("项目路径: {:?}", project_path);
-            if let Some(ref device) = cli.device {
-                eprintln!("目标设备: {}", device);
-            }
+        if is_json_output_command {
+            // Parser和Fetcher命令完全静默，不输出任何日志
+            // 以确保stdout只有纯JSON输出
         } else {
             info!("项目路径: {:?}", project_path);
             if let Some(ref device) = cli.device {
