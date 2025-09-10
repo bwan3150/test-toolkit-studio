@@ -211,10 +211,17 @@ enum RunCommands {
     },
     /// 运行项目中所有脚本
     Project,
-    /// 运行指定内容的脚本
+    /// 运行指定内容的脚本 (Toolkit Studio专用，返回JSON)
     Content {
         /// 脚本内容
         content: String,
+    },
+    /// 执行单个步骤 (Toolkit Studio专用)
+    Step {
+        /// 脚本内容
+        content: String,
+        /// 要执行的步骤索引 (0开始)
+        step_index: usize,
     },
 }
 
@@ -523,7 +530,7 @@ fn get_xml_content(xml_content: Option<String>) -> Result<String> {
 }
 
 async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_id: Option<String>) -> Result<()> {
-    let mut runner = Runner::new(project_path, device_id);
+    let mut runner = Runner::new(project_path.clone(), device_id.clone());
     
     match action {
         RunCommands::Script { script_path } => {
@@ -578,13 +585,73 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
             }
         }
         RunCommands::Content { content } => {
-            println!("开始执行脚本内容...");
+            // 为 Toolkit Studio 专用：返回 JSON 格式的结果
             let result = runner.run_script_content(&content).await?;
             
-            println!("执行结果: {}", if result.success { "成功 ✓" } else { "失败 ✗" });
-            if let Some(ref error) = result.error {
-                println!("错误信息: {}", error);
+            // 输出 JSON 格式的执行结果
+            let json_result = serde_json::json!({
+                "success": result.success,
+                "case_id": result.case_id,
+                "script_name": result.script_name,
+                "start_time": result.start_time,
+                "end_time": result.end_time,
+                "error": result.error,
+                "steps": result.steps.iter().map(|step| serde_json::json!({
+                    "index": step.index,
+                    "command": step.command,
+                    "success": step.success,
+                    "error": step.error,
+                    "duration_ms": step.duration_ms
+                })).collect::<Vec<_>>()
+            });
+            
+            println!("{}", serde_json::to_string(&json_result)?);
+        }
+        RunCommands::Step { content, step_index } => {
+            // 为 Toolkit Studio 专用：执行单个步骤并返回 JSON 结果
+            let script = runner.parser.parse(&content)?;
+            
+            if step_index >= script.steps.len() {
+                let error_result = serde_json::json!({
+                    "success": false,
+                    "error": format!("步骤索引超出范围: {} >= {}", step_index, script.steps.len()),
+                    "step_index": step_index
+                });
+                println!("{}", serde_json::to_string(&error_result)?);
+                return Ok(());
             }
+            
+            let step = &script.steps[step_index];
+            
+            // 初始化解释器
+            let mut interpreter = tke::ScriptInterpreter::new(
+                project_path.clone(),
+                device_id
+            )?;
+            
+            let start_time = std::time::Instant::now();
+            
+            // 执行单个步骤
+            let step_result = match interpreter.interpret_step(step).await {
+                Ok(()) => serde_json::json!({
+                    "success": true,
+                    "step_index": step_index,
+                    "command": step.raw,
+                    "line_number": step.line_number,
+                    "duration_ms": start_time.elapsed().as_millis(),
+                    "error": null
+                }),
+                Err(e) => serde_json::json!({
+                    "success": false,
+                    "step_index": step_index,
+                    "command": step.raw,
+                    "line_number": step.line_number,
+                    "duration_ms": start_time.elapsed().as_millis(),
+                    "error": e.to_string()
+                })
+            };
+            
+            println!("{}", serde_json::to_string(&step_result)?);
         }
     }
     

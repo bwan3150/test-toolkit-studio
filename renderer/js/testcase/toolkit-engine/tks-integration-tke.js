@@ -255,6 +255,10 @@ class TKSScriptRunnerTKE {
     async executeScriptLineByLine(scriptPath, projectPath, deviceId) {
         window.rLog('📋 开始逐行执行脚本');
         
+        // 读取原始脚本内容
+        const fs = window.nodeRequire('fs').promises;
+        this.rawContent = await fs.readFile(scriptPath, 'utf8');
+        
         // 先解析脚本获取所有步骤
         const parseResult = await this.parseScript(scriptPath);
         if (!parseResult || !parseResult.success || !parseResult.steps || parseResult.steps.length === 0) {
@@ -359,19 +363,13 @@ class TKSScriptRunnerTKE {
     async executeSingleStep(step, deviceId, projectPath, stepIndex) {
         const { spawn } = require('child_process');
         
-        // 构建单个步骤的脚本内容，需要包含完整的脚本格式
-        const singleStepScript = `用例: 临时测试
-脚本名: temp_script
-步骤:
-    ${step.command}`;
-        
         window.rLog(`执行单步骤 ${stepIndex + 1}:`, step.command);
         
-        // 使用 TKE 的 run content 命令来执行单个步骤
+        // 使用 TKE 的 run step 命令来执行单个步骤 - 返回JSON结果
         const args = [
             '--device', deviceId,
             '--project', projectPath,
-            'run', 'content', singleStepScript
+            'run', 'step', this.rawContent, stepIndex.toString()
         ];
         
         window.rLog('TKE执行命令:', this.tkeAdapter.tkeExecutable, args);
@@ -411,31 +409,49 @@ class TKSScriptRunnerTKE {
                 window.rLog('stdout:', stdout);
                 window.rLog('stderr:', stderr);
                 
-                // 检查输出中是否包含失败信息
-                const outputText = stdout + stderr;
-                const hasError = outputText.includes('脚本执行失败') || 
-                                outputText.includes('步骤执行失败') ||
-                                outputText.includes('ERROR') ||
-                                outputText.includes('元素未找到') ||
-                                outputText.includes('_FAIL.json');
-                
-                if (code === 0 && !hasError) {
-                    resolve();
-                } else {
-                    // 从输出中提取错误信息
-                    let errorMsg = `步骤执行失败，退出码: ${code}`;
-                    
-                    // 尝试从输出中提取具体的错误信息
-                    const errorMatch = outputText.match(/元素未找到[：:]\s*([^\n]+)/);
-                    if (errorMatch) {
-                        errorMsg = errorMatch[1].trim();
-                    } else if (outputText.includes('脚本执行失败')) {
-                        const failMatch = outputText.match(/脚本执行失败[：:]\s*[^-\n]*[-]\s*([^\n]+)/);
-                        if (failMatch) {
-                            errorMsg = failMatch[1].trim();
+                if (code === 0) {
+                    // 尝试解析 JSON 输出
+                    try {
+                        const result = JSON.parse(stdout.trim());
+                        if (result.success) {
+                            resolve(result);
+                        } else {
+                            const errorMsg = result.error || '步骤执行失败';
+                            reject(new Error(errorMsg));
+                        }
+                    } catch (parseError) {
+                        // 如果无法解析JSON，回退到原始逻辑
+                        window.rError('无法解析TKE JSON输出:', parseError);
+                        
+                        // 检查输出中是否包含失败信息
+                        const outputText = stdout + stderr;
+                        const hasError = outputText.includes('脚本执行失败') || 
+                                        outputText.includes('步骤执行失败') ||
+                                        outputText.includes('ERROR') ||
+                                        outputText.includes('元素未找到') ||
+                                        outputText.includes('_FAIL.json');
+                        
+                        if (hasError) {
+                            // 从输出中提取错误信息
+                            let errorMsg = '步骤执行失败';
+                            
+                            const errorMatch = outputText.match(/元素未找到[：:]\s*([^\n]+)/);
+                            if (errorMatch) {
+                                errorMsg = errorMatch[1].trim();
+                            } else if (outputText.includes('脚本执行失败')) {
+                                const failMatch = outputText.match(/脚本执行失败[：:]\s*[^-\n]*[-]\s*([^\n]+)/);
+                                if (failMatch) {
+                                    errorMsg = failMatch[1].trim();
+                                }
+                            }
+                            
+                            reject(new Error(errorMsg));
+                        } else {
+                            resolve();
                         }
                     }
-                    
+                } else {
+                    const errorMsg = stderr || stdout || `步骤执行失败，退出码: ${code}`;
                     reject(new Error(errorMsg));
                 }
             });
