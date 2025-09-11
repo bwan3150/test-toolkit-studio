@@ -118,6 +118,33 @@
             }
         }
         
+        // 上传日志到服务器
+        async uploadLogs() {
+            try {
+                // 准备日志数据
+                const logData = {
+                    timestamp: new Date().toISOString(),
+                    platform: process.platform,
+                    nodeVersion: process.versions.node,
+                    electronVersion: process.versions.electron,
+                    resourcesPath: process.resourcesPath || 'N/A',
+                    dirname: __dirname,
+                    logs: this.logBuffer
+                };
+                
+                // 通过 IPC 调用主进程上传日志
+                const result = await ipcRenderer.invoke('upload-logs', logData);
+                
+                return result;
+            } catch (error) {
+                console.error('上传日志失败:', error);
+                return { 
+                    success: false, 
+                    message: `上传失败: ${error.message}` 
+                };
+            }
+        }
+        
         // 获取日志缓存
         getLogs() {
             return this.logBuffer;

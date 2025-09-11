@@ -15,6 +15,7 @@ const { registerLogcatHandlers } = require('./handlers/logcat-handlers');
 const { registerAuthHandlers } = require('./handlers/auth-handlers');
 const { registerProjectHandlers } = require('./handlers/project-handlers');
 const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/ios-handlers');
+const { registerLogHandlers } = require('./handlers/log-handlers');
 
 // 全局变量
 let mainWindow;
@@ -216,6 +217,9 @@ function registerAllHandlers() {
     
     console.log('注册其他处理器...');
     registerMiscHandlers(app);
+    
+    console.log('注册日志处理器...');
+    registerLogHandlers(app);
     
     console.log('注册Logcat处理器...');
     registerLogcatHandlers(app, mainWindow);

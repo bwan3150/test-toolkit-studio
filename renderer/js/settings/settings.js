@@ -51,36 +51,34 @@ function initializeSettingsPage() {
         }
     });
     
-    // 导出日志按钮
+    // 上传日志按钮
     if (exportLogsBtn) {
         exportLogsBtn.addEventListener('click', async () => {
             try {
                 // 禁用按钮防止重复点击
                 exportLogsBtn.disabled = true;
                 
-                // 显示正在导出状态
+                // 显示正在上传状态
                 if (exportLogStatus) {
-                    exportLogStatus.textContent = 'Exporting...';
+                    exportLogStatus.textContent = 'Uploading...';
                     exportLogStatus.style.display = 'inline';
                 }
                 
-                // 调用日志导出功能
-                const result = await window.RendererLogger.exportLogs();
+                // 调用日志上传功能
+                const result = await window.RendererLogger.uploadLogs();
                 
                 if (result.success) {
                     if (exportLogStatus) {
                         exportLogStatus.textContent = 'Succeed';
                         exportLogStatus.style.color = '#4ec9b0';
                     }
-                    window.NotificationModule.showNotification('Log Export Successfully', 'success');
+                    window.NotificationModule.showNotification('Log Upload Successfully', 'success');
                 } else {
                     if (exportLogStatus) {
                         exportLogStatus.textContent = result.message || 'Failed';
                         exportLogStatus.style.color = '#f48771';
                     }
-                    if (result.message !== 'Cancelled') {
-                        window.NotificationModule.showNotification(result.message || 'Failed', 'error');
-                    }
+                    window.NotificationModule.showNotification(result.message || 'Failed', 'error');
                 }
                 
                 // 3秒后隐藏状态
@@ -91,7 +89,7 @@ function initializeSettingsPage() {
                 }, 3000);
                 
             } catch (error) {
-                window.rError('导出日志失败:', error);
+                window.rError('上传日志失败:', error);
                 window.NotificationModule.showNotification(`Failed: ${error.message}`, 'error');
                 if (exportLogStatus) {
                     exportLogStatus.textContent = 'Failed';
