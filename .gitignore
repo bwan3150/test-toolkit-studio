@@ -5,6 +5,7 @@ package-lock.json
 dist/
 out/
 toolkit-engine/target/
+toolkit-ai-tester/target/
 
 # build的配置文件留着
 build/*
