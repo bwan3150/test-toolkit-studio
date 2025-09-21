@@ -100,11 +100,15 @@ async function refreshDeviceScreen() {
         const error = result.error || '未知错误';
         window.rError('截图失败:', error);
         window.NotificationModule.showNotification(`截图失败: ${error}`, 'error');
-        
-        // 显示错误信息在屏幕占位符上
+
+        // 隐藏截图，显示默认占位符（不显示错误文字）
+        const img = document.getElementById('deviceScreenshot');
+        if (img) {
+            img.style.display = 'none';
+        }
         const placeholder = document.querySelector('.screen-placeholder');
         if (placeholder) {
-            placeholder.textContent = `截图失败: ${error}`;
+            placeholder.textContent = 'No device connected';  // 恢复默认文本
             placeholder.style.display = 'block';
         }
     }
