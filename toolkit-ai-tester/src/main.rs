@@ -11,7 +11,6 @@ mod core;
 mod models;
 mod ocr;
 mod tke_integration;
-mod test_rig;
 
 use core::{test_controller::AiTestController, Result, AiTesterError};
 use models::{TestCase, TestResult};
