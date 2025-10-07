@@ -45,8 +45,7 @@ impl Recognizer {
         
         let locators: HashMap<String, Locator> = serde_json::from_str(&content)
             .map_err(|e| TkeError::JsonError(e))?;
-        
-        info!("加载了 {} 个locator定义", locators.len());
+
         Ok(locators)
     }
     

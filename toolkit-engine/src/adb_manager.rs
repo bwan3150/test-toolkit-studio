@@ -17,42 +17,26 @@ pub struct AdbManager {
 impl AdbManager {
     /// 创建新的 ADB 管理器，自动处理内置或系统 ADB
     pub fn new() -> Result<Self> {
-        Self::new_with_verbosity(true)
-    }
-    
-    /// 创建新的 ADB 管理器，支持控制详细输出
-    pub fn new_with_verbosity(verbose: bool) -> Result<Self> {
         if HAS_BUNDLED_ADB {
-            if verbose {
-                info!("使用内置 ADB: {}", ADB_BINARY_NAME);
-            }
-            Self::create_with_bundled_adb_verbose(verbose)
+            Self::create_with_bundled_adb_silent()
         } else {
-            if verbose {
-                info!("使用系统 ADB");
-            }
-            Self::create_with_system_adb_verbose(verbose)
+            Self::create_with_system_adb_silent()
         }
     }
     
-    /// 使用内置 ADB 创建管理器（兼容性方法）
-    fn create_with_bundled_adb() -> Result<Self> {
-        Self::create_with_bundled_adb_verbose(true)
-    }
-    
-    /// 使用内置 ADB 创建管理器，支持控制详细输出
-    fn create_with_bundled_adb_verbose(verbose: bool) -> Result<Self> {
+    /// 使用内置 ADB 创建管理器（静默模式）
+    fn create_with_bundled_adb_silent() -> Result<Self> {
         // 获取临时目录来存放提取的 ADB
         let temp_dir = std::env::temp_dir().join("tke_adb");
-        
+
         // 确保临时目录存在
         if !temp_dir.exists() {
             fs::create_dir_all(&temp_dir)
                 .map_err(|e| TkeError::AdbError(format!("无法创建临时目录: {}", e)))?;
         }
-        
+
         let adb_path = temp_dir.join(ADB_BINARY_NAME);
-        
+
         // 检查是否需要重新提取 ADB
         let should_extract = if adb_path.exists() {
             // 检查文件大小是否匹配
@@ -63,16 +47,12 @@ impl AdbManager {
         } else {
             true
         };
-        
+
         if should_extract {
-            if verbose {
-                debug!("提取内置 ADB 到: {:?}", adb_path);
-            }
-            
             // 写入 ADB 二进制文件
             let mut file = fs::File::create(&adb_path)
                 .map_err(|e| TkeError::AdbError(format!("无法创建 ADB 文件: {}", e)))?;
-            
+
             file.write_all(EMBEDDED_ADB_BINARY)
                 .map_err(|e| TkeError::AdbError(format!("无法写入 ADB 文件: {}", e)))?;
             
@@ -87,38 +67,21 @@ impl AdbManager {
                 fs::set_permissions(&adb_path, perms)
                     .map_err(|e| TkeError::AdbError(format!("无法设置执行权限: {}", e)))?;
             }
-            
-            if verbose {
-                info!("✓ ADB 已提取到: {:?} ({} KB)", adb_path, EMBEDDED_ADB_BINARY.len() / 1024);
-            }
-        } else {
-            if verbose {
-                debug!("使用已存在的 ADB: {:?}", adb_path);
-            }
         }
-        
+
         Ok(Self {
             adb_path,
             is_bundled: true,
         })
     }
-    
-    /// 使用系统 ADB 创建管理器（兼容性方法）
-    fn create_with_system_adb() -> Result<Self> {
-        Self::create_with_system_adb_verbose(true)
-    }
-    
-    /// 使用系统 ADB 创建管理器，支持控制详细输出
-    fn create_with_system_adb_verbose(verbose: bool) -> Result<Self> {
+
+    /// 使用系统 ADB 创建管理器（静默模式）
+    fn create_with_system_adb_silent() -> Result<Self> {
         let adb_path = which::which("adb")
             .map_err(|_| TkeError::AdbError(
                 "系统中未找到 ADB，请确保 ADB 已安装并在 PATH 中".to_string()
             ))?;
-        
-        if verbose {
-            info!("✓ 找到系统 ADB: {:?}", adb_path);
-        }
-        
+
         Ok(Self {
             adb_path,
             is_bundled: false,
@@ -137,28 +100,16 @@ impl AdbManager {
     
     /// 验证 ADB 是否可用
     pub fn verify_adb(&self) -> Result<String> {
-        self.verify_adb_verbose(true)
-    }
-    
-    /// 验证 ADB 是否可用，支持控制详细输出
-    pub fn verify_adb_verbose(&self, verbose: bool) -> Result<String> {
         use std::process::Command;
-        
-        if verbose {
-            debug!("验证 ADB: {:?}", self.adb_path);
-        }
-        
+
         let output = Command::new(&self.adb_path)
             .arg("version")
             .output()
             .map_err(|e| TkeError::AdbError(format!("无法执行 ADB: {}", e)))?;
-        
+
         if output.status.success() {
             let version = String::from_utf8_lossy(&output.stdout);
             let version_line = version.lines().next().unwrap_or("未知版本");
-            if verbose {
-                info!("✓ ADB 验证成功: {}", version_line);
-            }
             Ok(version_line.to_string())
         } else {
             let error = String::from_utf8_lossy(&output.stderr);

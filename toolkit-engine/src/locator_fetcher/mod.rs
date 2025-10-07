@@ -90,8 +90,7 @@ impl LocatorFetcher {
             
             buf.clear();
         }
-        
-        eprintln!("从XML中提取了 {} 个UI元素", elements.len());
+
         Ok(elements)
     }
     

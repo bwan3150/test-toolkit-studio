@@ -13,12 +13,12 @@ pub struct Controller {
 
 impl Controller {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        // 使用 AdbManager 来获取 ADB
+        // 使用 AdbManager 来获取 ADB (静默模式)
         let adb_manager = AdbManager::new()?;
-        
+
         // 验证 ADB 可用性
         adb_manager.verify_adb()?;
-        
+
         Ok(Self {
             device_id,
             adb_manager,
@@ -67,8 +67,7 @@ impl Controller {
         
         // 获取UI树
         self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
-        
-        info!("UI状态已捕获并保存到workarea");
+
         Ok(())
     }
     
@@ -88,8 +87,7 @@ impl Controller {
         
         // 删除设备上的临时文件
         self.run_adb_command(&["shell", "rm", temp_path])?;
-        
-        debug!("截图已保存到: {:?}", output_path);
+
         Ok(())
     }
     
@@ -109,8 +107,7 @@ impl Controller {
         
         // 删除设备上的临时文件
         self.run_adb_command(&["shell", "rm", temp_path])?;
-        
-        debug!("UI树已保存到: {:?}", output_path);
+
         Ok(())
     }
     
@@ -119,8 +116,7 @@ impl Controller {
         let temp_path = "/sdcard/ui_dump.xml";
         
         // 在设备上dump UI - 忽略输出，因为有些设备会返回非标准输出
-        let dump_output = self.run_adb_command_output(&["shell", "uiautomator", "dump", temp_path])?;
-        debug!("uiautomator dump输出: {}", dump_output);
+        let _dump_output = self.run_adb_command_output(&["shell", "uiautomator", "dump", temp_path])?;
         
         // 等待一下让文件写入完成
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -130,20 +126,18 @@ impl Controller {
         
         // 删除设备上的临时文件（忽略错误）
         let _ = self.run_adb_command(&["shell", "rm", temp_path]);
-        
-        debug!("获取UI XML内容，长度: {}", xml_content.len());
+
         Ok(xml_content)
     }
-    
+
     // 指令2: 转发ADB基础指令
-    
+
     // 点击坐标
     pub fn tap(&self, x: i32, y: i32) -> Result<()> {
         self.run_adb_command(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
-        debug!("点击坐标: ({}, {})", x, y);
         Ok(())
     }
-    
+
     // 滑动
     pub fn swipe(&self, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<()> {
         self.run_adb_command(&[
@@ -152,18 +146,16 @@ impl Controller {
             &x2.to_string(), &y2.to_string(),
             &duration_ms.to_string()
         ])?;
-        debug!("滑动: ({}, {}) -> ({}, {}) 持续{}ms", x1, y1, x2, y2, duration_ms);
         Ok(())
     }
-    
+
     // 长按
     pub fn press(&self, x: i32, y: i32, duration_ms: u32) -> Result<()> {
         // 使用swipe模拟长按
         self.swipe(x, y, x, y, duration_ms)?;
-        debug!("长按坐标: ({}, {}) 持续{}ms", x, y, duration_ms);
         Ok(())
     }
-    
+
     // 输入文本
     pub fn input_text(&self, text: &str) -> Result<()> {
         // 转义特殊字符
@@ -171,41 +163,37 @@ impl Controller {
             .replace("\"", "\\\"")
             .replace("'", "\\'")
             .replace(" ", "%s");
-        
+
         self.run_adb_command(&["shell", "input", "text", &escaped])?;
-        debug!("输入文本: {}", text);
         Ok(())
     }
-    
+
     // 按键事件
     pub fn key_event(&self, key_code: &str) -> Result<()> {
         self.run_adb_command(&["shell", "input", "keyevent", key_code])?;
-        debug!("按键事件: {}", key_code);
         Ok(())
     }
-    
+
     // 返回键
     pub fn back(&self) -> Result<()> {
         self.key_event("KEYCODE_BACK")
     }
-    
+
     // 回到主屏
     pub fn home(&self) -> Result<()> {
         self.key_event("KEYCODE_HOME")
     }
-    
+
     // 启动应用
     pub fn launch_app(&self, package: &str, activity: &str) -> Result<()> {
         let component = format!("{}/{}", package, activity);
         self.run_adb_command(&["shell", "am", "start", "-n", &component])?;
-        info!("启动应用: {}", component);
         Ok(())
     }
-    
+
     // 停止应用
     pub fn stop_app(&self, package: &str) -> Result<()> {
         self.run_adb_command(&["shell", "am", "force-stop", package])?;
-        info!("停止应用: {}", package);
         Ok(())
     }
     

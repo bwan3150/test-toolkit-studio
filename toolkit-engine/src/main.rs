@@ -133,12 +133,6 @@ enum ControllerCommands {
     Back,
     /// 主页键
     Home,
-    /// 获取UI XML内容并保存到文件
-    GetXml {
-        /// 输出文件路径（可选，默认为当前目录的ui_dump.xml）
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-    },
 }
 
 #[derive(Subcommand)]
@@ -272,12 +266,19 @@ async fn main() -> Result<()> {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         });
         
-        // 对于Fetcher、Parser和OCR命令，将日志输出到stderr以避免干扰JSON输出
-        let is_json_output_command = matches!(cli.command, Commands::Fetcher { .. } | Commands::Parser { .. } | Commands::Ocr { .. });
+        // 对于输出JSON的命令,完全静默,不输出任何日志
+        // 包括: Fetcher、Parser、OCR、Controller、Recognizer
+        let is_json_output_command = matches!(
+            cli.command,
+            Commands::Fetcher { .. } |
+            Commands::Parser { .. } |
+            Commands::Ocr { .. } |
+            Commands::Controller { .. } |
+            Commands::Recognizer { .. }
+        );
 
         if is_json_output_command {
-            // Parser、Fetcher和OCR命令完全静默，不输出任何日志
-            // 以确保stdout只有纯JSON输出
+            // JSON输出命令完全静默,确保stdout只有纯JSON
         } else {
             info!("项目路径: {:?}", project_path);
             if let Some(ref device) = cli.device {
@@ -320,80 +321,101 @@ async fn main() -> Result<()> {
 
 async fn handle_controller_commands(action: ControllerCommands, device_id: Option<String>) -> Result<()> {
     let controller = Controller::new(device_id)?;
-    
+
     match action {
         ControllerCommands::Devices => {
             let devices = controller.get_devices()?;
-            if devices.is_empty() {
-                println!("没有检测到连接的设备");
-            } else {
-                println!("已连接的设备:");
-                for device in devices {
-                    println!("  - {}", device);
-                }
-            }
+            let json = serde_json::json!({
+                "devices": devices
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Capture => {
             let project_path = std::env::current_dir()
                 .map_err(|e| TkeError::IoError(e))?;
             controller.capture_ui_state(&project_path).await?;
-            println!("UI状态已捕获并保存到workarea");
+
+            let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
+            let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
+
+            let json = serde_json::json!({
+                "success": true,
+                "screenshot": screenshot_path.to_string_lossy(),
+                "xml": xml_path.to_string_lossy()
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Tap { x, y } => {
             controller.tap(x, y)?;
-            println!("已点击坐标: ({}, {})", x, y);
+            let json = serde_json::json!({
+                "success": true,
+                "x": x,
+                "y": y
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Swipe { x1, y1, x2, y2, duration } => {
             controller.swipe(x1, y1, x2, y2, duration)?;
-            println!("已滑动: ({}, {}) -> ({}, {}) 持续{}ms", x1, y1, x2, y2, duration);
+            let json = serde_json::json!({
+                "success": true,
+                "from": {"x": x1, "y": y1},
+                "to": {"x": x2, "y": y2},
+                "duration": duration
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Launch { package, activity } => {
             controller.launch_app(&package, &activity)?;
-            println!("已启动应用: {}/{}", package, activity);
+            let json = serde_json::json!({
+                "success": true,
+                "package": package,
+                "activity": activity
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Stop { package } => {
             controller.stop_app(&package)?;
-            println!("已停止应用: {}", package);
+            let json = serde_json::json!({
+                "success": true,
+                "package": package
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Input { text } => {
             controller.input_text(&text)?;
-            println!("已输入文本: {}", text);
+            let json = serde_json::json!({
+                "success": true,
+                "text": text
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Back => {
             controller.back()?;
-            println!("已按返回键");
+            let json = serde_json::json!({
+                "success": true
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ControllerCommands::Home => {
             controller.home()?;
-            println!("已按主页键");
-        }
-        ControllerCommands::GetXml { output } => {
-            let xml_content = controller.get_ui_xml().await?;
-            
-            // 确定输出文件路径
-            let output_path = output.unwrap_or_else(|| PathBuf::from("ui_dump.xml"));
-            
-            // 保存XML到文件
-            std::fs::write(&output_path, xml_content)?;
-            
-            // 输出成功消息到stdout（不是XML内容）
-            println!("XML已保存到: {}", output_path.display());
+            let json = serde_json::json!({
+                "success": true
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf) -> Result<()> {
     let fetcher = LocatorFetcher::new();
-    
+
     match action {
         FetcherCommands::Extract { xml_path } => {
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
-            println!("从XML文件提取了 {} 个元素:", elements.len());
-            for element in elements {
-                println!("  [{}] {}", element.index, element.to_ai_text());
-            }
+            let json = serde_json::to_string(&elements)?;
+            println!("{}", json);
         }
         FetcherCommands::Current => {
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
@@ -404,28 +426,22 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
                 )));
             }
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
-            println!("从当前UI树提取了 {} 个元素:", elements.len());
-            for element in elements {
-                println!("  [{}] {}", element.index, element.to_ai_text());
-            }
+            let json = serde_json::to_string(&elements)?;
+            println!("{}", json);
         }
         FetcherCommands::Interactive => {
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
             let interactive = fetcher.filter_interactive_elements(&elements);
-            println!("找到 {} 个可交互元素:", interactive.len());
-            for element in interactive {
-                println!("  [{}] {}", element.index, element.to_ai_text());
-            }
+            let json = serde_json::to_string(&interactive)?;
+            println!("{}", json);
         }
         FetcherCommands::Text => {
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
             let text_elements = fetcher.filter_text_elements(&elements);
-            println!("找到 {} 个有文本的元素:", text_elements.len());
-            for element in text_elements {
-                println!("  [{}] {}", element.index, element.to_ai_text());
-            }
+            let json = serde_json::to_string(&text_elements)?;
+            println!("{}", json);
         }
         FetcherCommands::InferScreenSize { xml_content } => {
             let xml = get_xml_content(xml_content)?;
@@ -456,28 +472,46 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
             println!("{}", tree_string);
         }
     }
-    
+
     Ok(())
 }
 
 async fn handle_recognizer_commands(action: RecognizerCommands, project_path: PathBuf) -> Result<()> {
     let recognizer = Recognizer::new(project_path)?;
-    
+
     match action {
         RecognizerCommands::FindXml { locator_name } => {
             let point = recognizer.find_xml_element(&locator_name)?;
-            println!("找到XML元素 '{}' 的位置: ({}, {})", locator_name, point.x, point.y);
+            let json = serde_json::json!({
+                "success": true,
+                "locator": locator_name,
+                "x": point.x,
+                "y": point.y
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         RecognizerCommands::FindImage { locator_name } => {
             let point = recognizer.find_image_element(&locator_name)?;
-            println!("找到图像元素 '{}' 的位置: ({}, {})", locator_name, point.x, point.y);
+            let json = serde_json::json!({
+                "success": true,
+                "locator": locator_name,
+                "x": point.x,
+                "y": point.y
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         RecognizerCommands::FindText { text } => {
             let point = recognizer.find_element_by_text(&text)?;
-            println!("找到文本 '{}' 的位置: ({}, {})", text, point.x, point.y);
+            let json = serde_json::json!({
+                "success": true,
+                "text": text,
+                "x": point.x,
+                "y": point.y
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
     }
-    
+
     Ok(())
 }
 
@@ -506,23 +540,32 @@ async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
         }
         ParserCommands::Validate { script_path } => {
             let script = parser.parse_file(&script_path)?;
-            
+
             // 基本验证
+            let mut warnings = Vec::new();
             if script.case_id.is_empty() {
-                warn!("脚本缺少用例ID");
+                warnings.push("脚本缺少用例ID");
             }
             if script.script_name.is_empty() {
-                warn!("脚本缺少脚本名");
+                warnings.push("脚本缺少脚本名");
             }
             if script.steps.is_empty() {
-                error!("脚本没有定义任何步骤");
+                let json = serde_json::json!({
+                    "valid": false,
+                    "error": "脚本没有定义任何步骤"
+                });
+                println!("{}", serde_json::to_string(&json)?);
                 return Err(TkeError::ScriptParseError("脚本验证失败".to_string()));
             }
-            
-            println!("脚本验证通过 ✓");
-            println!("  用例ID: {}", script.case_id);
-            println!("  脚本名: {}", script.script_name);
-            println!("  步骤数: {}", script.steps.len());
+
+            let json = serde_json::json!({
+                "valid": true,
+                "case_id": script.case_id,
+                "script_name": script.script_name,
+                "steps_count": script.steps.len(),
+                "warnings": warnings
+            });
+            println!("{}", serde_json::to_string(&json)?);
         }
         ParserCommands::Highlight { script_path } => {
             let content = std::fs::read_to_string(&script_path)
@@ -719,8 +762,8 @@ async fn handle_ocr_command(
 async fn handle_adb_command(args: Vec<String>, device_id: Option<String>) -> Result<()> {
     use std::process::Command;
     
-    // 创建静默模式的 AdbManager 来获取 ADB 路径，不输出任何信息
-    let adb_manager = match tke::AdbManager::new_with_verbosity(false) {
+    // 创建 AdbManager 来获取 ADB 路径，静默模式
+    let adb_manager = match tke::AdbManager::new() {
         Ok(manager) => manager,
         Err(_) => {
             // 如果获取ADB失败，直接退出，不输出错误信息

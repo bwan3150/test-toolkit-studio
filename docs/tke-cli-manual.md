@@ -87,11 +87,7 @@ brew install tesseract tesseract-lang
 ```bash
 ❯ tke controller devices
 
-2025-10-07T05:46:08.740363Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio"
-2025-10-07T05:46:08.740832Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:46:08.753638Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-已连接的设备:
-  - c9dc8614
+{"devices":["c9dc8614"]}
 ```
 
 ### 截图和获取 UI 树
@@ -99,14 +95,10 @@ brew install tesseract tesseract-lang
 ```bash
 ❯ tke controller capture
 
-2025-10-07T05:47:42.517753Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:47:42.517794Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:47:42.533826Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-2025-10-07T05:47:45.331022Z  INFO tke::controller: UI状态已捕获并保存到workarea
-UI状态已捕获并保存到workarea
+{"screenshot":"/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_5/workarea/current_screenshot.png","success":true,"xml":"/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_5/workarea/current_ui_tree.xml"}
 ```
 
-生成文件：
+覆盖生成文件：
 - `workarea/current_screenshot.png`
 - `workarea/current_ui_tree.xml`
 
@@ -115,21 +107,13 @@ UI状态已捕获并保存到workarea
 ```bash
 ❯ tke controller tap 400 2000
 
-2025-10-07T05:49:33.387028Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:49:33.387067Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:49:33.392784Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:49:33.772870Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-已点击坐标: (400, 2000)
+{"success":true,"x":400,"y":2000}
 ```
 
 ```bash
 ❯ tke controller swipe 500 1500 500 500 --duration 300
 
-2025-10-07T05:50:01.490219Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:50:01.490261Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:50:01.496548Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:50:01.737351Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-已滑动: (500, 1500) -> (500, 500) 持续300ms
+{"duration":300,"from":{"x":500,"y":1500},"success":true,"to":{"x":500,"y":500}}
 ```
 
 ### 应用控制
@@ -137,23 +121,13 @@ UI状态已捕获并保存到workarea
 ```bash
 ❯ tke controller launch com.android.settings .Settings
 
-2025-10-07T05:50:16.612699Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:50:16.612740Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:50:16.619972Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:50:16.853855Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-2025-10-07T05:50:16.989574Z  INFO tke::controller: 启动应用: com.android.settings/.Settings
-已启动应用: com.android.settings/.Settings
+{"activity":".Settings","package":"com.android.settings","success":true}
 ```
 
 ```bash
 ❯ tke controller stop com.android.settings
 
-2025-10-07T05:50:40.921384Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:50:40.921420Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:50:40.932036Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:50:41.164778Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-2025-10-07T05:50:41.243136Z  INFO tke::controller: 停止应用: com.android.settings
-已停止应用: com.android.settings
+{"package":"com.android.settings","success":true}
 ```
 
 ### 输入框输入
@@ -161,11 +135,7 @@ UI状态已捕获并保存到workarea
 ```bash
 ❯ tke controller input "Hello World"
 
-2025-10-07T05:50:59.930393Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:50:59.930442Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:50:59.943884Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:51:00.182662Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-已输入文本: Hello World
+{"success":true,"text":"Hello World"}
 ```
 
 ### 系统级控制
@@ -173,29 +143,13 @@ UI状态已捕获并保存到workarea
 ```bash
 ❯ tke controller back
 
-2025-10-07T05:51:26.704710Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:51:26.704758Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:51:26.710941Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:51:26.948042Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-已按返回键
+{"success":true}
 ```
 
 ```bash
 ❯ tke controller home
 
-2025-10-07T05:51:38.795980Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"
-2025-10-07T05:51:38.796020Z  INFO tke::adb_manager: 使用内置 ADB: adb
-2025-10-07T05:51:38.802224Z  INFO tke::adb_manager: ✓ ADB 已提取到: "/var/folders/pq/l00t670n1fs_74g7bt9m460r0000gn/T/tke_adb/adb" (15212 KB)
-2025-10-07T05:51:39.034565Z  INFO tke::adb_manager: ✓ ADB 验证成功: Android Debug Bridge version 1.0.41
-已按主页键
-```
-
-### 获取 UI XML
-
-```bash
-❯ tke controller get-xml --output my_ui.xml
-
-XML已保存到: my_ui.xml
+{"success":true}
 ```
 
 ---
@@ -209,8 +163,7 @@ XML已保存到: my_ui.xml
 ```bash
 ❯ tke fetcher extract-ui-elements < workarea/current_ui_tree.xml
 
-从XML中提取了 35 个UI元素
-[{"index":0,"class_name":"android.widget.FrameLayout","bounds":{"x1":0,"y1":0,"x2":1080,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[0]"},{"index":1,"class_name":"android.widget.HorizontalScrollView","bounds":{"x1":36,"y1":475,"x2":1032,"y2":625},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":true,"selected":false,"enabled":true,"xpath":"//node[1]"},{"index":2,"class_name":"android.view.View","bounds":{"x1":36,"y1":475,"x2":269,"y2":625},"text":null,"content_desc":"All Devices\nTab 1 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":true,"enabled":true,"xpath":"//node[2]"},{"index":3,"class_name":"android.view.View","bounds":{"x1":269,"y1":475,"x2":472,"y2":625},"text":null,"content_desc":"Network\nTab 2 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[3]"},{"index":4,"class_name":"android.view.View","bounds":{"x1":472,"y1":475,"x2":639,"y2":625},"text":null,"content_desc":"Switch\nTab 3 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[4]"},{"index":5,"class_name":"android.view.View","bounds":{"x1":639,"y1":475,"x2":810,"y2":625},"text":null,"content_desc":"Sensor\nTab 4 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[5]"},{"index":6,"class_name":"android.view.View","bounds":{"x1":810,"y1":475,"x2":943,"y2":625},"text":null,"content_desc":"Lock\nTab 5 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[6]"},{"index":7,"class_name":"android.view.View","bounds":{"x1":943,"y1":475,"x2":1032,"y2":625},"text":null,"content_desc":"Other\nTab 6 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[7]"},{"index":8,"class_name":"android.widget.ScrollView","bounds":{"x1":0,"y1":96,"x2":1080,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":true,"selected":false,"enabled":true,"xpath":"//node[8]"},{"index":9,"class_name":"android.widget.ImageView","bounds":{"x1":48,"y1":143,"x2":740,"y2":230},"text":null,"content_desc":"Test New User第十八次","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[9]"},{"index":10,"class_name":"android.widget.ImageView","bounds":{"x1":924,"y1":132,"x2":1032,"y2":240},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[10]"},{"index":11,"class_name":"android.view.View","bounds":{"x1":0,"y1":306,"x2":1080,"y2":439},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":true,"selected":false,"enabled":true,"xpath":"//node[11]"},{"index":12,"class_name":"android.widget.ImageView","bounds":{"x1":48,"y1":306,"x2":564,"y2":439},"text":null,"content_desc":"Turn Off All Lights","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[12]"},{"index":13,"class_name":"android.widget.ImageView","bounds":{"x1":564,"y1":306,"x2":1080,"y2":439},"text":null,"content_desc":"Turn Off All Lights","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[13]"},{"index":14,"class_name":"android.view.View","bounds":{"x1":0,"y1":625,"x2":1080,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[14]"},{"index":15,"class_name":"android.view.View","bounds":{"x1":36,"y1":625,"x2":525,"y2":983},"text":null,"content_desc":"Other Aircon 3","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[15]"},{"index":16,"class_name":"android.widget.ImageView","bounds":{"x1":351,"y1":659,"x2":525,"y2":809},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[16]"},{"index":17,"class_name":"android.view.View","bounds":{"x1":555,"y1":625,"x2":1044,"y2":983},"text":null,"content_desc":"Other Aircon 5","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[17]"},{"index":18,"class_name":"android.widget.ImageView","bounds":{"x1":870,"y1":659,"x2":1044,"y2":809},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[18]"},{"index":19,"class_name":"android.view.View","bounds":{"x1":36,"y1":1013,"x2":525,"y2":1370},"text":null,"content_desc":"Other Aircon 1","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[19]"},{"index":20,"class_name":"android.widget.ImageView","bounds":{"x1":351,"y1":1046,"x2":525,"y2":1196},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[20]"},{"index":21,"class_name":"android.view.View","bounds":{"x1":555,"y1":1013,"x2":1044,"y2":1370},"text":null,"content_desc":"Other Aircon 2","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[21]"},{"index":22,"class_name":"android.widget.ImageView","bounds":{"x1":870,"y1":1046,"x2":1044,"y2":1196},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[22]"},{"index":23,"class_name":"android.widget.ImageView","bounds":{"x1":36,"y1":1400,"x2":525,"y2":1757},"text":null,"content_desc":"Motion Sensor","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[23]"},{"index":24,"class_name":"android.widget.ImageView","bounds":{"x1":555,"y1":1400,"x2":1044,"y2":1757},"text":null,"content_desc":"Network Multimode Gateway 12","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[24]"},{"index":25,"class_name":"android.view.View","bounds":{"x1":36,"y1":1787,"x2":525,"y2":2144},"text":null,"content_desc":"Other Aircon 4","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[25]"},{"index":26,"class_name":"android.widget.ImageView","bounds":{"x1":351,"y1":1820,"x2":525,"y2":1970},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[26]"},{"index":27,"class_name":"android.view.View","bounds":{"x1":555,"y1":1787,"x2":1044,"y2":2144},"text":null,"content_desc":"Offline\nSensor Outdoor Siren Alarm ","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[27]"},{"index":28,"class_name":"android.widget.ImageView","bounds":{"x1":36,"y1":2174,"x2":525,"y2":2208},"text":null,"content_desc":"Lock K9","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[28]"},{"index":29,"class_name":"android.view.View","bounds":{"x1":555,"y1":2174,"x2":1044,"y2":2208},"text":null,"content_desc":"开关3","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[29]"},{"index":30,"class_name":"android.widget.ImageView","bounds":{"x1":870,"y1":2207,"x2":1044,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[30]"},{"index":31,"class_name":"android.widget.ImageView","bounds":{"x1":55,"y1":1973,"x2":244,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[31]"},{"index":32,"class_name":"android.widget.ImageView","bounds":{"x1":316,"y1":1973,"x2":504,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[32]"},{"index":33,"class_name":"android.widget.ImageView","bounds":{"x1":576,"y1":1973,"x2":764,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[33]"},{"index":34,"class_name":"android.widget.ImageView","bounds":{"x1":836,"y1":1973,"x2":1025,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[34]"}]
+[{"index":0,"class_name":"android.widget.FrameLayout","bounds":{"x1":0,"y1":0,"x2":1080,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[0]"},{"index":1,"class_name":"android.view.View","bounds":{"x1":0,"y1":0,"x2":1080,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[1]"},{"index":2,"class_name":"android.widget.ImageView","bounds":{"x1":425,"y1":270,"x2":1032,"y2":450},"text":null,"content_desc":"Add Device","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[2]"},{"index":3,"class_name":"android.widget.ImageView","bounds":{"x1":425,"y1":453,"x2":1032,"y2":633},"text":null,"content_desc":"Add Tap-to-Run","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[3]"},{"index":4,"class_name":"android.widget.ImageView","bounds":{"x1":425,"y1":636,"x2":1032,"y2":816},"text":null,"content_desc":"Add Automation","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[4]"},{"index":5,"class_name":"android.widget.ImageView","bounds":{"x1":425,"y1":834,"x2":1032,"y2":1014},"text":null,"content_desc":"Find Your Device","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[5]"},{"index":6,"class_name":"android.widget.HorizontalScrollView","bounds":{"x1":36,"y1":475,"x2":1032,"y2":625},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":true,"selected":false,"enabled":true,"xpath":"//node[6]"},{"index":7,"class_name":"android.view.View","bounds":{"x1":36,"y1":475,"x2":208,"y2":625},"text":null,"content_desc":"All Devices\nTab 1 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[7]"},{"index":8,"class_name":"android.view.View","bounds":{"x1":208,"y1":475,"x2":411,"y2":625},"text":null,"content_desc":"Network\nTab 2 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[8]"},{"index":9,"class_name":"android.view.View","bounds":{"x1":411,"y1":475,"x2":578,"y2":625},"text":null,"content_desc":"Switch\nTab 3 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[9]"},{"index":10,"class_name":"android.view.View","bounds":{"x1":578,"y1":475,"x2":746,"y2":625},"text":null,"content_desc":"Sensor\nTab 4 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":true,"enabled":true,"xpath":"//node[10]"},{"index":11,"class_name":"android.view.View","bounds":{"x1":746,"y1":475,"x2":878,"y2":625},"text":null,"content_desc":"Lock\nTab 5 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[11]"},{"index":12,"class_name":"android.view.View","bounds":{"x1":878,"y1":475,"x2":1032,"y2":625},"text":null,"content_desc":"Other\nTab 6 of 6","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[12]"},{"index":13,"class_name":"android.widget.ScrollView","bounds":{"x1":0,"y1":96,"x2":1080,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":true,"selected":false,"enabled":true,"xpath":"//node[13]"},{"index":14,"class_name":"android.widget.ImageView","bounds":{"x1":48,"y1":143,"x2":740,"y2":230},"text":null,"content_desc":"Test New User第十八次","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[14]"},{"index":15,"class_name":"android.widget.ImageView","bounds":{"x1":924,"y1":132,"x2":1032,"y2":240},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[15]"},{"index":16,"class_name":"android.view.View","bounds":{"x1":0,"y1":306,"x2":1080,"y2":439},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":false,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":true,"selected":false,"enabled":true,"xpath":"//node[16]"},{"index":17,"class_name":"android.widget.ImageView","bounds":{"x1":48,"y1":306,"x2":564,"y2":439},"text":null,"content_desc":"Turn Off All Lights","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[17]"},{"index":18,"class_name":"android.widget.ImageView","bounds":{"x1":564,"y1":306,"x2":1080,"y2":439},"text":null,"content_desc":"Turn Off All Lights","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[18]"},{"index":19,"class_name":"android.view.View","bounds":{"x1":36,"y1":625,"x2":525,"y2":983},"text":null,"content_desc":"Offline\nSensor Outdoor Siren Alarm ","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[19]"},{"index":20,"class_name":"android.view.View","bounds":{"x1":555,"y1":625,"x2":1044,"y2":983},"text":null,"content_desc":"Presence\nKonec Human Presence Sensor ","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[20]"},{"index":21,"class_name":"android.widget.ImageView","bounds":{"x1":36,"y1":1013,"x2":525,"y2":1370},"text":null,"content_desc":"Sensor Contact Sensor 8","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[21]"},{"index":22,"class_name":"android.widget.ImageView","bounds":{"x1":555,"y1":1013,"x2":1044,"y2":1370},"text":null,"content_desc":"Sensor Indoor Siren Alarm 1","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[22]"},{"index":23,"class_name":"android.widget.ImageView","bounds":{"x1":36,"y1":1400,"x2":525,"y2":1757},"text":null,"content_desc":"Sensor TH Sensor ","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[23]"},{"index":24,"class_name":"android.widget.ImageView","bounds":{"x1":555,"y1":1400,"x2":1044,"y2":1757},"text":null,"content_desc":"Sensor Human Sensor 2nd Gen ","resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[24]"},{"index":25,"class_name":"android.widget.ImageView","bounds":{"x1":55,"y1":1973,"x2":244,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[25]"},{"index":26,"class_name":"android.widget.ImageView","bounds":{"x1":316,"y1":1973,"x2":504,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[26]"},{"index":27,"class_name":"android.widget.ImageView","bounds":{"x1":576,"y1":1973,"x2":764,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[27]"},{"index":28,"class_name":"android.widget.ImageView","bounds":{"x1":836,"y1":1973,"x2":1025,"y2":2208},"text":null,"content_desc":null,"resource_id":null,"hint":null,"clickable":true,"checkable":false,"checked":false,"focusable":true,"focused":false,"scrollable":false,"selected":false,"enabled":true,"xpath":"//node[28]"}]
 ```
 
 ### 推断屏幕尺寸
@@ -226,30 +179,34 @@ XML已保存到: my_ui.xml
 ```bash
 ❯ tke fetcher generate-tree-string < workarea/current_ui_tree.xml
 
-从XML中提取了 35 个UI元素
 UI Tree Structure:
 =================
 
 [0] FrameLayout [focusable]
-    [1] HorizontalScrollView [focusable]
-    [2] View (All Devices
+[1] View [clickable, focusable]
+    [2] ImageView (Add Device) [clickable, focusable]
+    [3] ImageView (Add Tap-to-Run) [clickable, focusable]
+    [4] ImageView (Add Automation) [clickable, focusable]
+    [5] ImageView (Find Your Device) [clickable, focusable]
+    [6] HorizontalScrollView [focusable]
+    [7] View (All Devices
 Tab 1 of 6) [clickable, focusable]
-    [3] View (Network
+    [8] View (Network
 Tab 2 of 6) [clickable, focusable]
-    [4] View (Switch
+    [9] View (Switch
 Tab 3 of 6) [clickable, focusable]
-    [5] View (Sensor
+    [10] View (Sensor
 Tab 4 of 6) [clickable, focusable]
-    [6] View (Lock
+    [11] View (Lock
 Tab 5 of 6) [clickable, focusable]
-    [7] View (Other
+    [12] View (Other
 Tab 6 of 6) [clickable, focusable]
-[8] ScrollView [focusable]
-    [9] ImageView (Test New User第十八次) [clickable, focusable]
-    [10] ImageView [clickable, focusable]
-    [11] View [focusable]
-    [12] ImageView (Turn Off All Lights) [clickable, focusable]
-    [13] ImageView (Turn Off All Lights) [clickable, focusable]                                                         [14] View [focusable]                                                                                                       [15] View (Other Aircon 3) [clickable, focusable]                                                                       [16] ImageView [clickable, focusable]                                                                                   [17] View (Other Aircon 5) [clickable, focusable]                                                                       [18] ImageView [clickable, focusable]                                                                                   [19] View (Other Aircon 1) [clickable, focusable]                                                                       [20] ImageView [clickable, focusable]                                                                                   [21] View (Other Aircon 2) [clickable, focusable]                                                                       [22] ImageView [clickable, focusable]                                                                                   [23] ImageView (Motion Sensor) [clickable, focusable]                                                                   [24] ImageView (Network Multimode Gateway 12) [clickable, focusable]                                                    [25] View (Other Aircon 4) [clickable, focusable]                                                                       [26] ImageView [clickable, focusable]                                                                                   [27] View (Offline                                                                                                  Sensor Outdoor Siren Alarm ) [clickable, focusable]                                                                         [28] ImageView (Lock K9) [clickable, focusable]                                                                         [29] View (开关3) [clickable, focusable]                                                                                [30] ImageView [clickable, focusable]                                                                                   [31] ImageView [clickable, focusable]                                                                                   [32] ImageView [clickable, focusable]                                                                                   [33] ImageView [clickable, focusable]                                                                                   [34] ImageView [clickable, focusable]
+[13] ScrollView [focusable]
+    [14] ImageView (Test New User第十八次) [clickable, focusable]
+    [15] ImageView [clickable, focusable]
+    [16] View [focusable]
+    [17] ImageView (Turn Off All Lights) [clickable, focusable]
+    [18] ImageView (Turn Off All Lights) [clickable, focusable]                                                             [19] View (Offline                                                                                                  Sensor Outdoor Siren Alarm ) [clickable, focusable]                                                                         [20] View (Presence                                                                                                 Konec Human Presence Sensor ) [clickable, focusable]                                                                        [21] ImageView (Sensor Contact Sensor 8) [clickable, focusable]                                                         [22] ImageView (Sensor Indoor Siren Alarm 1) [clickable, focusable]                                                     [23] ImageView (Sensor TH Sensor ) [clickable, focusable]                                                               [24] ImageView (Sensor Human Sensor 2nd Gen ) [clickable, focusable]                                                    [25] ImageView [clickable, focusable]                                                                                   [26] ImageView [clickable, focusable]                                                                                   [27] ImageView [clickable, focusable]                                                                                   [28] ImageView [clickable, focusable]
 ```
 
 ---
@@ -261,38 +218,33 @@ Tab 6 of 6) [clickable, focusable]
 ```bash
 ❯ tke recognizer find-text "Test"
 
-2025-10-07T05:54:43.013889Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"                                                                                                          2025-10-07T05:54:43.014560Z  INFO tke::recognizer: 加载了 0 个locator定义                                               从XML中提取了 35 个UI元素                                                                                               找到文本 'Test' 的位置: (394, 186)
+{"success":true,"text":"Test","x":394,"y":186}
 
 
 ///// 失败则是
 ❯ tke recognizer find-text "xxx"
 
-2025-10-07T05:56:30.311774Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"                                                                                                          2025-10-07T05:56:30.311891Z  INFO tke::recognizer: 加载了 0 个locator定义                                               从XML中提取了 35 个UI元素
 Error: ElementNotFound("未找到包含文本 'xxx' 的元素")
 ```
 
 ```bash
 (这里需要elements.json里已经保存了一个叫plus的xml元素)
 ❯ tke recognizer find-xml plus
-2025-10-07T05:58:59.045492Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_5"
-2025-10-07T05:58:59.046817Z  INFO tke::recognizer: 加载了 3 个locator定义
-从XML中提取了 85 个UI元素
-找到XML元素 'plus' 的位置: (187, 107)
+
+{"locator":"plus","success":true,"x":728,"y":360}
 
 ///// 失败则是:
 ❯ tke recognizer find-xml settings_button
 
-2025-10-07T05:55:22.537889Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_6"                                                                                                          2025-10-07T05:55:22.538323Z  INFO tke::recognizer: 加载了 0 个locator定义                                               从XML中提取了 35 个UI元素                                                                                               Error: ElementNotFound("Locator 'settings_button' 未定义")
+Error: ElementNotFound("Locator 'settings_button' 未定义")
 ```
 
 ```bash
 ❯ tke recognizer find-image findUrDevice
 
-2025-10-07T06:01:04.626413Z  INFO tke: 项目路径: "/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_5"
-2025-10-07T06:01:04.628397Z  INFO tke::recognizer: 加载了 3 个locator定义
-2025-10-07T06:01:04.649587Z  INFO tke::recognizer::fast_matcher: 截图尺寸: 1080x2340, 模板尺寸: 504x108
-2025-10-07T06:01:04.688789Z  INFO tke::recognizer::fast_matcher: 精搜索找到最佳位置: Point { x: 512, y: 758 }, 相似度: 0.653
-Error: ElementNotFound("图像匹配置信度不足: 0.653 < 0.750")
+2025-10-07T07:17:12.173046Z  INFO tke::recognizer::fast_matcher: 截图尺寸: 1080x2340, 模板尺寸: 504x108
+2025-10-07T07:17:12.208964Z  INFO tke::recognizer::fast_matcher: 精搜索找到最佳位置: Point { x: 495, y: 757 }, 相似度: 0.626
+Error: ElementNotFound("图像匹配置信度不足: 0.626 < 0.750")
 ```
 
 ---
@@ -310,10 +262,7 @@ Error: ElementNotFound("图像匹配置信度不足: 0.653 < 0.750")
 ```bash
 ❯ tke parser validate cases/case_005/script/script_001.tks
 
-脚本验证通过 ✓
-  用例ID: 测试用例
-  脚本名: test_script
-  步骤数: 4
+{"case_id":": 测试用例","script_name":": test_script","steps_count":4,"valid":true,"warnings":[]}
 ```
 
 ---
@@ -372,15 +321,12 @@ tke -v controller capture
 
 ---
 
-## JSON 输出命令（可直接用 jq）
+## JSON 输出命令（可直接用 jq查看）
 
-- `tke ocr`
-- `tke fetcher infer-screen-size`
-- `tke fetcher extract-ui-elements`
-- `tke parser parse`
-- `tke run content`
-
-示例：
 ```bash
-tke ocr --image test.png --online --url http://localhost:8000/ocr | jq '.texts[0].text'
+❯ tke fetcher infer-screen-size < workarea/current_ui_tree.xml | jq
+{
+  "width": 1080,
+  "height": 2208
+}
 ```
