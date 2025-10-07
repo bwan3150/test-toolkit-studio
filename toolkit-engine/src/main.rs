@@ -272,11 +272,11 @@ async fn main() -> Result<()> {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         });
         
-        // 对于Fetcher和Parser命令，将日志输出到stderr以避免干扰JSON输出
-        let is_json_output_command = matches!(cli.command, Commands::Fetcher { .. } | Commands::Parser { .. });
-        
+        // 对于Fetcher、Parser和OCR命令，将日志输出到stderr以避免干扰JSON输出
+        let is_json_output_command = matches!(cli.command, Commands::Fetcher { .. } | Commands::Parser { .. } | Commands::Ocr { .. });
+
         if is_json_output_command {
-            // Parser和Fetcher命令完全静默，不输出任何日志
+            // Parser、Fetcher和OCR命令完全静默，不输出任何日志
             // 以确保stdout只有纯JSON输出
         } else {
             info!("项目路径: {:?}", project_path);
