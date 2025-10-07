@@ -70,7 +70,7 @@ project_root/
 
 本项目使用自定义自动化测试脚本语言, 对应脚本文件后缀为`.tks`
 
-语法规范可以参考[Toolkit Script语法规范v1.0.0](./The_ToolkitScript_Reference.md)
+语法规范可以参考[Toolkit Script语法规范v1.0.0](./docs/The_ToolkitScript_Reference.md)
 
 ## 常见问题
 
