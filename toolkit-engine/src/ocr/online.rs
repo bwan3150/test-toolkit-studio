@@ -3,20 +3,19 @@ use super::types::{OnlineOcrRequest, OnlineOcrResponse, OcrResult};
 #[cfg(feature = "ocr-online")]
 use base64::{engine::general_purpose, Engine as _};
 #[cfg(feature = "ocr-online")]
-use std::error::Error;
+use std::error::Error as StdError;
 
 #[cfg(feature = "ocr-online")]
 pub async fn recognize_online(
     image_data: &[u8],
-    ocr_host: &str,
-) -> Result<OcrResult, Box<dyn Error>> {
+    ocr_url: &str,
+) -> Result<OcrResult, Box<dyn StdError + Send + Sync>> {
     let base64_image = general_purpose::STANDARD.encode(image_data);
     let request_body = OnlineOcrRequest { image: base64_image };
-    let url = format!("{}/ocr", ocr_host.trim_end_matches('/'));
 
     let client = reqwest::Client::new();
     let response = client
-        .post(&url)
+        .post(ocr_url)
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()

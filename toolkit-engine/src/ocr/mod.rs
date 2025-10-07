@@ -7,19 +7,19 @@ mod online;
 mod types;
 
 pub use types::{OcrResult, OcrText};
-use std::error::Error;
+use std::error::Error as StdError;
 
 /// OCR 识别（统一入口）
 ///
 /// # 参数
 /// - image_data: 图片字节数据
 /// - online: true=在线OCR, false=离线OCR
-/// - param: 在线模式=服务地址, 离线模式=语言代码(如"eng","chi_sim")
+/// - param: 在线模式=完整URL(如"http://localhost:8000/ocr"), 离线模式=语言代码(如"eng","chi_sim")
 pub async fn ocr(
     image_data: &[u8],
     online: bool,
     param: &str,
-) -> Result<OcrResult, Box<dyn Error>> {
+) -> Result<OcrResult, Box<dyn StdError + Send + Sync>> {
     if online {
         #[cfg(not(feature = "ocr-online"))]
         return Err("ocr-online feature not enabled".into());

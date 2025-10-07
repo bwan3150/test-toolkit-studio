@@ -75,9 +75,9 @@ enum Commands {
         #[arg(long)]
         online: bool,
 
-        /// URL for online api
+        /// Full URL for online api (e.g. http://localhost:8000/ocr)
         #[arg(long)]
-        host: Option<String>,
+        url: Option<String>,
 
         /// language selection for offline ocr (eng, chi_sim, etc.)
         #[arg(long, default_value = "eng")]
@@ -312,8 +312,8 @@ async fn main() -> Result<()> {
         Commands::Adb { args } => {
             handle_adb_command(args, cli.device).await
         }
-        Commands::Ocr { image, online, host, lang } => {
-            handle_ocr_command(image, online, host, lang).await
+        Commands::Ocr { image, online, url, lang } => {
+            handle_ocr_command(image, online, url, lang).await
         }
     }
 }
@@ -683,17 +683,17 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
 async fn handle_ocr_command(
     image_path: PathBuf,
     online: bool,
-    host: Option<String>,
+    url: Option<String>,
     lang: String,
 ) -> Result<()> {
     let image_data = std::fs::read(&image_path)
         .map_err(|e| TkeError::IoError(e))?;
 
     let result = if online {
-        let host = host.ok_or_else(|| {
-            TkeError::InvalidArgument("在线模式需要提供 --host 参数".to_string())
+        let url = url.ok_or_else(|| {
+            TkeError::InvalidArgument("在线模式需要提供 --url 参数".to_string())
         })?;
-        ocr(&image_data, true, &host).await
+        ocr(&image_data, true, &url).await
     } else {
         ocr(&image_data, false, &lang).await
     };
