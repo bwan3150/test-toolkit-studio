@@ -5,8 +5,8 @@
 
     class BugAnalyzerClient {
         constructor() {
-            // API基础URL - 暂定地址，后续会改
-            this.baseURL = 'http://192.168.108.189:9000';
+            // Bug分析API基础URL
+            this.baseURL = 'https://analysis.test-toolkit.app';
             this.cache = new Map(); // 简单的缓存机制
             this.cacheTimeout = 5 * 60 * 1000; // 5分钟缓存
         }
