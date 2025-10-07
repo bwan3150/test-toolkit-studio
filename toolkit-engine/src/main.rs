@@ -1,4 +1,4 @@
-// ToolkitEngine (tke) - 自动化测试CLI工具主入口
+// ToolkitEngine (tke) CLI Main Entrancee
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -7,63 +7,81 @@ use tracing::{info, error, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use tke::{
-    Controller, LocatorFetcher, Recognizer, ScriptParser, 
-    Runner, Result, TkeError
+    Controller, LocatorFetcher, Recognizer, ScriptParser,
+    Runner, Result, TkeError, ocr
 };
 
 #[derive(Parser)]
 #[command(name = "tke")]
-#[command(about = "Toolkit Engine - 自动化测试CLI工具")]
+#[command(about = "Toolkit Engine")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
     
-    /// 设备ID (可选，用于多设备环境)
+    /// Phone Device ID (optional
     #[arg(short, long)]
     device: Option<String>,
     
-    /// 项目路径
+    /// Proj Path
     #[arg(short, long)]
     project: Option<PathBuf>,
     
-    /// 详细输出
+    /// verbose lwvel
     #[arg(short, long)]
     verbose: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Controller - ADB控制功能
+    /// Controller - ADB control
     Controller {
         #[command(subcommand)]
         action: ControllerCommands,
     },
-    /// LocatorFetcher - XML元素获取
+    /// LocatorFetcher - fetch useful element from XML
     Fetcher {
         #[command(subcommand)]
         action: FetcherCommands,
     },
-    /// Recognizer - 元素识别
+    /// Recognizer - recongnize image element from large image
     Recognizer {
         #[command(subcommand)]
         action: RecognizerCommands,
     },
-    /// ScriptParser - 脚本解析
+    /// ScriptParser - for .tks script highlight and render
     Parser {
         #[command(subcommand)]
         action: ParserCommands,
     },
-    /// Runner - 脚本执行
+    /// Runner - run .tks script in cli(not used in Toolkit Studio Desktop App)
     Run {
         #[command(subcommand)]
         action: RunCommands,
     },
-    /// ADB - 直通 ADB 命令
+    /// ADB - THIS IS JUST ADB!!!!! directly adb
     Adb {
-        /// ADB 命令参数
+        /// forward adb command to inner adb
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
+    },
+    /// OCR - extract words from image
+    Ocr {
+        /// image path
+        #[arg(short, long)]
+        image: PathBuf,
+
+        /// Online with api or Offline with tesseract and tesseract.rs
+        #[arg(long)]
+        online: bool,
+
+        /// URL for online api
+        #[arg(long)]
+        host: Option<String>,
+
+        /// language selection for offline ocr (eng, chi_sim, etc.)
+        #[arg(long, default_value = "eng")]
+        lang: String,
     },
 }
 
@@ -293,6 +311,9 @@ async fn main() -> Result<()> {
         }
         Commands::Adb { args } => {
             handle_adb_command(args, cli.device).await
+        }
+        Commands::Ocr { image, online, host, lang } => {
+            handle_ocr_command(image, online, host, lang).await
         }
     }
 }
@@ -656,6 +677,42 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
     }
     
     Ok(())
+}
+
+// OCR 命令处理
+async fn handle_ocr_command(
+    image_path: PathBuf,
+    online: bool,
+    host: Option<String>,
+    lang: String,
+) -> Result<()> {
+    let image_data = std::fs::read(&image_path)
+        .map_err(|e| TkeError::IoError(e))?;
+
+    let result = if online {
+        let host = host.ok_or_else(|| {
+            TkeError::InvalidArgument("在线模式需要提供 --host 参数".to_string())
+        })?;
+        ocr(&image_data, true, &host).await
+    } else {
+        ocr(&image_data, false, &lang).await
+    };
+
+    match result {
+        Ok(ocr_result) => {
+            let json = serde_json::to_string(&ocr_result)
+                .map_err(|e| TkeError::JsonError(e))?;
+            println!("{}", json);
+            Ok(())
+        }
+        Err(e) => {
+            let error_json = serde_json::json!({
+                "error": e.to_string()
+            });
+            println!("{}", serde_json::to_string(&error_json).unwrap());
+            Err(TkeError::OcrError(e.to_string()))
+        }
+    }
 }
 
 // ADB 直通命令处理

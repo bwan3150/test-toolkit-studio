@@ -9,6 +9,7 @@ pub mod script_parser;
 pub mod runner;
 pub mod models;
 pub mod adb_manager;
+pub mod ocr;
 
 // 导出主要类型和功能
 pub use controller::Controller;
@@ -18,6 +19,9 @@ pub use script_interpreter::ScriptInterpreter;
 pub use script_parser::ScriptParser;
 pub use runner::Runner;
 pub use adb_manager::AdbManager;
+
+// 导出 OCR 功能
+pub use ocr::{ocr, OcrResult, OcrText};
 
 // 导出模型
 pub use models::{
@@ -72,6 +76,9 @@ pub enum TkeError {
     
     #[error("项目路径无效: {0}")]
     InvalidProjectPath(String),
+
+    #[error("OCR错误: {0}")]
+    OcrError(String),
 }
 
 pub type Result<T> = std::result::Result<T, TkeError>;
