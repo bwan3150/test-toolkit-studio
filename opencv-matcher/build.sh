@@ -19,8 +19,11 @@ OUTPUT_DIR="../resources/${OS}/toolkit-engine"
 mkdir -p "$OUTPUT_DIR"
 
 # 激活 uv 环境并打包
-echo "使用 uv 运行 PyInstaller..."
-uv run pyinstaller \
+echo "同步依赖（包括 dev 依赖）..."
+uv sync --group dev
+
+echo "使用 PyInstaller 打包..."
+.venv/bin/pyinstaller \
     --onefile \
     --name tke-opencv \
     --clean \
