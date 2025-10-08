@@ -40,7 +40,7 @@ package:com.android.chrome
 HTTP 请求在线的 OCR 服务 API，返回纯 JSON。
 
 ```bash
-❯ tke ocr --image /path/to/screenshot.png --online --url https://ocr.test-toolkit.app/ocr
+❯ tke ocr --image workarea/current_screenshot.png --online --url https://ocr.test-toolkit.app/ocr
 
 {"texts":[{"text":"Settings","bbox":[[654.0,33.0],[1010.0,33.0],[1010.0,83.0],[654.0,83.0]],"confidence":0.95},{"text":"WiFi","bbox":[[210.0,559.0],[403.0,569.0],[400.0,634.0],[207.0,625.0]],"confidence":0.97},{"text":"Bluetooth","bbox":[[96.0,1053.0],[444.0,1053.0],[444.0,1103.0],[96.0,1103.0]],"confidence":0.91}]}
 ```
@@ -95,7 +95,7 @@ brew install tesseract tesseract-lang
 ```bash
 ❯ tke controller capture
 
-{"screenshot":"/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_5/workarea/current_screenshot.png","success":true,"xml":"/Users/eric_konec/Documents/GitHub/test-toolkit-studio/test-projects/test_project_5/workarea/current_ui_tree.xml"}
+{"screenshot":"/Users/eric_konec/Documents/GitHub/test-toolkit-studio/projects/test_project_5/workarea/current_screenshot.png","success":true,"xml":"/Users/eric_konec/Documents/GitHub/test-toolkit-studio/projects/test_project_5/workarea/current_ui_tree.xml"}
 ```
 
 覆盖生成文件：
@@ -218,7 +218,7 @@ Tab 6 of 6) [clickable, focusable]
 ```bash
 ❯ tke recognizer find-text "Test"
 
-{"success":true,"text":"Test","x":394,"y":186}
+{"success":true,"x":394,"y":186}
 
 
 ///// 失败则是
@@ -231,12 +231,12 @@ Error: ElementNotFound("未找到包含文本 'xxx' 的元素")
 (这里需要elements.json里已经保存了一个叫plus的xml元素)
 ❯ tke recognizer find-xml plus
 
-{"locator":"plus","success":true,"x":728,"y":360}
+{"success":true,"x":728,"y":360}
 
 ///// 失败则是:
 ❯ tke recognizer find-xml settings_button
 
-Error: ElementNotFound("Locator 'settings_button' 未定义")
+{"error":"元素未找到: Locator 'settings_button' 未定义","success":false}
 ```
 
 ```bash
@@ -248,7 +248,7 @@ Error: ElementNotFound("Locator 'settings_button' 未定义")
 ///// 失败则是:
 ❯ tke recognizer find-image findUrDevice --threshold 0.7
 
-{"success": false, "error": "未找到匹配点 (阈值=0.5)"}
+{"success": false, "error": "未找到匹配点 (阈值=0.7)"}
 ```
 
 ---

@@ -1,6 +1,6 @@
 // 图像查找模块 - 使用OpenCV进行图像匹配
 
-use crate::{Result, TkeError, Point, Locator, LocatorType};
+use crate::{Result, TkeError, Point, Locator, LocatorType, JsonOutput};
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::process::Command;
@@ -15,32 +15,20 @@ pub fn find_by_locator_json(
     // 获取locator定义
     let locator = locators.get(locator_name)
         .ok_or_else(|| {
-            let json = serde_json::json!({
-                "success": false,
-                "error": format!("Locator '{}' 未定义", locator_name)
-            });
-            println!("{}", serde_json::to_string(&json).unwrap());
+            JsonOutput::print_error(format!("Locator '{}' 未定义", locator_name));
             TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name))
         })?;
 
     // 确保是图像类型
     if !matches!(locator.locator_type, LocatorType::Image) {
-        let json = serde_json::json!({
-            "success": false,
-            "error": format!("Locator '{}' 不是图像类型", locator_name)
-        });
-        println!("{}", serde_json::to_string(&json).unwrap());
+        JsonOutput::print_error(format!("Locator '{}' 不是图像类型", locator_name));
         return Err(TkeError::InvalidArgument(format!("Locator '{}' 不是图像类型", locator_name)));
     }
 
     let template_path = if let Some(ref path) = locator.path {
         project_path.join(path)
     } else {
-        let json = serde_json::json!({
-            "success": false,
-            "error": "图像locator缺少path字段"
-        });
-        println!("{}", serde_json::to_string(&json).unwrap());
+        JsonOutput::print_error("图像locator缺少path字段");
         return Err(TkeError::InvalidArgument("图像locator缺少path字段".to_string()));
     };
 
@@ -133,11 +121,7 @@ fn opencv_match_json(screenshot_path: &PathBuf, template_path: &PathBuf, thresho
 
     // 检查 tke-opencv 是否存在
     if !opencv_bin.exists() {
-        let json = serde_json::json!({
-            "success": false,
-            "error": "找不到 tke-opencv 模块"
-        });
-        println!("{}", serde_json::to_string(&json).unwrap());
+        JsonOutput::print_error("找不到 tke-opencv 模块");
         return Err(TkeError::ElementNotFound("找不到 tke-opencv 模块".to_string()));
     }
 
@@ -148,17 +132,13 @@ fn opencv_match_json(screenshot_path: &PathBuf, template_path: &PathBuf, thresho
         .arg(threshold.to_string())
         .output()
         .map_err(|e| {
-            let json = serde_json::json!({
-                "success": false,
-                "error": format!("调用 tke-opencv 失败: {}", e)
-            });
-            println!("{}", serde_json::to_string(&json).unwrap());
+            JsonOutput::print_error(format!("调用 tke-opencv 失败: {}", e));
             TkeError::ImageError(format!("调用 tke-opencv 失败: {}", e))
         })?;
 
     // 直接输出 tke-opencv 的 JSON 结果
     let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("{}", stdout.trim());
+    JsonOutput::print_raw(stdout.trim());
 
     // 解析检查是否成功（用于返回Result）
     let result: serde_json::Value = serde_json::from_str(&stdout)

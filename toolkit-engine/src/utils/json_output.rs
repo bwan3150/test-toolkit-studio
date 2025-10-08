@@ -2,9 +2,13 @@
 // 所有 JSON 输出命令必须通过此模块输出，确保格式统一且无额外的 Error 信息
 
 use serde::Serialize;
+use serde_json::Value;
 use std::process;
 
 /// 统一 JSON 输出处理器
+///
+/// 所有子模块的 JSON 输出都必须通过这个统一接口
+/// 禁止子模块自己构建 serde_json::json! 或使用 println! 输出 JSON
 pub struct JsonOutput;
 
 impl JsonOutput {
@@ -69,6 +73,22 @@ impl JsonOutput {
         process::exit(1);
     }
 
+    /// 输出错误的 JSON 但不退出（返回 Result 以便上层继续处理）
+    ///
+    /// # 参数
+    /// - `message`: 错误消息
+    pub fn print_error(message: impl AsRef<str>) {
+        let json = serde_json::json!({
+            "success": false,
+            "error": message.as_ref()
+        });
+
+        match serde_json::to_string(&json) {
+            Ok(json_str) => println!("{}", json_str),
+            Err(_) => println!(r#"{{"success":false,"error":"JSON 序列化失败"}}"#),
+        }
+    }
+
     /// 从 Result 中输出，成功返回值，失败则输出错误 JSON 并退出
     ///
     /// # 参数
@@ -109,5 +129,66 @@ impl JsonOutput {
         }
 
         Self::success(json);
+    }
+
+    /// 构建成功的 JSON 对象（不输出，返回 Value）
+    ///
+    /// # 参数
+    /// - `data`: 任何可序列化的数据结构
+    ///
+    /// # 返回
+    /// - 包含 success: true 的 JSON Value
+    pub fn build_success<T: Serialize>(data: T) -> Value {
+        let mut json = serde_json::json!({"success": true});
+
+        if let Value::Object(map) = data.serialize(serde_json::value::Serializer).unwrap_or(Value::Null) {
+            if let Value::Object(ref mut base_map) = json {
+                for (k, v) in map {
+                    base_map.insert(k, v);
+                }
+            }
+        }
+
+        json
+    }
+
+    /// 构建错误的 JSON 对象（不输出，返回 Value）
+    ///
+    /// # 参数
+    /// - `message`: 错误消息
+    ///
+    /// # 返回
+    /// - 包含 success: false 和 error 的 JSON Value
+    pub fn build_error(message: impl AsRef<str>) -> Value {
+        serde_json::json!({
+            "success": false,
+            "error": message.as_ref()
+        })
+    }
+
+    /// 输出 JSON 字符串但不退出（直接打印）
+    ///
+    /// # 参数
+    /// - `json_str`: JSON 字符串
+    pub fn print_raw(json_str: &str) {
+        println!("{}", json_str);
+    }
+
+    /// 输出 JSON 字符串并退出（成功）
+    ///
+    /// # 参数
+    /// - `json_str`: JSON 字符串
+    pub fn success_raw(json_str: &str) -> ! {
+        println!("{}", json_str);
+        process::exit(0);
+    }
+
+    /// 输出 JSON 字符串并退出（失败）
+    ///
+    /// # 参数
+    /// - `json_str`: JSON 字符串
+    pub fn error_raw(json_str: &str) -> ! {
+        println!("{}", json_str);
+        process::exit(1);
     }
 }

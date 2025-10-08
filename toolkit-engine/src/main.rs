@@ -328,10 +328,9 @@ async fn handle_controller_commands(action: ControllerCommands, device_id: Optio
     match action {
         ControllerCommands::Devices => {
             let devices = controller.get_devices()?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "devices": devices
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Capture => {
             let project_path = std::env::current_dir()
@@ -341,70 +340,62 @@ async fn handle_controller_commands(action: ControllerCommands, device_id: Optio
             let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
 
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "screenshot": screenshot_path.to_string_lossy(),
                 "xml": xml_path.to_string_lossy()
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Tap { x, y } => {
             controller.tap(x, y)?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "x": x,
                 "y": y
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Swipe { x1, y1, x2, y2, duration } => {
             controller.swipe(x1, y1, x2, y2, duration)?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "from": {"x": x1, "y": y1},
                 "to": {"x": x2, "y": y2},
                 "duration": duration
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Launch { package, activity } => {
             controller.launch_app(&package, &activity)?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "package": package,
                 "activity": activity
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Stop { package } => {
             controller.stop_app(&package)?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "package": package
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Input { text } => {
             controller.input_text(&text)?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "text": text
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Back => {
             controller.back()?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ControllerCommands::Home => {
             controller.home()?;
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
     }
 
@@ -417,8 +408,7 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
     match action {
         FetcherCommands::Extract { xml_path } => {
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
-            let json = serde_json::to_string(&elements)?;
-            println!("{}", json);
+            JsonOutput::print(&elements);
         }
         FetcherCommands::Current => {
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
@@ -429,35 +419,32 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
                 )));
             }
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
-            let json = serde_json::to_string(&elements)?;
-            println!("{}", json);
+            JsonOutput::print(&elements);
         }
         FetcherCommands::Interactive => {
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
             let interactive = fetcher.filter_interactive_elements(&elements);
-            let json = serde_json::to_string(&interactive)?;
-            println!("{}", json);
+            JsonOutput::print(&interactive);
         }
         FetcherCommands::Text => {
             let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
             let elements = fetcher.fetch_elements_from_file(&xml_path)?;
             let text_elements = fetcher.filter_text_elements(&elements);
-            let json = serde_json::to_string(&text_elements)?;
-            println!("{}", json);
+            JsonOutput::print(&text_elements);
         }
         FetcherCommands::InferScreenSize { xml_content } => {
             let xml = get_xml_content(xml_content)?;
             if let Some((width, height)) = fetcher.infer_screen_size_from_xml(&xml)? {
-                println!("{{\"width\": {}, \"height\": {}}}", width, height);
+                JsonOutput::print(serde_json::json!({"width": width, "height": height}));
             } else {
-                println!("null");
+                JsonOutput::print(serde_json::Value::Null);
             }
         }
         FetcherCommands::OptimizeUITree { xml_content } => {
             let xml = get_xml_content(xml_content)?;
             let optimized = fetcher.optimize_ui_tree(&xml)?;
-            println!("{}", optimized);
+            JsonOutput::print_raw(&optimized);
         }
         FetcherCommands::ExtractUIElements { xml_content, width, height } => {
             let xml = get_xml_content(xml_content)?;
@@ -466,13 +453,12 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
             } else {
                 fetcher.extract_ui_elements(&xml)?
             };
-            let elements_json = serde_json::to_string(&elements)?;
-            println!("{}", elements_json);
+            JsonOutput::print(&elements);
         }
         FetcherCommands::GenerateTreeString { xml_content } => {
             let xml = get_xml_content(xml_content)?;
             let tree_string = fetcher.generate_tree_string(&xml)?;
-            println!("{}", tree_string);
+            JsonOutput::print_raw(&tree_string);
         }
     }
 
@@ -517,13 +503,13 @@ async fn handle_recognizer_commands(action: RecognizerCommands, project_path: Pa
 
 async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
     let parser = ScriptParser::new();
-    
+
     match action {
         ParserCommands::Parse { script_path } => {
             let script = parser.parse_file(&script_path)?;
-            
+
             // 输出JSON格式的解析结果
-            let json_output = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": true,
                 "case_id": script.case_id,
                 "script_name": script.script_name,
@@ -534,9 +520,7 @@ async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
                     "command_type": step.command,
                     "params": step.params
                 })).collect::<Vec<_>>()
-            });
-            
-            println!("{}", serde_json::to_string(&json_output)?);
+            }));
         }
         ParserCommands::Validate { script_path } => {
             let script = parser.parse_file(&script_path)?;
@@ -550,34 +534,31 @@ async fn handle_parser_commands(action: ParserCommands) -> Result<()> {
                 warnings.push("脚本缺少脚本名");
             }
             if script.steps.is_empty() {
-                let json = serde_json::json!({
+                JsonOutput::print(serde_json::json!({
                     "valid": false,
                     "error": "脚本没有定义任何步骤"
-                });
-                println!("{}", serde_json::to_string(&json)?);
+                }));
                 return Err(TkeError::ScriptParseError("脚本验证失败".to_string()));
             }
 
-            let json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "valid": true,
                 "case_id": script.case_id,
                 "script_name": script.script_name,
                 "steps_count": script.steps.len(),
                 "warnings": warnings
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            }));
         }
         ParserCommands::Highlight { script_path } => {
             let content = std::fs::read_to_string(&script_path)
                 .map_err(|e| TkeError::IoError(e))?;
             let highlights = parser.get_syntax_highlights(&content);
-            
+
             // 输出JSON格式的语法高亮信息
-            let json_output = serde_json::to_string(&highlights)?;
-            println!("{}", json_output);
+            JsonOutput::print(&highlights);
         }
     }
-    
+
     Ok(())
 }
 
@@ -651,9 +632,9 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
         RunCommands::Content { content } => {
             // 为 Toolkit Studio 专用：返回 JSON 格式的结果
             let result = runner.run_script_content(&content).await?;
-            
+
             // 输出 JSON 格式的执行结果
-            let json_result = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "success": result.success,
                 "case_id": result.case_id,
                 "script_name": result.script_name,
@@ -667,34 +648,31 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
                     "error": step.error,
                     "duration_ms": step.duration_ms
                 })).collect::<Vec<_>>()
-            });
-            
-            println!("{}", serde_json::to_string(&json_result)?);
+            }));
         }
         RunCommands::Step { content, step_index } => {
             // 为 Toolkit Studio 专用：执行单个步骤并返回 JSON 结果
             let script = runner.parser.parse(&content)?;
-            
+
             if step_index >= script.steps.len() {
-                let error_result = serde_json::json!({
+                JsonOutput::print(serde_json::json!({
                     "success": false,
                     "error": format!("步骤索引超出范围: {} >= {}", step_index, script.steps.len()),
                     "step_index": step_index
-                });
-                println!("{}", serde_json::to_string(&error_result)?);
+                }));
                 return Ok(());
             }
-            
+
             let step = &script.steps[step_index];
-            
+
             // 初始化解释器
             let mut interpreter = tke::ScriptInterpreter::new(
                 project_path.clone(),
                 device_id
             )?;
-            
+
             let start_time = std::time::Instant::now();
-            
+
             // 执行单个步骤
             let step_result = match interpreter.interpret_step(step).await {
                 Ok(()) => serde_json::json!({
@@ -714,8 +692,8 @@ async fn handle_run_commands(action: RunCommands, project_path: PathBuf, device_
                     "error": e.to_string()
                 })
             };
-            
-            println!("{}", serde_json::to_string(&step_result)?);
+
+            JsonOutput::print(step_result);
         }
     }
     
@@ -743,16 +721,13 @@ async fn handle_ocr_command(
 
     match result {
         Ok(ocr_result) => {
-            let json = serde_json::to_string(&ocr_result)
-                .map_err(|e| TkeError::JsonError(e))?;
-            println!("{}", json);
+            JsonOutput::print(&ocr_result);
             Ok(())
         }
         Err(e) => {
-            let error_json = serde_json::json!({
+            JsonOutput::print(serde_json::json!({
                 "error": e.to_string()
-            });
-            println!("{}", serde_json::to_string(&error_json).unwrap());
+            }));
             Err(TkeError::OcrError(e.to_string()))
         }
     }
