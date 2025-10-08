@@ -101,3 +101,26 @@ if "$TARGET_BINARY" --version > /dev/null 2>&1; then
 else
     echo "Warning: tke might not be executable"
 fi
+
+echo ""
+echo "==============================="
+echo "Building OpenCV Matcher..."
+echo "==============================="
+
+# 进入 opencv-matcher 目录并执行打包
+cd "$SCRIPT_DIR/opencv-matcher"
+if [ ! -f "build.sh" ]; then
+    echo "Error: opencv-matcher/build.sh not found"
+    exit 1
+fi
+
+# 执行 Python 打包脚本
+./build.sh
+
+# 返回原目录
+cd "$SCRIPT_DIR"
+
+echo ""
+echo "==============================="
+echo "All builds completed!"
+echo "==============================="

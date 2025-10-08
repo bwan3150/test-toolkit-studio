@@ -477,38 +477,82 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
 }
 
 async fn handle_recognizer_commands(action: RecognizerCommands, project_path: PathBuf) -> Result<()> {
-    let recognizer = Recognizer::new(project_path)?;
+    // 初始化 recognizer，如果失败则输出 JSON 错误
+    let recognizer = match Recognizer::new(project_path) {
+        Ok(r) => r,
+        Err(e) => {
+            let json = serde_json::json!({
+                "success": false,
+                "error": e.to_string()
+            });
+            println!("{}", serde_json::to_string(&json)?);
+            return Err(e);
+        }
+    };
 
     match action {
         RecognizerCommands::FindXml { locator_name } => {
-            let point = recognizer.find_xml_element(&locator_name)?;
-            let json = serde_json::json!({
-                "success": true,
-                "locator": locator_name,
-                "x": point.x,
-                "y": point.y
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            match recognizer.find_xml_element(&locator_name) {
+                Ok(point) => {
+                    let json = serde_json::json!({
+                        "success": true,
+                        "locator": locator_name,
+                        "x": point.x,
+                        "y": point.y
+                    });
+                    println!("{}", serde_json::to_string(&json)?);
+                }
+                Err(e) => {
+                    let json = serde_json::json!({
+                        "success": false,
+                        "error": e.to_string()
+                    });
+                    println!("{}", serde_json::to_string(&json)?);
+                    return Err(e);
+                }
+            }
         }
         RecognizerCommands::FindImage { locator_name } => {
-            let point = recognizer.find_image_element(&locator_name)?;
-            let json = serde_json::json!({
-                "success": true,
-                "locator": locator_name,
-                "x": point.x,
-                "y": point.y
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            match recognizer.find_image_element(&locator_name) {
+                Ok(point) => {
+                    let json = serde_json::json!({
+                        "success": true,
+                        "locator": locator_name,
+                        "x": point.x,
+                        "y": point.y
+                    });
+                    println!("{}", serde_json::to_string(&json)?);
+                }
+                Err(e) => {
+                    let json = serde_json::json!({
+                        "success": false,
+                        "error": e.to_string()
+                    });
+                    println!("{}", serde_json::to_string(&json)?);
+                    return Err(e);
+                }
+            }
         }
         RecognizerCommands::FindText { text } => {
-            let point = recognizer.find_element_by_text(&text)?;
-            let json = serde_json::json!({
-                "success": true,
-                "text": text,
-                "x": point.x,
-                "y": point.y
-            });
-            println!("{}", serde_json::to_string(&json)?);
+            match recognizer.find_element_by_text(&text) {
+                Ok(point) => {
+                    let json = serde_json::json!({
+                        "success": true,
+                        "text": text,
+                        "x": point.x,
+                        "y": point.y
+                    });
+                    println!("{}", serde_json::to_string(&json)?);
+                }
+                Err(e) => {
+                    let json = serde_json::json!({
+                        "success": false,
+                        "error": e.to_string()
+                    });
+                    println!("{}", serde_json::to_string(&json)?);
+                    return Err(e);
+                }
+            }
         }
     }
 

@@ -281,22 +281,70 @@ impl Recognizer {
         // 获取locator定义
         let locator = self.locators.get(locator_name)
             .ok_or_else(|| TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name)))?;
-        
+
         // 确保是图像类型
         if !matches!(locator.locator_type, LocatorType::Image) {
             return Err(TkeError::InvalidArgument(format!("Locator '{}' 不是图像类型", locator_name)));
         }
-        
+
         let template_path = if let Some(ref path) = locator.path {
             self.project_path.join(path)
         } else {
             return Err(TkeError::InvalidArgument("图像locator缺少path字段".to_string()));
         };
-        
+
         let screenshot_path = self.project_path.join("workarea").join("current_screenshot.png");
-        
-        // 使用快速匹配器执行模板匹配
-        self.fast_matcher.match_template(&screenshot_path, &template_path)
+
+        // 调用 tke-opencv 可执行文件进行模板匹配
+        self.opencv_match(&screenshot_path, &template_path)
+    }
+
+    // 使用 OpenCV (Python 打包的可执行文件) 进行模板匹配
+    fn opencv_match(&self, screenshot_path: &PathBuf, template_path: &PathBuf) -> Result<Point> {
+        use std::process::Command;
+
+        // tke-opencv 可执行文件路径（与当前可执行文件同目录）
+        let current_exe = std::env::current_exe()
+            .map_err(|e| TkeError::IoError(e))?;
+        let exe_dir = current_exe.parent()
+            .ok_or_else(|| TkeError::InvalidArgument("无法获取可执行文件目录".to_string()))?;
+        let opencv_bin = exe_dir.join("tke-opencv");
+
+        // 检查 tke-opencv 是否存在
+        if !opencv_bin.exists() {
+            return Err(TkeError::ElementNotFound(
+                format!("tke-opencv 可执行文件不存在: {:?}", opencv_bin)
+            ));
+        }
+
+        // 调用 tke-opencv
+        let output = Command::new(&opencv_bin)
+            .arg(screenshot_path.to_str().unwrap())
+            .arg(template_path.to_str().unwrap())
+            .arg(self.confidence_threshold.to_string())
+            .output()
+            .map_err(|e| TkeError::ImageError(format!("调用 tke-opencv 失败: {}", e)))?;
+
+        // 解析 JSON 输出
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let result: serde_json::Value = serde_json::from_str(&stdout)
+            .map_err(|e| TkeError::JsonError(e))?;
+
+        // 检查是否成功
+        if result["success"].as_bool().unwrap_or(false) {
+            let x = result["x"].as_i64()
+                .ok_or_else(|| TkeError::ElementNotFound("JSON 响应缺少 x 字段".to_string()))?
+                as i32;
+            let y = result["y"].as_i64()
+                .ok_or_else(|| TkeError::ElementNotFound("JSON 响应缺少 y 字段".to_string()))?
+                as i32;
+
+            Ok(Point::new(x, y))
+        } else {
+            let error = result["error"].as_str()
+                .unwrap_or("未知错误");
+            Err(TkeError::ElementNotFound(error.to_string()))
+        }
     }
     
     // 直接根据文本查找元素

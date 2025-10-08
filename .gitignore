@@ -7,6 +7,18 @@ out/
 toolkit-engine/target/
 toolkit-ai-tester/target/
 
+# Python (opencv-matcher)
+toolkit-engine/opencv-matcher/.venv/
+toolkit-engine/opencv-matcher/build/
+toolkit-engine/opencv-matcher/dist/
+toolkit-engine/opencv-matcher/*.spec
+toolkit-engine/opencv-matcher/.python-version
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
 # build的配置文件留着
 build/*
 !build/*.plist
