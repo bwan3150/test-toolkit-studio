@@ -1,24 +1,28 @@
 // Toolkit Engine 核心库
 // 提供自动化测试的核心功能
 
-pub mod controller;
-pub mod locator_fetcher;
-pub mod recognizer;
-pub mod script_interpreter;
-pub mod script_parser;
-pub mod runner;
+// 核心模块
+pub mod utils;
 pub mod models;
-pub mod adb_manager;
-pub mod ocr;
 
-// 导出主要类型和功能
+// 功能模块（对应 tke 命令）
+pub mod adb;
+pub mod ocr;
+pub mod controller;
+pub mod fetcher;
+pub mod recognizer;
+pub mod parser;
+pub mod runner;
+
+// 导出工具类
+pub use utils::{JsonOutput, AdbManager};
+
+// 导出功能模块
 pub use controller::Controller;
-pub use locator_fetcher::LocatorFetcher;
+pub use fetcher::Fetcher;
 pub use recognizer::Recognizer;
-pub use script_interpreter::ScriptInterpreter;
-pub use script_parser::ScriptParser;
+pub use parser::{ScriptParser, ScriptInterpreter};
 pub use runner::Runner;
-pub use adb_manager::AdbManager;
 
 // 导出 OCR 功能
 pub use ocr::{ocr, OcrResult, OcrText};
@@ -46,34 +50,34 @@ use thiserror::Error;
 pub enum TkeError {
     #[error("ADB错误: {0}")]
     AdbError(String),
-    
+
     #[error("文件IO错误: {0}")]
     IoError(#[from] std::io::Error),
-    
+
     #[error("JSON解析错误: {0}")]
     JsonError(#[from] serde_json::Error),
-    
+
     #[error("XML解析错误: {0}")]
     XmlError(String),
-    
+
     #[error("图像处理错误: {0}")]
     ImageError(String),
-    
+
     #[error("元素未找到: {0}")]
     ElementNotFound(String),
-    
+
     #[error("脚本解析错误: {0}")]
     ScriptParseError(String),
-    
+
     #[error("脚本执行错误: {0}")]
     ScriptExecuteError(String),
-    
+
     #[error("无效的参数: {0}")]
     InvalidArgument(String),
-    
+
     #[error("设备未连接")]
     DeviceNotConnected,
-    
+
     #[error("项目路径无效: {0}")]
     InvalidProjectPath(String),
 

@@ -7,8 +7,8 @@ use tracing::{info, error, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use tke::{
-    Controller, LocatorFetcher, Recognizer, ScriptParser,
-    Runner, Result, TkeError, ocr
+    Controller, Fetcher, Recognizer, ScriptParser,
+    Runner, Result, TkeError, ocr, JsonOutput
 };
 
 #[derive(Parser)]
@@ -412,7 +412,7 @@ async fn handle_controller_commands(action: ControllerCommands, device_id: Optio
 }
 
 async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf) -> Result<()> {
-    let fetcher = LocatorFetcher::new();
+    let fetcher = Fetcher::new();
 
     match action {
         FetcherCommands::Extract { xml_path } => {
@@ -517,7 +517,10 @@ async fn handle_recognizer_commands(action: RecognizerCommands, project_path: Pa
         }
         RecognizerCommands::FindImage { locator_name, threshold } => {
             // 直接输出 tke-opencv 的 JSON 结果，不包装
-            recognizer.find_image_element_json(&locator_name, threshold)?;
+            // 错误时静默退出，不打印 Error 信息
+            if let Err(_) = recognizer.find_image_element_json(&locator_name, threshold) {
+                std::process::exit(1);
+            }
         }
         RecognizerCommands::FindText { text } => {
             match recognizer.find_element_by_text(&text) {
@@ -790,40 +793,6 @@ async fn handle_ocr_command(
 
 // ADB 直通命令处理
 async fn handle_adb_command(args: Vec<String>, device_id: Option<String>) -> Result<()> {
-    use std::process::Command;
-    
-    // 创建 AdbManager 来获取 ADB 路径，静默模式
-    let adb_manager = match tke::AdbManager::new() {
-        Ok(manager) => manager,
-        Err(_) => {
-            // 如果获取ADB失败，直接退出，不输出错误信息
-            std::process::exit(1);
-        }
-    };
-    
-    // 构建 ADB 命令
-    let mut cmd = Command::new(adb_manager.adb_path());
-    
-    // 如果指定了设备ID，添加 -s 参数
-    if let Some(ref device) = device_id {
-        cmd.arg("-s").arg(device);
-    }
-    
-    // 添加用户提供的参数
-    cmd.args(&args);
-    
-    // 执行命令并继承标准输入输出（完全透明传递）
-    // 直接传递退出码，不做任何处理
-    let status = cmd
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .unwrap_or_else(|_| {
-            // 如果执行失败，静默退出
-            std::process::exit(1)
-        });
-    
-    // 直接使用ADB的退出码退出，不做任何额外处理
-    std::process::exit(status.code().unwrap_or(1));
+    // 使用 adb 模块执行命令
+    tke::adb::execute_adb_command(args, device_id)
 }
