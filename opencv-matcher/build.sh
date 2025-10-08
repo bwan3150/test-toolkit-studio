@@ -1,5 +1,5 @@
 #!/bin/bash
-# OpenCV Matcher 打包脚本
+# OpenCV Matcher 打包脚本（独立模块）
 
 set -e
 
@@ -7,11 +7,15 @@ echo "==============================================="
 echo "开始打包 OpenCV Matcher..."
 echo "==============================================="
 
+# 获取脚本所在目录（opencv-matcher目录）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 # 获取当前操作系统
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
-# 确定输出目录（toolkit-engine 的上一级，即项目根目录的 resources）
-OUTPUT_DIR="../../resources/${OS}/toolkit-engine"
+# 确定输出目录（项目根目录的 resources）
+OUTPUT_DIR="../resources/${OS}/toolkit-engine"
 mkdir -p "$OUTPUT_DIR"
 
 # 激活 uv 环境并打包

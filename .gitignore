@@ -5,14 +5,14 @@ package-lock.json
 dist/
 out/
 toolkit-engine/target/
-toolkit-ai-tester/target/
+tester-ai/target/
 
 # Python (opencv-matcher)
-toolkit-engine/opencv-matcher/.venv/
-toolkit-engine/opencv-matcher/build/
-toolkit-engine/opencv-matcher/dist/
-toolkit-engine/opencv-matcher/*.spec
-toolkit-engine/opencv-matcher/.python-version
+opencv-matcher/.venv/
+opencv-matcher/build/
+opencv-matcher/dist/
+opencv-matcher/*.spec
+opencv-matcher/.python-version
 __pycache__/
 *.py[cod]
 *$py.class
