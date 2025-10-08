@@ -187,6 +187,9 @@ enum RecognizerCommands {
     FindImage {
         /// Locator名称
         locator_name: String,
+        /// 置信度阈值 (0.0-1.0)
+        #[arg(long, default_value = "0.75")]
+        threshold: f32,
     },
     /// 根据文本查找元素位置
     FindText {
@@ -512,26 +515,9 @@ async fn handle_recognizer_commands(action: RecognizerCommands, project_path: Pa
                 }
             }
         }
-        RecognizerCommands::FindImage { locator_name } => {
-            match recognizer.find_image_element(&locator_name) {
-                Ok(point) => {
-                    let json = serde_json::json!({
-                        "success": true,
-                        "locator": locator_name,
-                        "x": point.x,
-                        "y": point.y
-                    });
-                    println!("{}", serde_json::to_string(&json)?);
-                }
-                Err(e) => {
-                    let json = serde_json::json!({
-                        "success": false,
-                        "error": e.to_string()
-                    });
-                    println!("{}", serde_json::to_string(&json)?);
-                    return Err(e);
-                }
-            }
+        RecognizerCommands::FindImage { locator_name, threshold } => {
+            // 直接输出 tke-opencv 的 JSON 结果，不包装
+            recognizer.find_image_element_json(&locator_name, threshold)?;
         }
         RecognizerCommands::FindText { text } => {
             match recognizer.find_element_by_text(&text) {

@@ -1,33 +1,25 @@
 // Recognizer模块 - 负责元素识别(XML匹配和图像匹配)
 
-mod fast_matcher;
-
 use crate::{Result, TkeError, UIElement, Locator, LocatorType, Point, Bounds};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tracing::{debug, info, warn};
-use fast_matcher::FastMatcher;
+use tracing::debug;
 
 pub struct Recognizer {
     project_path: PathBuf,
     locators: HashMap<String, Locator>,
     confidence_threshold: f32,
-    fast_matcher: FastMatcher,
 }
 
 impl Recognizer {
     pub fn new(project_path: PathBuf) -> Result<Self> {
         // 加载locator定义
         let locators = Self::load_locators(&project_path)?;
-        
-        let mut fast_matcher = FastMatcher::new();
-        fast_matcher.set_confidence_threshold(0.75);
-        
+
         Ok(Self {
             project_path,
             locators,
-            confidence_threshold: 0.8,
-            fast_matcher,
+            confidence_threshold: 0.60,
         })
     }
     
@@ -58,7 +50,6 @@ impl Recognizer {
     // 设置置信度阈值
     pub fn set_confidence_threshold(&mut self, threshold: f32) {
         self.confidence_threshold = threshold;
-        self.fast_matcher.set_confidence_threshold(threshold);
     }
     
     // 指令1: 根据XML locator查找元素
@@ -276,31 +267,61 @@ impl Recognizer {
         best_match
     }
     
-    // 指令2: 根据图像locator查找元素
+    // 指令2: 根据图像locator查找元素（内部使用，返回Point）
     pub fn find_image_element(&self, locator_name: &str) -> Result<Point> {
+        self.find_image_element_with_threshold(locator_name, self.confidence_threshold)
+    }
+
+    // 根据图像locator查找元素（指定阈值，用于CLI）
+    pub fn find_image_element_json(&self, locator_name: &str, threshold: f32) -> Result<()> {
+        match self.find_image_element_with_threshold(locator_name, threshold) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    // 内部实现：根据图像locator查找元素
+    fn find_image_element_with_threshold(&self, locator_name: &str, threshold: f32) -> Result<Point> {
         // 获取locator定义
         let locator = self.locators.get(locator_name)
-            .ok_or_else(|| TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name)))?;
+            .ok_or_else(|| {
+                let json = serde_json::json!({
+                    "success": false,
+                    "error": format!("Locator '{}' 未定义", locator_name)
+                });
+                println!("{}", serde_json::to_string(&json).unwrap());
+                TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name))
+            })?;
 
         // 确保是图像类型
         if !matches!(locator.locator_type, LocatorType::Image) {
+            let json = serde_json::json!({
+                "success": false,
+                "error": format!("Locator '{}' 不是图像类型", locator_name)
+            });
+            println!("{}", serde_json::to_string(&json).unwrap());
             return Err(TkeError::InvalidArgument(format!("Locator '{}' 不是图像类型", locator_name)));
         }
 
         let template_path = if let Some(ref path) = locator.path {
             self.project_path.join(path)
         } else {
+            let json = serde_json::json!({
+                "success": false,
+                "error": "图像locator缺少path字段"
+            });
+            println!("{}", serde_json::to_string(&json).unwrap());
             return Err(TkeError::InvalidArgument("图像locator缺少path字段".to_string()));
         };
 
         let screenshot_path = self.project_path.join("workarea").join("current_screenshot.png");
 
         // 调用 tke-opencv 可执行文件进行模板匹配
-        self.opencv_match(&screenshot_path, &template_path)
+        self.opencv_match(&screenshot_path, &template_path, threshold)
     }
 
     // 使用 OpenCV (Python 打包的可执行文件) 进行模板匹配
-    fn opencv_match(&self, screenshot_path: &PathBuf, template_path: &PathBuf) -> Result<Point> {
+    fn opencv_match(&self, screenshot_path: &PathBuf, template_path: &PathBuf, threshold: f32) -> Result<Point> {
         use std::process::Command;
 
         // tke-opencv 可执行文件路径（与当前可执行文件同目录）
@@ -312,25 +333,38 @@ impl Recognizer {
 
         // 检查 tke-opencv 是否存在
         if !opencv_bin.exists() {
-            return Err(TkeError::ElementNotFound(
-                format!("tke-opencv 可执行文件不存在: {:?}", opencv_bin)
-            ));
+            let json = serde_json::json!({
+                "success": false,
+                "error": "找不到 tke-opencv 模块"
+            });
+            println!("{}", serde_json::to_string(&json).unwrap());
+            return Err(TkeError::ElementNotFound("找不到 tke-opencv 模块".to_string()));
         }
 
         // 调用 tke-opencv
         let output = Command::new(&opencv_bin)
             .arg(screenshot_path.to_str().unwrap())
             .arg(template_path.to_str().unwrap())
-            .arg(self.confidence_threshold.to_string())
+            .arg(threshold.to_string())
             .output()
-            .map_err(|e| TkeError::ImageError(format!("调用 tke-opencv 失败: {}", e)))?;
+            .map_err(|e| {
+                let json = serde_json::json!({
+                    "success": false,
+                    "error": format!("调用 tke-opencv 失败: {}", e)
+                });
+                println!("{}", serde_json::to_string(&json).unwrap());
+                TkeError::ImageError(format!("调用 tke-opencv 失败: {}", e))
+            })?;
 
-        // 解析 JSON 输出
+        // 解析并输出 tke-opencv 的 JSON 结果
         let stdout = String::from_utf8_lossy(&output.stdout);
         let result: serde_json::Value = serde_json::from_str(&stdout)
             .map_err(|e| TkeError::JsonError(e))?;
 
-        // 检查是否成功
+        // 直接输出原始 JSON
+        println!("{}", stdout.trim());
+
+        // 检查是否成功并返回 Point
         if result["success"].as_bool().unwrap_or(false) {
             let x = result["x"].as_i64()
                 .ok_or_else(|| TkeError::ElementNotFound("JSON 响应缺少 x 字段".to_string()))?
@@ -341,9 +375,7 @@ impl Recognizer {
 
             Ok(Point::new(x, y))
         } else {
-            let error = result["error"].as_str()
-                .unwrap_or("未知错误");
-            Err(TkeError::ElementNotFound(error.to_string()))
+            Err(TkeError::ElementNotFound("图像匹配失败".to_string()))
         }
     }
     
