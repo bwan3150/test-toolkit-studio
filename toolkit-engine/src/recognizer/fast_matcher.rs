@@ -37,10 +37,7 @@ impl FastMatcher {
         let screen_height = screenshot.height();
         let template_width = template.width();
         let template_height = template.height();
-        
-        info!("截图尺寸: {}x{}, 模板尺寸: {}x{}", 
-              screen_width, screen_height, template_width, template_height);
-        
+
         if template_width > screen_width || template_height > screen_height {
             return Err(TkeError::InvalidArgument("模板图片大于截图".to_string()));
         }

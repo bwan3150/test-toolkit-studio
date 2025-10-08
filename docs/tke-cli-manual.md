@@ -242,8 +242,8 @@ Error: ElementNotFound("Locator 'settings_button' 未定义")
 ```bash
 ❯ tke recognizer find-image findUrDevice
 
-2025-10-07T07:17:12.173046Z  INFO tke::recognizer::fast_matcher: 截图尺寸: 1080x2340, 模板尺寸: 504x108
-2025-10-07T07:17:12.208964Z  INFO tke::recognizer::fast_matcher: 精搜索找到最佳位置: Point { x: 495, y: 757 }, 相似度: 0.626
+2025-10-08T00:27:32.731085Z  INFO tke::recognizer::fast_matcher: 精搜索找到最佳位置: Point { x: 495, y: 757 }, 相似度: 0.62
+6
 Error: ElementNotFound("图像匹配置信度不足: 0.626 < 0.750")
 ```
 
