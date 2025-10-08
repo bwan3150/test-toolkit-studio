@@ -188,7 +188,7 @@ enum RecognizerCommands {
         /// Locator名称
         locator_name: String,
         /// 置信度阈值 (0.0-1.0)
-        #[arg(long, default_value = "0.75")]
+        #[arg(long, default_value = "0.50")]
         threshold: f32,
     },
     /// 根据文本查找元素位置
