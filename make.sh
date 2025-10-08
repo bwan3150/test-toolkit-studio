@@ -18,7 +18,11 @@ npm audit fix
 echo ">>> Rusting tke up..."
 ./toolkit-engine/build.sh
 
-# 4. Electron构建
+# 4. pip-installer opencv-matcher构建
+echo ">>> Pip installing tke-opencv..."
+./opencv-matcher/build.sh
+
+# 5. Electron构建
 if [ "$1" = "mac" ]; then
   echo ">>> Building electron for mac..."
   npm run build-mac
@@ -30,4 +34,4 @@ else
   exit 1
 fi
 
-echo ">>> Make Donw"
+echo ">>> Make DONE!"
