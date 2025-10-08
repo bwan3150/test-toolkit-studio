@@ -240,11 +240,15 @@ Error: ElementNotFound("Locator 'settings_button' 未定义")
 ```
 
 ```bash
+(tke默认阈值0.5)
 ❯ tke recognizer find-image findUrDevice
 
-2025-10-08T00:27:32.731085Z  INFO tke::recognizer::fast_matcher: 精搜索找到最佳位置: Point { x: 495, y: 757 }, 相似度: 0.62
-6
-Error: ElementNotFound("图像匹配置信度不足: 0.626 < 0.750")
+{"success": true, "x": 725, "y": 910, "width": 490, "height": 105, "matches_count": 1}
+
+///// 失败则是:
+❯ tke recognizer find-image findUrDevice --threshold 0.7
+
+{"success": false, "error": "未找到匹配点 (阈值=0.5)"}
 ```
 
 ---

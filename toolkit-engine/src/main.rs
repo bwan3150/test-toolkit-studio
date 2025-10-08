@@ -480,68 +480,35 @@ async fn handle_fetcher_commands(action: FetcherCommands, project_path: PathBuf)
 }
 
 async fn handle_recognizer_commands(action: RecognizerCommands, project_path: PathBuf) -> Result<()> {
-    // 初始化 recognizer，如果失败则输出 JSON 错误
-    let recognizer = match Recognizer::new(project_path) {
-        Ok(r) => r,
-        Err(e) => {
-            let json = serde_json::json!({
-                "success": false,
-                "error": e.to_string()
-            });
-            println!("{}", serde_json::to_string(&json)?);
-            return Err(e);
-        }
-    };
+    // 初始化 recognizer，如果失败则输出 JSON 错误并退出
+    let recognizer = Recognizer::new(project_path)
+        .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
     match action {
         RecognizerCommands::FindXml { locator_name } => {
-            match recognizer.find_xml_element(&locator_name) {
-                Ok(point) => {
-                    let json = serde_json::json!({
-                        "success": true,
-                        "locator": locator_name,
-                        "x": point.x,
-                        "y": point.y
-                    });
-                    println!("{}", serde_json::to_string(&json)?);
-                }
-                Err(e) => {
-                    let json = serde_json::json!({
-                        "success": false,
-                        "error": e.to_string()
-                    });
-                    println!("{}", serde_json::to_string(&json)?);
-                    return Err(e);
-                }
-            }
+            let point = recognizer.find_xml_element(&locator_name)
+                .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
+
+            JsonOutput::success(serde_json::json!({
+                "success": true,
+                "x": point.x,
+                "y": point.y
+            }));
         }
         RecognizerCommands::FindImage { locator_name, threshold } => {
-            // 直接输出 tke-opencv 的 JSON 结果，不包装
-            // 错误时静默退出，不打印 Error 信息
-            if let Err(_) = recognizer.find_image_element_json(&locator_name, threshold) {
-                std::process::exit(1);
-            }
+            // image 模块内部已经处理了 JSON 输出
+            recognizer.find_image_element_json(&locator_name, threshold)
+                .unwrap_or_else(|_| std::process::exit(1));
         }
         RecognizerCommands::FindText { text } => {
-            match recognizer.find_element_by_text(&text) {
-                Ok(point) => {
-                    let json = serde_json::json!({
-                        "success": true,
-                        "text": text,
-                        "x": point.x,
-                        "y": point.y
-                    });
-                    println!("{}", serde_json::to_string(&json)?);
-                }
-                Err(e) => {
-                    let json = serde_json::json!({
-                        "success": false,
-                        "error": e.to_string()
-                    });
-                    println!("{}", serde_json::to_string(&json)?);
-                    return Err(e);
-                }
-            }
+            let point = recognizer.find_element_by_text(&text)
+                .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
+
+            JsonOutput::success(serde_json::json!({
+                "success": true,
+                "x": point.x,
+                "y": point.y
+            }));
         }
     }
 
