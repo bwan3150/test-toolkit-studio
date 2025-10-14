@@ -1,6 +1,6 @@
 // ScriptInterpreter模块 - 脚本解释器，将TKS指令转换为可执行的ADB指令
 
-use crate::{Result, TkeError, TksScript, TksStep, TksCommand, TksParam, Point, Controller, Recognizer};
+use crate::{Result, TkeError, TksStep, TksCommand, TksParam, Point, Controller, Recognizer};
 use std::path::PathBuf;
 use tracing::{debug, info, error};
 

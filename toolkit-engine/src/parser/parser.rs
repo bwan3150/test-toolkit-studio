@@ -4,7 +4,6 @@ use crate::{Result, TkeError, TksScript, TksStep, TksCommand, TksParam, Point};
 use regex::Regex;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tracing::{debug, info};
 
 pub struct ScriptParser {
     // 命令映射

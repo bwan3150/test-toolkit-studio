@@ -3,8 +3,6 @@
 use crate::{Result, TkeError, DeviceInfo, AdbManager};
 use std::path::PathBuf;
 use std::process::Command;
-use tracing::{debug, info, error};
-use anyhow::Context;
 
 pub struct Controller {
     device_id: Option<String>,

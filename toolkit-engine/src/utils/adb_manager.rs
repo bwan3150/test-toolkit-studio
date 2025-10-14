@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::Write;
-use tracing::{info, warn, debug, error};
+use tracing::{warn, debug};
 use crate::{Result, TkeError};
 
 // 引入构建时生成的 ADB 二进制数据
