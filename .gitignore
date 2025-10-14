@@ -57,6 +57,10 @@ pids
 # 测试项目
 test-projects/
 projects/
+tester-ai/examples/
+
+# 本地
+local/
 
 # Electron
 electron-builder.yml
