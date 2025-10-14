@@ -1,6 +1,8 @@
 // Librarian Agent - 从知识库中检索相关信息
 
 use anyhow::Result;
+use rig::completion::Prompt;
+use rig::providers::openai;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing::info;
@@ -31,14 +33,21 @@ pub struct KnowledgeItem {
 pub struct LibrarianAgent {
     /// 知识库路径
     knowledge_base_path: String,
+    /// OpenAI 客户端
+    client: openai::Client,
+    /// 模型名称
+    model: String,
 }
 
 impl LibrarianAgent {
     /// 创建新的 Librarian Agent
-    pub fn new(knowledge_base_path: String) -> Self {
-        Self {
+    pub fn new(knowledge_base_path: String, api_key: String, model: String) -> Result<Self> {
+        let client = openai::Client::new(&api_key);
+        Ok(Self {
             knowledge_base_path,
-        }
+            client,
+            model,
+        })
     }
 
     /// 检索相关知识
@@ -48,16 +57,60 @@ impl LibrarianAgent {
     ) -> Result<LibrarianKnowledge> {
         info!("Librarian 检索知识: {}", self.knowledge_base_path);
 
-        // TODO: 实现实际的知识库检索
-        // 1. 扫描知识库文件夹
-        // 2. 读取 markdown/txt 文件
-        // 3. 使用向量搜索或关键词匹配找到相关内容
-        // 4. 使用 LLM 总结相关知识
+        // 扫描并读取知识库文件
+        let knowledge_files = self.scan_knowledge_base().await?;
 
-        // 暂时返回空知识
+        if knowledge_files.is_empty() {
+            return Ok(LibrarianKnowledge {
+                relevant_items: vec![],
+                summary: "知识库为空".to_string(),
+            });
+        }
+
+        // 读取所有知识文件内容
+        let mut all_knowledge = String::new();
+        for file_path in &knowledge_files {
+            if let Ok(content) = tokio::fs::read_to_string(file_path).await {
+                all_knowledge.push_str(&format!("\n\n=== {} ===\n", file_path));
+                all_knowledge.push_str(&content);
+            }
+        }
+
+        if all_knowledge.is_empty() {
+            return Ok(LibrarianKnowledge {
+                relevant_items: vec![],
+                summary: "知识库无内容".to_string(),
+            });
+        }
+
+        // 使用 LLM 提取相关知识
+        let prompt = format!(
+            r#"你是一个知识库管理员。
+
+测试用例描述:
+{}
+
+知识库内容:
+{}
+
+请从知识库中提取与测试用例相关的信息，并生成一个简洁的摘要。
+摘要应该包含对测试有帮助的关键信息，比如账号信息、操作流程、预期行为等。
+
+只返回摘要文本，不要有额外的解释。
+"#,
+            test_case_description, all_knowledge
+        );
+
+        let agent = self.client.agent(&self.model).build();
+
+        let summary = agent
+            .prompt(&prompt)
+            .await
+            .unwrap_or_else(|_| "未能提取知识".to_string());
+
         Ok(LibrarianKnowledge {
             relevant_items: vec![],
-            summary: "暂无相关知识".to_string(),
+            summary,
         })
     }
 

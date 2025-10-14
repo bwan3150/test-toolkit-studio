@@ -1,7 +1,9 @@
 // Worker Agent - 执行测试操作的核心 Agent
 
 use crate::models::{ActionDecision, ActionParams, ActionType};
-use anyhow::Result;
+use anyhow::{Context, Result};
+use rig::completion::Prompt;
+use rig::providers::openai;
 use tracing::info;
 
 /// Worker Agent
@@ -12,18 +14,28 @@ pub struct WorkerAgent {
     /// 知识库内容 (由 Librarian 提供)
     knowledge: String,
 
-    /// LLM 占位
-    _placeholder: (),
+    /// OpenAI 客户端
+    client: openai::Client,
+
+    /// 模型名称
+    model: String,
 }
 
 impl WorkerAgent {
     /// 创建新的 Worker Agent
-    pub fn new(test_instruction: String, knowledge: String) -> Self {
-        Self {
+    pub fn new(
+        test_instruction: String,
+        knowledge: String,
+        api_key: String,
+        model: String,
+    ) -> Result<Self> {
+        let client = openai::Client::new(&api_key);
+        Ok(Self {
             test_instruction,
             knowledge,
-            _placeholder: (),
-        }
+            client,
+            model,
+        })
     }
 
     /// 根据当前屏幕状态做出决策
@@ -34,21 +46,6 @@ impl WorkerAgent {
         previous_actions: &[String],
     ) -> Result<ActionDecision> {
         info!("Worker 做出第 {} 轮决策", round);
-
-        // TODO: 使用 RIG 框架调用 LLM
-        // 输入:
-        // 1. 测试指令 (test_instruction)
-        // 2. 知识库内容 (knowledge)
-        // 3. 当前屏幕描述 (screen_description)
-        // 4. 之前的操作历史 (previous_actions)
-        //
-        // 输出: ActionDecision (JSON 格式)
-        //
-        // Prompt 应该包含:
-        // - 测试目标
-        // - 当前可交互元素列表
-        // - 可用的操作类型
-        // - 要求返回 JSON 格式的决策
 
         let prompt = format!(
             r#"你是一个移动应用自动化测试执行员。
@@ -68,40 +65,67 @@ impl WorkerAgent {
 请根据以上信息，决定下一步操作。
 
 可用的操作类型:
-- click: 点击元素
-- swipe: 滑动
-- input: 输入文字
-- back: 返回
-- wait: 等待
+- click: 点击元素 (需要 target_element_id)
+- swipe: 滑动 (需要 target_element_id 作为起点, params.to 作为终点坐标)
+- input: 输入文字 (需要 target_element_id, params.text)
+- back: 返回 (不需要 target_element_id)
+- wait: 等待 (不需要 target_element_id, params.duration 默认 1000ms)
 
-请以 JSON 格式返回决策，格式如下：
+请严格以 JSON 格式返回决策，格式如下：
 {{
   "action_type": "click",
   "target_element_id": 5,
-  "params": {{}},
-  "reasoning": "决策理由",
+  "params": {{
+    "text": "输入的文本",
+    "duration": 1000,
+    "to": [500, 800]
+  }},
+  "reasoning": "决策理由 - 解释为什么选择这个操作",
   "test_completed": false
 }}
 
-如果你认为测试已经完成，请将 test_completed 设置为 true。
+注意:
+1. target_element_id 必须是屏幕元素列表中的 ID
+2. 如果你认为测试已经完成（达到了测试目标），请将 test_completed 设置为 true
+3. 只返回 JSON，不要有任何其他文字
 "#,
             self.test_instruction,
             self.knowledge,
             screen_description,
             previous_actions.len(),
-            previous_actions.join("\n")
+            if previous_actions.is_empty() {
+                "无".to_string()
+            } else {
+                previous_actions.join("\n")
+            }
         );
 
-        // 暂时返回模拟决策
-        Ok(ActionDecision {
-            action_type: ActionType::Wait,
-            target_element_id: None,
-            params: ActionParams {
-                duration: Some(1000),
-                ..Default::default()
-            },
-            reasoning: "等待屏幕加载".to_string(),
-            test_completed: false,
-        })
+        let agent = self.client.agent(&self.model).build();
+
+        let response = agent
+            .prompt(&prompt)
+            .await
+            .context("调用 LLM 失败")?;
+
+        // 解析 JSON 响应
+        let json_str = response.trim();
+
+        // 尝试提取 JSON (如果被代码块包裹)
+        let json_str = if json_str.starts_with("```json") {
+            json_str
+                .trim_start_matches("```json")
+                .trim_end_matches("```")
+                .trim()
+        } else if json_str.starts_with("```") {
+            json_str
+                .trim_start_matches("```")
+                .trim_end_matches("```")
+                .trim()
+        } else {
+            json_str
+        };
+
+        serde_json::from_str(json_str)
+            .context(format!("解析 LLM 响应失败: {}", json_str))
     }
 }

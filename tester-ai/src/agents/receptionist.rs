@@ -1,6 +1,8 @@
 // Receptionist Agent - 接收测试用例并生成测试意见
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use rig::completion::Prompt;
+use rig::providers::openai;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -22,16 +24,17 @@ pub struct ReceptionistAnalysis {
 
 /// Receptionist Agent
 pub struct ReceptionistAgent {
-    /// LLM 客户端 (暂时占位, 后续使用 RIG 实现)
-    _placeholder: (),
+    /// OpenAI 客户端
+    client: openai::Client,
+    /// 模型名称
+    model: String,
 }
 
 impl ReceptionistAgent {
     /// 创建新的 Receptionist Agent
-    pub fn new() -> Self {
-        Self {
-            _placeholder: (),
-        }
+    pub fn new(api_key: String, model: String) -> Result<Self> {
+        let client = openai::Client::new(&api_key);
+        Ok(Self { client, model })
     }
 
     /// 分析测试用例
@@ -42,9 +45,6 @@ impl ReceptionistAgent {
         app_package: &str,
     ) -> Result<ReceptionistAnalysis> {
         info!("Receptionist 分析测试用例: {}", test_case_name);
-
-        // TODO: 使用 RIG 框架调用 LLM
-        // 这里先返回一个示例结果
 
         let prompt = format!(
             r#"你是一个专业的移动应用测试员接待员。
@@ -61,37 +61,45 @@ impl ReceptionistAgent {
 3. 需要关注的要点 (可能的边界情况、特殊场景等)
 4. 预期结果
 
-以 JSON 格式返回，格式如下：
+请严格以 JSON 格式返回，格式如下：
 {{
   "test_objective": "测试目标",
   "suggested_approach": ["步骤1", "步骤2", "步骤3"],
   "key_points": ["要点1", "要点2"],
   "expected_outcome": "预期结果"
 }}
+
+只返回 JSON，不要有任何其他文字。
 "#,
             test_case_name, test_case_description, app_package
         );
 
-        // 暂时返回模拟数据
-        Ok(ReceptionistAnalysis {
-            test_objective: format!("测试 {} 应用的 {} 功能", app_package, test_case_name),
-            suggested_approach: vec![
-                "启动应用".to_string(),
-                "导航到目标功能".to_string(),
-                "执行测试操作".to_string(),
-                "验证结果".to_string(),
-            ],
-            key_points: vec![
-                "注意边界情况".to_string(),
-                "检查错误处理".to_string(),
-            ],
-            expected_outcome: "功能正常工作，无错误".to_string(),
-        })
-    }
-}
+        let agent = self.client.agent(&self.model).build();
 
-impl Default for ReceptionistAgent {
-    fn default() -> Self {
-        Self::new()
+        let response = agent
+            .prompt(&prompt)
+            .await
+            .context("调用 LLM 失败")?;
+
+        // 解析 JSON 响应
+        let json_str = response.trim();
+
+        // 尝试提取 JSON (如果被代码块包裹)
+        let json_str = if json_str.starts_with("```json") {
+            json_str
+                .trim_start_matches("```json")
+                .trim_end_matches("```")
+                .trim()
+        } else if json_str.starts_with("```") {
+            json_str
+                .trim_start_matches("```")
+                .trim_end_matches("```")
+                .trim()
+        } else {
+            json_str
+        };
+
+        serde_json::from_str(json_str)
+            .context(format!("解析 LLM 响应失败: {}", json_str))
     }
 }

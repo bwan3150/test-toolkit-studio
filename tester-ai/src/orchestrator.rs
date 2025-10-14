@@ -61,7 +61,10 @@ impl TesterOrchestrator {
 
         // 1. Receptionist 分析测试用例
         info!("步骤 1: Receptionist 分析测试用例");
-        let receptionist = ReceptionistAgent::new();
+        let receptionist = ReceptionistAgent::new(
+            self.input.ai_config.api_key.clone(),
+            self.input.ai_config.model.clone(),
+        )?;
         let analysis = receptionist
             .analyze_test_case(
                 &self.input.test_case_name,
@@ -74,7 +77,11 @@ impl TesterOrchestrator {
 
         // 2. Librarian 检索知识
         info!("步骤 2: Librarian 检索知识库");
-        let librarian = LibrarianAgent::new(self.input.knowledge_base_path.clone());
+        let librarian = LibrarianAgent::new(
+            self.input.knowledge_base_path.clone(),
+            self.input.ai_config.api_key.clone(),
+            self.input.ai_config.model.clone(),
+        )?;
         let knowledge = librarian
             .retrieve_knowledge(&self.input.test_case_description)
             .await?;
@@ -96,10 +103,19 @@ impl TesterOrchestrator {
             analysis.expected_outcome
         );
 
-        let worker = WorkerAgent::new(test_instruction.clone(), knowledge.summary.clone());
+        let worker = WorkerAgent::new(
+            test_instruction.clone(),
+            knowledge.summary.clone(),
+            self.input.ai_config.api_key.clone(),
+            self.input.ai_config.model.clone(),
+        )?;
 
         // 4. 初始化 Supervisor
-        let supervisor = SupervisorAgent::new(analysis.test_objective.clone());
+        let supervisor = SupervisorAgent::new(
+            analysis.test_objective.clone(),
+            self.input.ai_config.api_key.clone(),
+            self.input.ai_config.model.clone(),
+        )?;
 
         // 5. 启动应用
         info!("步骤 3: 启动被测应用");
