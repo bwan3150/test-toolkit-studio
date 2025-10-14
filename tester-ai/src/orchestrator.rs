@@ -14,22 +14,22 @@ use tracing::{error, info, warn};
 /// AI 测试员主控制器
 pub struct TesterOrchestrator {
     /// 输入参数
-    input: TesterInput,
+    pub(crate) input: TesterInput,
 
     /// TKE 执行器
-    tke: TkeExecutor,
+    pub(crate) tke: TkeExecutor,
 
     /// Worker Parser
-    parser: WorkerParser,
+    pub(crate) parser: WorkerParser,
 
     /// 测试日志
-    logs: Vec<RoundLog>,
+    pub(crate) logs: Vec<RoundLog>,
 
     /// 已执行的操作历史
-    action_history: Vec<String>,
+    pub(crate) action_history: Vec<String>,
 
     /// .tks 脚本内容
-    tks_script: Vec<String>,
+    pub(crate) tks_script: Vec<String>,
 }
 
 impl TesterOrchestrator {
@@ -242,10 +242,10 @@ impl TesterOrchestrator {
         // 1. 截图和获取 UI 树
         let capture_result = self.tke.capture().await?;
 
-        // 2. OCR 识别
+        // 2. OCR 识别 (使用在线 OCR)
         let ocr_result = self
             .tke
-            .ocr(&capture_result.screenshot, false, None)
+            .ocr(&capture_result.screenshot, true, Some("https://ocr.test-toolkit.app/ocr"))
             .await?;
 
         // 3. 提取 UI 元素
@@ -272,17 +272,25 @@ impl TesterOrchestrator {
         // 6. 转换并执行操作
         let tks_line = ActionTranslator::translate_to_tks_script(&decision, &self.parser)?;
 
-        // 执行 TKE 命令 (简化处理)
-        // TODO: 根据不同的 ActionType 调用对应的 TKE 方法
+        // 7. 真正执行 TKE 命令
+        let action_success = self.execute_action(&decision).await.is_ok();
 
-        // 7. 记录日志
+        if !action_success {
+            warn!("操作执行失败: {:?}", decision.action_type);
+        } else {
+            info!("操作执行成功");
+            // 等待界面更新
+            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+        }
+
+        // 8. 记录日志
         let log = RoundLog {
             round,
             timestamp: round_start,
             observation: screen_description,
             decision: decision.reasoning.clone(),
             action: tks_line.clone(),
-            action_success: true,
+            action_success,
             error: None,
         };
 
