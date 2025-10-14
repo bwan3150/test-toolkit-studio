@@ -8,6 +8,11 @@
 
 基于Rust语言的LLM框架RIG搭建, 文档见 https://docs.rs/rig-core/latest/rig/  
 
+### tke的功能
+
+文档参考:./docs/The_ToolkitScript_Reference.md
+具体指令参考./docs/tke-cli-manual.md
+
 ### AI Agent分工
 
 ### Receptionist
@@ -15,6 +20,9 @@
 
 ### Librarian
 根据测试用例, 在用户的测试项目目录下保存着的本项目测试知识库(需要在Toolkit Studio在创建用户项目时同时默认生成一个知识库文件夹, 这个需要其他部分来做), 在知识库里查找可能会用到的信息, 并且发送给Reception用于测试意见的生成  
+
+### worker-parser
+这不是一个AI Agent, 而是一个单纯的工具, 其作用是, 将使用OCR提取出来的当前屏幕上的文字和坐标, 以及从当前xml中获取的可交互元素, 都集中在一起, 带着统一的序号, 仅给worker这个agent看ocr的文字和xml的元素名字等可读的信息, 然后将坐标bondingbox等过滤, 以减少token开支, 但是同时要记录一个字典, 当worker进行决策要与哪个文字或xml元素交互时, 要带着worker要决策的那个序号, 回去查字典, 找出对应的文字和xml等元素序号对应的交互的坐标, 然后将其与worker agent给出的需要执行的指令(点击, 拖拽, 输入 等等等等全部指令), 结合起来, 交给tke controller去执行这个指令, 也就是, 将tke ocr和tke fetcher所获取的当前屏幕信息, 精简和翻译给work agent, 然后将worker agent返回的指令+对象, 转化为tke controller可以操作执行的命令, 这么一个翻译者
 
 ### Worker
 以Receptionist的意见, 以及 Librarian 提供的知识作为prompt, 为目前测试用例量身制作的Agent, 运行起来之后, 需要结合toolkit studio以及tke已有的能力, 每一轮都需要经历 获取手机当前截图和xml(tke执行 并更新前端截图显示) -> 从截图提取OCR文字信息+过滤有用xml信息 -> 综合以上信息返回应该对什么元素执行什么tke支持的操作以逐渐靠近完成测试目标 -> tke对对应元素执行对应操作 -> 将本次操作append到本次AI执行测试的.tks文件中 -> 再次获取截图和xml并更新前端显示 -> ... 直到觉得测试完成, 则发给Supervisor进行审核  
