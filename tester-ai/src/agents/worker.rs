@@ -74,6 +74,7 @@ impl WorkerAgent {
 - input: 输入文字 (需要 target_element_id, params.text)
 - back: 返回 (不需要 target_element_id)
 - wait: 等待 (不需要 target_element_id, params.duration 默认 1000ms)
+- none: 无操作,测试已完成 (不需要 target_element_id)
 
 ## 返回格式 (严格 JSON):
 {{
@@ -88,9 +89,18 @@ impl WorkerAgent {
   "test_completed": false
 }}
 
+## 测试完成时的返回格式:
+{{
+  "action_type": "none",
+  "target_element_id": null,
+  "params": {{}},
+  "reasoning": "测试目标已达成,原因是...",
+  "test_completed": true
+}}
+
 ## 重要提醒:
-1. target_element_id 必须是当前屏幕元素列表中存在的 ID
-2. 如果测试目标已达成,将 test_completed 设为 true
+1. target_element_id 必须是当前屏幕元素列表中存在的 ID (如果 action_type 为 none, 则设为 null)
+2. 如果测试目标已达成,将 action_type 设为 "none" 并且 test_completed 设为 true
 3. 只返回 JSON,不要有任何其他文字或解释
 "#,
             self.test_instruction,

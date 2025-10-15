@@ -158,6 +158,11 @@ impl ActionTranslator {
                 // 直接在脚本层面记录
                 Ok(("assert".to_string(), vec![]))
             }
+
+            ActionType::None => {
+                // 测试完成，无需操作
+                Ok(("wait".to_string(), vec!["0".to_string()]))
+            }
         }
     }
 
@@ -323,6 +328,11 @@ impl ActionTranslator {
                     .context(format!("找不到元素 ID {}", element_id))?;
 
                 Ok(format!("读取 [{{{},{}}}]", pos.0, pos.1))
+            }
+
+            ActionType::None => {
+                // 测试完成，无需操作
+                Ok("# 测试完成".to_string())
             }
         }
     }
@@ -531,6 +541,11 @@ impl ActionTranslator {
                     .context(format!("找不到元素 ID {}", element_id))?;
 
                 Ok(format!("读取 [{{{},{}}}]", pos.0, pos.1))
+            }
+
+            ActionType::None => {
+                // 测试完成，无需操作
+                Ok("# 测试完成".to_string())
             }
         }
     }

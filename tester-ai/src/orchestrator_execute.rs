@@ -116,6 +116,11 @@ impl TesterOrchestrator {
                 self.tke.stop(package).await?;
             }
 
+            ActionType::None => {
+                // 测试完成，无需执行任何操作
+                info!("测试完成，无需执行操作");
+            }
+
             // 其他操作类型暂不实际执行
             _ => {
                 info!("操作类型 {:?} 暂不支持实际执行", decision.action_type);

@@ -245,47 +245,136 @@ impl ElementManager {
         text: Option<&str>,
         resource_id: Option<&str>,
     ) -> String {
-        // 优先使用 resource_id
+        let simple_class = Self::simplify_class_name(class_name);
+
+        // 策略 1: 如果有 text，使用 text + 类型后缀
+        if let Some(txt) = text {
+            let clean_text = txt
+                .chars()
+                .filter(|c| c.is_alphanumeric() || *c == '_' || Self::is_chinese_char(*c))
+                .take(10)  // 限制长度
+                .collect::<String>();
+
+            if !clean_text.is_empty() {
+                let suffix = Self::get_type_suffix(&simple_class);
+                let name = if suffix.is_empty() {
+                    clean_text
+                } else {
+                    format!("{}{}", clean_text, suffix)
+                };
+                return self.make_unique_name(&name);
+            }
+        }
+
+        // 策略 2: 如果有 resourceId，提取有意义的部分 + 类型后缀
         if let Some(rid) = resource_id {
             if let Some(simple_id) = rid.split('/').last() {
                 if !simple_id.is_empty() {
-                    return self.make_unique_name(simple_id);
+                    // 提取有意义的词（如 email_input -> 邮箱输入框）
+                    let meaningful_name = Self::extract_meaningful_name(simple_id, &simple_class);
+                    return self.make_unique_name(&meaningful_name);
                 }
             }
         }
 
-        // 其次使用 text
-        if let Some(txt) = text {
-            if !txt.trim().is_empty() && txt.len() <= 20 {
-                let clean_text = txt
-                    .chars()
-                    .filter(|c| c.is_alphanumeric() || *c == '_' || Self::is_chinese_char(*c))
-                    .collect::<String>();
-
-                if !clean_text.is_empty() {
-                    return self.make_unique_name(&clean_text);
-                }
-            }
-        }
-
-        // 最后使用类名
-        let simple_class = Self::simplify_class_name(class_name);
+        // 策略 3: 纯类型名称
         self.make_unique_name(&simple_class)
+    }
+
+    /// 根据类型获取中文后缀
+    fn get_type_suffix(class_name: &str) -> &'static str {
+        match class_name {
+            "Button" => "按钮",
+            "EditText" => "输入框",
+            "TextView" => "文本",
+            "ImageView" => "图标",
+            "CheckBox" => "复选框",
+            "RadioButton" => "单选按钮",
+            "Switch" => "开关",
+            "SeekBar" => "滑块",
+            "ProgressBar" => "进度条",
+            "Spinner" => "下拉框",
+            _ => "",
+        }
+    }
+
+    /// 从 resourceId 提取有意义的名称
+    fn extract_meaningful_name(resource_id: &str, class_name: &str) -> String {
+        // 常见的模式转换
+        let meaningful = resource_id
+            .replace("_btn", "")
+            .replace("_button", "")
+            .replace("_txt", "")
+            .replace("_text", "")
+            .replace("_et", "")
+            .replace("_edit", "")
+            .replace("_iv", "")
+            .replace("_img", "")
+            .replace("_image", "")
+            .replace("_", "");
+
+        // 常见单词的中文映射
+        let translated = match meaningful.to_lowercase().as_str() {
+            "email" | "mail" => "邮箱",
+            "password" | "pwd" | "pass" => "密码",
+            "username" | "user" | "name" => "用户名",
+            "login" | "signin" => "登录",
+            "signup" | "register" => "注册",
+            "submit" | "confirm" => "确认",
+            "cancel" => "取消",
+            "back" => "返回",
+            "next" => "下一步",
+            "finish" | "done" => "完成",
+            "search" => "搜索",
+            "phone" | "mobile" => "手机号",
+            "code" | "verify" | "captcha" => "验证码",
+            "close" | "dismiss" => "关闭",
+            "menu" => "菜单",
+            "settings" => "设置",
+            "home" => "首页",
+            "profile" => "个人",
+            "message" | "msg" => "消息",
+            _ => &meaningful,
+        };
+
+        // 添加类型后缀
+        let suffix = Self::get_type_suffix(class_name);
+        if suffix.is_empty() || translated.contains("按钮") || translated.contains("输入框") {
+            translated.to_string()
+        } else {
+            format!("{}{}", translated, suffix)
+        }
     }
 
     /// 生成 OCR 元素名称
     fn generate_ocr_element_name(&mut self, text: &str) -> String {
+        // 先清理文本，保留字母数字和中文
         let clean_text = text
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '_' || Self::is_chinese_char(*c))
-            .take(15)
+            .take(10)
             .collect::<String>();
 
         if clean_text.is_empty() {
-            return self.make_unique_name("ocr文本");
+            return self.make_unique_name("OCR文本");
         }
 
-        self.make_unique_name(&clean_text)
+        // 尝试识别常见的 UI 文本并添加后缀
+        let name_with_suffix = match clean_text.to_lowercase().as_str() {
+            txt if txt.contains("login") || txt.contains("signin") || txt == "登录" => format!("{}按钮", clean_text),
+            txt if txt.contains("sign") && txt.contains("up") || txt == "注册" => format!("{}按钮", clean_text),
+            txt if txt.contains("continue") || txt == "继续" => format!("{}按钮", clean_text),
+            txt if txt.contains("submit") || txt == "提交" => format!("{}按钮", clean_text),
+            txt if txt.contains("confirm") || txt == "确认" => format!("{}按钮", clean_text),
+            txt if txt.contains("cancel") || txt == "取消" => format!("{}按钮", clean_text),
+            txt if txt.contains("back") || txt == "返回" => format!("{}按钮", clean_text),
+            txt if txt.contains("next") || txt == "下一步" => format!("{}按钮", clean_text),
+            txt if txt.contains("welcome") || txt.starts_with("欢迎") => format!("{}文本", clean_text),
+            txt if txt.contains("password") || txt == "密码" => format!("{}文本", clean_text),
+            _ => clean_text.clone(),
+        };
+
+        self.make_unique_name(&name_with_suffix)
     }
 
     /// 简化类名

@@ -53,6 +53,8 @@ pub enum ActionType {
     Assert,
     /// 读取文本
     ReadText,
+    /// 无操作（测试完成时使用）
+    None,
 }
 
 /// 操作参数
