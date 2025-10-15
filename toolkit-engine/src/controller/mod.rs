@@ -185,9 +185,7 @@ impl Controller {
             let _ = self.run_adb_command(&["shell", "ime", "set", &current_ime]);
         }
 
-        // 隐藏键盘，退出输入模式
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        let _ = self.hide_keyboard();
+        // 不隐藏键盘 - 让后续操作（如点击按钮）自然隐藏，避免在某些页面触发返回
 
         Ok(())
     }
