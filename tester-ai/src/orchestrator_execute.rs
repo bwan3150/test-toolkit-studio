@@ -66,6 +66,13 @@ impl TesterOrchestrator {
                 // 等待输入框获得焦点
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
+                // 清空输入框
+                info!("清空输入框内容");
+                self.tke.clear_input().await?;
+
+                // 短暂等待清空完成
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
                 info!("执行输入: {}", text);
                 self.tke.input(text).await?;
             }

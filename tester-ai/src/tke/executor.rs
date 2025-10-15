@@ -193,4 +193,10 @@ impl TkeExecutor {
         info!("停止 App: {}", package);
         self.execute_json(&["controller", "stop", package]).await
     }
+
+    /// 清空输入框
+    pub async fn clear_input(&self) -> Result<ActionResult> {
+        info!("清空输入框");
+        self.execute_json(&["controller", "clear-input"]).await
+    }
 }

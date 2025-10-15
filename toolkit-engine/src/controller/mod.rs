@@ -156,6 +156,21 @@ impl Controller {
 
     // 输入文本
     pub fn input_text(&self, text: &str) -> Result<()> {
+        // 保存当前输入法
+        let current_ime = self.get_current_ime().unwrap_or_default();
+
+        // 判断文本类型并切换输入法
+        if self.is_chinese_text(text) {
+            // 需要中文输入法 - 切换到中文输入法
+            self.switch_to_chinese_ime()?;
+        } else {
+            // 需要英文输入法 - 切换到英文输入法（或关闭中文输入法）
+            self.switch_to_english_ime()?;
+        }
+
+        // 等待输入法切换完成
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
         // 转义特殊字符
         let escaped = text
             .replace("\"", "\\\"")
@@ -163,6 +178,86 @@ impl Controller {
             .replace(" ", "%s");
 
         self.run_adb_command(&["shell", "input", "text", &escaped])?;
+
+        // 恢复原来的输入法
+        if !current_ime.is_empty() && !current_ime.contains("not found") {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let _ = self.run_adb_command(&["shell", "ime", "set", &current_ime]);
+        }
+
+        // 隐藏键盘，退出输入模式
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let _ = self.hide_keyboard();
+
+        Ok(())
+    }
+
+    // 获取当前输入法
+    fn get_current_ime(&self) -> Result<String> {
+        let output = self.run_adb_command_output(&["shell", "settings", "get", "secure", "default_input_method"])?;
+        Ok(output.trim().to_string())
+    }
+
+    // 判断文本是否包含中文
+    fn is_chinese_text(&self, text: &str) -> bool {
+        text.chars().any(|c| {
+            // 判断字符是否在中文 Unicode 范围内
+            matches!(c, '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' | '\u{20000}'..='\u{2A6DF}')
+        })
+    }
+
+    // 切换到英文输入法
+    fn switch_to_english_ime(&self) -> Result<()> {
+        // 获取设备上可用的输入法列表
+        let ime_list = self.run_adb_command_output(&["shell", "ime", "list", "-s"]).unwrap_or_default();
+
+        // 优先使用 Appium Unicode IME（最可靠，专门用于自动化测试）
+        if ime_list.contains("io.appium.settings/.UnicodeIME") {
+            if self.run_adb_command(&["shell", "ime", "set", "io.appium.settings/.UnicodeIME"]).is_ok() {
+                return Ok(());
+            }
+        }
+
+        // 尝试切换到 Google 输入法（支持英文）
+        let english_imes = [
+            "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME",
+            "com.android.inputmethod.latin/.LatinIME",
+            "com.android.inputmethod/.LatinIME",
+        ];
+
+        for ime in &english_imes {
+            if ime_list.contains(ime) {
+                if self.run_adb_command(&["shell", "ime", "set", ime]).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // 切换到中文输入法
+    fn switch_to_chinese_ime(&self) -> Result<()> {
+        // 获取设备上可用的输入法列表
+        let ime_list = self.run_adb_command_output(&["shell", "ime", "list", "-s"]).unwrap_or_default();
+
+        // 尝试切换到中文输入法，按优先级尝试
+        let chinese_imes = [
+            "com.netease.nie.yosemite/.ime.ImeService",  // 网易输入法
+            "com.google.android.inputmethod.pinyin/.PinyinIME",  // Google 拼音
+            "com.sohu.inputmethod.sogou/.SogouIME",  // 搜狗
+            "com.baidu.input/.ImeService",  // 百度
+            "com.iflytek.inputmethod/.FlyIME",  // 讯飞
+        ];
+
+        for ime in &chinese_imes {
+            if ime_list.contains(ime) {
+                if self.run_adb_command(&["shell", "ime", "set", ime]).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -197,12 +292,19 @@ impl Controller {
     
     // 清理输入框
     pub fn clear_input(&self) -> Result<()> {
-        // 移到行尾
-        self.key_event("KEYCODE_MOVE_END")?;
-        // 全选并删除
-        for _ in 0..50 {
+        // 简单粗暴的方法：向前删除20次，向后删除20次
+        // 这样无论光标在哪个位置都能清空内容
+
+        // 向前删除 20 次 (KEYCODE_DEL = 向前删除，相当于 Backspace)
+        for _ in 0..20 {
             self.key_event("KEYCODE_DEL")?;
         }
+
+        // 向后删除 20 次 (KEYCODE_FORWARD_DEL = 向后删除，相当于 Delete)
+        for _ in 0..20 {
+            self.key_event("KEYCODE_FORWARD_DEL")?;
+        }
+
         Ok(())
     }
     

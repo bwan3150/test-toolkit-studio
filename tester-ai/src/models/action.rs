@@ -57,6 +57,7 @@ pub enum ActionType {
 
 /// 操作参数
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ActionParams {
     /// 输入的文本 (用于 Input)
     pub text: Option<String>,

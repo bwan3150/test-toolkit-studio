@@ -47,6 +47,8 @@ pub enum ControllerCommands {
         /// 要输入的文本
         text: String,
     },
+    /// 清空输入框 (通过全选+删除)
+    ClearInput,
     /// 返回键
     Back,
     /// 主页键
@@ -115,6 +117,12 @@ pub async fn handle(action: ControllerCommands, device_id: Option<String>) -> Re
             JsonOutput::print(serde_json::json!({
                 "success": true,
                 "text": text
+            }));
+        }
+        ControllerCommands::ClearInput => {
+            controller.clear_input()?;
+            JsonOutput::print(serde_json::json!({
+                "success": true
             }));
         }
         ControllerCommands::Back => {
