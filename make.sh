@@ -22,6 +22,10 @@ echo ">>> Rusting tke up..."
 echo ">>> Pip installing tke-opencv..."
 ./opencv-matcher/build.sh
 
+# 5. rust tester-ai cargo build构建
+echo ">>> Rusting tester-ai up..."
+./tester-ai/build.sh
+
 # 5. Electron构建
 if [ "$1" = "mac" ]; then
   echo ">>> Building electron for mac..."

@@ -1,6 +1,6 @@
 [package]
 name = "tester-ai"
-version = "0.1.0"
+version = "0.3.3"
 edition = "2021"
 authors = ["Eric Wang"]
 description = "AI-powered automated testing agent using RIG framework"
