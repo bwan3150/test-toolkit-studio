@@ -300,20 +300,15 @@ function registerAdbHandlers(app) {
   // 卸载应用
   ipcMain.handle('adb-uninstall-app', async (event, deviceId, packageName) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!deviceId || !packageName) {
         return { success: false, error: '无效的设备ID或包名' };
       }
-      
+
       console.log('卸载应用:', deviceId, packageName);
-      
-      const uninstallCommand = `"${adbPath}" -s ${deviceId} uninstall ${packageName}`;
-      const { stdout, stderr } = await execPromise(uninstallCommand);
-      
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, ['uninstall', packageName]);
+
       if (stdout.includes('Success')) {
         return { success: true, message: '应用卸载成功' };
       } else if (stdout.includes('Failure')) {
@@ -324,9 +319,9 @@ function registerAdbHandlers(app) {
         }
         return { success: false, error: '卸载失败', details: stdout };
       }
-      
+
       return { success: true, message: '卸载命令已执行', output: stdout };
-      
+
     } catch (error) {
       console.error('卸载应用失败:', error);
       return { success: false, error: error.message };
@@ -336,44 +331,39 @@ function registerAdbHandlers(app) {
   // 无线配对功能
   ipcMain.handle('adb-pair-wireless', async (event, ipAddress, port, pairingCode) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!ipAddress || !port || !pairingCode) {
         return { success: false, error: '请提供IP地址、端口和配对码' };
       }
-      
+
       console.log('开始ADB无线配对:', ipAddress, port);
-      
-      const pairCommand = `"${adbPath}" pair ${ipAddress}:${port} ${pairingCode}`;
-      const { stdout, stderr } = await execPromise(pairCommand);
-      
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, null, ['pair', `${ipAddress}:${port}`, pairingCode]);
+
       console.log('配对输出:', stdout);
       if (stderr) console.log('配对错误:', stderr);
-      
+
       if (stdout.includes('Successfully paired') || stdout.includes('成功配对')) {
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: `成功配对到设备 ${ipAddress}:${port}`,
           output: stdout
         };
       } else if (stdout.includes('Failed') || (stderr && stderr.includes('failed'))) {
-        return { 
-          success: false, 
-          error: `配对失败: ${stderr || stdout}` 
+        return {
+          success: false,
+          error: `配对失败: ${stderr || stdout}`
         };
       } else {
         // 某些情况下配对可能成功但没有明确的成功消息
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: `配对命令已执行，请尝试连接设备`,
           output: stdout,
           warning: '配对状态不确定，请尝试连接'
         };
       }
-      
+
     } catch (error) {
       console.error('ADB配对失败:', error);
       return { success: false, error: `配对异常: ${error.message}` };
@@ -383,42 +373,38 @@ function registerAdbHandlers(app) {
   // 无线连接功能
   ipcMain.handle('adb-connect-wireless', async (event, ipAddress, port = 5555) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!ipAddress) {
         return { success: false, error: '请提供IP地址' };
       }
-      
+
       const connectionAddress = `${ipAddress}:${port}`;
       console.log('连接到无线ADB设备:', connectionAddress);
-      
-      const { stdout, stderr } = await execPromise(`"${adbPath}" connect ${connectionAddress}`);
-      
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, null, ['connect', connectionAddress]);
+
       if (stderr && stderr.includes('failed')) {
         return { success: false, error: `连接失败: ${stderr}` };
       }
-      
+
       if (stdout.includes('connected to') || stdout.includes('already connected')) {
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: `成功连接到设备 ${connectionAddress}`,
-          deviceId: connectionAddress 
+          deviceId: connectionAddress
         };
       } else if (stdout.includes('unable to connect')) {
-        return { 
-          success: false, 
-          error: `无法连接到 ${connectionAddress}，请确保设备已启用ADB调试并在同一网络` 
+        return {
+          success: false,
+          error: `无法连接到 ${connectionAddress}，请确保设备已启用ADB调试并在同一网络`
         };
       } else {
-        return { 
-          success: false, 
-          error: `连接状态未知: ${stdout}` 
+        return {
+          success: false,
+          error: `连接状态未知: ${stdout}`
         };
       }
-      
+
     } catch (error) {
       return { success: false, error: `连接异常: ${error.message}` };
     }
@@ -427,30 +413,26 @@ function registerAdbHandlers(app) {
   // 断开无线连接
   ipcMain.handle('adb-disconnect-wireless', async (event, ipAddress, port = 5555) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!ipAddress) {
         return { success: false, error: '请提供IP地址' };
       }
-      
+
       const connectionAddress = `${ipAddress}:${port}`;
       console.log('断开无线ADB设备连接:', connectionAddress);
-      
-      const { stdout, stderr } = await execPromise(`"${adbPath}" disconnect ${connectionAddress}`);
-      
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, null, ['disconnect', connectionAddress]);
+
       if (stderr && !stderr.includes('Warning')) {
         return { success: false, error: `断开连接失败: ${stderr}` };
       }
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         message: `已断开设备 ${connectionAddress}`,
         output: stdout.trim()
       };
-      
+
     } catch (error) {
       return { success: false, error: `断开连接异常: ${error.message}` };
     }
@@ -617,26 +599,21 @@ function registerAdbHandlers(app) {
   // 停止应用
   ipcMain.handle('stop-app', async (event, deviceId, packageName) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!deviceId || !packageName) {
         return { success: false, error: '请提供设备ID和包名' };
       }
-      
-      const stopCommand = `"${adbPath}" -s ${deviceId} shell am force-stop ${packageName}`;
-      console.log('停止应用命令:', stopCommand);
-      
-      const { stdout, stderr } = await execPromise(stopCommand);
-      
+
+      console.log('停止应用:', deviceId, packageName);
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, ['shell', 'am', 'force-stop', packageName]);
+
       if (stderr && !stderr.includes('Warning')) {
         return { success: false, error: stderr };
       }
-      
+
       return { success: true, message: '应用已停止', output: stdout };
-      
+
     } catch (error) {
       console.error('停止应用失败:', error);
       return { success: false, error: error.message };
@@ -646,28 +623,23 @@ function registerAdbHandlers(app) {
   // 清除应用数据
   ipcMain.handle('clear-app-data', async (event, deviceId, packageName) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!deviceId || !packageName) {
         return { success: false, error: '请提供设备ID和包名' };
       }
-      
-      const clearCommand = `"${adbPath}" -s ${deviceId} shell pm clear ${packageName}`;
-      console.log('清除应用数据命令:', clearCommand);
-      
-      const { stdout, stderr } = await execPromise(clearCommand);
-      
+
+      console.log('清除应用数据:', deviceId, packageName);
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, ['shell', 'pm', 'clear', packageName]);
+
       if (stdout.includes('Success')) {
         return { success: true, message: '应用数据已清除' };
       } else if (stdout.includes('Failed')) {
         return { success: false, error: '清除数据失败', details: stdout };
       }
-      
+
       return { success: true, message: '清除命令已执行', output: stdout };
-      
+
     } catch (error) {
       console.error('清除应用数据失败:', error);
       return { success: false, error: error.message };
@@ -677,34 +649,29 @@ function registerAdbHandlers(app) {
   // 推送文件到设备
   ipcMain.handle('push-file', async (event, deviceId, localPath, remotePath) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!deviceId || !localPath || !remotePath) {
         return { success: false, error: '参数无效' };
       }
-      
+
       if (!fs.existsSync(localPath)) {
         return { success: false, error: '本地文件不存在' };
       }
-      
-      const pushCommand = `"${adbPath}" -s ${deviceId} push "${localPath}" "${remotePath}"`;
-      console.log('推送文件命令:', pushCommand);
-      
-      const { stdout, stderr } = await execPromise(pushCommand);
-      
+
+      console.log('推送文件到设备:', deviceId, localPath, '->', remotePath);
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, ['push', localPath, remotePath]);
+
       if (stdout.includes('pushed') || stdout.includes('100%')) {
         return { success: true, message: '文件推送成功', output: stdout };
       }
-      
+
       if (stderr && !stderr.includes('Warning')) {
         return { success: false, error: stderr };
       }
-      
+
       return { success: true, message: '推送命令已执行', output: stdout };
-      
+
     } catch (error) {
       console.error('推送文件失败:', error);
       return { success: false, error: error.message };
@@ -714,30 +681,25 @@ function registerAdbHandlers(app) {
   // 从设备拉取文件
   ipcMain.handle('pull-file', async (event, deviceId, remotePath, localPath) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
       if (!deviceId || !remotePath || !localPath) {
         return { success: false, error: '参数无效' };
       }
-      
-      const pullCommand = `"${adbPath}" -s ${deviceId} pull "${remotePath}" "${localPath}"`;
-      console.log('拉取文件命令:', pullCommand);
-      
-      const { stdout, stderr } = await execPromise(pullCommand);
-      
+
+      console.log('从设备拉取文件:', deviceId, remotePath, '->', localPath);
+
+      // 使用TKE内置ADB
+      const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, ['pull', remotePath, localPath]);
+
       if (stdout.includes('pulled') || stdout.includes('100%')) {
         return { success: true, message: '文件拉取成功', output: stdout };
       }
-      
+
       if (stderr && !stderr.includes('Warning')) {
         return { success: false, error: stderr };
       }
-      
+
       return { success: true, message: '拉取命令已执行', output: stdout };
-      
+
     } catch (error) {
       console.error('拉取文件失败:', error);
       return { success: false, error: error.message };
@@ -745,69 +707,69 @@ function registerAdbHandlers(app) {
   });
 
   // 增强版截图，同时保存到工作区并获取UI树
+  // 使用新的 tke controller capture JSON API（一次性获取截图和XML）
   ipcMain.handle('adb-screenshot', async (event, deviceId, projectPath = null) => {
     try {
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      const tempPath = path.join(app.getPath('temp'), 'screenshot.png');
-      
-      // 通过TKE获取截图，先保存到设备然后拉取
-      const remotePath = '/sdcard/temp_screenshot.png';
-      await execTkeAdbCommand(app, deviceId, ['shell', 'screencap', '-p', remotePath]);
-      await execTkeAdbCommand(app, deviceId, ['pull', remotePath, tempPath]);
-      await execTkeAdbCommand(app, deviceId, ['shell', 'rm', remotePath]);
-      
-      const imageData = fs.readFileSync(tempPath);
-      
-      // 如果提供了项目路径，保存到工作区
-      if (projectPath) {
-        try {
-          const workareaPath = path.join(projectPath, 'workarea');
-          
-          // 确保workarea目录存在
-          if (!fs.existsSync(workareaPath)) {
-            fs.mkdirSync(workareaPath, { recursive: true });
-          }
-          
-          // 保存截图到工作区
-          const screenshotPath = path.join(workareaPath, 'current_screenshot.png');
-          fs.writeFileSync(screenshotPath, imageData);
-          
-          // 同时获取UI树
-          try {
-            await execTkeAdbCommand(app, deviceId, ['shell', 'uiautomator', 'dump', '/sdcard/window_dump.xml']);
-            const { stdout: xmlContent } = await execTkeAdbCommand(app, deviceId, ['shell', 'cat', '/sdcard/window_dump.xml']);
-            
-            // 保存XML到工作区
-            const xmlPath = path.join(workareaPath, 'current_ui_tree.xml');
-            fs.writeFileSync(xmlPath, xmlContent, 'utf8');
-            
-            console.log('已保存截图和UI树到workspace:', workareaPath);
-          } catch (xmlError) {
-            console.warn('获取UI树失败，但截图保存成功:', xmlError.message);
-          }
-          
-          // 返回截图路径和base64数据
-          return { 
-            success: true, 
-            data: imageData.toString('base64'),
-            imagePath: screenshotPath,
-            screenshotPath: screenshotPath
-          };
-        } catch (saveError) {
-          console.warn('保存到workspace失败:', saveError.message);
-          // 不影响截图返回
-        }
+      // 验证projectPath是否有效（不为空且为绝对路径）
+      if (!projectPath || typeof projectPath !== 'string' || projectPath.trim() === '') {
+        return { success: false, error: '请提供有效的项目路径' };
       }
-      
-      // 临时截图路径
-      return { 
-        success: true, 
+
+      if (!path.isAbsolute(projectPath)) {
+        return { success: false, error: '项目路径必须是绝对路径' };
+      }
+
+      // 获取 TKE 可执行文件路径
+      const tkePath = getTkePath(app);
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'TKE可执行文件未找到' };
+      }
+
+      // 确保workarea目录存在
+      const workareaPath = path.join(projectPath, 'workarea');
+      if (!fs.existsSync(workareaPath)) {
+        fs.mkdirSync(workareaPath, { recursive: true });
+      }
+
+      // 使用 tke controller capture 一次性获取截图和XML
+      // 命令格式: tke --device <deviceId> --project <projectPath> controller capture
+      const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture'];
+      const command = `"${tkePath}" ${args.join(' ')}`;
+
+      console.log('执行TKE capture命令:', command);
+      const { stdout, stderr } = await execPromise(command);
+
+      if (stderr && !stderr.includes('INFO')) {
+        console.warn('TKE capture警告:', stderr);
+      }
+
+      // 解析JSON输出
+      // 格式: {"screenshot":"/path/to/screenshot.png","success":true,"xml":"/path/to/xml"}
+      const result = JSON.parse(stdout.trim());
+
+      if (!result.success) {
+        return { success: false, error: 'TKE capture执行失败' };
+      }
+
+      console.log('TKE capture成功:', result);
+
+      // 读取截图文件并转换为base64
+      const screenshotPath = result.screenshot;
+      const imageData = fs.readFileSync(screenshotPath);
+
+      // 返回截图路径和base64数据
+      return {
+        success: true,
         data: imageData.toString('base64'),
-        imagePath: tempPath
+        imagePath: screenshotPath,
+        screenshotPath: screenshotPath,
+        xmlPath: result.xml
       };
+
     } catch (error) {
       console.error('截图失败:', error);
       return { success: false, error: error.message };
@@ -851,34 +813,29 @@ function registerAdbHandlers(app) {
   // 增强版UI dump，包含屏幕尺寸信息
   ipcMain.handle('adb-ui-dump-enhanced', async (event, deviceId) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      const deviceArg = `-s ${deviceId}`;
-      
-      // 1. 获取UI hierarchy
-      await execPromise(`"${adbPath}" ${deviceArg} shell uiautomator dump /sdcard/window_dump.xml`);
-      const { stdout: xmlContent } = await execPromise(`"${adbPath}" ${deviceArg} shell cat /sdcard/window_dump.xml`);
-      
-      // 2. 获取屏幕尺寸
+      console.log('增强版UI dump:', deviceId);
+
+      // 1. 获取UI hierarchy - 使用TKE内置ADB
+      await execTkeAdbCommand(app, deviceId, ['shell', 'uiautomator', 'dump', '/sdcard/window_dump.xml']);
+      const { stdout: xmlContent } = await execTkeAdbCommand(app, deviceId, ['shell', 'cat', '/sdcard/window_dump.xml']);
+
+      // 2. 获取屏幕尺寸 - 使用TKE内置ADB
       let screenSize = null;
       try {
-        const { stdout: sizeOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell wm size`);
+        const { stdout: sizeOutput } = await execTkeAdbCommand(app, deviceId, ['shell', 'wm', 'size']);
         const sizeMatch = sizeOutput.match(/Physical size: (\d+)x(\d+)/);
         if (sizeMatch) {
-          screenSize = { 
-            width: parseInt(sizeMatch[1]), 
-            height: parseInt(sizeMatch[2]) 
+          screenSize = {
+            width: parseInt(sizeMatch[1]),
+            height: parseInt(sizeMatch[2])
           };
         } else {
           // 尝试从dumpsys获取
-          const { stdout: dumpsysOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell dumpsys window displays | grep -E "Display|cur="`);
+          const { stdout: dumpsysOutput } = await execTkeAdbCommand(app, deviceId, ['shell', 'dumpsys window displays']);
           const displayMatch = dumpsysOutput.match(/cur=(\d+)x(\d+)/);
           if (displayMatch) {
             screenSize = {
@@ -892,14 +849,14 @@ function registerAdbHandlers(app) {
         // 使用默认尺寸
         screenSize = { width: 1080, height: 1920 };
       }
-      
-      // 3. 获取设备信息（可选）
+
+      // 3. 获取设备信息（可选）- 使用TKE内置ADB
       let deviceInfo = {};
       try {
-        const { stdout: brandOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell getprop ro.product.brand`);
-        const { stdout: modelOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell getprop ro.product.model`);
-        const { stdout: versionOutput } = await execPromise(`"${adbPath}" ${deviceArg} shell getprop ro.build.version.release`);
-        
+        const { stdout: brandOutput } = await execTkeAdbCommand(app, deviceId, ['shell', 'getprop', 'ro.product.brand']);
+        const { stdout: modelOutput } = await execTkeAdbCommand(app, deviceId, ['shell', 'getprop', 'ro.product.model']);
+        const { stdout: versionOutput } = await execTkeAdbCommand(app, deviceId, ['shell', 'getprop', 'ro.build.version.release']);
+
         deviceInfo = {
           brand: brandOutput.trim(),
           model: modelOutput.trim(),
@@ -908,9 +865,9 @@ function registerAdbHandlers(app) {
       } catch (infoError) {
         console.warn('无法获取设备信息:', infoError.message);
       }
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         xml: xmlContent,
         screenSize: screenSize,
         deviceInfo: deviceInfo,
@@ -925,14 +882,23 @@ function registerAdbHandlers(app) {
   // 初始化项目工作区
   ipcMain.handle('init-project-workarea', async (event, projectPath) => {
     try {
+      // 验证projectPath是否有效（不为空且为绝对路径）
+      if (!projectPath || typeof projectPath !== 'string' || projectPath.trim() === '') {
+        return { success: false, error: '请提供有效的项目路径' };
+      }
+
+      if (!path.isAbsolute(projectPath)) {
+        return { success: false, error: '项目路径必须是绝对路径' };
+      }
+
       const workareaPath = path.join(projectPath, 'workarea');
-      
+
       // 确保workarea目录存在
       if (!fs.existsSync(workareaPath)) {
         fs.mkdirSync(workareaPath, { recursive: true });
         console.log('创建workspace目录:', workareaPath);
       }
-      
+
       return { success: true, path: workareaPath };
     } catch (error) {
       console.error('初始化项目workspace失败:', error);
@@ -943,20 +909,18 @@ function registerAdbHandlers(app) {
   // 获取设备进程列表
   ipcMain.handle('get-device-processes', async (event, deviceId) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      const { stdout } = await execPromise(`"${adbPath}" -s ${deviceId} shell ps`);
-      
+      console.log('获取设备进程列表:', deviceId);
+
+      // 使用TKE内置ADB
+      const { stdout } = await execTkeAdbCommand(app, deviceId, ['shell', 'ps']);
+
       const lines = stdout.split('\n');
       const processes = [];
-      
+
       for (let i = 1; i < lines.length; i++) { // 跳过标题行
         const line = lines[i].trim();
         if (line) {
@@ -977,8 +941,8 @@ function registerAdbHandlers(app) {
         }
       }
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         processes: processes
       };
 
@@ -1131,12 +1095,10 @@ function registerAdbHandlers(app) {
 
   ipcMain.handle('scan-wireless-devices', async (event, ipRange = null) => {
     try {
-      
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
-      }
-      
+      console.log('扫描无线设备:', ipRange);
+
       // 简化的扫描逻辑，实际应该扫描网络
+      // 未来可以通过TKE内置ADB实现设备扫描
       return {
         success: true,
         devices: [],
@@ -1148,6 +1110,7 @@ function registerAdbHandlers(app) {
   });
 
   // 获取设备UI XML结构 - 使用TKE方法
+  // 使用新的 tke controller capture JSON API
   ipcMain.handle('adb-get-ui-xml', async (event, options) => {
     try {
       const { deviceId, projectPath, options: uiOptions = {}, metadata = {} } = options;
@@ -1156,65 +1119,63 @@ function registerAdbHandlers(app) {
         return { success: false, error: '请提供设备ID' };
       }
 
+      // 验证projectPath是否有效（不为空且为绝对路径）
+      if (!projectPath || typeof projectPath !== 'string' || projectPath.trim() === '') {
+        return { success: false, error: '请提供有效的项目路径' };
+      }
+
+      if (!path.isAbsolute(projectPath)) {
+        return { success: false, error: '项目路径必须是绝对路径' };
+      }
+
       // 获取 TKE 可执行文件路径
       const tkePath = getTkePath(app);
       if (!fs.existsSync(tkePath)) {
         return { success: false, error: 'TKE可执行文件未找到' };
       }
 
-      // 创建临时文件路径
-      const tempXmlPath = path.join(os.tmpdir(), `tke_ui_dump_${Date.now()}.xml`);
-      
-      // 构建 TKE 命令：tke --device <deviceId> controller get-xml --output <file>
-      const args = ['--device', deviceId, 'controller', 'get-xml', '--output', tempXmlPath];
-      
-      // 执行 TKE 命令（现在会保存到文件而不是输出到stdout）
-      await execPromise(`"${tkePath}" ${args.join(' ')}`);
-      
-      // 读取生成的XML文件
-      const xmlContent = fs.readFileSync(tempXmlPath, 'utf8');
-      
-      // 删除临时文件
-      try {
-        fs.unlinkSync(tempXmlPath);
-      } catch (e) {
-        // 忽略删除错误
+      // 确保workarea目录存在
+      const workareaPath = path.join(projectPath, 'workarea');
+      if (!fs.existsSync(workareaPath)) {
+        fs.mkdirSync(workareaPath, { recursive: true });
       }
-      
+
+      // 使用 tke controller capture 一次性获取截图和XML
+      const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture'];
+      const command = `"${tkePath}" ${args.join(' ')}`;
+
+      console.log('执行TKE capture命令获取XML:', command);
+      const { stdout, stderr } = await execPromise(command);
+
+      if (stderr && !stderr.includes('INFO')) {
+        console.warn('TKE capture警告:', stderr);
+      }
+
+      // 解析JSON输出
+      const result = JSON.parse(stdout.trim());
+
+      if (!result.success) {
+        return { success: false, error: 'TKE capture执行失败' };
+      }
+
+      // 读取XML内容
+      const xmlContent = fs.readFileSync(result.xml, 'utf8');
+
       // 获取屏幕尺寸（如果需要的话）
       let screenSize = metadata.screenSize;
       if (!screenSize) {
-        // 可以从 XML 中推断屏幕尺寸，或者使用默认值
+        // 尝试从XML推断屏幕尺寸，或使用默认值
         screenSize = { width: 1080, height: 1920 };
       }
-      
-      // 如果提供了项目路径，保存XML到工作区
-      if (projectPath) {
-        try {
-          const workareaPath = path.join(projectPath, 'workarea');
-          
-          // 确保workarea目录存在
-          if (!fs.existsSync(workareaPath)) {
-            fs.mkdirSync(workareaPath, { recursive: true });
-          }
-          
-          // 保存XML到工作区
-          const xmlPath = path.join(workareaPath, 'current_ui_tree.xml');
-          fs.writeFileSync(xmlPath, xmlContent, 'utf8');
-          
-          console.log('已通过TKE保存UI XML到workspace:', xmlPath);
-        } catch (saveError) {
-          console.warn('保存UI XML到workspace失败:', saveError.message);
-        }
-      }
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         xml: xmlContent,
+        xmlPath: result.xml,
         screenSize: screenSize,
         timestamp: Date.now()
       };
-      
+
     } catch (error) {
       console.error('TKE获取UI XML失败:', error);
       return { success: false, error: error.message };
@@ -1230,8 +1191,13 @@ function registerAdbHandlers(app) {
         return { success: false, error: '请提供设备ID' };
       }
 
-      if (!projectPath) {
-        return { success: false, error: '请提供项目路径' };
+      // 验证projectPath是否有效（不为空且为绝对路径）
+      if (!projectPath || typeof projectPath !== 'string' || projectPath.trim() === '') {
+        return { success: false, error: '请提供有效的项目路径' };
+      }
+
+      if (!path.isAbsolute(projectPath)) {
+        return { success: false, error: '项目路径必须是绝对路径' };
       }
 
       // 获取 TKE 可执行文件路径

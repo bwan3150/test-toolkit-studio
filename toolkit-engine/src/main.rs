@@ -141,7 +141,7 @@ async fn main() -> tke::Result<()> {
     // 路由到对应的 handler
     match cli.command {
         Commands::Controller { action } => {
-            controller::handle(action, cli.device).await
+            controller::handle(action, cli.device, project_path).await
         }
         Commands::Fetcher { action } => {
             fetcher::handle(action, project_path).await

@@ -60,14 +60,22 @@ const TIMELINE_COLORS = {
 
         try {
             if (window.rInfo) {
-                window.rInfo('加载数据, 筛选器:', Object.keys(currentFilters).join(', ') || '无');
+                window.rInfo('=== 开始加载Insight数据 ===');
+                window.rInfo('筛选器:', Object.keys(currentFilters).join(', ') || '无');
+                window.rInfo('API Base URL:', window.BugAnalyzerClient.client.baseURL);
             }
             
             // 获取当前日期
             const today = new Date().toISOString().split('T')[0];
             
             // 1. 获取今日Priority统计（用于饼图）- 应用筛选器
+            if (window.rInfo) {
+                window.rInfo('请求Priority统计...');
+            }
             const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats(currentFilters);
+            if (window.rInfo) {
+                window.rInfo('Priority统计响应:', priorityStats);
+            }
             if (priorityStats && priorityStats.data) {
                 // 获取返回数据中的第一个日期的数据（API可能返回的不是今天）
                 const dates = Object.keys(priorityStats.data);
@@ -116,20 +124,41 @@ const TIMELINE_COLORS = {
             }
             
             // 2. 获取趋势数据（用于趋势图）- 应用筛选器
+            if (window.rInfo) {
+                window.rInfo('请求趋势数据, timeRange:', currentTimeRange, 'days');
+            }
             const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority', currentFilters);
+            if (window.rInfo) {
+                window.rInfo('趋势数据响应:', trendData);
+            }
             if (trendData && trendData.data) {
                 apiData.trendData = trendData.data;
             }
-            
+
             // 3. 获取问题模块统计（用于表格）
+            if (window.rInfo) {
+                window.rInfo('请求模块统计...');
+            }
             const moduleStats = await window.BugAnalyzerClient.getModuleStats();
+            if (window.rInfo) {
+                window.rInfo('模块统计响应:', moduleStats);
+            }
             if (moduleStats && moduleStats.data && moduleStats.data[today]) {
                 apiData.moduleStats = moduleStats.data[today];
             }
-            
-            console.log('API数据加载完成:', apiData);
+
+            if (window.rInfo) {
+                window.rInfo('=== API数据加载完成 ===');
+                window.rInfo('apiData.priorityStats:', apiData.priorityStats);
+                window.rInfo('apiData.trendData keys:', apiData.trendData ? Object.keys(apiData.trendData).length : 0);
+                window.rInfo('apiData.moduleStats:', apiData.moduleStats);
+            }
         } catch (error) {
-            console.error('加载真实数据失败:', error);
+            if (window.rError) {
+                window.rError('=== 加载数据失败 ===');
+                window.rError('错误:', error.message);
+                window.rError('错误堆栈:', error.stack);
+            }
             // 不显示错误界面，让图表显示"暂无数据"状态
             // 这样至少UI是正常的
         }

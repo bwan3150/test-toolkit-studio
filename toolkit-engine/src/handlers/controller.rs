@@ -56,7 +56,7 @@ pub enum ControllerCommands {
 }
 
 /// 处理 Controller 相关命令
-pub async fn handle(action: ControllerCommands, device_id: Option<String>) -> Result<()> {
+pub async fn handle(action: ControllerCommands, device_id: Option<String>, project_path: std::path::PathBuf) -> Result<()> {
     let controller = Controller::new(device_id)?;
 
     match action {
@@ -67,8 +67,7 @@ pub async fn handle(action: ControllerCommands, device_id: Option<String>) -> Re
             }));
         }
         ControllerCommands::Capture => {
-            let project_path = std::env::current_dir()
-                .map_err(|e| TkeError::IoError(e))?;
+            // 使用传入的 project_path 参数而不是 current_dir()
             controller.capture_ui_state(&project_path).await?;
 
             let screenshot_path = project_path.join("workarea").join("current_screenshot.png");

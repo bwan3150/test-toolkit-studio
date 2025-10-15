@@ -5,63 +5,35 @@
 
     class BugAnalyzerClient {
         constructor() {
-            // Bug分析API基础URL
-            this.baseURL = 'https://analysis.test-toolkit.app';
-            this.cache = new Map(); // 简单的缓存机制
-            this.cacheTimeout = 5 * 60 * 1000; // 5分钟缓存
+            // 通过主进程代理请求，避免CORS问题
+            this.ipcRenderer = require('electron').ipcRenderer;
         }
 
-        // 通用请求方法
+        // 通用请求方法 - 通过主进程代理
         async request(endpoint, options = {}) {
             try {
-                const url = `${this.baseURL}${endpoint}`;
-                
-                // 暂时禁用缓存，直接请求
-                // TODO: 修复缓存逻辑，确保筛选条件变化时不使用缓存
-                /*
-                const cacheKey = `${options.method || 'GET'}_${url}_${JSON.stringify(options.body)}`;
-                if (this.cache.has(cacheKey)) {
-                    const cached = this.cache.get(cacheKey);
-                    if (Date.now() - cached.timestamp < this.cacheTimeout) {
-                        if (window.rDebug) {
-                            window.rDebug('使用缓存数据, key:', cacheKey.substring(0, 100));
-                        }
-                        return cached.data;
-                    }
-                }
-                */
-
-                // 构建请求体
-                const requestBody = options.body ? JSON.stringify(options.body) : undefined;
-                
                 // 详细记录请求（用于调试）
                 if (window.rInfo && options.body && options.body.filters) {
-                    window.rInfo('完整请求URL:', url);
-                    window.rInfo('完整请求体:', requestBody);
-                }
-                
-                const response = await fetch(url, {
-                    method: options.method || 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    },
-                    body: requestBody
-                });
-
-                if (!response.ok) {
-                    const errorMsg = `HTTP ${response.status}: ${response.statusText}`;
-                    if (window.rError) {
-                        window.rError('API请求失败:', errorMsg, 'URL:', url);
-                    }
-                    throw new Error(errorMsg);
+                    window.rInfo('请求endpoint:', endpoint);
+                    window.rInfo('请求体:', JSON.stringify(options.body));
                 }
 
-                const data = await response.json();
-                
-                // 记录响应数据（更详细）
+                // 通过主进程IPC代理请求
+                const result = await this.ipcRenderer.invoke(
+                    'bug-analysis-request',
+                    endpoint,
+                    options.method || 'GET',
+                    options.body || null
+                );
+
+                if (!result.success) {
+                    throw new Error(result.error || '请求失败');
+                }
+
+                const data = result.data;
+
+                // 记录响应数据
                 if (window.rInfo && endpoint === '/api/analysis') {
-                    // 对于分析API，记录关键响应信息
                     if (data && data.data) {
                         const dates = Object.keys(data.data);
                         if (dates.length > 0) {
@@ -77,14 +49,6 @@
                         }
                     }
                 }
-                
-                // 暂时禁用缓存存储
-                /*
-                this.cache.set(cacheKey, {
-                    data: data,
-                    timestamp: Date.now()
-                });
-                */
 
                 return data;
             } catch (error) {
@@ -220,16 +184,6 @@
             return await this.performAnalysis(params);
         }
 
-        // 清除缓存
-        clearCache() {
-            this.cache.clear();
-        }
-
-        // 更新基础URL（如果后续需要更改）
-        updateBaseURL(newURL) {
-            this.baseURL = newURL;
-            this.clearCache(); // 更改URL后清除缓存
-        }
     }
 
     // 创建全局实例
@@ -248,9 +202,7 @@
         getTodayPriorityStats: (filters) => bugAnalyzerClient.getTodayPriorityStats(filters),
         getBugTrends: (days, targetField, filters) => bugAnalyzerClient.getBugTrends(days, targetField, filters),
         getTotalBugTrend: (days, filters) => bugAnalyzerClient.getTotalBugTrend(days, filters),
-        getModuleStats: (date) => bugAnalyzerClient.getModuleStats(date),
-        clearCache: () => bugAnalyzerClient.clearCache(),
-        updateBaseURL: (newURL) => bugAnalyzerClient.updateBaseURL(newURL)
+        getModuleStats: (date) => bugAnalyzerClient.getModuleStats(date)
     };
 
     console.log('Bug Analyzer API客户端已加载');

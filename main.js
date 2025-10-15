@@ -16,6 +16,7 @@ const { registerAuthHandlers } = require('./handlers/auth-handlers');
 const { registerProjectHandlers } = require('./handlers/project-handlers');
 const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/ios-handlers');
 const { registerLogHandlers } = require('./handlers/log-handlers');
+const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
 
 // 全局变量
 let mainWindow;
@@ -35,10 +36,30 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       webSecurity: false,
-      devTools: false  // 彻底禁用开发者工具
+      devTools: false,  // 彻底禁用开发者工具
+      allowRunningInsecureContent: true  // 允许不安全的内容（HTTP请求）
     },
     icon: path.join(__dirname, 'assets', 'icon.png')
   });
+
+  // 禁用CSP（Content Security Policy）以允许外部API请求
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': ['default-src * \'unsafe-inline\' \'unsafe-eval\' data: blob:;']
+      }
+    });
+  });
+
+  // 设置代理（如果需要的话）- 确保可以访问外部API
+  // 允许所有HTTP/HTTPS请求
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['http://*/*', 'https://*/*'] },
+    (details, callback) => {
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
 
   // 加载主页面
   mainWindow.loadFile('renderer/html/index.html');
@@ -232,10 +253,13 @@ function registerAllHandlers() {
     
     console.log('注册iOS处理器...');
     registerIosHandlers(app);
-    
+
+    console.log('注册Bug Analysis API代理处理器...');
+    registerBugAnalysisProxyHandlers();
+
     // 注册其他IPC处理器
     registerOtherHandlers();
-    
+
     console.log('所有IPC处理器注册完成');
   } catch (error) {
     console.error('注册IPC处理器失败:', error);

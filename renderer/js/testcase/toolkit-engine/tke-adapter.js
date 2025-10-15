@@ -305,121 +305,209 @@
 
         /**
          * 获取连接的设备列表
+         * 返回JSON格式: {"devices":["device1", "device2"]}
          */
         async getDevices() {
             const result = await this.tkeAdapter.executeTKECommand(['controller', 'devices']);
-            
-            // 解析设备列表输出
-            const devices = [];
-            const lines = result.stdout.split('\n');
-            
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('- ')) {
-                    devices.push(trimmed.substring(2));
+
+            // 解析JSON输出
+            try {
+                const jsonResult = JSON.parse(result.stdout.trim());
+                return jsonResult.devices || [];
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析devices JSON失败:', error);
                 }
+                return [];
             }
-            
-            return devices;
         }
 
         /**
          * 捕获UI状态(截图和XML)
+         * 返回JSON格式: {"screenshot":"path","success":true,"xml":"path"}
          */
         async captureUIState() {
             const args = ['--project', this.projectPath, 'controller', 'capture'];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                const jsonResult = JSON.parse(result.stdout.trim());
+                return jsonResult;
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析capture JSON失败:', error);
+                }
+                throw error;
+            }
         }
 
         /**
          * 点击坐标
+         * 返回JSON格式: {"success":true,"x":400,"y":2000}
          */
         async tap(x, y) {
             const args = ['controller', 'tap', x.toString(), y.toString()];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析tap JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
 
         /**
          * 滑动操作
+         * 返回JSON格式: {"duration":300,"from":{"x":500,"y":1500},"success":true,"to":{"x":500,"y":500}}
          */
         async swipe(x1, y1, x2, y2, duration = 300) {
-            const args = ['controller', 'swipe', 
-                         x1.toString(), y1.toString(), 
-                         x2.toString(), y2.toString(), 
+            const args = ['controller', 'swipe',
+                         x1.toString(), y1.toString(),
+                         x2.toString(), y2.toString(),
                          '--duration', duration.toString()];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析swipe JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
 
         /**
          * 启动应用
+         * 返回JSON格式: {"activity":".Settings","package":"com.android.settings","success":true}
          */
         async launchApp(packageName, activityName) {
             const args = ['controller', 'launch', packageName, activityName];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析launch JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
 
         /**
          * 停止应用
+         * 返回JSON格式: {"package":"com.android.settings","success":true}
          */
         async stopApp(packageName) {
             const args = ['controller', 'stop', packageName];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析stop JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
 
         /**
          * 输入文本
+         * 返回JSON格式: {"success":true,"text":"Hello World"}
          */
         async inputText(text) {
             const args = ['controller', 'input', text];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析input JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
 
         /**
          * 返回键
+         * 返回JSON格式: {"success":true}
          */
         async back() {
             const args = ['controller', 'back'];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析back JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
 
         /**
          * 主页键
+         * 返回JSON格式: {"success":true}
          */
         async home() {
             const args = ['controller', 'home'];
             if (this.deviceId) {
                 args.unshift('--device', this.deviceId);
             }
-            
-            await this.tkeAdapter.executeTKECommand(args);
+
+            const result = await this.tkeAdapter.executeTKECommand(args);
+
+            // 解析JSON输出
+            try {
+                return JSON.parse(result.stdout.trim());
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析home JSON失败:', error);
+                }
+                return { success: false };
+            }
         }
     }
 
@@ -598,48 +686,77 @@
 
         /**
          * 根据XML locator查找元素
+         * 返回JSON格式: {"success":true,"x":728,"y":360}
          */
         async findXmlElement(locatorName) {
             const args = ['--project', this.projectPath, 'recognizer', 'find-xml', locatorName];
             const result = await this.tkeAdapter.executeTKECommand(args);
-            
-            return this.parseCoordinateOutput(result.stdout);
+
+            // 解析JSON输出
+            try {
+                const jsonResult = JSON.parse(result.stdout.trim());
+                if (jsonResult.success) {
+                    return { x: jsonResult.x, y: jsonResult.y, success: true };
+                } else {
+                    throw new Error(jsonResult.error || '元素未找到');
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析find-xml JSON失败:', error);
+                }
+                throw error;
+            }
         }
 
         /**
          * 根据图像locator查找元素
+         * 返回JSON格式: {"success":true,"x":725,"y":910,"width":490,"height":105,"matches_count":1}
          */
-        async findImageElement(locatorName) {
+        async findImageElement(locatorName, threshold = 0.5) {
             const args = ['--project', this.projectPath, 'recognizer', 'find-image', locatorName];
+            if (threshold !== 0.5) {
+                args.push('--threshold', threshold.toString());
+            }
             const result = await this.tkeAdapter.executeTKECommand(args);
-            
-            return this.parseCoordinateOutput(result.stdout);
+
+            // 解析JSON输出
+            try {
+                const jsonResult = JSON.parse(result.stdout.trim());
+                if (jsonResult.success) {
+                    return jsonResult;
+                } else {
+                    throw new Error(jsonResult.error || '图像未找到');
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析find-image JSON失败:', error);
+                }
+                throw error;
+            }
         }
 
         /**
          * 根据文本查找元素
+         * 返回JSON格式: {"success":true,"x":394,"y":186}
          */
         async findElementByText(text) {
             const args = ['--project', this.projectPath, 'recognizer', 'find-text', text];
             const result = await this.tkeAdapter.executeTKECommand(args);
-            
-            return this.parseCoordinateOutput(result.stdout);
-        }
 
-        /**
-         * 解析坐标输出
-         */
-        parseCoordinateOutput(output) {
-            // 匹配格式: 找到xxx的位置: (x, y)
-            const match = output.match(/位置:\s*\((\d+),\s*(\d+)\)/);
-            if (match) {
-                return {
-                    x: parseInt(match[1]),
-                    y: parseInt(match[2])
-                };
+            // 解析JSON输出
+            try {
+                const jsonResult = JSON.parse(result.stdout.trim());
+                if (jsonResult.success) {
+                    return { x: jsonResult.x, y: jsonResult.y, success: true };
+                } else {
+                    throw new Error(jsonResult.error || '文本未找到');
+                }
+            } catch (error) {
+                if (window.rError) {
+                    window.rError('解析find-text JSON失败:', error);
+                }
+                throw error;
             }
-            
-            throw new Error('无法解析坐标信息');
         }
     }
 
