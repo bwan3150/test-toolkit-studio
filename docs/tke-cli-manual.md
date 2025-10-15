@@ -138,6 +138,13 @@ brew install tesseract tesseract-lang
 {"success":true,"text":"Hello World"}
 ```
 
+### 输入框清空
+```bash
+❯ tke controller clear-input
+
+{"success":true}
+```
+
 ### 系统级控制
 
 ```bash
