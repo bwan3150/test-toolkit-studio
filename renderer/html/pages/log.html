@@ -1,0 +1,178 @@
+<!-- Log Page -->
+<div class="page" id="logPage">
+  <div class="page-header">
+    <h2>Log Viewer</h2>
+    <div class="header-actions">
+      <button class="btn btn-primary" id="toggleLogBtn">
+        <svg class="btn-icon" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+        Start
+      </button>
+      <button class="btn btn-secondary" id="clearLogBtn">
+        <svg class="btn-icon" viewBox="0 0 24 24">
+          <path
+            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+          />
+        </svg>
+        Clear
+      </button>
+      <button class="btn btn-secondary" id="exportLogBtn">
+        <svg class="btn-icon" viewBox="0 0 24 24">
+          <path
+            d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"
+          />
+        </svg>
+        Export
+      </button>
+      <button
+        class="btn btn-secondary active"
+        id="followLogBtn"
+        title="Auto-scroll to latest logs"
+      >
+        <svg class="btn-icon" viewBox="0 0 24 24">
+          <path
+            d="M12 5.83L15.17 9l1.41-1.41L12 3 7.41 7.59 8.83 9 12 5.83zm0 12.34L8.83 15l-1.41 1.41L12 21l4.59-4.59L15.17 15 12 18.17z"
+          />
+        </svg>
+        Auto Scroll
+      </button>
+    </div>
+  </div>
+
+  <!-- ADB Logcat风格的控制区域 -->
+  <div class="logcat-controls">
+    <!-- 第一行：设备和基本控制 -->
+    <div class="control-row">
+      <div class="control-group">
+        <label>Device:</label>
+        <select id="logDeviceSelect" class="control-select">
+          <option value="">Select a device</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Format:</label>
+        <select id="logFormatSelect" class="control-select">
+          <option value="threadtime">threadtime</option>
+          <option value="time">time</option>
+          <option value="brief">brief</option>
+          <option value="long">long</option>
+          <option value="raw">raw</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Buffer:</label>
+        <select id="logBufferSelect" class="control-select">
+          <option value="main">main</option>
+          <option value="system">system</option>
+          <option value="radio">radio</option>
+          <option value="events">events</option>
+          <option value="all">all</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 第二行：模式切换和过滤器 -->
+    <div class="control-row">
+      <div class="control-group">
+        <label>Filter Mode:</label>
+        <div class="filter-mode-toggle">
+          <label class="mode-option">
+            <input type="radio" name="filterMode" value="simple" id="simpleModeRadio" checked>
+            <span>Simple</span>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="filterMode" value="expert" id="expertModeRadio">
+            <span>Expert</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Expert模式：Logcat Filter Spec -->
+    <div class="control-row" id="expertFilterRow" style="display: none;">
+      <div class="control-group filter-input-group" style="flex: 1">
+        <label>Filter Spec:</label>
+        <input
+          type="text"
+          id="logFilterSpec"
+          class="control-input"
+          placeholder="例如: flutter:V ActivityManager:I MyApp:D *:S"
+          title="Logcat filter specification: TAG:LEVEL format"
+          style="flex: 1"
+        />
+        <button id="applyFilterBtn" class="btn btn-secondary btn-sm">Apply</button>
+      </div>
+    </div>
+
+    <!-- Simple模式:分离的过滤器 -->
+    <div id="simpleFilterRows">
+      <div class="control-row">
+        <div class="control-group">
+          <label>Log Level:</label>
+          <select id="simpleLogLevel" class="control-select">
+            <option value="V">Verbose (V)</option>
+            <option value="D">Debug (D)</option>
+            <option value="I" selected>Info (I)</option>
+            <option value="W">Warn (W)</option>
+            <option value="E">Error (E)</option>
+            <option value="A">Assert (A)</option>
+          </select>
+        </div>
+
+        <div class="control-group filter-input-group">
+          <label>Tag:</label>
+          <input
+            type="text"
+            id="simpleTagFilter"
+            class="control-input"
+            placeholder="flutter, ActivityManager, etc."
+          />
+        </div>
+
+        <div class="control-group filter-input-group">
+          <label>Package:</label>
+          <input
+            type="text"
+            id="simplePackageFilter"
+            class="control-input"
+            placeholder="com.example.app"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- 第三行：快速搜索 -->
+    <div class="control-row">
+      <div class="control-group filter-input-group">
+        <label>Search:</label>
+        <input
+          type="text"
+          id="logSearchInput"
+          class="control-input"
+          placeholder="Search in log content..."
+        />
+      </div>
+
+      <div class="control-group">
+        <label>
+          <input type="checkbox" id="regexSearchCheckbox"> Regex
+        </label>
+      </div>
+
+      <div class="control-group">
+        <label>
+          <input type="checkbox" id="caseSensitiveCheckbox"> Case Sensitive
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="log-viewer">
+    <div class="log-container" id="logContainer">
+      <!-- 日志条目将动态添加到这里 -->
+    </div>
+  </div>
+</div>

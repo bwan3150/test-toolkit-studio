@@ -1,18 +1,20 @@
 // 主应用入口文件
-// 
+//
 // 此文件负责加载所有模块并初始化应用程序
 
-// 1. core/globals.js - 全局变量和依赖项
-// 2. ui/notifications.js - 通知系统
-// 3. ui/navigation.js - 导航管理
-// 4. ui/editor-manager.js - 编辑器管理功能
-// 5. ui/settings.js - 设置页面
-// 6. ui/resizable-panels.js - 可调整面板
-// 7. modules/project-manager.js - 项目管理
-// 8. testcase/testcase-controller.js - 测试用例控制器
-// 9. modules/device-manager.js - 设备管理
-// 10. utils/keyboard-shortcuts.js - 键盘快捷键
-// 11. utils/ipc-handlers.js - IPC消息处理
+// 注意：AppGlobals（全局变量和依赖项）已在 index.html 中内联加载
+//
+// 模块加载顺序：
+// 1. ui/notifications.js - 通知系统
+// 2. ui/navigation.js - 导航管理
+// 3. ui/editor-manager.js - 编辑器管理功能（在 index.html 中静态加载）
+// 4. ui/settings.js - 设置页面
+// 5. ui/resizable-panels.js - 可调整面板
+// 6. modules/project-manager.js - 项目管理
+// 7. testcase/testcase-controller.js - 测试用例控制器
+// 8. modules/device-manager.js - 设备管理
+// 9. utils/keyboard-shortcuts.js - 键盘快捷键
+// 10. utils/ipc-handlers.js - IPC消息处理
 
 // 在最开始就尝试加载 renderer-logger
 (async function() {
@@ -89,11 +91,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 现在可以使用 renderer logger
         window.rLog('开始应用初始化...');
         window.rLog('正在加载模块...');
-        
-        // 1. 然后加载核心模块（全局变量）
-        await loadScript('../js/utils/globals.js');
-        // console.log('✓ 核心模块已加载'); // 已禁用以减少日志
-        
+
+        // 1. 验证核心模块（全局变量）已在 index.html 中内联加载
+        if (!window.AppGlobals) {
+            window.rError('❌ AppGlobals 未定义!');
+            throw new Error('AppGlobals 初始化失败 - AppGlobals 未定义');
+        }
+        window.rLog('✓ AppGlobals 已加载', {
+            hasSetCodeEditor: typeof window.AppGlobals.setCodeEditor,
+            properties: Object.keys(window.AppGlobals)
+        });
+
         // 2. 加载UI模块
         await loadScript('../js/components/notifications.js');
         await loadScript('../js/components/navigation.js');

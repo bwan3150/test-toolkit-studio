@@ -1,0 +1,218 @@
+<!-- Test Report Page -->
+<div class="page" id="reportPage">
+  <div class="page-header">
+    <h2>Insights</h2>
+    <div class="header-actions">
+      <select id="reportProjectSelect" class="control-select">
+        <option value="all">All projects</option>
+        <option value="current">Current project</option>
+      </select>
+      <select id="reportSeverityFilter" class="control-select">
+        <option value="all">All severities</option>
+        <option value="critical">Critical</option>
+        <option value="high">High</option>
+        <option value="moderate">Moderate</option>
+        <option value="low">Low</option>
+        <option value="info">Info</option>
+      </select>
+      <button class="btn btn-secondary" id="moreFiltersBtn">
+        More filters
+      </button>
+      <span style="margin: 0 8px; color: var(--text-secondary)"
+        >|</span
+      >
+      <select id="reportTimeRange" class="control-select">
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="180">Last 6 months</option>
+        <option value="365">Last year</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="report-content">
+    <!-- Top Stats Row -->
+    <div class="report-stats-row">
+      <div class="stat-box">
+        <h4>Projects</h4>
+        <div class="stat-value">1</div>
+      </div>
+      <div class="stat-box">
+        <h4>Bug</h4>
+        <div class="stat-value">11</div>
+      </div>
+      <div class="stat-box coverage">
+        <h4>Avg. coverage rate</h4>
+        <div class="stat-value">80.33%</div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="report-main-grid">
+      <!-- Left Column - Problems by severity -->
+      <div class="severity-card">
+        <div class="card-header">
+          <h3>Problems by severity</h3>
+        </div>
+        <div class="donut-chart-wrapper">
+          <div class="donut-chart-container">
+            <canvas id="severityChart"></canvas>
+            <div class="chart-center-text">
+              <div class="chart-center-value">unknown</div>
+              <div class="chart-center-label">problems</div>
+            </div>
+          </div>
+        </div>
+        <div class="severity-legend">
+          <div class="legend-item">
+            <span
+              class="legend-dot"
+              style="background: #e55765"
+            ></span>
+            <span class="legend-label">Critical:</span>
+            <span class="legend-value">1897</span>
+          </div>
+          <div class="legend-item">
+            <span
+              class="legend-dot"
+              style="background: #f09f5b"
+            ></span>
+            <span class="legend-label">High:</span>
+            <span class="legend-value">1613</span>
+          </div>
+          <div class="legend-item">
+            <span
+              class="legend-dot"
+              style="background: #f4c752"
+            ></span>
+            <span class="legend-label">Moderate:</span>
+            <span class="legend-value">439</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column - Problems over period -->
+      <div class="timeline-card">
+        <div class="card-header">
+          <h3>Problems over period</h3>
+        </div>
+        <div class="timeline-chart-container">
+          <canvas id="timelineChart"></canvas>
+        </div>
+        <div class="timeline-legend">
+          <!-- 图例将由JavaScript动态生成 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Tables Grid -->
+    <div class="report-tables-grid">
+      <!-- Bug Search Module -->
+      <div class="table-card">
+        <h3>Bug search by task name</h3>
+        <div class="bug-search-section">
+          <div class="bug-search-header">
+            <input
+              type="text"
+              id="bugSearchInput"
+              class="bug-search-field"
+              placeholder="Search task name..."
+            />
+            <button id="bugSearchBtn" class="bug-search-button">
+              <svg viewBox="0 0 16 16" width="14" height="14">
+                <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.027.04.057.078.09.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.09zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+              </svg>
+            </button>
+          </div>
+          <table class="compact-table" id="bugResultsTable">
+            <thead>
+              <tr>
+                <th>Bug ID</th>
+                <th>Task name</th>
+                <th>Status</th>
+                <th>Priority</th>
+              </tr>
+            </thead>
+            <tbody id="bugResultsBody">
+              <tr>
+                <td colspan="4" class="empty-state">Enter keywords to search</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Problems sorted by severity -->
+      <div class="table-card">
+        <h3>Problems sorted by severity ↓</h3>
+        <table class="compact-table">
+          <thead>
+            <tr>
+              <th>Inspection</th>
+              <th>Severity</th>
+              <th>Occurrence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ESLint</td>
+              <td>
+                <span class="severity-badge critical">Critical</span>
+              </td>
+              <td class="problem-count">1889</td>
+            </tr>
+            <tr>
+              <td>Attempt to assign to const or readonly variable</td>
+              <td>
+                <span class="severity-badge critical">Critical</span>
+              </td>
+              <td class="problem-count">5</td>
+            </tr>
+            <tr>
+              <td>Hardcoded passwords</td>
+              <td>
+                <span class="severity-badge critical">Critical</span>
+              </td>
+              <td class="problem-count">2</td>
+            </tr>
+            <tr>
+              <td>Invalid properties configuration</td>
+              <td>
+                <span class="severity-badge critical">Critical</span>
+              </td>
+              <td class="problem-count">1</td>
+            </tr>
+            <tr>
+              <td>Import can be shortened</td>
+              <td><span class="severity-badge high">High</span></td>
+              <td class="problem-count">583</td>
+            </tr>
+            <tr>
+              <td>Unused local symbol</td>
+              <td><span class="severity-badge high">High</span></td>
+              <td class="problem-count">502</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 筛选器弹窗 -->
+  <div id="filterModal" class="filter-modal" style="display: none;">
+    <div class="filter-modal-content">
+      <div class="filter-modal-header">
+        <h3>Filter Options</h3>
+        <button class="close-btn" id="closeFilterBtn">&times;</button>
+      </div>
+      <div class="filter-modal-body">
+        <!-- 动态生成的筛选器内容 -->
+      </div>
+      <div class="filter-modal-footer">
+        <button class="btn btn-primary" id="applyFilterBtn">Apply</button>
+        <button class="btn btn-secondary" id="clearFilterBtn">Clear All</button>
+      </div>
+    </div>
+  </div>
+</div>

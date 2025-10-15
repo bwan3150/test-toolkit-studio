@@ -449,15 +449,25 @@ let editorManagerInstance = null;
 function initializeEditorManager() {
     if (!editorManagerInstance) {
         editorManagerInstance = new EditorManager();
-        
+
         // 全局引用
         window.EditorManager = editorManagerInstance;
-        
+
         // 更新全局AppGlobals的编辑器引用 - 直接使用EditorManager
-        window.AppGlobals.setCodeEditor(editorManagerInstance);
-        
+        // 添加防御性检查
+        if (window.AppGlobals && typeof window.AppGlobals.setCodeEditor === 'function') {
+            window.AppGlobals.setCodeEditor(editorManagerInstance);
+        } else {
+            window.rError('❌ AppGlobals 未定义或 setCodeEditor 方法不存在', {
+                hasAppGlobals: !!window.AppGlobals,
+                AppGlobalsType: typeof window.AppGlobals,
+                hasSetCodeEditor: window.AppGlobals ? typeof window.AppGlobals.setCodeEditor : 'N/A'
+            });
+            throw new Error('AppGlobals 未正确初始化');
+        }
+
         window.rLog('编辑器管理器初始化完成');
-        
+
         // 初始化后立即加载字体设置
         setTimeout(() => {
             if (window.SettingsModule && window.SettingsModule.loadEditorFontSettings) {
@@ -465,7 +475,7 @@ function initializeEditorManager() {
             }
         }, 100);
     }
-    
+
     return editorManagerInstance;
 }
 
