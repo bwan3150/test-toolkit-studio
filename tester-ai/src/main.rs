@@ -48,7 +48,8 @@ async fn main() -> Result<()> {
     info!("读取输入成功: 测试用例 {}", input.test_case_name);
 
     // 创建控制器并运行
-    let mut orchestrator = TesterOrchestrator::new(input);
+    let mut orchestrator = TesterOrchestrator::new(input)
+        .context("创建 TesterOrchestrator 失败")?;
 
     match orchestrator.run().await {
         Ok(output) => {

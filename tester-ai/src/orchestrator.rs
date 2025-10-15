@@ -2,7 +2,7 @@
 
 use crate::agents::{LibrarianAgent, ReceptionistAgent, SupervisorAgent, WorkerAgent};
 use crate::models::{RoundLog, TestResult, TestStatus, TesterInput, TesterOutput};
-use crate::parser::{ActionTranslator, WorkerParser};
+use crate::parser::{ActionTranslator, WorkerParser, ElementManager};
 use crate::tke::TkeExecutor;
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -22,6 +22,9 @@ pub struct TesterOrchestrator {
     /// Worker Parser
     pub(crate) parser: WorkerParser,
 
+    /// 元素管理器
+    pub(crate) element_manager: ElementManager,
+
     /// 测试日志
     pub(crate) logs: Vec<RoundLog>,
 
@@ -34,7 +37,7 @@ pub struct TesterOrchestrator {
 
 impl TesterOrchestrator {
     /// 创建新的控制器
-    pub fn new(input: TesterInput) -> Self {
+    pub fn new(input: TesterInput) -> Result<Self> {
         let tke = TkeExecutor::new(
             &input.tke_path,
             &input.project_path,
@@ -43,14 +46,18 @@ impl TesterOrchestrator {
 
         let parser = WorkerParser::new();
 
-        Self {
+        let element_manager = ElementManager::new(&input.project_path)
+            .context("创建 ElementManager 失败")?;
+
+        Ok(Self {
             input,
             tke,
             parser,
+            element_manager,
             logs: Vec::new(),
             action_history: Vec::new(),
             tks_script: Vec::new(),
-        }
+        })
     }
 
     /// 执行完整测试流程
@@ -202,9 +209,11 @@ impl TesterOrchestrator {
             test_result = TestResult::Incomplete;
         }
 
-        // 7. 保存 .tks 脚本
-        info!("步骤 5: 保存 .tks 脚本");
+        // 7. 保存 .tks 脚本和 element.json
+        info!("步骤 5: 保存 .tks 脚本和 element.json");
         self.save_tks_script().await?;
+        self.element_manager.save()
+            .context("保存 element.json 失败")?;
 
         let end_time = Utc::now();
 
@@ -261,6 +270,11 @@ impl TesterOrchestrator {
 
         let screen_description = WorkerParser::generate_screen_description(&screen_state);
 
+        // DEBUG: 输出送给 Worker 的屏幕描述
+        info!("========== 送给 Worker 的屏幕描述 (第 {} 轮) ==========", round);
+        info!("\n{}\n", screen_description);
+        info!("========================================");
+
         // 5. Worker 做出决策
         let decision = worker
             .make_decision(&screen_description, round, &self.action_history)
@@ -269,8 +283,13 @@ impl TesterOrchestrator {
         info!("Worker 决策: {:?}", decision.action_type);
         info!("决策理由: {}", decision.reasoning);
 
-        // 6. 转换并执行操作
-        let tks_line = ActionTranslator::translate_to_tks_script(&decision, &self.parser)?;
+        // 6. 转换并执行操作（使用元素名）
+        let tks_line = ActionTranslator::translate_to_tks_script_with_element_names(
+            &decision,
+            &self.parser,
+            &mut self.element_manager,
+            &screen_state,
+        )?;
 
         // 7. 真正执行 TKE 命令
         let action_success = self.execute_action(&decision).await.is_ok();
