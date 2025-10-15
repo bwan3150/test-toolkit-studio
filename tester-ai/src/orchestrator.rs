@@ -148,23 +148,31 @@ impl TesterOrchestrator {
                     if decision.test_completed {
                         info!("Worker 认为测试已完成，提交给 Supervisor 审核");
 
-                        // 获取最近 5 轮的日志
-                        let recent_rounds: Vec<String> = self
+                        // 获取当前屏幕状态（最后一轮的 observation）
+                        let current_screen = self
+                            .logs
+                            .last()
+                            .map(|log| log.observation.as_str())
+                            .unwrap_or("");
+
+                        // 构建全部历史步骤的详细信息
+                        let all_rounds: Vec<String> = self
                             .logs
                             .iter()
-                            .rev()
-                            .take(5)
-                            .rev()
                             .map(|log| {
                                 format!(
-                                    "轮次 {}: 观察={}, 决策={}, 操作={}",
-                                    log.round, log.observation, log.decision, log.action
+                                    "【第 {} 轮】\n屏幕状态:\n{}\n\nWorker 决策: {}\n\n执行的操作: {}\n\n操作结果: {}",
+                                    log.round,
+                                    log.observation,
+                                    log.decision,
+                                    log.action,
+                                    if log.action_success { "成功" } else { "失败" }
                                 )
                             })
                             .collect();
 
                         let review = supervisor
-                            .review_test(&recent_rounds, &decision.reasoning)
+                            .review_test(current_screen, &all_rounds, &decision.reasoning)
                             .await?;
 
                         match review {

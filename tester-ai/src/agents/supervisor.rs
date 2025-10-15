@@ -57,53 +57,72 @@ impl SupervisorAgent {
     /// 审核测试结果
     pub async fn review_test(
         &self,
-        recent_rounds: &[String],
+        current_screen: &str,
+        all_rounds: &[String],
         worker_completion_claim: &str,
     ) -> Result<SupervisorReview> {
         info!("Supervisor 审核测试结果");
 
         let prompt = format!(
-            r#"你是一个测试审核员。
+            r#"你是一个测试审核员，负责审核 Worker 的测试执行结果。
 
 # 测试目标
 {}
 
-# Worker 最近的测试执行记录
+# 当前屏幕状态（Worker 声称完成时的屏幕）
 {}
 
-# Worker 声明
+# 完整的测试执行历史（从第一轮到最后一轮）
 {}
 
-请审核以上测试执行，判断：
-1. 测试是否真的完成了？
-2. 如果完成了，应用功能是否正常？是否发现 Bug？
-3. 如果没完成，应该如何继续？
+# Worker 的完成声明
+{}
 
-请严格以 JSON 格式返回审核结果，格式如下：
+## 你的审核任务：
+1. **检查操作正确性**：仔细审查每一轮的操作，看 Worker 是否有误操作
+   - 是否把某个信息输入到了其他错误的输入框？
+   - 是否忘记输入某个必填字段？
+   - 是否点击了错误的按钮？
+   - 其他此类问题
 
-如果测试未完成:
+2. **检查当前屏幕状态**：根据测试目标，判断当前屏幕是否符合预期
+   - 如果测试目标是登录成功，当前是否在主界面？
+   - 当前屏幕是否有错误提示（如 "Invalid email", "Wrong password" 等）？
+
+3. **判断测试完成度**：
+   - 测试目标是否真的达成了？
+   - Worker 的操作步骤是否完整？
+
+4. **发现潜在 Bug**：
+   - 应用是否有异常行为？
+   - 是否有功能不正常？
+
+## 返回格式（严格 JSON）：
+
+如果测试未完成（Worker 还有步骤没做，或者操作有误需要重试）:
 {{
   "status": "incomplete",
-  "feedback": "建议继续...（具体建议）"
+  "feedback": "具体的问题和建议，例如：Worker 在第3轮将密码输入到了邮箱框，需要重新正确输入"
 }}
 
 如果测试完成且功能正常:
 {{
   "status": "passed_normal",
-  "summary": "测试通过...（总结）"
+  "summary": "测试通过的总结，说明达成了什么目标"
 }}
 
-如果测试完成但发现 Bug:
+如果发现应用 Bug（不是 Worker 的操作问题，而是应用本身的问题）:
 {{
   "status": "failed_with_bug",
-  "bug_description": "发现的 Bug 描述",
+  "bug_description": "Bug 的详细描述，例如：输入了正确的邮箱密码，但应用提示'Invalid email address'",
   "summary": "测试总结"
 }}
 
 只返回 JSON，不要有任何其他文字。
 "#,
             self.test_objective,
-            recent_rounds.join("\n\n"),
+            current_screen,
+            all_rounds.join("\n\n"),
             worker_completion_claim
         );
 
