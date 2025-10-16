@@ -12,6 +12,12 @@ const { registerAdbHandlers, getBuiltInScrcpyPath, getBuiltInStbPath, getTkePath
 const { registerLogcatHandlers } = require('./handlers/tke-integration/logcat-handlers');
 const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/tke-integration/ios-handlers');
 const { registerDeviceHandlers } = require('./handlers/tke-integration/device-handlers');
+const { registerControllerHandlers } = require('./handlers/tke-integration/controller-handlers');
+const { registerFetcherHandlers } = require('./handlers/tke-integration/fetcher-handlers');
+const { registerRecognizerHandlers } = require('./handlers/tke-integration/recognizer-handlers');
+const { registerParserHandlers } = require('./handlers/tke-integration/parser-handlers');
+const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-handlers');
+const { registerOcrHandlers } = require('./handlers/tke-integration/ocr-handlers');
 
 // Electron 核心模块 - Electron 应用的核心功能
 const { registerWindowHandlers } = require('./handlers/electron-core/window-handlers');
@@ -264,6 +270,24 @@ function registerAllHandlers() {
 
     console.log('注册iOS处理器...');
     registerIosHandlers(app);
+
+    console.log('注册TKE Controller处理器...');
+    registerControllerHandlers(app);
+
+    console.log('注册TKE Fetcher处理器...');
+    registerFetcherHandlers(app);
+
+    console.log('注册TKE Recognizer处理器...');
+    registerRecognizerHandlers(app);
+
+    console.log('注册TKE Parser处理器...');
+    registerParserHandlers(app);
+
+    console.log('注册TKE Runner处理器...');
+    registerRunnerHandlers(app);
+
+    console.log('注册TKE OCR处理器...');
+    registerOcrHandlers(app);
 
     // 项目管理模块
     console.log('注册项目处理器...');
