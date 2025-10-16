@@ -255,6 +255,16 @@ const ConsolePanel = {
 // 导出到全局
 window.ConsolePanel = ConsolePanel;
 
+// 导出模块（供BottomPanelManager调用）
+window.ConsolePanelModule = {
+    clear: () => ConsolePanel.clearConsole(),
+    log: (...args) => ConsolePanel.log(...args),
+    info: (...args) => ConsolePanel.info(...args),
+    warn: (...args) => ConsolePanel.warn(...args),
+    error: (...args) => ConsolePanel.error(...args),
+    exportLogs: () => ConsolePanel.exportLogs()
+};
+
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     ConsolePanel.init();

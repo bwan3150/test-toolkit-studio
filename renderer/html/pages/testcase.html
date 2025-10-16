@@ -38,130 +38,70 @@
         <!-- 编辑器标签将在这里动态生成 -->
       </div>
 
-      <!-- Bottom Panel (UI Elements + Console) -->
-      <div
-        class="ui-elements-bottom-panel"
-        id="uiElementsBottomPanel"
-      >
-        <!-- Bottom Panel Resizer -->
-        <div
-          class="bottom-panel-resizer"
-          id="bottomPanelResizer"
-        ></div>
-        <div class="elements-tabs">
-          <div class="tab-header">
-            <button class="tab-btn active" data-tab="elements-list">
-              UI元素
+      <!-- Bottom Panel - 统一的下方面板系统 -->
+      <div class="bottom-panel" id="bottomPanel">
+        <!-- Resizer -->
+        <div class="bottom-panel-resizer" id="bottomPanelResizer"></div>
+
+        <!-- Header with Tabs -->
+        <div class="bottom-panel-header">
+          <div class="bottom-panel-tabs">
+            <!-- Tabs will be rendered by BottomPanelManager -->
+          </div>
+          <div class="bottom-panel-toolbar">
+            <button class="btn-icon" id="clearConsoleBtn" title="清空控制台" style="display: none;">
+              <svg viewBox="0 0 24 24">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
             </button>
-            <button
-              class="tab-btn"
-              data-tab="element-props"
-              id="elementPropsTab"
-            >
-              元素属性
+            <button class="btn-icon" id="togglePanelBtn" title="收起/展开">
+              <svg viewBox="0 0 24 24">
+                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" />
+              </svg>
             </button>
-            <button
-              class="tab-btn"
-              data-tab="locator-lib"
-              id="locatorLibTab"
-            >
-              Locator库
-            </button>
-            <button
-              class="tab-btn"
-              data-tab="console-output"
-              id="consoleTab"
-            >
-              控制台
-            </button>
-            <div class="tab-actions">
-              <button
-                class="btn btn-icon btn-small"
-                id="toggleElementsPanelBtn"
-                title="收起"
-              >
-                <svg viewBox="0 0 24 24" id="toggleElementsPanelIcon">
-                  <path
-                    d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"
-                  />
-                </svg>
-              </button>
-              <button
-                class="btn btn-icon btn-small"
-                id="clearConsoleBtn"
-                title="清空控制台"
-                style="display: none"
-              >
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-                  />
-                </svg>
-              </button>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="bottom-panel-content">
+          <!-- UI Elements List -->
+          <div class="bottom-panel-content-pane" data-pane-id="elements-list">
+            <div class="elements-list-container" id="elementsListContainer">
+              <div class="empty-state">
+                <div class="empty-state-text">暂无UI元素</div>
+                <div class="empty-state-hint">点击上方"XML Overlay"按钮获取页面元素</div>
+              </div>
             </div>
           </div>
-          <div class="tab-content" id="uiElementsPanelContent">
-            <!-- Elements List Tab -->
-            <div class="tab-pane active" id="elementsListPane">
-              <div
-                class="elements-list-container"
-                id="elementsListContainer"
-              >
+
+          <!-- Element Properties -->
+          <div class="bottom-panel-content-pane" data-pane-id="element-props">
+            <div class="element-props-container" id="elementPropsContainer">
+              <div class="empty-state">
+                <div class="empty-state-text">未选择元素</div>
+                <div class="empty-state-hint">点击UI元素列表中的项目查看详情</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Locator Library -->
+          <div class="bottom-panel-content-pane" data-pane-id="locator-lib">
+            <div class="locator-lib-container" id="locatorLibContainer">
+              <div class="locator-search-bar">
+                <input type="text" id="locatorSearchInput" placeholder="搜索元素名称..." />
+              </div>
+              <div class="locator-list" id="locatorList">
                 <div class="empty-state">
-                  <div class="empty-state-text">暂无UI元素</div>
+                  <div class="empty-state-text">暂无保存的元素</div>
+                  <div class="empty-state-hint">在元素属性页面点击"入库"保存元素</div>
                 </div>
               </div>
             </div>
-            <!-- Element Properties Tab -->
-            <div
-              class="tab-pane"
-              id="elementPropsPane"
-              style="display: none"
-            >
-              <div
-                class="element-props-container"
-                id="elementPropsContainer"
-              >
-                <div class="empty-state">
-                  <div class="empty-state-text">未选择元素</div>
-                </div>
-              </div>
-            </div>
-            <!-- Locator Library Tab -->
-            <div
-              class="tab-pane"
-              id="locatorLibPane"
-              style="display: none"
-            >
-              <div
-                class="locator-lib-container"
-                id="locatorLibContainer"
-              >
-                <div class="locator-search-bar">
-                  <input
-                    type="text"
-                    id="locatorSearchInput"
-                    placeholder="搜索元素名称..."
-                  />
-                </div>
-                <div class="locator-list" id="locatorList">
-                  <div class="empty-state">
-                    <div class="empty-state-text">暂无保存的元素</div>
-                    <div class="empty-state-hint">
-                      在元素属性页面点击"入库"保存元素
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- Console Output Tab -->
-            <div
-              class="tab-pane"
-              id="consoleOutputPane"
-              style="display: none"
-            >
-              <div class="console-output" id="consoleOutput"></div>
-            </div>
+          </div>
+
+          <!-- Console -->
+          <div class="bottom-panel-content-pane" data-pane-id="console">
+            <div class="console-output" id="consoleOutput"></div>
           </div>
         </div>
       </div>

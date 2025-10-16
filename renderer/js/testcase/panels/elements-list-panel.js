@@ -10,35 +10,14 @@ const ElementsListPanel = {
         // 监听UI元素更新事件
         document.addEventListener('uiElementsUpdated', (event) => {
             this.updateElements(event.detail.elements);
-            
-            // 确保底部面板可见并设置正确高度
-            const bottomPanel = document.getElementById('uiElementsBottomPanel');
-            if (bottomPanel) {
-                bottomPanel.style.display = 'flex';
-                bottomPanel.style.height = '300px'; // 设置合适的高度
-                bottomPanel.classList.remove('collapsed');
-                
-                // 确保UI元素标签页处于激活状态
-                const elementsTab = document.querySelector('.tab-btn[data-tab="elements-list"]');
-                const elementsPane = document.getElementById('elementsListPane');
-                if (elementsTab && !elementsTab.classList.contains('active')) {
-                    elementsTab.click(); // 激活UI元素标签页
-                } else if (elementsPane) {
-                    // 如果已经激活，确保面板显示
-                    elementsPane.style.display = 'flex';
-                    elementsPane.classList.add('active');
-                }
+
+            // 确保底部面板展开并切换到UI元素Tab
+            if (window.BottomPanelManager) {
+                window.BottomPanelManager.expand();
+                window.BottomPanelManager.switchTab('elements-list');
             }
         });
-        
-        // 绑定搜索功能
-        const searchInput = document.querySelector('#elementsListPane .search-input');
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.filterElements(e.target.value);
-            });
-        }
-        
+
         // 初始渲染空状态
         this.renderElements();
     },
@@ -69,13 +48,12 @@ const ElementsListPanel = {
             return;
         }
         
-        // 计算元素的尺寸和中心点
+        // 计算元素的尺寸和中心点 (TKE返回的bounds是对象格式: {x1, y1, x2, y2})
         const elementsWithSize = elements.map(el => {
-            const width = el.bounds ? (el.bounds[2] - el.bounds[0]) : (el.width || 0);
-            const height = el.bounds ? (el.bounds[3] - el.bounds[1]) : (el.height || 0);
-            const centerX = el.bounds ? Math.round((el.bounds[0] + el.bounds[2]) / 2) : (el.centerX || 0);
-            const centerY = el.bounds ? Math.round((el.bounds[1] + el.bounds[3]) / 2) : (el.centerY || 0);
-            
+            const width = el.bounds.x2 - el.bounds.x1;
+            const height = el.bounds.y2 - el.bounds.y1;
+            const centerX = Math.round((el.bounds.x1 + el.bounds.x2) / 2);
+            const centerY = Math.round((el.bounds.y1 + el.bounds.y2) / 2);
             return { ...el, width, height, centerX, centerY };
         });
         
