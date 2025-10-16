@@ -12,14 +12,10 @@ const ElementPropertiesPanel = {
     
     // 显示元素属性
     showElementProperties(element) {
-        const elementPropsTab = document.getElementById('elementPropsTab');
-        const elementPropsPane = document.getElementById('elementPropsPane');
         const elementPropsContainer = document.getElementById('elementPropsContainer');
-        const elementsListTab = document.querySelector('.tab-btn[data-tab="elements-list"]');
-        const elementsListPane = document.getElementById('elementsListPane');
-        
-        if (!elementPropsTab || !elementPropsPane || !elementPropsContainer) {
-            window.rError('元素属性面板组件未找到');
+
+        if (!elementPropsContainer) {
+            window.rError('元素属性容器未找到: elementPropsContainer');
             return;
         }
         
@@ -36,7 +32,7 @@ const ElementPropertiesPanel = {
                 <div class="prop-group">
                     <h4 class="prop-title">位置信息</h4>
                     <div class="prop-item"><strong>中心点:</strong> (${element.centerX || 0}, ${element.centerY || 0})</div>
-                    <div class="prop-item"><strong>边界:</strong> [${element.bounds ? element.bounds.join(', ') : 'N/A'}]</div>
+                    <div class="prop-item"><strong>边界:</strong> [${element.bounds ? `${element.bounds.x1}, ${element.bounds.y1}, ${element.bounds.x2}, ${element.bounds.y2}` : 'N/A'}]</div>
                     <div class="prop-item"><strong>尺寸:</strong> ${element.width || 0} × ${element.height || 0}</div>
                 </div>
                 
@@ -106,15 +102,12 @@ const ElementPropertiesPanel = {
         
         // 更新属性容器内容
         elementPropsContainer.innerHTML = propertiesHTML;
-        
-        // 切换到属性标签页
-        elementsListTab.classList.remove('active');
-        elementPropsTab.classList.add('active');
-        elementsListPane.style.display = 'none';
-        elementsListPane.classList.remove('active');
-        elementPropsPane.style.display = 'block';
-        elementPropsPane.classList.add('active');
-        
+
+        // 使用BottomPanelManager切换到属性Tab
+        if (window.BottomPanelManager) {
+            window.BottomPanelManager.switchTab('element-props');
+        }
+
         window.rLog(`显示元素 [${element.index}] 的属性`);
     },
     
@@ -127,9 +120,13 @@ const ElementPropertiesPanel = {
             return;
         }
         
+        const boundsStr = element.bounds ?
+            `[${element.bounds.x1}, ${element.bounds.y1}, ${element.bounds.x2}, ${element.bounds.y2}]` :
+            'N/A';
+
         const info = `元素 [${element.index}]
 类型: ${element.className || 'Unknown'}
-位置: [${element.bounds ? element.bounds.join(', ') : 'N/A'}]
+位置: ${boundsStr}
 文本: ${element.text || 'N/A'}
 描述: ${element.contentDesc || 'N/A'}
 可点击: ${element.clickable ? '是' : '否'}`;

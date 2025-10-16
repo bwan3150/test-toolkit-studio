@@ -294,45 +294,69 @@
     padding: 12px;
 }
 
-.props-section {
-    margin-bottom: 16px;
+.element-details {
+    max-width: 800px;
 }
 
-.props-section-title {
-    font-size: 11px;
+.prop-group {
+    margin-bottom: 20px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.prop-title {
+    font-size: 13px;
     font-weight: 600;
-    text-transform: uppercase;
-    color: var(--text-secondary);
+    color: var(--text-primary);
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.prop-item {
     margin-bottom: 8px;
-    letter-spacing: 0.5px;
-}
-
-.props-grid {
-    display: grid;
-    grid-template-columns: 120px 1fr;
-    gap: 8px 12px;
     font-size: 12px;
+    line-height: 1.6;
 }
 
-.prop-label {
+.prop-item strong {
     color: var(--text-secondary);
+    margin-right: 8px;
+}
+
+.status-item {
+    display: inline-block;
+    padding: 4px 8px;
+    margin-right: 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 500;
 }
 
-.prop-value {
-    color: var(--text-primary);
-    font-family: var(--font-mono);
-    word-break: break-all;
+.status-item.status-true {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--accent-success);
+    border: 1px solid var(--accent-success);
 }
 
-.prop-value.clickable {
-    color: var(--accent-primary);
-    cursor: pointer;
-    text-decoration: underline;
+.status-item.status-false {
+    background: rgba(158, 158, 158, 0.1);
+    color: var(--text-disabled);
+    border: 1px solid var(--border-color);
 }
 
-.prop-value.clickable:hover {
-    opacity: 0.8;
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.action-buttons .btn {
+    padding: 8px 16px;
+    font-size: 12px;
 }
 
 /* Locator库面板 */
