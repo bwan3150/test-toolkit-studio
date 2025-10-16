@@ -67,17 +67,48 @@ async function refreshDeviceScreen() {
     }
 
     window.rLog('开始截图，设备:', deviceSelect.value, '项目路径:', projectPath);
-    const result = await ipcRenderer.invoke('adb-screenshot', deviceSelect.value, projectPath);
-    
-    window.rLog('截图结果:', { success: result.success, hasImagePath: !!result.imagePath });
-    
-    if (result.success && result.imagePath) {
+
+    // 使用新的 TKE controller capture 命令
+    const captureResult = await ipcRenderer.invoke('tke-controller-capture', deviceSelect.value, projectPath);
+
+    if (!captureResult.success) {
+        const error = captureResult.error || '未知错误';
+        window.rError('截图失败:', error);
+        window.NotificationModule.showNotification(`截图失败: ${error}`, 'error');
+
+        // 隐藏截图，显示默认占位符
+        const img = document.getElementById('deviceScreenshot');
+        if (img) {
+            img.style.display = 'none';
+        }
+        const placeholder = document.querySelector('.screen-placeholder');
+        if (placeholder) {
+            placeholder.textContent = 'No device connected';
+            placeholder.style.display = 'block';
+        }
+        return;
+    }
+
+    // 解析 TKE 返回的 JSON
+    let result;
+    try {
+        result = JSON.parse(captureResult.output);
+    } catch (e) {
+        window.rError('解析TKE输出失败:', e);
+        window.NotificationModule.showNotification('解析截图结果失败', 'error');
+        return;
+    }
+
+    window.rLog('截图结果:', { success: result.success, hasScreenshot: !!result.screenshot });
+
+    if (result.success && result.screenshot) {
+        const imagePath = result.screenshot;
         const img = document.getElementById('deviceScreenshot');
         if (!img) {
             window.rError('未找到 deviceScreenshot 元素');
             return;
         }
-        
+
         // 等待图片加载完成
         await new Promise((resolve) => {
             img.onload = () => {
@@ -87,74 +118,48 @@ async function refreshDeviceScreen() {
                     placeholder.style.display = 'none';
                 }
                 window.rLog('截图显示成功');
-                
+
                 // 给浏览器一点时间完成布局
                 setTimeout(resolve, 50);
             };
-            img.src = `file://${result.imagePath}?t=${Date.now()}`;
+            img.src = `file://${imagePath}?t=${Date.now()}`;
         });
-        
-        // 更新设备信息并获取UI结构
-        await updateDeviceInfoAndGetUIStructure();
-    } else {
-        const error = result.error || '未知错误';
-        window.rError('截图失败:', error);
-        window.NotificationModule.showNotification(`截图失败: ${error}`, 'error');
 
-        // 隐藏截图，显示默认占位符（不显示错误文字）
-        const img = document.getElementById('deviceScreenshot');
-        if (img) {
-            img.style.display = 'none';
-        }
-        const placeholder = document.querySelector('.screen-placeholder');
-        if (placeholder) {
-            placeholder.textContent = 'No device connected';  // 恢复默认文本
-            placeholder.style.display = 'block';
-        }
+        // 更新设备信息并获取UI结构（传入xml路径）
+        await updateDeviceInfoAndGetUIStructure(result.xml);
     }
 }
 
 // ============================================
 // UI 结构获取和解析
 // ============================================
-async function updateDeviceInfoAndGetUIStructure() {
+async function updateDeviceInfoAndGetUIStructure(xmlPath) {
     const { ipcRenderer, path } = getGlobals();
     const deviceSelect = document.getElementById('deviceSelect');
     const projectPath = window.AppGlobals.currentProject;
-    
+
     if (!deviceSelect?.value || !projectPath) return;
-    
+
     window.rLog(`🔄 获取设备UI结构, 当前 overlay 状态: ${ScreenState.xmlOverlayEnabled}`);
-    
+
     try {
-        // 获取设备XML结构
-        const result = await ipcRenderer.invoke('adb-get-ui-xml', {
-            deviceId: deviceSelect.value,
-            projectPath: projectPath,
-            options: {
-                useCompressedLayout: true,
-                timeout: 30000,
-                retryCount: 2
-            },
-            metadata: {
-                screenSize: null,
-                timestamp: Date.now(),
-                deviceModel: null
+        // 1. 首先使用 TKE fetcher infer-screen-size 推断屏幕尺寸
+        const sizeResult = await ipcRenderer.invoke('tke-fetcher-infer-screen-size', projectPath);
+
+        let screenSize = { width: 1080, height: 1920 }; // 默认值
+        if (sizeResult.success) {
+            try {
+                const sizeData = JSON.parse(sizeResult.output);
+                screenSize = {
+                    width: sizeData.width,
+                    height: sizeData.height
+                };
+                window.rLog('屏幕尺寸:', screenSize);
+            } catch (e) {
+                window.rWarn('解析屏幕尺寸失败，使用默认值:', e);
             }
-        });
-        
-        if (!result.success) {
-            window.rError('获取设备UI结构失败:', result.error);
-            if (result.error && result.error.includes('timeout')) {
-                window.NotificationModule.showNotification('获取UI结构超时，请检查设备连接', 'error');
-            } else {
-                window.NotificationModule.showNotification('获取UI结构失败: ' + (result.error || '未知错误'), 'error');
-            }
-            return;
         }
-        
-        window.rLog('屏幕尺寸:', result.screenSize);
-        
+
         // 显示图片尺寸信息
         const deviceImage = document.getElementById('deviceScreenshot');
         if (deviceImage && deviceImage.complete) {
@@ -166,63 +171,59 @@ async function updateDeviceInfoAndGetUIStructure() {
                 height: rect.height
             });
         }
-        
-        // 通过 TKE 提取 UI 元素
-        if (result.xml) {
-            window.rLog('开始通过 TKE 提取 UI 元素...');
-            
-            // 调用 TKE 提取元素
-            const extractResult = await ipcRenderer.invoke('execute-tke-extract-elements', {
-                deviceId: deviceSelect.value,
-                projectPath: projectPath,
-                screenWidth: result.screenSize?.width || 1080,
-                screenHeight: result.screenSize?.height || 1920
-            });
-            
-            if (extractResult.success && extractResult.elements) {
-                window.rLog(`TKE 提取到 ${extractResult.elements.length} 个UI元素`);
-                const elements = extractResult.elements;
-                
-                // 显示UI元素列表
-                displayUIElementList(elements);
-                
-                // 如果XML overlay 已启用，重新创建overlay UI
-                if (ScreenState.xmlOverlayEnabled) {
-                    window.rLog('📊 重新创建XML overlay UI');
-                    
-                    // 从元素推断屏幕尺寸（如果有根节点）
-                    let screenSize = result.screenSize || { width: 1080, height: 1920 };
-                    if (elements.length > 0 && elements[0].bounds && elements[0].bounds.length === 4) {
-                        const rootBounds = elements[0].bounds;
-                        const inferredWidth = rootBounds[2] - rootBounds[0];
-                        const inferredHeight = rootBounds[3] - rootBounds[1];
-                        
-                        if (inferredWidth >= 800 && inferredHeight >= 600) {
-                            screenSize = { width: inferredWidth, height: inferredHeight };
-                            window.rLog(`从XML根节点推断屏幕尺寸: ${screenSize.width}x${screenSize.height}`);
-                        }
-                    }
-                    
-                    // 更新状态
-                    ScreenState.currentUIElements = elements;
-                    ScreenState.currentScreenSize = screenSize;
-                    
-                    // 创建新的overlay
-                    await createUIOverlay(elements, screenSize);
-                }
-                
-                // 存储当前屏幕尺寸
-                window.AppGlobals.currentScreenSize = result.screenSize;
-                
-                // 如果有TKE适配器，更新屏幕信息
-                if (window.TkeAdapterModule && window.TkeAdapterModule.updateScreenInfo) {
-                    window.TkeAdapterModule.updateScreenInfo(result.screenSize);
-                }
-            } else {
-                window.rError('TKE 提取UI元素失败:', extractResult.error);
+
+        // 2. 使用 TKE fetcher extract-ui-elements 提取 UI 元素
+        window.rLog('开始通过 TKE 提取 UI 元素...');
+
+        const extractResult = await ipcRenderer.invoke('tke-fetcher-extract-ui-elements', {
+            projectPath: projectPath,
+            screenWidth: screenSize.width,
+            screenHeight: screenSize.height
+        });
+
+        if (!extractResult.success) {
+            window.rError('TKE 提取UI元素失败:', extractResult.error);
+            window.NotificationModule.showNotification('提取UI元素失败: ' + (extractResult.error || '未知错误'), 'error');
+            return;
+        }
+
+        // 解析 TKE 返回的 JSON
+        let elements;
+        try {
+            elements = JSON.parse(extractResult.output);
+        } catch (e) {
+            window.rError('解析TKE输出失败:', e);
+            window.NotificationModule.showNotification('解析UI元素失败', 'error');
+            return;
+        }
+
+        if (Array.isArray(elements)) {
+            window.rLog(`TKE 提取到 ${elements.length} 个UI元素`);
+
+            // 显示UI元素列表
+            displayUIElementList(elements);
+
+            // 如果XML overlay 已启用，重新创建overlay UI
+            if (ScreenState.xmlOverlayEnabled) {
+                window.rLog('📊 重新创建XML overlay UI');
+
+                // 更新状态
+                ScreenState.currentUIElements = elements;
+                ScreenState.currentScreenSize = screenSize;
+
+                // 创建新的overlay
+                await createUIOverlay(elements, screenSize);
+            }
+
+            // 存储当前屏幕尺寸
+            window.AppGlobals.currentScreenSize = screenSize;
+
+            // 如果有TKE适配器，更新屏幕信息
+            if (window.TkeAdapterModule && window.TkeAdapterModule.updateScreenInfo) {
+                window.TkeAdapterModule.updateScreenInfo(screenSize);
             }
         }
-        
+
     } catch (error) {
         window.rError('Error updating device info:', error);
         window.NotificationModule.showNotification('更新设备信息失败: ' + error.message, 'error');
@@ -285,56 +286,64 @@ async function enableXmlOverlay(deviceId) {
             });
         }
         
-        // 2. 通过 TKE 提取 UI 元素（从工作区的 current_ui_tree.xml）
-        // 先用默认尺寸调用TKE
-        const extractResult = await ipcRenderer.invoke('execute-tke-extract-elements', {
-            deviceId: deviceId,
-            projectPath: projectPath,
-            screenWidth: 1080,  // 临时值
-            screenHeight: 2400  // 临时值
-        });
-        
-        if (!extractResult.success || !extractResult.elements) {
-            throw new Error('TKE提取UI元素失败: ' + (extractResult.error || '未知错误'));
-        }
-        
-        // 3. 从元素的bounds中推断实际屏幕尺寸
-        let screenSize = { width: 1080, height: 1920 };  // 默认值
-        
-        // 查找根节点（通常第一个元素）来确定屏幕尺寸
-        if (extractResult.elements.length > 0) {
-            const rootElement = extractResult.elements[0];
-            if (rootElement.bounds && rootElement.bounds.length === 4) {
-                // bounds格式: [x1, y1, x2, y2]
-                const inferredWidth = rootElement.bounds[2] - rootElement.bounds[0];
-                const inferredHeight = rootElement.bounds[3] - rootElement.bounds[1];
-                
-                // 如果推断的尺寸合理（大于800x600），使用它
-                if (inferredWidth >= 800 && inferredHeight >= 600) {
-                    screenSize = { width: inferredWidth, height: inferredHeight };
-                    window.rLog(`从XML根节点推断屏幕尺寸: ${screenSize.width}x${screenSize.height}`);
-                }
+        // 2. 使用 TKE fetcher infer-screen-size 推断屏幕尺寸
+        const sizeResult = await ipcRenderer.invoke('tke-fetcher-infer-screen-size', projectPath);
+
+        let screenSize = { width: 1080, height: 1920 }; // 默认值
+        if (sizeResult.success) {
+            try {
+                const sizeData = JSON.parse(sizeResult.output);
+                screenSize = {
+                    width: sizeData.width,
+                    height: sizeData.height
+                };
+                window.rLog('推断屏幕尺寸:', screenSize);
+            } catch (e) {
+                window.rWarn('解析屏幕尺寸失败，使用默认值:', e);
             }
         }
-        
+
         // 如果有保存的屏幕尺寸且合理，也可以使用
-        if (window.AppGlobals.currentScreenSize && 
-            window.AppGlobals.currentScreenSize.width > 0 && 
+        if (window.AppGlobals.currentScreenSize &&
+            window.AppGlobals.currentScreenSize.width > 0 &&
             window.AppGlobals.currentScreenSize.height > 0) {
-            // 比较两个尺寸，如果差异太大，使用XML推断的
+            // 比较两个尺寸，如果差异太大，使用推断的
             const savedSize = window.AppGlobals.currentScreenSize;
             const widthDiff = Math.abs(savedSize.width - screenSize.width);
             const heightDiff = Math.abs(savedSize.height - screenSize.height);
-            
+
             if (widthDiff < 100 && heightDiff < 100) {
                 // 差异不大，使用保存的尺寸（可能更准确）
                 screenSize = savedSize;
                 window.rLog(`使用保存的屏幕尺寸: ${screenSize.width}x${screenSize.height}`);
             }
         }
-        
+
+        // 3. 使用 TKE fetcher extract-ui-elements 提取 UI 元素
+        const extractResult = await ipcRenderer.invoke('tke-fetcher-extract-ui-elements', {
+            projectPath: projectPath,
+            screenWidth: screenSize.width,
+            screenHeight: screenSize.height
+        });
+
+        if (!extractResult.success) {
+            throw new Error('TKE提取UI元素失败: ' + (extractResult.error || '未知错误'));
+        }
+
+        // 解析 TKE 返回的 JSON
+        let elements;
+        try {
+            elements = JSON.parse(extractResult.output);
+        } catch (e) {
+            throw new Error('解析TKE输出失败: ' + e.message);
+        }
+
+        if (!Array.isArray(elements)) {
+            throw new Error('TKE返回的数据格式不正确');
+        }
+
         // 存储元素和屏幕尺寸
-        ScreenState.currentUIElements = extractResult.elements;
+        ScreenState.currentUIElements = elements;
         ScreenState.currentScreenSize = screenSize;
         
         // 4. 创建 overlay
@@ -434,29 +443,34 @@ async function updateXmlOverlay(elements, screenSize) {
 // 创建UI覆盖层
 async function createUIOverlay(elements, screenSize) {
     window.rLog(`创建UI覆盖层，元素数量: ${elements.length}`);
-    
+
     const screenContent = document.getElementById('screenContent');
     const deviceImage = document.getElementById('deviceScreenshot');
-    
+
     if (!screenContent || !deviceImage) {
         window.rError('未找到必要的DOM元素');
         return;
     }
-    
+
     // 移除旧的覆盖层
     const existingOverlay = screenContent.querySelector('.ui-overlay');
     if (existingOverlay) {
+        window.rLog('移除旧的覆盖层');
         existingOverlay.remove();
     }
-    
+
     // 获取图片的实际显示位置和大小
     const imgRect = deviceImage.getBoundingClientRect();
     const containerRect = screenContent.getBoundingClientRect();
-    
+
     // 计算图片相对于容器的偏移
     const offsetLeft = imgRect.left - containerRect.left;
     const offsetTop = imgRect.top - containerRect.top;
-    
+
+    window.rLog(`容器位置: left=${containerRect.left}, top=${containerRect.top}, width=${containerRect.width}, height=${containerRect.height}`);
+    window.rLog(`图片位置: left=${imgRect.left}, top=${imgRect.top}, width=${imgRect.width}, height=${imgRect.height}`);
+    window.rLog(`偏移量: offsetLeft=${offsetLeft}, offsetTop=${offsetTop}`);
+
     // 创建新的覆盖层，直接覆盖在图片上
     const overlay = document.createElement('div');
     overlay.className = 'ui-overlay';
@@ -466,17 +480,80 @@ async function createUIOverlay(elements, screenSize) {
         left: ${offsetLeft}px;
         width: ${imgRect.width}px;
         height: ${imgRect.height}px;
-        pointer-events: none;
-        z-index: 10;
+        pointer-events: auto;
+        z-index: 1000;
     `;
-    
+
+    // 添加CSS样式到head (如果还没有)
+    if (!document.getElementById('ui-overlay-styles')) {
+        const style = document.createElement('style');
+        style.id = 'ui-overlay-styles';
+        style.textContent = `
+            .ui-element-box {
+                pointer-events: none;
+            }
+            .ui-element-box.active {
+                pointer-events: auto;
+                outline: 2px solid #2196F3 !important;
+                outline-offset: -2px !important;
+                background: rgba(33, 150, 243, 0.15) !important;
+                z-index: 100000 !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 添加鼠标移动监听器来动态启用最顶层元素的pointer-events
+    overlay.addEventListener('mousemove', (e) => {
+        // 临时禁用所有元素的pointer-events来找到真正最顶层的元素
+        const allBoxes = overlay.querySelectorAll('.ui-element-box');
+
+        // 先移除所有active状态
+        allBoxes.forEach(box => box.classList.remove('active'));
+
+        // 按z-index从大到小遍历，找到第一个包含鼠标位置的元素
+        const sortedBoxes = Array.from(allBoxes).sort((a, b) => {
+            const zA = parseInt(a.dataset.baseZIndex) || 0;
+            const zB = parseInt(b.dataset.baseZIndex) || 0;
+            return zB - zA; // 从大到小
+        });
+
+        const rect = overlay.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // 找到鼠标下方z-index最大的元素
+        for (const box of sortedBoxes) {
+            const boxRect = box.getBoundingClientRect();
+            const relLeft = boxRect.left - rect.left;
+            const relTop = boxRect.top - rect.top;
+            const relRight = relLeft + boxRect.width;
+            const relBottom = relTop + boxRect.height;
+
+            if (mouseX >= relLeft && mouseX <= relRight &&
+                mouseY >= relTop && mouseY <= relBottom) {
+                box.classList.add('active');
+                break; // 只激活最顶层的一个元素
+            }
+        }
+    });
+
+    // 鼠标离开overlay时移除所有active状态
+    overlay.addEventListener('mouseleave', () => {
+        const allBoxes = overlay.querySelectorAll('.ui-element-box');
+        allBoxes.forEach(box => box.classList.remove('active'));
+    });
+
     // 确保容器是相对定位
     screenContent.style.position = 'relative';
     screenContent.appendChild(overlay);
-    
+
+    window.rLog(`✅ Overlay 已添加到 DOM，className: ${overlay.className}`);
+    window.rLog(`Overlay 样式: ${overlay.style.cssText}`);
+
     // 设置 ResizeObserver 来监听容器大小变化
     setupResizeObserver(screenContent, deviceImage);
-    
+
     // 渲染元素框
     renderUIElements(overlay, elements, screenSize);
 }
@@ -556,62 +633,119 @@ function updateOverlayPosition() {
 // 渲染UI元素框
 function renderUIElements(overlay, elements, screenSize) {
     const deviceImage = document.getElementById('deviceScreenshot');
-    if (!deviceImage) return;
-    
+    if (!deviceImage) {
+        window.rError('renderUIElements: deviceImage 未找到');
+        return;
+    }
+
     // 清空现有内容
     overlay.innerHTML = '';
-    
+
     // 获取图片实际显示尺寸
     const imgRect = deviceImage.getBoundingClientRect();
     const scaleX = imgRect.width / screenSize.width;
     const scaleY = imgRect.height / screenSize.height;
-    
+
     window.rLog(`渲染比例: scaleX=${scaleX}, scaleY=${scaleY}`);
-    
-    // 为每个元素创建框
-    elements.forEach((element, index) => {
-        if (!element.bounds || element.bounds.length !== 4) return;
-        
-        const [x1, y1, x2, y2] = element.bounds;
-        
+    window.rLog(`图片尺寸: ${imgRect.width}x${imgRect.height}, 屏幕尺寸: ${screenSize.width}x${screenSize.height}`);
+
+    // 按z_index排序元素,从小到大渲染(大元素先渲染,小元素后渲染)
+    // 这样小元素在DOM中靠后,会自然覆盖在大元素上方
+    const sortedElements = elements
+        .map((el, idx) => ({ element: el, originalIndex: idx }))
+        .sort((a, b) => {
+            const zIndexA = a.element.z_index || (100 + a.originalIndex);
+            const zIndexB = b.element.z_index || (100 + b.originalIndex);
+            return zIndexA - zIndexB; // 从小到大排序
+        });
+
+    // 为每个元素创建框 (按z_index从小到大的顺序渲染)
+    sortedElements.forEach(({ element, originalIndex }) => {
+        const index = originalIndex;
+        // TKE 返回的 bounds 是对象格式: {x1, y1, x2, y2}
+        if (!element.bounds || typeof element.bounds !== 'object') return;
+
+        const { x1, y1, x2, y2 } = element.bounds;
+
         // 创建元素框
         const elementBox = document.createElement('div');
         elementBox.className = 'ui-element-marker';  // 使用正确的CSS类名
-        elementBox.dataset.index = index;
+        elementBox.dataset.index = index; // 保存索引
         elementBox.dataset.elementIndex = element.index;  // 兼容原有代码
-        
+
         // 计算缩放后的位置和大小
         const left = x1 * scaleX;
         const top = y1 * scaleY;
         const width = (x2 - x1) * scaleX;
         const height = (y2 - y1) * scaleY;
-        
-        // 只设置位置和尺寸，样式交给CSS处理
+
+        // 使用TKE计算好的z_index,如果没有则使用默认值
+        const baseZIndex = element.z_index || (100 + index);
+
+        // 计算元素面积用于调试
+        const area = (x2 - x1) * (y2 - y1);
+
+        // 设置元素框样式 - 使用outline而不是border,避免占据空间干扰鼠标事件
+        // pointer-events默认为none,只有在mousemove时动态激活最顶层元素
         elementBox.style.cssText = `
             position: absolute;
             left: ${left}px;
             top: ${top}px;
             width: ${width}px;
             height: ${height}px;
+            outline: 1px solid rgba(33, 150, 243, 0.6);
+            outline-offset: -1px;
+            background: transparent;
+            box-sizing: border-box;
+            z-index: ${baseZIndex};
+            transition: all 0.2s ease;
         `;
-        
-        // 添加元素索引标签
+
+        // 存储面积信息
+        elementBox.dataset.area = area;
+
+        // 存储原始 z-index 以便 hover 时使用
+        elementBox.dataset.baseZIndex = baseZIndex;
+
+        // 记录前5个元素的z-index信息用于调试
+        if (index < 5) {
+            window.rLog(`元素${index}: bounds=[${x1},${y1}][${x2},${y2}], area=${area}, z-index=${baseZIndex}`);
+        }
+
+        // 添加元素索引标签 (一直显示)
         const label = document.createElement('div');
         label.className = 'element-label';
-        label.textContent = element.index || index;  // 显示元素的index
+        label.textContent = element.index !== undefined ? element.index : index;  // 显示元素的index
+        label.style.cssText = `
+            position: absolute;
+            top: -20px;
+            left: 0;
+            background: #2196F3;
+            color: white;
+            padding: 2px 6px;
+            font-size: 12px;
+            font-weight: bold;
+            border-radius: 3px;
+            z-index: 101;
+            pointer-events: none;
+        `;
         elementBox.appendChild(label);
-        
-        // CSS已经处理了悬停效果，不需要JS
-        
+
+        // 添加hover类用于CSS控制
+        elementBox.classList.add('ui-element-box');
+
         // 添加点击事件
-        elementBox.addEventListener('click', () => {
+        elementBox.addEventListener('click', (e) => {
+            e.stopPropagation(); // 阻止事件冒泡
+            window.rLog(`点击了元素 ${index}`);
             selectElement(index);
         });
-        
+
         overlay.appendChild(elementBox);
     });
-    
+
     window.rLog(`✅ 渲染了 ${elements.length} 个UI元素框`);
+    window.rLog(`Overlay子元素数量: ${overlay.children.length}`);
 }
 
 // ============================================

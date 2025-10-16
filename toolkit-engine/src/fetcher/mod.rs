@@ -91,7 +91,31 @@ impl Fetcher {
             buf.clear();
         }
 
+        // 计算并设置z_index: 按面积排序,面积越小z_index越大
+        self.calculate_z_index(&mut elements);
+
         Ok(elements)
+    }
+
+    // 计算元素的z_index,基于面积排序(面积越小,z_index越大)
+    fn calculate_z_index(&self, elements: &mut [UIElement]) {
+        // 创建一个包含索引和面积的数组
+        let mut element_areas: Vec<(usize, i32)> = elements
+            .iter()
+            .enumerate()
+            .map(|(idx, el)| {
+                let area = el.bounds.width() * el.bounds.height();
+                (idx, area)
+            })
+            .collect();
+
+        // 按面积从大到小排序
+        element_areas.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // 给每个元素设置z_index (排序后的索引就是z_index)
+        for (sorted_idx, (original_idx, _)) in element_areas.iter().enumerate() {
+            elements[*original_idx].z_index = Some(100 + sorted_idx);
+        }
     }
     
     // 解析单个节点
@@ -156,6 +180,7 @@ impl Fetcher {
             selected,
             enabled,
             xpath: Some(format!("//node[{}]", index)),
+            z_index: None,  // 稍后计算
         })
     }
     
