@@ -7,15 +7,24 @@ const { promisify } = require('util');
 const execPromise = promisify(exec);
 
 // 导入处理器模块
-const { registerAdbHandlers, getBuiltInScrcpyPath, getBuiltInStbPath, getTkePath, buildTkeAdbCommand } = require('./handlers/adb-handlers');
-const { registerWindowHandlers } = require('./handlers/window-handlers');
-const { registerStoreHandlers } = require('./handlers/store-handlers');
-const { registerOtherHandlers: registerMiscHandlers } = require('./handlers/other-handlers');
-const { registerLogcatHandlers } = require('./handlers/logcat-handlers');
-const { registerAuthHandlers } = require('./handlers/auth-handlers');
-const { registerProjectHandlers } = require('./handlers/project-handlers');
-const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/ios-handlers');
-const { registerLogHandlers } = require('./handlers/log-handlers');
+// TKE 集成模块 - 所有与 TKE（Toolkit Engine）交互的底层功能
+const { registerAdbHandlers, getBuiltInScrcpyPath, getBuiltInStbPath, getTkePath, buildTkeAdbCommand } = require('./handlers/tke-integration/adb-handlers');
+const { registerLogcatHandlers } = require('./handlers/tke-integration/logcat-handlers');
+const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/tke-integration/ios-handlers');
+const { registerDeviceHandlers } = require('./handlers/tke-integration/device-handlers');
+
+// Electron 核心模块 - Electron 应用的核心功能
+const { registerWindowHandlers } = require('./handlers/electron-core/window-handlers');
+const { registerStoreHandlers } = require('./handlers/electron-core/store-handlers');
+const { registerLogHandlers } = require('./handlers/electron-core/log-handlers');
+const { registerFilesystemHandlers } = require('./handlers/electron-core/filesystem-handlers');
+const { registerSystemHandlers } = require('./handlers/electron-core/system-handlers');
+
+// 项目管理模块
+const { registerProjectHandlers } = require('./handlers/project/project-handlers');
+
+// API 代理模块 - 与外部 API 服务交互
+const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
 const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
 
 // 全局变量
@@ -226,38 +235,48 @@ function createTray() {
 function registerAllHandlers() {
   try {
     console.log('开始注册IPC处理器...');
-    
+
+    // Electron 核心模块
     console.log('注册Store处理器...');
     registerStoreHandlers(app);
-    
-    console.log('注册ADB处理器...');
-    registerAdbHandlers(app);
-    
+
     console.log('注册窗口处理器...');
     registerWindowHandlers(mainWindow);
-    
-    console.log('注册其他处理器...');
-    registerMiscHandlers(app);
-    
+
     console.log('注册日志处理器...');
     registerLogHandlers(app);
-    
+
+    console.log('注册文件系统处理器...');
+    registerFilesystemHandlers(app);
+
+    console.log('注册系统工具检查处理器...');
+    registerSystemHandlers(app);
+
+    // TKE 集成模块
+    console.log('注册ADB处理器...');
+    registerAdbHandlers(app);
+
     console.log('注册Logcat处理器...');
     registerLogcatHandlers(app, mainWindow);
-    
-    console.log('注册认证处理器...');
-    registerAuthHandlers();
-    
-    console.log('注册项目处理器...');
-    registerProjectHandlers();
-    
+
+    console.log('注册设备管理处理器...');
+    registerDeviceHandlers(app);
+
     console.log('注册iOS处理器...');
     registerIosHandlers(app);
+
+    // 项目管理模块
+    console.log('注册项目处理器...');
+    registerProjectHandlers();
+
+    // API 代理模块
+    console.log('注册认证处理器...');
+    registerAuthHandlers();
 
     console.log('注册Bug Analysis API代理处理器...');
     registerBugAnalysisProxyHandlers();
 
-    // 注册其他IPC处理器
+    // 注册其他IPC处理器（scrcpy, STB, screenshot等）
     registerOtherHandlers();
 
     console.log('所有IPC处理器注册完成');
