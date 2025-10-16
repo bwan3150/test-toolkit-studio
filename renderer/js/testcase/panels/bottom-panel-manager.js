@@ -44,8 +44,8 @@ const BottomPanelManager = {
         // 注册内置的4个tab
         this.registerTab({
             id: 'elements-list',
-            title: 'UI元素',
-            icon: this.getIconSVG('list'),
+            title: '当前元素',
+            icon: this.getIconSVG('current-element'),
             order: 1,
             onActivate: () => {
                 // 激活时隐藏清空控制台按钮
@@ -65,7 +65,7 @@ const BottomPanelManager = {
 
         this.registerTab({
             id: 'locator-lib',
-            title: 'Locator库',
+            title: '元素库',
             icon: this.getIconSVG('library'),
             order: 3,
             onActivate: () => {
@@ -299,6 +299,7 @@ const BottomPanelManager = {
         }
 
         // 设置全局样式
+        document.body.classList.add('bottom-panel-dragging');
         document.body.style.cursor = 'row-resize';
         document.body.style.userSelect = 'none';
     },
@@ -349,6 +350,7 @@ const BottomPanelManager = {
             resizer.classList.remove('dragging');
         }
 
+        document.body.classList.remove('bottom-panel-dragging');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
 
@@ -358,12 +360,12 @@ const BottomPanelManager = {
     // 获取图标SVG
     getIconSVG(type) {
         const icons = {
-            list: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>',
-            properties: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
-            library: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>',
+            'current-element': '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>',
+            properties: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>',
+            library: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 9H10V9h8v2zm-3 3H10v-2h5v2zm3-6H10V6h8v2z"/></svg>',
             console: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h3l-1 1v2h12v-2l-1-1h3c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 13H4V5h16v11zM6 8.5l2.5 2.5L6 13.5 7 15l4-4-4-4zm5 5h5v1h-5z"/></svg>'
         };
-        return icons[type] || icons.list;
+        return icons[type] || icons['current-element'];
     }
 };
 

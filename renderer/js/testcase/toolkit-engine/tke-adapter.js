@@ -72,80 +72,49 @@
         }
 
         /**
-         * 查找TKE可执行文件 - 参考主进程的getTkePath实现
+         * 查找TKE可执行文件 - 简化版,只支持两种模式
          */
         findTKEExecutable() {
             // 获取平台信息
             const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
             const tkeBinaryName = process.platform === 'win32' ? 'tke.exe' : 'tke';
             const fs = require('fs');
-            
-            // 构建可能的路径列表
-            const possiblePaths = [];
-            
+
             // 判断是否是打包模式
-            // 在渲染进程中，我们通过检查 process.resourcesPath 来判断
-            // 打包后的应用，resourcesPath 通常是 /Applications/XXX.app/Contents/Resources
             const isPackaged = process.resourcesPath && (
                 process.resourcesPath.includes('.app/Contents/Resources') || // macOS
                 process.resourcesPath.includes('\\resources\\app.asar') || // Windows
                 process.resourcesPath.endsWith('/resources') // Linux
             );
-            
-            if (isPackaged || process.resourcesPath) {
-                // 生产模式：与主进程保持一致
-                // process.resourcesPath/[platform]/toolkit-engine/tke
-                possiblePaths.push(path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName));
-            }
-            
-            // 开发模式路径作为备选
-            possiblePaths.push(
-                // 开发模式的资源路径
-                path.join(__dirname, '..', '..', '..', '..', '..', 'resources', platform, 'toolkit-engine', tkeBinaryName),
-                // 当前构建的路径
-                path.join(__dirname, '..', '..', '..', '..', '..', 'toolkit-engine', 'target', 'release', tkeBinaryName),
-                path.join(__dirname, '..', '..', '..', '..', '..', 'toolkit-engine', 'target', 'debug', tkeBinaryName),
-                // 相对于工作目录的路径
-                path.join(process.cwd(), 'toolkit-engine', 'target', 'release', tkeBinaryName),
-                path.join(process.cwd(), 'toolkit-engine', 'target', 'debug', tkeBinaryName)
-            );
-            
-            // 输出调试信息
-            if (window.rLog) {
-                window.rLog('TKE路径查找调试信息:');
-                window.rLog('- 平台:', platform);
-                window.rLog('- 二进制名称:', tkeBinaryName);
-                window.rLog('- 是否打包模式:', isPackaged);
-                window.rLog('- process.resourcesPath:', process.resourcesPath);
-                window.rLog('- __dirname:', __dirname);
-                window.rLog('- 候选路径列表:', possiblePaths);
-            }
-            
-            // 遍历所有路径，找到第一个存在的文件
-            for (const possiblePath of possiblePaths) {
-                try {
-                    if (fs.existsSync(possiblePath)) {
-                        if (window.rLog) {
-                            window.rLog('✅ 找到TKE可执行文件:', possiblePath);
-                        }
-                        return possiblePath;
-                    } else {
-                        if (window.rLog) {
-                            window.rLog('❌ 路径不存在:', possiblePath);
-                        }
-                    }
-                } catch (error) {
-                    if (window.rLog) {
-                        window.rLog('⚠️ 访问路径出错:', possiblePath, error.message);
-                    }
+
+            let tkePath;
+
+            if (isPackaged) {
+                // 打包模式: 包内的 Contents/Resources/平台/toolkit-engine/tke
+                tkePath = path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName);
+                if (window.rLog) {
+                    window.rLog('📦 打包模式 TKE路径:', tkePath);
+                }
+            } else {
+                // 开发模式: ./resources/平台/toolkit-engine/tke
+                tkePath = path.join(process.cwd(), 'resources', platform, 'toolkit-engine', tkeBinaryName);
+                if (window.rLog) {
+                    window.rLog('🔧 开发模式 TKE路径:', tkePath);
                 }
             }
-            
-            // 如果没找到存在的文件，返回第一个路径作为默认值
-            if (window.rLog) {
-                window.rLog('⚠️ 警告：没有找到存在的TKE文件，使用默认路径:', possiblePaths[0]);
+
+            // 检查文件是否存在
+            if (fs.existsSync(tkePath)) {
+                if (window.rLog) {
+                    window.rLog('✅ TKE可执行文件存在:', tkePath);
+                }
+                return tkePath;
+            } else {
+                if (window.rError) {
+                    window.rError('❌ TKE可执行文件不存在:', tkePath);
+                }
+                return tkePath; // 即使不存在也返回,让后续错误处理
             }
-            return possiblePaths[0];
         }
 
         /**

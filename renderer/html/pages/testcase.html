@@ -64,44 +64,40 @@
 
         <!-- Content -->
         <div class="bottom-panel-content">
-          <!-- UI Elements List -->
+          <!-- Tab 1: 当前元素 -->
           <div class="bottom-panel-content-pane" data-pane-id="elements-list">
             <div class="elements-list-container" id="elementsListContainer">
-              <div class="empty-state">
-                <div class="empty-state-text">暂无UI元素</div>
-                <div class="empty-state-hint">点击上方"XML Overlay"按钮获取页面元素</div>
-              </div>
+              <!-- 空状态由JS动态生成表格结构 -->
             </div>
           </div>
 
-          <!-- Element Properties -->
+          <!-- Tab 2: 元素属性 -->
           <div class="bottom-panel-content-pane" data-pane-id="element-props">
             <div class="element-props-container" id="elementPropsContainer">
-              <div class="empty-state">
-                <div class="empty-state-text">未选择元素</div>
-                <div class="empty-state-hint">点击UI元素列表中的项目查看详情</div>
-              </div>
+              <!-- 空状态由JS动态生成 -->
             </div>
           </div>
 
-          <!-- Locator Library -->
+          <!-- Tab 3: 元素库 -->
           <div class="bottom-panel-content-pane" data-pane-id="locator-lib">
             <div class="locator-lib-container" id="locatorLibContainer">
               <div class="locator-search-bar">
-                <input type="text" id="locatorSearchInput" placeholder="搜索元素名称..." />
+                <input type="text" id="locatorSearchInput" placeholder="Filter locators by name..." />
               </div>
               <div class="locator-list" id="locatorList">
-                <div class="empty-state">
-                  <div class="empty-state-text">暂无保存的元素</div>
-                  <div class="empty-state-hint">在元素属性页面点击"入库"保存元素</div>
-                </div>
+                <!-- 空状态由JS动态生成 -->
               </div>
             </div>
           </div>
 
-          <!-- Console -->
+          <!-- Tab 4: 控制台 -->
           <div class="bottom-panel-content-pane" data-pane-id="console">
-            <div class="console-output" id="consoleOutput"></div>
+            <div class="console-output" id="consoleOutput">
+              <div class="console-empty">
+                <span class="console-empty-icon">></span>
+                <span class="console-empty-text">Console output will appear here</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

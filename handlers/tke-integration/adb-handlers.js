@@ -131,10 +131,10 @@ function registerAdbHandlers(app) {
         installFlags.push('-d'); // 允许降级
       }
       installFlags.push('-g'); // 授予权限
-      installFlags.push(`"${apkPath}"`);
-      
+      installFlags.push(apkPath);
+
       console.log('执行TKE安装命令:', installFlags);
-      
+
       const { stdout, stderr } = await execTkeAdbCommand(app, deviceId, ['install', ...installFlags]);
       
       // 合并输出以便检查
@@ -738,10 +738,30 @@ function registerAdbHandlers(app) {
       // 使用 tke controller capture 一次性获取截图和XML
       // 命令格式: tke --device <deviceId> --project <projectPath> controller capture
       const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture'];
-      const command = `"${tkePath}" ${args.join(' ')}`;
 
-      console.log('执行TKE capture命令:', command);
-      const { stdout, stderr } = await execPromise(command);
+      console.log('执行TKE capture命令:', tkePath, args);
+
+      // 使用spawn而不是execPromise来正确处理参数中的空格
+      const child = spawn(tkePath, args);
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      const exitCode = await new Promise((resolve) => {
+        child.on('close', resolve);
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`TKE命令失败 (exit code ${exitCode}): ${stderr}`);
+      }
 
       if (stderr && !stderr.includes('INFO')) {
         console.warn('TKE capture警告:', stderr);
@@ -1142,10 +1162,30 @@ function registerAdbHandlers(app) {
 
       // 使用 tke controller capture 一次性获取截图和XML
       const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture'];
-      const command = `"${tkePath}" ${args.join(' ')}`;
 
-      console.log('执行TKE capture命令获取XML:', command);
-      const { stdout, stderr } = await execPromise(command);
+      console.log('执行TKE capture命令获取XML:', tkePath, args);
+
+      // 使用spawn而不是execPromise来正确处理参数中的空格
+      const child = spawn(tkePath, args);
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      const exitCode = await new Promise((resolve) => {
+        child.on('close', resolve);
+      });
+
+      if (exitCode !== 0) {
+        throw new Error(`TKE命令失败 (exit code ${exitCode}): ${stderr}`);
+      }
 
       if (stderr && !stderr.includes('INFO')) {
         console.warn('TKE capture警告:', stderr);
@@ -1336,8 +1376,51 @@ async function execTkeAdbCommand(app, deviceId, adbArgs) {
   if (!fs.existsSync(tkePath)) {
     throw new Error('Toolkit Engine未找到');
   }
-  const command = buildTkeAdbCommand(tkePath, deviceId, adbArgs);
-  return await execPromise(command);
+
+  // 构建参数数组
+  const args = [];
+  if (deviceId) {
+    args.push('--device', deviceId);
+  }
+  args.push('adb');
+
+  if (Array.isArray(adbArgs)) {
+    args.push(...adbArgs);
+  } else {
+    args.push(adbArgs);
+  }
+
+  // 使用spawn而不是execPromise来正确处理参数中的空格
+  return new Promise((resolve, reject) => {
+    const child = spawn(tkePath, args);
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        const error = new Error(`TKE ADB命令失败 (exit code ${code})`);
+        error.code = code;
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
+  });
 }
 
 module.exports = {

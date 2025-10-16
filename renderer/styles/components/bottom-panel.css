@@ -1,84 +1,98 @@
-/* Bottom Panel - JetBrains IDE风格
+/* Bottom Panel - JetBrains IDE风格 (完全重构版)
  * 统一的下方面板系统,支持多Tab切换、收起展开、高度调整
+ * 设计理念: 纯表格布局、无emoji、IDE原生风格
  */
 
-/* 主容器 */
+/* ============================================
+ * 主容器
+ * ============================================ */
 .bottom-panel {
     position: relative;
     display: flex;
     flex-direction: column;
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
     border-top: 1px solid var(--border-color);
     height: 300px;
-    min-height: 32px;
-    transition: height 0.2s ease;
+    min-height: 150px;
+    transition: height 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 100;
+    overflow: hidden;
 }
 
 /* 收起状态 */
 .bottom-panel.collapsed {
-    height: 32px !important;
-    min-height: 32px !important;
+    height: 36px !important;
+    min-height: 36px !important;
 }
 
 .bottom-panel.collapsed .bottom-panel-content {
     display: none !important;
 }
 
-/* 拖拽条 */
+/* ============================================
+ * 拖拽条 - JetBrains风格
+ * ============================================ */
 .bottom-panel-resizer {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 4px;
+    height: 5px;
     background: transparent;
     cursor: row-resize;
-    z-index: 101;
-    transition: background-color 0.2s;
+    z-index: 102;
+    transition: background-color 0.15s ease;
 }
 
-.bottom-panel-resizer::before {
+.bottom-panel-resizer::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
     height: 1px;
-    background: var(--border-color);
+    background: transparent;
+    transition: all 0.15s ease;
 }
 
 .bottom-panel-resizer:hover,
 .bottom-panel-resizer.dragging {
+    background: rgba(249, 168, 37, 0.1);
+}
+
+.bottom-panel-resizer:hover::after,
+.bottom-panel-resizer.dragging::after {
     background: var(--accent-primary);
+    width: 80px;
+    height: 2px;
 }
 
-.bottom-panel-resizer:hover::before,
-.bottom-panel-resizer.dragging::before {
-    opacity: 0;
-}
-
-/* 头部区域 */
+/* ============================================
+ * 头部区域 - JetBrains风格的Tab栏
+ * ============================================ */
 .bottom-panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 32px;
-    min-height: 32px;
-    background: var(--bg-tertiary);
+    height: 36px;
+    min-height: 36px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    padding: 0 8px 0 0;
+    padding: 0;
     user-select: none;
 }
 
 /* Tab栏容器 */
 .bottom-panel-tabs {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     height: 100%;
     gap: 0;
     overflow-x: auto;
     overflow-y: hidden;
+    flex: 1;
 }
 
 /* 隐藏滚动条但保持可滚动 */
@@ -87,31 +101,32 @@
     display: none;
 }
 
-/* Tab按钮 */
+/* Tab按钮 - JetBrains风格 */
 .bottom-tab-btn {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 32px;
-    padding: 0 12px;
+    height: 100%;
+    padding: 0 16px;
     background: transparent;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-right: 1px solid transparent;
     color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 400;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
     white-space: nowrap;
-    position: relative;
+    flex-shrink: 0;
 }
 
 .bottom-tab-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
-    opacity: 0.7;
-    transition: opacity 0.15s ease;
+    opacity: 0.65;
+    transition: opacity 0.12s ease;
 }
 
 .bottom-tab-btn:hover {
@@ -120,17 +135,30 @@
 }
 
 .bottom-tab-btn:hover svg {
-    opacity: 1;
+    opacity: 0.85;
 }
 
+/* 激活状态 - JetBrains风格的下划线 */
 .bottom-tab-btn.active {
-    color: var(--accent-primary);
-    border-bottom-color: var(--accent-primary);
+    color: var(--text-primary);
     background: var(--bg-primary);
+    font-weight: 500;
+}
+
+.bottom-tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-primary);
+    transition: background 0.12s ease;
 }
 
 .bottom-tab-btn.active svg {
     opacity: 1;
+    color: var(--accent-primary);
 }
 
 .bottom-tab-btn .tab-title {
@@ -141,20 +169,22 @@
 .bottom-panel-toolbar {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     height: 100%;
+    padding: 0 4px;
+    flex-shrink: 0;
 }
 
 .bottom-panel-toolbar .btn-icon {
-    width: 24px;
-    height: 24px;
-    padding: 4px;
+    width: 28px;
+    height: 28px;
+    padding: 6px;
     background: transparent;
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -164,7 +194,7 @@
     width: 16px;
     height: 16px;
     fill: currentColor;
-    transition: transform 0.2s ease;
+    transition: transform 0.15s ease;
 }
 
 .bottom-panel-toolbar .btn-icon:hover {
@@ -176,12 +206,15 @@
     background: var(--bg-active);
 }
 
-/* 内容区域 */
+/* ============================================
+ * 内容区域 - 扁平化设计
+ * ============================================ */
 .bottom-panel-content {
     flex: 1;
     display: flex;
     overflow: hidden;
     background: var(--bg-primary);
+    min-height: 0;
 }
 
 /* 内容面板 */
@@ -190,7 +223,7 @@
     display: none;
     flex-direction: column;
     overflow: hidden;
-    min-height: 0; /* 关键: 允许flex子元素收缩 */
+    min-height: 0;
 }
 
 .bottom-panel-content-pane.active {
@@ -198,222 +231,334 @@
 }
 
 /* ============================================
- * 各个Tab的内容样式
+ * Tab 1: 当前元素列表 - 表格样式
  * ============================================ */
-
-/* UI元素列表 */
 .elements-list-container {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
-    min-height: 0; /* 允许flex子元素收缩 */
-    display: flex;
-    flex-direction: column;
+    overflow-x: auto;
+    min-height: 0;
 }
 
-.element-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    margin: 0 8px 4px 8px; /* 添加左右边距替代容器的padding */
+.elements-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+}
+
+.elements-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    border-bottom: 1px solid var(--border-color);
 }
 
-/* 第一个元素添加上边距 */
-.element-item:first-child {
-    margin-top: 8px;
-}
-
-/* 最后一个元素添加下边距 */
-.element-item:last-child {
-    margin-bottom: 8px;
-}
-
-.element-item:hover {
-    background: var(--bg-hover);
-    border-color: var(--accent-primary);
-}
-
-.element-item.selected {
-    background: var(--bg-active);
-    border-color: var(--accent-primary);
-}
-
-.element-main {
-    flex: 1;
-    min-width: 0;
-}
-
-.element-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-}
-
-.element-index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 32px;
-    height: 20px;
-    padding: 0 6px;
-    background: var(--bg-tertiary);
-    border-radius: 3px;
-    font-size: 11px;
+.elements-table th {
+    padding: 8px 12px;
+    text-align: left;
     font-weight: 600;
-    color: var(--accent-primary);
-    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.element-type {
-    font-size: 13px;
-    font-weight: 500;
+.elements-table th.col-index { width: 60px; }
+.elements-table th.col-type { width: 200px; }
+.elements-table th.col-content { width: auto; min-width: 200px; }
+.elements-table th.col-bounds { width: 120px; }
+.elements-table th.col-size { width: 100px; }
+.elements-table th.col-actions { width: 60px; text-align: center; }
+
+.elements-table tbody tr.element-row {
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.1s ease;
+}
+
+.elements-table tbody tr.element-row:hover {
+    background: var(--bg-hover);
+}
+
+.elements-table tbody tr.element-row.selected {
+    background: var(--bg-active);
+}
+
+.elements-table td {
+    padding: 8px 12px;
+    vertical-align: middle;
     color: var(--text-primary);
 }
 
-.element-text,
-.element-desc,
-.element-hint {
-    font-size: 12px;
+/* 索引列 */
+.col-index .index-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+/* 类型列 */
+.type-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.type-icon {
+    flex-shrink: 0;
+}
+
+.type-icon-svg {
+    width: 14px;
+    height: 14px;
     color: var(--text-secondary);
-    margin-bottom: 2px;
+}
+
+.type-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-primary);
+}
+
+/* 内容列 */
+.content-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.content-text {
+    font-size: 12px;
+    color: var(--text-primary);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
-.element-size {
+.content-desc {
     font-size: 11px;
     color: var(--text-disabled);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 位置和尺寸列 */
+.bounds-code,
+.size-code {
     font-family: var(--font-mono);
-    margin-top: 4px;
+    font-size: 11px;
+    color: var(--accent-info);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 3px;
 }
 
-.element-actions {
-    display: flex;
-    gap: 4px;
-    margin-left: 8px;
+/* 操作按钮 */
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.12s ease;
 }
 
-/* 元素属性面板 */
+.action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+.action-btn svg {
+    fill: currentColor;
+}
+
+/* ============================================
+ * Tab 2: 元素属性 - IntelliJ风格属性面板
+ * ============================================ */
 .element-props-container {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    min-height: 0; /* 允许flex子元素收缩 */
+    min-height: 0;
+}
+
+.properties-panel {
     display: flex;
     flex-direction: column;
+    height: 100%;
 }
 
-.element-details {
-    width: 100%;
-    max-width: 800px;
-    margin: 0 auto; /* 水平居中 */
-    padding: 12px;
-}
-
-.prop-group {
-    margin-bottom: 20px;
-    padding: 12px;
+/* 属性工具栏 */
+.properties-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
     background: var(--bg-secondary);
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
-/* 最后一个prop-group不需要底部边距 */
-.prop-group:last-child {
-    margin-bottom: 0;
-}
-
-.prop-title {
-    font-size: 13px;
+.toolbar-left .element-id {
+    font-size: 12px;
     font-weight: 600;
     color: var(--text-primary);
-    margin: 0 0 12px 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-color);
+    font-family: var(--font-mono);
 }
 
-.prop-item {
-    margin-bottom: 8px;
-    font-size: 12px;
-    line-height: 1.6;
-}
-
-.prop-item strong {
-    color: var(--text-secondary);
-    margin-right: 8px;
-}
-
-.status-item {
-    display: inline-block;
-    padding: 4px 8px;
-    margin-right: 8px;
-    margin-bottom: 4px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 500;
-}
-
-.status-item.status-true {
-    background: rgba(76, 175, 80, 0.15);
-    color: var(--accent-success);
-    border: 1px solid var(--accent-success);
-}
-
-.status-item.status-false {
-    background: rgba(158, 158, 158, 0.1);
-    color: var(--text-disabled);
-    border: 1px solid var(--border-color);
-}
-
-.action-buttons {
+.toolbar-right {
     display: flex;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 4px;
 }
 
-.action-buttons .btn {
-    padding: 8px 16px;
+.tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 6px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.12s ease;
+}
+
+.tool-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.tool-btn svg {
+    fill: currentColor;
+}
+
+/* 属性表格 */
+.properties-table {
+    width: 100%;
+    border-collapse: collapse;
     font-size: 12px;
 }
 
-/* Locator库面板 */
+.properties-table tr.prop-category td {
+    padding: 10px 12px 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+}
+
+.properties-table tr.prop-category:first-child td {
+    border-top: none;
+    padding-top: 12px;
+}
+
+.properties-table tr {
+    border-bottom: 1px solid transparent;
+}
+
+.properties-table tr:hover:not(.prop-category) {
+    background: var(--bg-hover);
+}
+
+.properties-table td.prop-key {
+    width: 140px;
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    vertical-align: top;
+}
+
+.properties-table td.prop-value {
+    padding: 6px 12px;
+    color: var(--text-primary);
+    font-size: 12px;
+    word-break: break-word;
+}
+
+.properties-table td.prop-value code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-info);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+/* Boolean值样式 */
+.bool-value {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+
+.bool-value.bool-true {
+    color: var(--accent-success);
+    background: rgba(78, 201, 176, 0.15);
+}
+
+.bool-value.bool-false {
+    color: var(--text-disabled);
+    background: var(--bg-tertiary);
+}
+
+/* ============================================
+ * Tab 3: 元素库 - 紧凑列表样式
+ * ============================================ */
 .locator-lib-container {
     flex: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    min-height: 0; /* 允许flex子元素收缩 */
+    min-height: 0;
 }
 
 .locator-search-bar {
-    flex-shrink: 0; /* 防止搜索栏被压缩 */
-    padding: 8px;
+    flex-shrink: 0;
+    padding: 10px 12px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
 }
 
 .locator-search-bar input {
     width: 100%;
-    padding: 6px 12px;
+    padding: 7px 12px;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-primary);
-    font-size: 12px;
-    transition: border-color 0.15s ease;
+    font-size: 13px;
+    transition: all 0.15s ease;
 }
 
 .locator-search-bar input:focus {
     outline: none;
     border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(249, 168, 37, 0.1);
 }
 
 .locator-search-bar input::placeholder {
@@ -424,9 +569,8 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    min-height: 0; /* 允许flex子元素收缩 */
-    display: flex;
-    flex-direction: column;
+    min-height: 0;
+    padding: 8px;
 }
 
 .locator-item {
@@ -434,26 +578,20 @@
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    margin: 0 8px 6px 8px; /* 添加左右边距替代容器的padding */
+    margin-bottom: 6px;
     cursor: move;
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
 }
 
-/* 第一个locator添加上边距 */
-.locator-item:first-child {
-    margin-top: 8px;
-}
-
-/* 最后一个locator添加下边距 */
 .locator-item:last-child {
-    margin-bottom: 8px;
+    margin-bottom: 0;
 }
 
 .locator-item:hover {
     background: var(--bg-hover);
     border-color: var(--accent-primary);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .locator-item.dragging {
@@ -476,69 +614,87 @@
 
 .locator-type {
     font-size: 10px;
-    padding: 2px 6px;
+    padding: 2px 8px;
     background: var(--bg-tertiary);
     border-radius: 3px;
-    color: var(--text-secondary);
+    color: var(--accent-primary);
     text-transform: uppercase;
     font-weight: 600;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
 }
 
 .locator-desc {
     font-size: 11px;
     color: var(--text-secondary);
     margin-bottom: 4px;
+    line-height: 1.5;
 }
 
 .locator-preview {
     font-size: 11px;
     color: var(--text-disabled);
     font-family: var(--font-mono);
+    line-height: 1.4;
 }
 
-/* 控制台面板 */
+/* ============================================
+ * Tab 4: 控制台 - 真正的IDE控制台样式
+ * ============================================ */
 .console-output {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
-    padding: 8px 12px;
+    overflow-x: auto;
+    padding: 0;
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
     background: var(--bg-primary);
-    min-height: 0; /* 允许flex子元素收缩 */
+    min-height: 0;
 }
 
 .console-log {
-    margin-bottom: 2px;
-    padding: 2px 0;
+    display: flex;
+    gap: 0;
+    padding: 4px 12px;
+    border-bottom: 1px solid transparent;
     white-space: pre-wrap;
     word-break: break-word;
-    display: flex;
-    gap: 8px;
+    transition: background 0.1s ease;
 }
 
 .console-log:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom-color: var(--border-color);
 }
 
 .console-timestamp {
     color: var(--text-disabled);
     font-size: 11px;
     flex-shrink: 0;
+    min-width: 90px;
+    font-family: var(--font-mono);
 }
 
 .console-type {
-    font-weight: 600;
+    font-weight: 700;
     flex-shrink: 0;
-    width: 50px;
+    min-width: 60px;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    font-family: var(--font-mono);
 }
 
-.console-type-log,
-.console-type-info,
+.console-type-log {
+    color: var(--accent-info);
+}
+
+.console-type-info {
+    color: var(--accent-info);
+}
+
 .console-type-system {
-    color: var(--text-primary);
+    color: var(--accent-info);
 }
 
 .console-type-warn {
@@ -556,14 +712,15 @@
 .console-message {
     flex: 1;
     color: var(--text-primary);
+    font-family: var(--font-mono);
 }
 
 /* 旧样式兼容 */
 .console-line {
-    margin-bottom: 2px;
-    padding: 2px 0;
+    padding: 4px 12px;
     white-space: pre-wrap;
     word-break: break-word;
+    border-bottom: 1px solid transparent;
 }
 
 .console-line.info {
@@ -587,49 +744,125 @@
 }
 
 .console-line:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom-color: var(--border-color);
 }
 
-/* 空状态 */
-.empty-state {
-    flex: 1; /* 填满父容器 */
+/* ============================================
+ * 空状态 - IDE风格重新设计
+ * ============================================ */
+
+/* 表格空状态 - 保留表头 */
+.table-empty-state {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+}
+
+.table-empty-state .elements-table {
+    flex-shrink: 0;
+}
+
+.empty-message {
+    position: absolute;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
-    min-height: 100px; /* 最小高度，确保即使内容很少也能显示 */
-    color: var(--text-disabled);
-    text-align: center;
-    padding: 20px;
-    box-sizing: border-box;
+    gap: 16px;
+    padding: 40px 20px;
 }
 
-.empty-state-text {
+.empty-icon {
+    color: var(--text-disabled);
+    opacity: 0.4;
+}
+
+.empty-icon svg {
+    display: block;
+}
+
+.empty-title {
     font-size: 14px;
     font-weight: 500;
-    margin-bottom: 8px;
-    line-height: 1.5;
+    color: var(--text-secondary);
+    margin: 0;
 }
 
-.empty-state-hint {
+.empty-desc {
     font-size: 12px;
-    opacity: 0.7;
-    line-height: 1.5;
+    color: var(--text-disabled);
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.6;
 }
 
-/* 滚动条样式 */
-.bottom-panel-content-pane::-webkit-scrollbar,
+/* 属性面板空状态 */
+.properties-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    padding: 40px 20px;
+}
+
+.properties-empty-state .empty-icon {
+    color: var(--text-disabled);
+    opacity: 0.4;
+}
+
+.properties-empty-state .empty-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.properties-empty-state .empty-desc {
+    font-size: 12px;
+    color: var(--text-disabled);
+    max-width: 300px;
+    text-align: center;
+    line-height: 1.6;
+}
+
+/* 控制台空状态 */
+.console-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    color: var(--text-disabled);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.console-empty-icon {
+    font-weight: 700;
+    color: var(--text-disabled);
+}
+
+.console-empty-text {
+    font-style: italic;
+}
+
+/* ============================================
+ * 滚动条样式 - JetBrains风格
+ * ============================================ */
 .elements-list-container::-webkit-scrollbar,
 .element-props-container::-webkit-scrollbar,
 .locator-list::-webkit-scrollbar,
 .console-output::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
 }
 
-.bottom-panel-content-pane::-webkit-scrollbar-track,
 .elements-list-container::-webkit-scrollbar-track,
 .element-props-container::-webkit-scrollbar-track,
 .locator-list::-webkit-scrollbar-track,
@@ -637,19 +870,43 @@
     background: transparent;
 }
 
-.bottom-panel-content-pane::-webkit-scrollbar-thumb,
 .elements-list-container::-webkit-scrollbar-thumb,
 .element-props-container::-webkit-scrollbar-thumb,
 .locator-list::-webkit-scrollbar-thumb,
 .console-output::-webkit-scrollbar-thumb {
     background: var(--bg-tertiary);
-    border-radius: 4px;
+    border-radius: 5px;
+    border: 2px solid var(--bg-primary);
 }
 
-.bottom-panel-content-pane::-webkit-scrollbar-thumb:hover,
 .elements-list-container::-webkit-scrollbar-thumb:hover,
 .element-props-container::-webkit-scrollbar-thumb:hover,
 .locator-list::-webkit-scrollbar-thumb:hover,
 .console-output::-webkit-scrollbar-thumb:hover {
-    background: var(--border-color);
+    background: var(--bg-hover);
+}
+
+/* ============================================
+ * 响应式设计
+ * ============================================ */
+@media (max-width: 1200px) {
+    .bottom-tab-btn {
+        padding: 0 12px;
+    }
+
+    .bottom-tab-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+}
+
+/* 拖拽时的全局样式 */
+body.bottom-panel-dragging {
+    cursor: row-resize !important;
+    user-select: none !important;
+}
+
+body.bottom-panel-dragging * {
+    cursor: row-resize !important;
+    user-select: none !important;
 }

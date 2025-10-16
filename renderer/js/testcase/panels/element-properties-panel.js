@@ -8,9 +8,14 @@ const ElementPropertiesPanel = {
         document.addEventListener('elementSelected', (event) => {
             this.showElementProperties(event.detail.element);
         });
+
+        // 初始化显示空状态
+        this.clear();
+
+        window.rLog('✅ ElementPropertiesPanel 初始化完成');
     },
     
-    // 显示元素属性
+    // 显示元素属性 - IntelliJ风格属性表格
     showElementProperties(element) {
         const elementPropsContainer = document.getElementById('elementPropsContainer');
 
@@ -18,88 +23,122 @@ const ElementPropertiesPanel = {
             window.rError('元素属性容器未找到: elementPropsContainer');
             return;
         }
-        
-        // 生成属性面板HTML
+
+        // IntelliJ风格的属性表格
         const propertiesHTML = `
-            <div class="element-details">
-                <div class="prop-group">
-                    <h4 class="prop-title">基本信息</h4>
-                    <div class="prop-item"><strong>索引:</strong> [${element.index}]</div>
-                    <div class="prop-item"><strong>类型:</strong> ${element.className || 'Unknown'}</div>
-                    <div class="prop-item"><strong>包名:</strong> ${element.package || 'N/A'}</div>
-                </div>
-                
-                <div class="prop-group">
-                    <h4 class="prop-title">位置信息</h4>
-                    <div class="prop-item"><strong>中心点:</strong> (${element.centerX || 0}, ${element.centerY || 0})</div>
-                    <div class="prop-item"><strong>边界:</strong> [${element.bounds ? `${element.bounds.x1}, ${element.bounds.y1}, ${element.bounds.x2}, ${element.bounds.y2}` : 'N/A'}]</div>
-                    <div class="prop-item"><strong>尺寸:</strong> ${element.width || 0} × ${element.height || 0}</div>
-                </div>
-                
-                ${element.text || element.contentDesc || element.hint ? `
-                    <div class="prop-group">
-                        <h4 class="prop-title">文本信息</h4>
-                        ${element.text ? `<div class="prop-item"><strong>文本:</strong> ${element.text}</div>` : ''}
-                        ${element.contentDesc ? `<div class="prop-item"><strong>描述:</strong> ${element.contentDesc}</div>` : ''}
-                        ${element.hint ? `<div class="prop-item"><strong>提示:</strong> ${element.hint}</div>` : ''}
+            <div class="properties-panel">
+                <!-- 工具栏 -->
+                <div class="properties-toolbar">
+                    <div class="toolbar-left">
+                        <span class="element-id">[${element.index}] ${element.className ? element.className.split('.').pop() : 'Element'}</span>
                     </div>
-                ` : ''}
-                
-                ${element.resourceId ? `
-                    <div class="prop-group">
-                        <h4 class="prop-title">资源信息</h4>
-                        <div class="prop-item"><strong>资源ID:</strong> ${element.resourceId}</div>
-                    </div>
-                ` : ''}
-                
-                <div class="prop-group">
-                    <h4 class="prop-title">状态</h4>
-                    <div class="prop-item">
-                        <span class="status-item ${element.clickable ? 'status-true' : 'status-false'}">
-                            ${element.clickable ? '✓' : '✗'} 可点击
-                        </span>
-                        <span class="status-item ${element.enabled ? 'status-true' : 'status-false'}">
-                            ${element.enabled ? '✓' : '✗'} 已启用
-                        </span>
-                    </div>
-                    <div class="prop-item">
-                        <span class="status-item ${element.focusable ? 'status-true' : 'status-false'}">
-                            ${element.focusable ? '✓' : '✗'} 可获焦点
-                        </span>
-                        <span class="status-item ${element.scrollable ? 'status-true' : 'status-false'}">
-                            ${element.scrollable ? '✓' : '✗'} 可滚动
-                        </span>
-                    </div>
-                    <div class="prop-item">
-                        <span class="status-item ${element.checkable ? 'status-true' : 'status-false'}">
-                            ${element.checkable ? '✓' : '✗'} 可勾选
-                        </span>
-                        <span class="status-item ${element.checked ? 'status-true' : 'status-false'}">
-                            ${element.checked ? '✓' : '✗'} 已勾选
-                        </span>
-                    </div>
-                </div>
-                
-                <div class="prop-group">
-                    <h4 class="prop-title">操作</h4>
-                    <div class="action-buttons">
-                        <button class="btn btn-primary" onclick="window.LocatorLibraryPanel.saveElementToLocator(${element.index})">
-                            <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align: middle; margin-right: 4px;">
-                                <path fill="currentColor" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                    <div class="toolbar-right">
+                        <button class="tool-btn" onclick="window.LocatorLibraryPanel.saveElementToLocator(${element.index})" title="保存到元素库">
+                            <svg viewBox="0 0 16 16" width="16" height="16">
+                                <path fill="currentColor" d="M13.5 2h-11C1.67 2 1 2.67 1 3.5v9c0 .83.67 1.5 1.5 1.5h11c.83 0 1.5-.67 1.5-1.5v-9c0-.83-.67-1.5-1.5-1.5zM8 11.5c-1.38 0-2.5-1.12-2.5-2.5S6.62 6.5 8 6.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM11 5H3V3h8v2z"/>
                             </svg>
-                            入库
                         </button>
-                        <button class="btn btn-secondary" onclick="window.ElementPropertiesPanel.copyElementInfo(${element.index})">
-                            <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align: middle; margin-right: 4px;">
-                                <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                        <button class="tool-btn" onclick="window.ElementPropertiesPanel.copyElementInfo(${element.index})" title="复制属性">
+                            <svg viewBox="0 0 16 16" width="16" height="16">
+                                <path fill="currentColor" d="M11 1H3c-.55 0-1 .45-1 1v10h1V2h8V1zm2 3H6c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h7c.55 0 1-.45 1-1V5c0-.55-.45-1-1-1zm0 11H6V5h7v10z"/>
                             </svg>
-                            复制
                         </button>
                     </div>
                 </div>
+
+                <!-- 属性表格 -->
+                <table class="properties-table">
+                    <tbody>
+                        <tr class="prop-category">
+                            <td colspan="2">General</td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">index</td>
+                            <td class="prop-value">${element.index}</td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">className</td>
+                            <td class="prop-value"><code>${element.className || 'N/A'}</code></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">package</td>
+                            <td class="prop-value"><code>${element.package || 'N/A'}</code></td>
+                        </tr>
+                        ${element.resourceId ? `
+                        <tr>
+                            <td class="prop-key">resourceId</td>
+                            <td class="prop-value"><code>${element.resourceId}</code></td>
+                        </tr>` : ''}
+
+                        <tr class="prop-category">
+                            <td colspan="2">Bounds & Size</td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">center</td>
+                            <td class="prop-value"><code>(${element.centerX || 0}, ${element.centerY || 0})</code></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">bounds</td>
+                            <td class="prop-value"><code>[${element.bounds ? `${element.bounds.x1}, ${element.bounds.y1}, ${element.bounds.x2}, ${element.bounds.y2}` : 'N/A'}]</code></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">size</td>
+                            <td class="prop-value"><code>${element.width || 0} × ${element.height || 0}</code></td>
+                        </tr>
+
+                        ${element.text || element.contentDesc || element.hint ? `
+                        <tr class="prop-category">
+                            <td colspan="2">Text Content</td>
+                        </tr>
+                        ${element.text ? `
+                        <tr>
+                            <td class="prop-key">text</td>
+                            <td class="prop-value">"${this.escapeHtml(element.text)}"</td>
+                        </tr>` : ''}
+                        ${element.contentDesc ? `
+                        <tr>
+                            <td class="prop-key">contentDesc</td>
+                            <td class="prop-value">"${this.escapeHtml(element.contentDesc)}"</td>
+                        </tr>` : ''}
+                        ${element.hint ? `
+                        <tr>
+                            <td class="prop-key">hint</td>
+                            <td class="prop-value">"${this.escapeHtml(element.hint)}"</td>
+                        </tr>` : ''}
+                        ` : ''}
+
+                        <tr class="prop-category">
+                            <td colspan="2">State Flags</td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">clickable</td>
+                            <td class="prop-value"><span class="bool-value ${element.clickable ? 'bool-true' : 'bool-false'}">${element.clickable}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">enabled</td>
+                            <td class="prop-value"><span class="bool-value ${element.enabled ? 'bool-true' : 'bool-false'}">${element.enabled}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">focusable</td>
+                            <td class="prop-value"><span class="bool-value ${element.focusable ? 'bool-true' : 'bool-false'}">${element.focusable}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">scrollable</td>
+                            <td class="prop-value"><span class="bool-value ${element.scrollable ? 'bool-true' : 'bool-false'}">${element.scrollable}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">checkable</td>
+                            <td class="prop-value"><span class="bool-value ${element.checkable ? 'bool-true' : 'bool-false'}">${element.checkable}</span></td>
+                        </tr>
+                        <tr>
+                            <td class="prop-key">checked</td>
+                            <td class="prop-value"><span class="bool-value ${element.checked ? 'bool-true' : 'bool-false'}">${element.checked}</span></td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         `;
-        
+
         // 更新属性容器内容
         elementPropsContainer.innerHTML = propertiesHTML;
 
@@ -109,6 +148,13 @@ const ElementPropertiesPanel = {
         }
 
         window.rLog(`显示元素 [${element.index}] 的属性`);
+    },
+
+    // HTML转义
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     },
     
     // 复制元素信息到剪贴板
@@ -144,7 +190,21 @@ const ElementPropertiesPanel = {
     clear() {
         const elementPropsContainer = document.getElementById('elementPropsContainer');
         if (elementPropsContainer) {
-            elementPropsContainer.innerHTML = '<div class="empty-state"><div class="empty-state-text">请选择一个元素查看属性</div></div>';
+            elementPropsContainer.innerHTML = `
+                <div class="properties-empty-state">
+                    <div class="empty-icon">
+                        <svg viewBox="0 0 48 48" width="48" height="48">
+                            <rect x="10" y="8" width="28" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <line x1="16" y1="16" x2="32" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="16" y1="21" x2="28" y2="21" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="16" y1="26" x2="30" y2="26" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="16" y1="31" x2="26" y2="31" stroke="currentColor" stroke-width="1.5"/>
+                        </svg>
+                    </div>
+                    <div class="empty-title">No element selected</div>
+                    <div class="empty-desc">Select an element from the "当前元素" tab to view its properties</div>
+                </div>
+            `;
         }
     }
 };

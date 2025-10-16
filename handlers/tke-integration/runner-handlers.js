@@ -2,11 +2,9 @@
 // 负责脚本和项目的执行
 // 注意：此模块只负责执行 TKE 命令并返回原始输出
 const { ipcMain } = require('electron');
-const { promisify } = require('util');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const execPromise = promisify(exec);
 const { getTkePath } = require('./adb-handlers');
 
 // 通用的 TKE 命令执行函数（runner 返回纯文本，不是 JSON）
@@ -17,17 +15,43 @@ async function execTkeCommand(app, args) {
     throw new Error('TKE可执行文件未找到');
   }
 
-  const command = `"${tkePath}" ${args.join(' ')}`;
-  console.log('执行TKE命令:', command);
+  console.log('执行TKE命令:', tkePath, args.join(' '));
 
-  const { stdout, stderr } = await execPromise(command);
+  return new Promise((resolve, reject) => {
+    const child = spawn(tkePath, args);
 
-  if (stderr && !stderr.includes('INFO')) {
-    console.warn('TKE命令警告:', stderr);
-  }
+    let stdout = '';
+    let stderr = '';
 
-  // runner 返回纯文本输出，不需要验证 JSON
-  return stdout.trim();
+    child.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        const error = new Error(`TKE命令失败 (exit code ${code}): ${stderr}`);
+        error.code = code;
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        if (stderr && !stderr.includes('INFO')) {
+          console.warn('TKE命令警告:', stderr);
+        }
+
+        // runner 返回纯文本输出，不需要验证 JSON
+        resolve(stdout.trim());
+      }
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
+  });
 }
 
 // 注册 TKE Runner 相关的 IPC 处理器
