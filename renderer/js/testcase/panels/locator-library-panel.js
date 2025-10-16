@@ -270,22 +270,14 @@ const LocatorLibraryPanel = {
         const locatorsToRender = filteredLocators || Object.entries(this.locators);
 
         if (locatorsToRender.length === 0) {
-            // 空状态
-            locatorList.innerHTML = `
-                <div class="properties-empty-state">
-                    <div class="empty-icon">
-                        <svg viewBox="0 0 48 48" width="48" height="48">
-                            <rect x="10" y="8" width="28" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-                            <circle cx="24" cy="20" r="4" fill="currentColor"/>
-                            <path d="M16 30c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" fill="none"/>
-                        </svg>
-                    </div>
-                    <div class="empty-title">No saved locators</div>
-                    <div class="empty-desc">Click the save button in "当前元素" tab to add elements to the library</div>
-                </div>
-            `;
+            // ✅ 空状态：直接清空，不显示任何提示
+            locatorList.classList.remove('locator-list-with-cards');
+            locatorList.innerHTML = '';
             return;
         }
+
+        // ✅ 有卡片：添加 with-cards 类，显示padding和gap
+        locatorList.classList.add('locator-list-with-cards');
 
         // 卡片布局
         const cardsHTML = locatorsToRender.map(([name, locator]) => {

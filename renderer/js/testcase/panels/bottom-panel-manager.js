@@ -281,9 +281,12 @@ const BottomPanelManager = {
             resizer.addEventListener('mousedown', (e) => this.startDragging(e));
         }
 
-        // 全局mousemove和mouseup - 用于拖拽
-        document.addEventListener('mousemove', (e) => this.handleDragMove(e));
-        document.addEventListener('mouseup', () => this.handleDragEnd());
+        // ✅ 修复滚动问题：将全局监听器绑定为实例方法，方便后续管理
+        this.boundHandleDragMove = (e) => this.handleDragMove(e);
+        this.boundHandleDragEnd = () => this.handleDragEnd();
+
+        // 只在开始拖拽时才添加全局监听器，避免干扰正常的鼠标交互
+        // 全局mousemove和mouseup - 用于拖拽 (现在在startDragging中动态添加)
     },
 
     // 开始拖拽
@@ -297,6 +300,10 @@ const BottomPanelManager = {
         if (resizer) {
             resizer.classList.add('dragging');
         }
+
+        // ✅ 修复滚动问题：只在开始拖拽时才添加全局监听器
+        document.addEventListener('mousemove', this.boundHandleDragMove);
+        document.addEventListener('mouseup', this.boundHandleDragEnd);
 
         // 设置全局样式
         document.body.classList.add('bottom-panel-dragging');
@@ -343,6 +350,10 @@ const BottomPanelManager = {
             cancelAnimationFrame(this.state.rafId);
             this.state.rafId = null;
         }
+
+        // ✅ 修复滚动问题：移除全局监听器，恢复正常的鼠标交互
+        document.removeEventListener('mousemove', this.boundHandleDragMove);
+        document.removeEventListener('mouseup', this.boundHandleDragEnd);
 
         // 清理拖拽样式
         const resizer = document.getElementById('bottomPanelResizer');
