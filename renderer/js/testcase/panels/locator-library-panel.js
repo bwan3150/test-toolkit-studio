@@ -98,15 +98,18 @@ const LocatorLibraryPanel = {
             return;
         }
         
-        // 生成定位器名称
-        const name = await this.promptForLocatorName(element);
-        if (!name) return;
-        
+        // 生成定位器名称和备注
+        const result = await this.promptForLocatorName(element);
+        if (!result) return;
+
+        const { name, note } = result;
+
         // 创建定位器对象，兼容toolkit-engine格式
         const locator = {
             type: 'xml',
             locator_type: 'XML',  // 兼容toolkit-engine
             name: name,
+            note: note || '',  // 添加备注字段
             class_name: element.className || '',  // 使用下划线格式兼容toolkit-engine
             text: element.text || null,
             content_desc: element.contentDesc || null,  // 使用下划线格式
@@ -118,7 +121,7 @@ const LocatorLibraryPanel = {
             match_strategy: null,  // 可选的匹配策略
             createdAt: new Date().toISOString()
         };
-        
+
         // 保存到locators对象
         this.locators[name] = locator;
         
@@ -175,9 +178,16 @@ const LocatorLibraryPanel = {
                 <h3 style="margin: 0 0 15px 0; color: var(--text-primary);">保存元素到定位器库</h3>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">定位器名称：</label>
-                    <input type="text" id="locator-name-input" value="${this.escapeHtml(defaultName)}" 
-                           style="width: 100%; padding: 8px; background: var(--bg-primary); 
-                                  border: 1px solid var(--border-color); color: var(--text-primary); 
+                    <input type="text" id="locator-name-input" value="${this.escapeHtml(defaultName)}"
+                           style="width: 100%; padding: 8px; background: var(--bg-primary);
+                                  border: 1px solid var(--border-color); color: var(--text-primary);
+                                  border-radius: 4px; font-size: 13px;">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">备注 (可选)：</label>
+                    <input type="text" id="locator-note-input" placeholder="添加备注说明..."
+                           style="width: 100%; padding: 8px; background: var(--bg-primary);
+                                  border: 1px solid var(--border-color); color: var(--text-primary);
                                   border-radius: 4px; font-size: 13px;">
                 </div>
                 ${element.text ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">文本: ${this.escapeHtml(element.text)}</div>` : ''}
@@ -185,10 +195,10 @@ const LocatorLibraryPanel = {
                 ${element.className ? `<div style="margin-bottom: 15px; color: var(--text-secondary); font-size: 11px;">类型: ${this.escapeHtml(element.className)}</div>` : ''}
                 ${element.resourceId ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">资源ID: ${this.escapeHtml(element.resourceId)}</div>` : ''}
                 <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button id="cancel-btn" style="padding: 6px 16px; background: var(--bg-tertiary); 
-                                                   border: 1px solid var(--border-color); color: var(--text-primary); 
+                    <button id="cancel-btn" style="padding: 6px 16px; background: var(--bg-tertiary);
+                                                   border: 1px solid var(--border-color); color: var(--text-primary);
                                                    border-radius: 4px; cursor: pointer;">取消</button>
-                    <button id="save-btn" style="padding: 6px 16px; background: var(--accent-primary); 
+                    <button id="save-btn" style="padding: 6px 16px; background: var(--accent-primary);
                                                 border: none; color: white; border-radius: 4px; cursor: pointer;">保存</button>
                 </div>
             `;
@@ -205,21 +215,25 @@ const LocatorLibraryPanel = {
 
             // 事件处理
             const handleSave = async () => {
-                const name = input.value.trim();
+                const nameInput = dialog.querySelector('#locator-name-input');
+                const noteInput = dialog.querySelector('#locator-note-input');
+                const name = nameInput.value.trim();
+                const note = noteInput.value.trim();
+
                 if (!name) {
                     window.NotificationModule.showNotification('请输入定位器名称', 'warning');
                     return;
                 }
-                
+
                 // 检查是否已存在
                 if (this.locators[name]) {
                     if (!confirm(`定位器 "${name}" 已存在，是否覆盖？`)) {
                         return;
                     }
                 }
-                
+
                 document.body.removeChild(modal);
-                resolve(name);
+                resolve({ name, note });
             };
 
             const handleCancel = () => {
@@ -248,79 +262,88 @@ const LocatorLibraryPanel = {
         });
     },
     
-    // 渲染定位器列表
+    // 渲染定位器列表 - 卡片布局
     renderLocators(filteredLocators = null) {
         const locatorList = document.getElementById('locatorList');
         if (!locatorList) return;
-        
+
         const locatorsToRender = filteredLocators || Object.entries(this.locators);
-        
+
         if (locatorsToRender.length === 0) {
+            // 空状态
             locatorList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-text">暂无保存的定位器</div>
-                    <div class="empty-state-hint">在UI元素列表中点击"入库"保存定位器</div>
+                <div class="properties-empty-state">
+                    <div class="empty-icon">
+                        <svg viewBox="0 0 48 48" width="48" height="48">
+                            <rect x="10" y="8" width="28" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="24" cy="20" r="4" fill="currentColor"/>
+                            <path d="M16 30c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" fill="none"/>
+                        </svg>
+                    </div>
+                    <div class="empty-title">No saved locators</div>
+                    <div class="empty-desc">Click the save button in "当前元素" tab to add elements to the library</div>
                 </div>
             `;
             return;
         }
-        
-        // 使用原有的卡片样式和拖拽功能
-        const locatorsHTML = locatorsToRender.map(([name, locator]) => {
-            if (locator.type === 'image') {
+
+        // 卡片布局
+        const cardsHTML = locatorsToRender.map(([name, locator]) => {
+            const type = locator.type || 'xml';
+            const note = locator.note || '';
+
+            // 图标HTML
+            let iconHTML = '';
+            if (type === 'image') {
+                // 如果是图片类型，显示图片
                 const { path: PathModule } = window.AppGlobals;
                 const projectPath = window.AppGlobals.currentProject;
                 const imagePath = locator.path ? (projectPath ? PathModule.join(projectPath, locator.path) : locator.path) : '';
-                
-                return `
-                    <div class="locator-card image-type" draggable="true" data-name="${name}" data-type="image">
-                        <div class="card-thumbnail">
-                            ${imagePath ? `<img src="${imagePath}" alt="${name}">` : '<div class="no-image">图片</div>'}
-                        </div>
-                        <div class="card-content">
-                            <div class="card-title">${this.escapeHtml(name)}</div>
-                            <div class="card-type">image</div>
-                        </div>
-                    </div>
-                `;
-            } else if (locator.type === 'xml') {
-                return `
-                    <div class="locator-card xml-type" draggable="true" data-name="${name}" data-type="xml">
-                        <div class="card-icon">
-                            <svg viewBox="0 0 24 24" width="24" height="24">
-                                <path fill="currentColor" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
-                            </svg>
-                        </div>
-                        <div class="card-content">
-                            <div class="card-title">${this.escapeHtml(name)}</div>
-                            <div class="card-info">
-                                ${locator.text ? `<div class="card-text">${this.escapeHtml(locator.text)}</div>` : ''}
-                                ${(locator.resource_id || locator.resourceId) ? `<div class="card-id">${this.escapeHtml((locator.resource_id || locator.resourceId).split('/').pop())}</div>` : ''}
-                                <div class="card-type">${(locator.class_name || locator.className) ? this.escapeHtml((locator.class_name || locator.className).split('.').pop()) : 'Element'}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
+
+                if (imagePath) {
+                    iconHTML = `<img src="${imagePath}" alt="${this.escapeHtml(name)}">`;
+                } else {
+                    iconHTML = `<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8" cy="8" r="2" fill="currentColor"/><path d="M2 18l5-5 3 3 6-6 6 6v4H2v-2z" fill="currentColor"/></svg>`;
+                }
+            } else {
+                // XML类型，显示花括号图标
+                iconHTML = `<svg viewBox="0 0 24 24"><path d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3z" fill="currentColor"/></svg>`;
             }
-            return '';
-        }).filter(html => html !== '').join('');
-        
-        locatorList.innerHTML = locatorsHTML;
-        
+
+            return `
+                <div class="locator-card"
+                     draggable="true"
+                     data-name="${this.escapeHtml(name)}"
+                     data-type="${type}"
+                     oncontextmenu="window.LocatorLibraryPanel.showContextMenu(event, '${this.escapeHtml(name)}'); return false;">
+                    <div class="locator-card-icon">
+                        ${iconHTML}
+                    </div>
+                    <div class="locator-card-content">
+                        <div class="locator-card-name">${this.escapeHtml(name)}</div>
+                        ${note ? `<div class="locator-card-note">${this.escapeHtml(note)}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        locatorList.innerHTML = cardsHTML;
+
         // 为每个卡片添加拖拽事件
-        locatorList.querySelectorAll('.locator-card').forEach(item => {
-            this.setupItemDragEvents(item);
-            this.setupItemContextMenu(item);
+        locatorList.querySelectorAll('.locator-card').forEach(card => {
+            this.setupCardDragEvents(card);
         });
+
+        window.rLog(`✅ 已显示 ${locatorsToRender.length} 个定位器`);
     },
-    
-    // 设置拖拽事件
-    setupItemDragEvents(item) {
-        item.addEventListener('dragstart', (e) => {
-            const name = item.dataset.name;
-            const type = item.dataset.type || 'xml';
+
+    // 设置卡片拖拽事件
+    setupCardDragEvents(card) {
+        card.addEventListener('dragstart', (e) => {
+            const name = card.dataset.name;
+            const type = card.dataset.type || 'xml';
             e.dataTransfer.effectAllowed = 'copy';
-            
+
             // 设置拖拽数据，支持新TKS语法
             if (type === 'image') {
                 // 图片元素：@{图片名称}
@@ -329,7 +352,7 @@ const LocatorLibraryPanel = {
                 // XML元素：{元素名称}
                 e.dataTransfer.setData('text/plain', `{${name}}`);
             }
-            
+
             // 设置JSON格式数据供编辑器使用
             e.dataTransfer.setData('application/json', JSON.stringify({
                 type: 'locator',
@@ -337,21 +360,12 @@ const LocatorLibraryPanel = {
                 locatorType: type,
                 data: this.locators[name]
             }));
-            
-            item.style.opacity = '0.5';
+
+            card.style.opacity = '0.5';
         });
-        
-        item.addEventListener('dragend', (e) => {
-            item.style.opacity = '';
-        });
-    },
-    
-    // 设置右键菜单
-    setupItemContextMenu(item) {
-        item.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            const name = item.dataset.name;
-            this.showContextMenu(e, name);
+
+        card.addEventListener('dragend', (e) => {
+            card.style.opacity = '';
         });
     },
     

@@ -527,8 +527,10 @@
 }
 
 /* ============================================
- * Tab 3: 元素库 - 紧凑列表样式
+ * Tab 3: 元素库 - 卡片布局
  * ============================================ */
+
+/* 主容器 */
 .locator-lib-container {
     flex: 1;
     display: flex;
@@ -537,6 +539,7 @@
     min-height: 0;
 }
 
+/* 搜索栏 */
 .locator-search-bar {
     flex-shrink: 0;
     padding: 10px 12px;
@@ -552,7 +555,7 @@
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 13px;
-    transition: all 0.15s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .locator-search-bar input:focus {
@@ -565,76 +568,100 @@
     color: var(--text-disabled);
 }
 
+/* 卡片列表容器 */
 .locator-list {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     min-height: 0;
-    padding: 8px;
 }
 
-.locator-item {
+/* 单个卡片 */
+.locator-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     padding: 10px 12px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
-    margin-bottom: 6px;
-    cursor: move;
-    transition: all 0.12s ease;
+    border-radius: 6px;
+    cursor: grab;
+    transition: all 0.15s ease;
 }
 
-.locator-item:last-child {
-    margin-bottom: 0;
-}
-
-.locator-item:hover {
+.locator-card:hover {
     background: var(--bg-hover);
     border-color: var(--accent-primary);
     transform: translateY(-1px);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.locator-item.dragging {
-    opacity: 0.5;
+.locator-card:active {
     cursor: grabbing;
 }
 
-.locator-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 6px;
+.locator-card[draggable="true"] {
+    user-select: none;
 }
 
-.locator-name {
+/* 卡片图标/图片 */
+.locator-card-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    color: var(--text-secondary);
+}
+
+.locator-card-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+/* 图片类型的图标 */
+.locator-card-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+/* 卡片内容 */
+.locator-card-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* 卡片名称 */
+.locator-card-name {
     font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.locator-type {
-    font-size: 10px;
-    padding: 2px 8px;
-    background: var(--bg-tertiary);
-    border-radius: 3px;
-    color: var(--accent-primary);
-    text-transform: uppercase;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
-
-.locator-desc {
+/* 卡片备注 */
+.locator-card-note {
     font-size: 11px;
     color: var(--text-secondary);
-    margin-bottom: 4px;
-    line-height: 1.5;
-}
-
-.locator-preview {
-    font-size: 11px;
-    color: var(--text-disabled);
-    font-family: var(--font-mono);
-    line-height: 1.4;
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ============================================
