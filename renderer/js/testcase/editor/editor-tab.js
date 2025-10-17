@@ -1733,8 +1733,7 @@ class EditorTab {
         try {
             // 创建TKE缓冲区用于文件操作
             this.buffer = new window.TKEEditorBuffer(filePath);
-            await this.buffer.initialize();
-            
+
             // 加载文件内容
             await this.buffer.loadFromFile();
             

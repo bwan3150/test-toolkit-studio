@@ -125,13 +125,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 3. 加载业务功能模块
         await loadScript('../js/project/project-manager.js');
-        await loadScript('../js/testcase/toolkit-engine/xml-parser-tke.js');
-        
+
         // 加载拆分的 testcase 子模块
         await loadScript('../js/testcase/explorer/testcase-explorer.js');
         await loadScript('../js/testcase/screen/device-screen-manager.js');
         await loadScript('../js/testcase/screen/screen-mode-manager.js');
-        
+
         // 加载主控制器（依赖上面的子模块）
         await loadScript('../js/testcase/testcase-controller.js');
         await loadScript('../js/device/device-manager.js');
@@ -139,10 +138,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/logviewer/log-manager.js');
         await loadScript('../js/services/bug-analyzer-client.js'); // Bug分析API客户端
         await loadScript('../js/insights/test-report-manager.js');
-        
-        // 4. 加载TKE版本的模块
-        await loadScript('../js/testcase/toolkit-engine/tke-adapter.js');
-        await loadScript('../js/testcase/toolkit-engine/tks-integration-tke.js');
         // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
@@ -160,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseController', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
-            'NotificationModule', 'AppGlobals', 'TKEAdapterModule', 'TKSIntegrationTKEModule'
+            'NotificationModule', 'AppGlobals'
             // ApiClient 是可选的，稍后单独检查
         ];
         
@@ -215,11 +210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             } catch (error) {
                 window.rError('设置模块初始化失败:', error);
             }
-            
-            // 初始化TKS集成模块(TKE版本)
-            await window.TKSIntegrationTKEModule.initializeTKSIntegrationTKE();
-            window.rLog('✓ TKS脚本引擎(TKE版本)已初始化');
-            
+
             // 初始化Locator管理器
             if (window.LocatorManager) {
                 window.LocatorManager.initialize();
