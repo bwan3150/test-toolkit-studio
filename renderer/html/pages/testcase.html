@@ -93,9 +93,17 @@
           <!-- Tab 4: 控制台 -->
           <div class="bottom-panel-content-pane" data-pane-id="console">
             <div class="console-output" id="consoleOutput">
-              <div class="console-empty">
-                <span class="console-empty-icon">></span>
-                <span class="console-empty-text">Console output will appear here</span>
+              <div class="console-empty-state">
+                <div class="empty-icon">
+                  <svg viewBox="0 0 48 48" width="48" height="48">
+                    <rect x="6" y="8" width="36" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <line x1="10" y1="16" x2="18" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="10" y1="22" x2="26" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                    <line x1="10" y1="28" x2="20" y2="28" stroke="currentColor" stroke-width="1.5"/>
+                    <circle cx="38" cy="32" r="2" fill="currentColor"/>
+                  </svg>
+                </div>
+                <div class="empty-title">No console output</div>
               </div>
             </div>
           </div>

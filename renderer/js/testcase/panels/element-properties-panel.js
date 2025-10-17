@@ -202,7 +202,6 @@ const ElementPropertiesPanel = {
                         </svg>
                     </div>
                     <div class="empty-title">No element selected</div>
-                    <div class="empty-desc">Select an element from the "当前元素" tab to view its properties</div>
                 </div>
             `;
         }

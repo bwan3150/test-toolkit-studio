@@ -67,7 +67,6 @@ const ElementsListPanel = {
                             </svg>
                         </div>
                         <div class="empty-title">No elements captured</div>
-                        <div class="empty-desc">Switch to "XML Overlay" mode and click on the device screen to capture UI elements</div>
                     </div>
                 </div>
             `;

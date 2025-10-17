@@ -112,38 +112,45 @@ const ConsolePanel = {
     appendLogToUI(log) {
         const consoleOutput = document.getElementById('consoleOutput');
         if (!consoleOutput) return;
-        
+
+        // 如果存在空状态，先清除
+        const emptyState = consoleOutput.querySelector('.console-empty-state');
+        if (emptyState) {
+            emptyState.remove();
+        }
+
         const logElement = document.createElement('div');
         logElement.className = `console-log console-${log.type}`;
-        
+
         // 创建时间戳元素
         const timestampElement = document.createElement('span');
         timestampElement.className = 'console-timestamp';
         timestampElement.textContent = log.timestamp;
-        
+
         // 创建类型标签元素
         const typeElement = document.createElement('span');
         typeElement.className = `console-type console-type-${log.type}`;
         typeElement.textContent = log.type.toUpperCase().padEnd(5);
-        
+
         // 创建消息元素
         const messageElement = document.createElement('span');
         messageElement.className = 'console-message';
         messageElement.textContent = log.message;
-        
+
         // 组装日志元素
         logElement.appendChild(timestampElement);
         logElement.appendChild(typeElement);
         logElement.appendChild(messageElement);
-        
+
         consoleOutput.appendChild(logElement);
-        
+
         // 自动滚动到底部
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
-        
-        // 限制UI中的日志数量
-        while (consoleOutput.children.length > this.MAX_LOGS) {
-            consoleOutput.removeChild(consoleOutput.firstChild);
+
+        // 限制UI中的日志数量（只计算.console-log元素）
+        const logElements = consoleOutput.querySelectorAll('.console-log');
+        while (logElements.length > this.MAX_LOGS) {
+            logElements[0].remove();
         }
     },
     
@@ -152,9 +159,22 @@ const ConsolePanel = {
         this.logs = [];
         const consoleOutput = document.getElementById('consoleOutput');
         if (consoleOutput) {
-            consoleOutput.innerHTML = '';
+            // 显示统一的空状态提示
+            consoleOutput.innerHTML = `
+                <div class="console-empty-state">
+                    <div class="empty-icon">
+                        <svg viewBox="0 0 48 48" width="48" height="48">
+                            <rect x="6" y="8" width="36" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <line x1="10" y1="16" x2="18" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="10" y1="22" x2="26" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="10" y1="28" x2="20" y2="28" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="38" cy="32" r="2" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="empty-title">No console output</div>
+                </div>
+            `;
         }
-        this.addSystemLog('控制台已初始化');
     },
     
     // 添加系统日志

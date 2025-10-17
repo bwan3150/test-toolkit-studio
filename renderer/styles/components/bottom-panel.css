@@ -236,13 +236,31 @@
     color: var(--accent-primary);
 }
 
-/* 空状态 */
+/* ============================================
+ * 统一空状态样式 - 适用于所有tab
+ * ============================================ */
+
+/* 元素列表专用容器 */
 .table-empty-state {
     height: 100%;
     display: flex;
     flex-direction: column;
 }
 
+/* 元素属性、元素库、控制台的空状态容器 */
+.properties-empty-state,
+.locator-empty-state,
+.console-empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-disabled);
+}
+
+/* 通用的空状态消息容器 */
 .empty-message {
     flex: 1;
     display: flex;
@@ -251,6 +269,31 @@
     justify-content: center;
     gap: 16px;
     color: var(--text-disabled);
+}
+
+/* 空状态图标 */
+.empty-icon {
+    opacity: 0.3;
+    color: var(--text-disabled);
+}
+
+.empty-icon svg {
+    display: block;
+}
+
+/* 空状态标题 */
+.empty-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* 空状态描述 */
+.empty-desc {
+    font-size: 11px;
+    color: var(--text-disabled);
+    text-align: center;
+    max-width: 300px;
 }
 
 /* ============================================
@@ -363,9 +406,13 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 12px;
     display: flex;
     flex-direction: column;
+}
+
+/* 有卡片时才显示padding和gap */
+.locator-list.locator-list-with-cards {
+    padding: 12px;
     gap: 8px;
 }
 
@@ -458,14 +505,6 @@
 .console-message {
     flex: 1;
     color: var(--text-primary);
-}
-
-.console-empty {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
-    color: var(--text-disabled);
 }
 
 /* ============================================
