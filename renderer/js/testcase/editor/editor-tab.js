@@ -629,7 +629,7 @@ class EditorTab {
     renderBlocks() {
         // 获取命令
         const commands = this.getCommands();
-        
+
         let blocksHtml = '';
         
         // 为每个命令块生成HTML，包括块间的插入按钮

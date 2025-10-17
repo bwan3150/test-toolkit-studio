@@ -340,7 +340,7 @@ function registerOtherHandlers() {
     };
     const color = levelColors[level] || levelColors.log;
     const reset = '\x1b[0m';
-    
+
     console.log(`${color}[Renderer ${level.toUpperCase()}] ${timestamp}:${reset} ${message}`);
   });
 

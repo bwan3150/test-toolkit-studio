@@ -13,4 +13,6 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "Running Toolkit Studio(Electron) in Dev..."
+export ELECTRON_DEV_MODE=true
+export ELECTRON_PROJECT_ROOT="$(pwd)"
 npm start

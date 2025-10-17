@@ -72,7 +72,7 @@
         }
 
         /**
-         * 查找TKE可执行文件 - 简化版,只支持两种模式
+         * 查找TKE可执行文件 - 使用环境变量判断开发模式
          */
         findTKEExecutable() {
             // 获取平台信息
@@ -80,26 +80,23 @@
             const tkeBinaryName = process.platform === 'win32' ? 'tke.exe' : 'tke';
             const fs = require('fs');
 
-            // 判断是否是打包模式
-            const isPackaged = process.resourcesPath && (
-                process.resourcesPath.includes('.app/Contents/Resources') || // macOS
-                process.resourcesPath.includes('\\resources\\app.asar') || // Windows
-                process.resourcesPath.endsWith('/resources') // Linux
-            );
+            // 通过环境变量判断是否是开发模式
+            const isDevMode = process.env.ELECTRON_DEV_MODE === 'true';
+            const projectRoot = process.env.ELECTRON_PROJECT_ROOT;
 
             let tkePath;
 
-            if (isPackaged) {
+            if (isDevMode && projectRoot) {
+                // 开发模式: 直接使用dev.sh传入的项目根目录
+                tkePath = path.join(projectRoot, 'resources', platform, 'toolkit-engine', tkeBinaryName);
+                if (window.rLog) {
+                    window.rLog('🔧 开发模式 TKE路径:', tkePath);
+                }
+            } else {
                 // 打包模式: 包内的 Contents/Resources/平台/toolkit-engine/tke
                 tkePath = path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName);
                 if (window.rLog) {
                     window.rLog('📦 打包模式 TKE路径:', tkePath);
-                }
-            } else {
-                // 开发模式: ./resources/平台/toolkit-engine/tke
-                tkePath = path.join(process.cwd(), 'resources', platform, 'toolkit-engine', tkeBinaryName);
-                if (window.rLog) {
-                    window.rLog('🔧 开发模式 TKE路径:', tkePath);
                 }
             }
 
