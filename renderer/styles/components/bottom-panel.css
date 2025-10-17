@@ -1,11 +1,6 @@
-/* Bottom Panel - JetBrains IDE风格 (完全重构版)
- * 统一的下方面板系统,支持多Tab切换、收起展开、高度调整
- * 设计理念: 纯表格布局、无emoji、IDE原生风格
- */
+/* Bottom Panel - 简化重写版，专注解决滚动问题 */
 
-/* ============================================
- * 主容器
- * ============================================ */
+/* 主容器 */
 .bottom-panel {
     position: relative;
     display: flex;
@@ -14,24 +9,18 @@
     border-top: 1px solid var(--border-color);
     height: 300px;
     min-height: 150px;
-    transition: height 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 100;
-    overflow: hidden;
 }
 
-/* 收起状态 */
 .bottom-panel.collapsed {
     height: 36px !important;
-    min-height: 36px !important;
 }
 
 .bottom-panel.collapsed .bottom-panel-content {
     display: none !important;
 }
 
-/* ============================================
- * 拖拽条 - JetBrains风格
- * ============================================ */
+/* 拖拽条 */
 .bottom-panel-resizer {
     position: absolute;
     top: 0;
@@ -41,92 +30,48 @@
     background: transparent;
     cursor: row-resize;
     z-index: 102;
-    transition: background-color 0.15s ease;
 }
 
-.bottom-panel-resizer::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 60px;
-    height: 1px;
-    background: transparent;
-    transition: all 0.15s ease;
-}
-
-.bottom-panel-resizer:hover,
-.bottom-panel-resizer.dragging {
+.bottom-panel-resizer:hover {
     background: rgba(249, 168, 37, 0.1);
 }
 
-.bottom-panel-resizer:hover::after,
-.bottom-panel-resizer.dragging::after {
-    background: var(--accent-primary);
-    width: 80px;
-    height: 2px;
-}
-
-/* ============================================
- * 头部区域 - JetBrains风格的Tab栏
- * ============================================ */
+/* Header - 固定高度 36px */
 .bottom-panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     height: 36px;
-    min-height: 36px;
     flex-shrink: 0;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    padding: 0;
     user-select: none;
 }
 
-/* Tab栏容器 */
 .bottom-panel-tabs {
     display: flex;
-    align-items: stretch;
     height: 100%;
-    gap: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
     flex: 1;
+    overflow-x: auto;
 }
 
-/* 隐藏滚动条但保持可滚动 */
-.bottom-panel-tabs::-webkit-scrollbar {
-    height: 0;
-    display: none;
-}
-
-/* Tab按钮 - JetBrains风格 */
 .bottom-tab-btn {
     position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 100%;
     padding: 0 16px;
     background: transparent;
     border: none;
-    border-right: 1px solid transparent;
     color: var(--text-secondary);
     font-size: 13px;
-    font-weight: 400;
     cursor: pointer;
-    transition: all 0.12s ease;
     white-space: nowrap;
-    flex-shrink: 0;
 }
 
 .bottom-tab-btn svg {
     width: 16px;
     height: 16px;
-    flex-shrink: 0;
-    opacity: 0.65;
-    transition: opacity 0.12s ease;
 }
 
 .bottom-tab-btn:hover {
@@ -134,11 +79,6 @@
     color: var(--text-primary);
 }
 
-.bottom-tab-btn:hover svg {
-    opacity: 0.85;
-}
-
-/* 激活状态 - JetBrains风格的下划线 */
 .bottom-tab-btn.active {
     color: var(--text-primary);
     background: var(--bg-primary);
@@ -153,26 +93,12 @@
     right: 0;
     height: 2px;
     background: var(--accent-primary);
-    transition: background 0.12s ease;
 }
 
-.bottom-tab-btn.active svg {
-    opacity: 1;
-    color: var(--accent-primary);
-}
-
-.bottom-tab-btn .tab-title {
-    line-height: 1;
-}
-
-/* 工具栏按钮区域 */
 .bottom-panel-toolbar {
     display: flex;
-    align-items: center;
     gap: 2px;
-    height: 100%;
     padding: 0 4px;
-    flex-shrink: 0;
 }
 
 .bottom-panel-toolbar .btn-icon {
@@ -184,75 +110,49 @@
     border-radius: 4px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.12s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.bottom-panel-toolbar .btn-icon svg {
-    width: 16px;
-    height: 16px;
-    fill: currentColor;
-    transition: transform 0.15s ease;
 }
 
 .bottom-panel-toolbar .btn-icon:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
 }
 
-.bottom-panel-toolbar .btn-icon:active {
-    background: var(--bg-active);
-}
-
-/* ============================================
- * 内容区域 - 扁平化设计
- * ============================================ */
+/* 内容区域 - 使用 calc 计算剩余高度 */
 .bottom-panel-content {
-    flex: 1;
-    display: flex;
+    height: calc(100% - 36px); /* 总高度减去 header */
     overflow: hidden;
     background: var(--bg-primary);
-    min-height: 0;
 }
 
-/* 内容面板 */
 .bottom-panel-content-pane {
-    flex: 1;
     display: none;
-    flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
+    height: 100%;
 }
 
 .bottom-panel-content-pane.active {
-    display: flex;
+    display: block;
 }
 
 /* ============================================
- * Tab 1: 当前元素列表 - 表格样式
+ * Tab 1: 当前元素列表
  * ============================================ */
 .elements-list-container {
-    flex: 1;
+    height: 100%;
     overflow-y: auto;
-    overflow-x: auto;
-    min-height: 0;
+    overflow-x: hidden;
 }
 
 .elements-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
-    table-layout: fixed;
 }
 
 .elements-table thead {
     position: sticky;
     top: 0;
-    z-index: 10;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+    z-index: 10;
 }
 
 .elements-table th {
@@ -262,99 +162,56 @@
     color: var(--text-secondary);
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid var(--border-color);
 }
 
 .elements-table th.col-index { width: 60px; }
 .elements-table th.col-type { width: 200px; }
-.elements-table th.col-content { width: auto; min-width: 200px; }
+.elements-table th.col-content { width: auto; }
 .elements-table th.col-bounds { width: 120px; }
 .elements-table th.col-size { width: 100px; }
-.elements-table th.col-actions { width: 60px; text-align: center; }
+.elements-table th.col-actions { width: 60px; }
 
-.elements-table tbody tr.element-row {
+.elements-table tbody tr {
     cursor: pointer;
     border-bottom: 1px solid var(--border-color);
-    transition: background-color 0.1s ease;
 }
 
-.elements-table tbody tr.element-row:hover {
+.elements-table tbody tr:hover {
     background: var(--bg-hover);
-}
-
-.elements-table tbody tr.element-row.selected {
-    background: var(--bg-active);
 }
 
 .elements-table td {
     padding: 8px 12px;
-    vertical-align: middle;
     color: var(--text-primary);
 }
 
-/* 索引列 */
-.col-index .index-badge {
-    display: inline-block;
+.index-badge {
     padding: 2px 8px;
     background: var(--bg-tertiary);
     border-radius: 3px;
     font-family: var(--font-mono);
     font-size: 11px;
-    font-weight: 600;
     color: var(--accent-primary);
 }
 
-/* 类型列 */
 .type-cell {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.type-icon {
-    flex-shrink: 0;
-}
-
-.type-icon-svg {
-    width: 14px;
-    height: 14px;
-    color: var(--text-secondary);
-}
-
 .type-name {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--text-primary);
-}
-
-/* 内容列 */
-.content-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
 }
 
 .content-text {
     font-size: 12px;
-    color: var(--text-primary);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.content-desc {
-    font-size: 11px;
-    color: var(--text-disabled);
-    font-style: italic;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* 位置和尺寸列 */
-.bounds-code,
-.size-code {
+.bounds-code, .size-code {
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--accent-info);
@@ -363,11 +220,7 @@
     border-radius: 3px;
 }
 
-/* 操作按钮 */
 .action-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     width: 24px;
     height: 24px;
     padding: 4px;
@@ -376,7 +229,6 @@
     border-radius: 3px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.12s ease;
 }
 
 .action-btn:hover {
@@ -384,41 +236,52 @@
     color: var(--accent-primary);
 }
 
-.action-btn svg {
-    fill: currentColor;
+/* 空状态 */
+.table-empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.empty-message {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-disabled);
 }
 
 /* ============================================
- * Tab 2: 元素属性 - IntelliJ风格属性面板
+ * Tab 2: 元素属性
  * ============================================ */
 .element-props-container {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .properties-panel {
-    display: flex;
-    flex-direction: column;
     height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
-/* 属性工具栏 */
 .properties-toolbar {
+    position: sticky;
+    top: 0;
     display: flex;
-    align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    flex-shrink: 0;
+    z-index: 10;
 }
 
-.toolbar-left .element-id {
+.element-id {
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-primary);
     font-family: var(--font-mono);
 }
 
@@ -428,9 +291,6 @@
 }
 
 .tool-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
     width: 28px;
     height: 28px;
     padding: 6px;
@@ -439,47 +299,16 @@
     border-radius: 3px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.12s ease;
 }
 
 .tool-btn:hover {
     background: var(--bg-hover);
-    color: var(--text-primary);
 }
 
-.tool-btn svg {
-    fill: currentColor;
-}
-
-/* 属性表格 */
 .properties-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
-}
-
-.properties-table tr.prop-category td {
-    padding: 10px 12px 6px 12px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    background: var(--bg-primary);
-    border-top: 1px solid var(--border-color);
-}
-
-.properties-table tr.prop-category:first-child td {
-    border-top: none;
-    padding-top: 12px;
-}
-
-.properties-table tr {
-    border-bottom: 1px solid transparent;
-}
-
-.properties-table tr:hover:not(.prop-category) {
-    background: var(--bg-hover);
 }
 
 .properties-table td.prop-key {
@@ -488,58 +317,26 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-secondary);
-    vertical-align: top;
 }
 
 .properties-table td.prop-value {
     padding: 6px 12px;
     color: var(--text-primary);
-    font-size: 12px;
-    word-break: break-word;
 }
 
-.properties-table td.prop-value code {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--accent-info);
-    background: var(--bg-tertiary);
-    padding: 2px 6px;
-    border-radius: 3px;
-}
-
-/* Boolean值样式 */
-.bool-value {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 3px;
-}
-
-.bool-value.bool-true {
-    color: var(--accent-success);
-    background: rgba(78, 201, 176, 0.15);
-}
-
-.bool-value.bool-false {
-    color: var(--text-disabled);
-    background: var(--bg-tertiary);
+.properties-table tr:hover {
+    background: var(--bg-hover);
 }
 
 /* ============================================
- * Tab 3: 元素库 - 卡片布局
+ * Tab 3: 元素库
  * ============================================ */
-
-/* 主容器 */
 .locator-lib-container {
-    flex: 1;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
 }
 
-/* 搜索栏 */
 .locator-search-bar {
     flex-shrink: 0;
     padding: 10px 12px;
@@ -555,38 +352,23 @@
     border-radius: 4px;
     color: var(--text-primary);
     font-size: 13px;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .locator-search-bar input:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(249, 168, 37, 0.1);
 }
 
-.locator-search-bar input::placeholder {
-    color: var(--text-disabled);
-}
-
-/* 卡片列表容器 */
 .locator-list {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 0;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 0;
-    min-height: 0;
-}
-
-/* ✅ 有卡片时的样式（通过JS添加类） */
-.locator-list.locator-list-with-cards {
-    padding: 12px;
     gap: 8px;
 }
 
-/* 单个卡片 */
 .locator-card {
     display: flex;
     align-items: center;
@@ -596,27 +378,14 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: grab;
-    transition: all 0.15s ease;
 }
 
 .locator-card:hover {
     background: var(--bg-hover);
     border-color: var(--accent-primary);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.locator-card:active {
-    cursor: grabbing;
-}
-
-.locator-card[draggable="true"] {
-    user-select: none;
-}
-
-/* 卡片图标/图片 */
 .locator-card-icon {
-    flex-shrink: 0;
     width: 32px;
     height: 32px;
     display: flex;
@@ -624,325 +393,115 @@
     justify-content: center;
     background: var(--bg-tertiary);
     border-radius: 4px;
-    color: var(--text-secondary);
 }
 
-.locator-card-icon svg {
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
-}
-
-/* 图片类型的图标 */
-.locator-card-icon img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 4px;
-}
-
-/* 卡片内容 */
 .locator-card-content {
     flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
 }
 
-/* 卡片名称 */
 .locator-card-name {
     font-size: 13px;
     font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* 卡片备注 */
 .locator-card-note {
     font-size: 11px;
     color: var(--text-secondary);
     font-style: italic;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* ============================================
- * Tab 4: 控制台 - 真正的IDE控制台样式
+ * Tab 4: 控制台
  * ============================================ */
 .console-output {
-    flex: 1;
+    height: 100%;
     overflow-y: auto;
-    overflow-x: auto;
-    padding: 0;
+    overflow-x: hidden;
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
-    background: var(--bg-primary);
-    min-height: 0;
 }
 
 .console-log {
     display: flex;
-    gap: 0;
+    gap: 8px;
     padding: 4px 12px;
-    border-bottom: 1px solid transparent;
     white-space: pre-wrap;
     word-break: break-word;
-    transition: background 0.1s ease;
 }
 
 .console-log:hover {
     background: rgba(255, 255, 255, 0.02);
-    border-bottom-color: var(--border-color);
 }
 
 .console-timestamp {
     color: var(--text-disabled);
     font-size: 11px;
-    flex-shrink: 0;
     min-width: 90px;
-    font-family: var(--font-mono);
 }
 
 .console-type {
     font-weight: 700;
-    flex-shrink: 0;
     min-width: 60px;
     text-transform: uppercase;
     font-size: 10px;
-    letter-spacing: 0.5px;
-    font-family: var(--font-mono);
 }
 
-.console-type-log {
-    color: var(--accent-info);
-}
-
-.console-type-info {
-    color: var(--accent-info);
-}
-
-.console-type-system {
-    color: var(--accent-info);
-}
-
-.console-type-warn {
-    color: var(--accent-warning);
-}
-
-.console-type-error {
-    color: var(--accent-danger);
-}
-
-.console-type-debug {
-    color: var(--text-disabled);
-}
+.console-type-log, .console-type-info { color: var(--accent-info); }
+.console-type-warn { color: var(--accent-warning); }
+.console-type-error { color: var(--accent-danger); }
 
 .console-message {
     flex: 1;
     color: var(--text-primary);
-    font-family: var(--font-mono);
 }
 
-/* 旧样式兼容 */
-.console-line {
-    padding: 4px 12px;
-    white-space: pre-wrap;
-    word-break: break-word;
-    border-bottom: 1px solid transparent;
-}
-
-.console-line.info {
-    color: var(--text-primary);
-}
-
-.console-line.success {
-    color: var(--accent-success);
-}
-
-.console-line.warning {
-    color: var(--accent-warning);
-}
-
-.console-line.error {
-    color: var(--accent-danger);
-}
-
-.console-line.debug {
-    color: var(--text-disabled);
-}
-
-.console-line:hover {
-    background: rgba(255, 255, 255, 0.02);
-    border-bottom-color: var(--border-color);
-}
-
-/* ============================================
- * 空状态 - IDE风格重新设计
- * ============================================ */
-
-/* 表格空状态 - 保留表头 */
-.table-empty-state {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    position: relative;
-}
-
-.table-empty-state .elements-table {
-    flex-shrink: 0;
-}
-
-.empty-message {
-    position: absolute;
-    top: 60px;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 40px 20px;
-}
-
-.empty-icon {
-    color: var(--text-disabled);
-    opacity: 0.4;
-}
-
-.empty-icon svg {
-    display: block;
-}
-
-.empty-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin: 0;
-}
-
-.empty-desc {
-    font-size: 12px;
-    color: var(--text-disabled);
-    max-width: 400px;
-    text-align: center;
-    line-height: 1.6;
-}
-
-/* 属性面板空状态 */
-.properties-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    gap: 16px;
-    padding: 40px 20px;
-}
-
-.properties-empty-state .empty-icon {
-    color: var(--text-disabled);
-    opacity: 0.4;
-}
-
-.properties-empty-state .empty-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-secondary);
-}
-
-.properties-empty-state .empty-desc {
-    font-size: 12px;
-    color: var(--text-disabled);
-    max-width: 300px;
-    text-align: center;
-    line-height: 1.6;
-}
-
-/* 控制台空状态 */
 .console-empty {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 12px;
     color: var(--text-disabled);
-    font-family: var(--font-mono);
-    font-size: 12px;
-}
-
-.console-empty-icon {
-    font-weight: 700;
-    color: var(--text-disabled);
-}
-
-.console-empty-text {
-    font-style: italic;
 }
 
 /* ============================================
- * 滚动条样式 - JetBrains风格
+ * 滚动条样式
  * ============================================ */
 .elements-list-container::-webkit-scrollbar,
-.element-props-container::-webkit-scrollbar,
+.properties-panel::-webkit-scrollbar,
 .locator-list::-webkit-scrollbar,
 .console-output::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 12px;
 }
 
 .elements-list-container::-webkit-scrollbar-track,
-.element-props-container::-webkit-scrollbar-track,
+.properties-panel::-webkit-scrollbar-track,
 .locator-list::-webkit-scrollbar-track,
 .console-output::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--bg-secondary);
 }
 
 .elements-list-container::-webkit-scrollbar-thumb,
-.element-props-container::-webkit-scrollbar-thumb,
+.properties-panel::-webkit-scrollbar-thumb,
 .locator-list::-webkit-scrollbar-thumb,
 .console-output::-webkit-scrollbar-thumb {
-    background: var(--bg-tertiary);
-    border-radius: 5px;
-    border: 2px solid var(--bg-primary);
+    background: #555555;
+    border-radius: 6px;
 }
 
 .elements-list-container::-webkit-scrollbar-thumb:hover,
-.element-props-container::-webkit-scrollbar-thumb:hover,
+.properties-panel::-webkit-scrollbar-thumb:hover,
 .locator-list::-webkit-scrollbar-thumb:hover,
 .console-output::-webkit-scrollbar-thumb:hover {
-    background: var(--bg-hover);
+    background: #777777;
 }
 
-/* ============================================
- * 响应式设计
- * ============================================ */
-@media (max-width: 1200px) {
-    .bottom-tab-btn {
-        padding: 0 12px;
-    }
-
-    .bottom-tab-btn svg {
-        width: 14px;
-        height: 14px;
-    }
-}
-
-/* ✅ 修复滚动问题：移除全局的 pointer-events 和 user-select 阻断 */
-/* 拖拽时的全局样式 - 只影响 body 本身，不影响所有子元素 */
+/* 拖拽时禁止选择 */
 body.bottom-panel-dragging {
     cursor: row-resize !important;
     user-select: none !important;
 }
-
-/* ❌ 删除这个样式！它阻止了所有子元素的鼠标交互
-body.bottom-panel-dragging * {
-    cursor: row-resize !important;
-    user-select: none !important;
-}
-*/

@@ -39,7 +39,7 @@ const BottomPanelManager = {
 
     // 初始化
     init() {
-        safeLog('🎯 初始化 BottomPanelManager');
+        safeLog('🎯 初始化 BottomPanelManager - START');
 
         // 注册内置的4个tab
         this.registerTab({
@@ -281,12 +281,9 @@ const BottomPanelManager = {
             resizer.addEventListener('mousedown', (e) => this.startDragging(e));
         }
 
-        // ✅ 修复滚动问题：将全局监听器绑定为实例方法，方便后续管理
+        // 将全局监听器绑定为实例方法，方便后续管理
         this.boundHandleDragMove = (e) => this.handleDragMove(e);
         this.boundHandleDragEnd = () => this.handleDragEnd();
-
-        // 只在开始拖拽时才添加全局监听器，避免干扰正常的鼠标交互
-        // 全局mousemove和mouseup - 用于拖拽 (现在在startDragging中动态添加)
     },
 
     // 开始拖拽
@@ -301,7 +298,7 @@ const BottomPanelManager = {
             resizer.classList.add('dragging');
         }
 
-        // ✅ 修复滚动问题：只在开始拖拽时才添加全局监听器
+        // 只在开始拖拽时才添加全局监听器
         document.addEventListener('mousemove', this.boundHandleDragMove);
         document.addEventListener('mouseup', this.boundHandleDragEnd);
 
@@ -351,7 +348,7 @@ const BottomPanelManager = {
             this.state.rafId = null;
         }
 
-        // ✅ 修复滚动问题：移除全局监听器，恢复正常的鼠标交互
+        // 移除全局监听器
         document.removeEventListener('mousemove', this.boundHandleDragMove);
         document.removeEventListener('mouseup', this.boundHandleDragEnd);
 

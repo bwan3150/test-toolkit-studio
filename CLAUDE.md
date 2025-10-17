@@ -14,8 +14,8 @@ Electron 桌面应用，用于自动化测试。
 
 ## 关键路径（重构后）
 - HTML 文件在 `renderer/html/` 
-- 从 HTML 引用 JS：`../js/xxx.js`
-- 从 HTML 引用 CSS：`../styles/xxx.css`
+- 从 HTML 引用 JS：`renderer/js/xxx.js`
+- 从 HTML 引用 CSS：`renderer/styles/xxx.css`
 - 从 HTML 引用图片：`../../assets/xxx`
 
 ## 代码规范补充
