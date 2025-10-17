@@ -264,15 +264,15 @@ const LocatorLibraryPanel = {
     
     // 渲染定位器列表 - 卡片布局
     renderLocators(filteredLocators = null) {
-        const locatorList = document.getElementById('locatorList');
-        if (!locatorList) return;
+        const container = document.getElementById('locatorLibContent');
+        if (!container) return;
 
         const locatorsToRender = filteredLocators || Object.entries(this.locators);
 
         if (locatorsToRender.length === 0) {
             // 显示统一的空状态提示
-            locatorList.classList.remove('locator-list-with-cards');
-            locatorList.innerHTML = `
+            container.classList.remove('with-cards');
+            container.innerHTML = `
                 <div class="locator-empty-state">
                     <div class="empty-icon">
                         <svg viewBox="0 0 48 48" width="48" height="48">
@@ -289,8 +289,8 @@ const LocatorLibraryPanel = {
             return;
         }
 
-        // ✅ 有卡片：添加 with-cards 类，显示padding和gap
-        locatorList.classList.add('locator-list-with-cards');
+        // 有卡片：添加 with-cards 类，显示padding和gap
+        container.classList.add('with-cards');
 
         // 卡片布局
         const cardsHTML = locatorsToRender.map(([name, locator]) => {
@@ -332,10 +332,10 @@ const LocatorLibraryPanel = {
             `;
         }).join('');
 
-        locatorList.innerHTML = cardsHTML;
+        container.innerHTML = cardsHTML;
 
         // 为每个卡片添加拖拽事件
-        locatorList.querySelectorAll('.locator-card').forEach(card => {
+        container.querySelectorAll('.locator-card').forEach(card => {
             this.setupCardDragEvents(card);
         });
 

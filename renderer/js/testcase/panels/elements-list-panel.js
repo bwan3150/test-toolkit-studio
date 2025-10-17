@@ -32,9 +32,9 @@ const ElementsListPanel = {
     
     // 渲染元素列表 - 全新的表格样式
     renderElements(filteredElements = null) {
-        const container = document.getElementById('elementsListContainer');
+        const container = document.getElementById('elementsListContent');
         if (!container) {
-            window.rError('元素列表容器(elementsListContainer)未找到');
+            window.rError('元素列表容器(elementsListContent)未找到');
             return;
         }
 

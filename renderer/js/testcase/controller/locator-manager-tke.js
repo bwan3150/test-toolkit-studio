@@ -260,10 +260,10 @@ class LocatorManagerTKE {
     }
 
     updateLocatorList() {
-        const locatorList = document.getElementById('locatorList');
-        if (!locatorList) return;
+        const locatorLibContent = document.getElementById('locatorLibContent');
+        if (!locatorLibContent) return;
 
-        locatorList.innerHTML = '';
+        locatorLibContent.innerHTML = '';
 
         for (const [name, locator] of Object.entries(this.locators)) {
             const locatorItem = document.createElement('div');
@@ -283,7 +283,7 @@ class LocatorManagerTKE {
                 </div>
             `;
 
-            locatorList.appendChild(locatorItem);
+            locatorLibContent.appendChild(locatorItem);
         }
     }
 
@@ -317,10 +317,10 @@ class LocatorManagerTKE {
     }
 
     setupDragAndDrop() {
-        const locatorList = document.getElementById('locatorList');
-        if (locatorList) {
-            locatorList.addEventListener('dragover', (e) => e.preventDefault());
-            locatorList.addEventListener('drop', (e) => {
+        const locatorLibContent = document.getElementById('locatorLibContent');
+        if (locatorLibContent) {
+            locatorLibContent.addEventListener('dragover', (e) => e.preventDefault());
+            locatorLibContent.addEventListener('drop', (e) => {
                 e.preventDefault();
                 this.handleDrop(e);
             });

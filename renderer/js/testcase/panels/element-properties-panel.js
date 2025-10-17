@@ -17,18 +17,17 @@ const ElementPropertiesPanel = {
     
     // 显示元素属性 - IntelliJ风格属性表格
     showElementProperties(element) {
-        const elementPropsContainer = document.getElementById('elementPropsContainer');
+        const headerContainer = document.getElementById('elementPropsHeader');
+        const contentContainer = document.getElementById('elementPropsContent');
 
-        if (!elementPropsContainer) {
-            window.rError('元素属性容器未找到: elementPropsContainer');
+        if (!headerContainer || !contentContainer) {
+            window.rError('元素属性容器未找到');
             return;
         }
 
-        // IntelliJ风格的属性表格
-        const propertiesHTML = `
-            <div class="properties-panel">
-                <!-- 工具栏 -->
-                <div class="properties-toolbar">
+        // 工具栏HTML
+        const toolbarHTML = `
+            <div class="properties-toolbar">
                     <div class="toolbar-left">
                         <span class="element-id">[${element.index}] ${element.className ? element.className.split('.').pop() : 'Element'}</span>
                     </div>
@@ -44,10 +43,12 @@ const ElementPropertiesPanel = {
                             </svg>
                         </button>
                     </div>
-                </div>
+            </div>
+        `;
 
-                <!-- 属性表格 -->
-                <table class="properties-table">
+        // 属性表格HTML
+        const propertiesTableHTML = `
+            <table class="properties-table">
                     <tbody>
                         <tr class="prop-category">
                             <td colspan="2">General</td>
@@ -135,12 +136,12 @@ const ElementPropertiesPanel = {
                             <td class="prop-value"><span class="bool-value ${element.checked ? 'bool-true' : 'bool-false'}">${element.checked}</span></td>
                         </tr>
                     </tbody>
-                </table>
-            </div>
+            </table>
         `;
 
-        // 更新属性容器内容
-        elementPropsContainer.innerHTML = propertiesHTML;
+        // 更新头部和内容
+        headerContainer.innerHTML = toolbarHTML;
+        contentContainer.innerHTML = propertiesTableHTML;
 
         // 使用BottomPanelManager切换到属性Tab
         if (window.BottomPanelManager) {
@@ -188,9 +189,15 @@ const ElementPropertiesPanel = {
     
     // 清空属性面板
     clear() {
-        const elementPropsContainer = document.getElementById('elementPropsContainer');
-        if (elementPropsContainer) {
-            elementPropsContainer.innerHTML = `
+        const headerContainer = document.getElementById('elementPropsHeader');
+        const contentContainer = document.getElementById('elementPropsContent');
+
+        if (headerContainer) {
+            headerContainer.innerHTML = '';
+        }
+
+        if (contentContainer) {
+            contentContainer.innerHTML = `
                 <div class="properties-empty-state">
                     <div class="empty-icon">
                         <svg viewBox="0 0 48 48" width="48" height="48">

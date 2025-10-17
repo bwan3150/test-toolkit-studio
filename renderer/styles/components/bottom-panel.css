@@ -136,7 +136,20 @@
  * Tab 1: 当前元素列表
  * ============================================ */
 .elements-list-container {
+    width: 100%;
     height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.elements-list-header {
+    flex-shrink: 0;
+    /* 预留：未来可以添加搜索栏样式 */
+}
+
+.elements-list-content {
+    flex: 1;
+    width: 100%;
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -300,26 +313,31 @@
  * Tab 2: 元素属性
  * ============================================ */
 .element-props-container {
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-.properties-panel {
-    height: 100%;
+.element-props-header {
+    flex-shrink: 0;
+    /* 工具栏由JS动态生成 */
+}
+
+.element-props-content {
+    flex: 1;
+    width: 100%;
     overflow-y: auto;
     overflow-x: hidden;
 }
 
+/* 元素属性工具栏（由JS动态生成到header中） */
 .properties-toolbar {
-    position: sticky;
-    top: 0;
     display: flex;
     justify-content: space-between;
     padding: 8px 12px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    z-index: 10;
 }
 
 .element-id {
@@ -375,19 +393,20 @@
  * Tab 3: 元素库
  * ============================================ */
 .locator-lib-container {
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
 }
 
-.locator-search-bar {
+.locator-lib-header {
     flex-shrink: 0;
     padding: 10px 12px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
 }
 
-.locator-search-bar input {
+.locator-lib-header .search-input {
     width: 100%;
     padding: 7px 12px;
     background: var(--bg-primary);
@@ -397,22 +416,23 @@
     font-size: 13px;
 }
 
-.locator-search-bar input:focus {
+.locator-lib-header .search-input:focus {
     outline: none;
     border-color: var(--accent-primary);
 }
 
-.locator-list {
+.locator-lib-content {
     flex: 1;
+    width: 100%;
     overflow-y: auto;
     overflow-x: hidden;
-    display: flex;
-    flex-direction: column;
 }
 
 /* 有卡片时才显示padding和gap */
-.locator-list.locator-list-with-cards {
+.locator-lib-content.with-cards {
     padding: 12px;
+    display: flex;
+    flex-direction: column;
     gap: 8px;
 }
 
@@ -464,8 +484,21 @@
 /* ============================================
  * Tab 4: 控制台
  * ============================================ */
-.console-output {
+.console-container {
+    width: 100%;
     height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.console-header {
+    flex-shrink: 0;
+    /* 预留：可以放筛选按钮 */
+}
+
+.console-content {
+    flex: 1;
+    width: 100%;
     overflow-y: auto;
     overflow-x: hidden;
     font-family: var(--font-mono);
@@ -510,32 +543,32 @@
 /* ============================================
  * 滚动条样式
  * ============================================ */
-.elements-list-container::-webkit-scrollbar,
-.properties-panel::-webkit-scrollbar,
-.locator-list::-webkit-scrollbar,
-.console-output::-webkit-scrollbar {
+.elements-list-content::-webkit-scrollbar,
+.element-props-content::-webkit-scrollbar,
+.locator-lib-content::-webkit-scrollbar,
+.console-content::-webkit-scrollbar {
     width: 12px;
 }
 
-.elements-list-container::-webkit-scrollbar-track,
-.properties-panel::-webkit-scrollbar-track,
-.locator-list::-webkit-scrollbar-track,
-.console-output::-webkit-scrollbar-track {
+.elements-list-content::-webkit-scrollbar-track,
+.element-props-content::-webkit-scrollbar-track,
+.locator-lib-content::-webkit-scrollbar-track,
+.console-content::-webkit-scrollbar-track {
     background: var(--bg-secondary);
 }
 
-.elements-list-container::-webkit-scrollbar-thumb,
-.properties-panel::-webkit-scrollbar-thumb,
-.locator-list::-webkit-scrollbar-thumb,
-.console-output::-webkit-scrollbar-thumb {
+.elements-list-content::-webkit-scrollbar-thumb,
+.element-props-content::-webkit-scrollbar-thumb,
+.locator-lib-content::-webkit-scrollbar-thumb,
+.console-content::-webkit-scrollbar-thumb {
     background: #555555;
     border-radius: 6px;
 }
 
-.elements-list-container::-webkit-scrollbar-thumb:hover,
-.properties-panel::-webkit-scrollbar-thumb:hover,
-.locator-list::-webkit-scrollbar-thumb:hover,
-.console-output::-webkit-scrollbar-thumb:hover {
+.elements-list-content::-webkit-scrollbar-thumb:hover,
+.element-props-content::-webkit-scrollbar-thumb:hover,
+.locator-lib-content::-webkit-scrollbar-thumb:hover,
+.console-content::-webkit-scrollbar-thumb:hover {
     background: #777777;
 }
 

@@ -66,44 +66,59 @@
         <div class="bottom-panel-content">
           <!-- Tab 1: 当前元素 -->
           <div class="bottom-panel-content-pane" data-pane-id="elements-list">
-            <div class="elements-list-container" id="elementsListContainer">
-              <!-- 空状态由JS动态生成表格结构 -->
+            <div class="elements-list-container">
+              <div class="elements-list-header">
+                <!-- 预留：可以放搜索/筛选功能 -->
+              </div>
+              <div class="elements-list-content" id="elementsListContent">
+                <!-- 空状态或表格由JS动态生成 -->
+              </div>
             </div>
           </div>
 
           <!-- Tab 2: 元素属性 -->
           <div class="bottom-panel-content-pane" data-pane-id="element-props">
-            <div class="element-props-container" id="elementPropsContainer">
-              <!-- 空状态由JS动态生成 -->
+            <div class="element-props-container">
+              <div class="element-props-header" id="elementPropsHeader">
+                <!-- 工具栏由JS动态生成 -->
+              </div>
+              <div class="element-props-content" id="elementPropsContent">
+                <!-- 空状态或属性表格由JS动态生成 -->
+              </div>
             </div>
           </div>
 
           <!-- Tab 3: 元素库 -->
           <div class="bottom-panel-content-pane" data-pane-id="locator-lib">
-            <div class="locator-lib-container" id="locatorLibContainer">
-              <div class="locator-search-bar">
-                <input type="text" id="locatorSearchInput" placeholder="Filter locators by name..." />
+            <div class="locator-lib-container">
+              <div class="locator-lib-header">
+                <input type="text" class="search-input" id="locatorSearchInput" placeholder="Filter locators by name..." />
               </div>
-              <div class="locator-list" id="locatorList">
-                <!-- 空状态由JS动态生成 -->
+              <div class="locator-lib-content" id="locatorLibContent">
+                <!-- 空状态或卡片列表由JS动态生成 -->
               </div>
             </div>
           </div>
 
           <!-- Tab 4: 控制台 -->
           <div class="bottom-panel-content-pane" data-pane-id="console">
-            <div class="console-output" id="consoleOutput">
-              <div class="console-empty-state">
-                <div class="empty-icon">
-                  <svg viewBox="0 0 48 48" width="48" height="48">
-                    <rect x="6" y="8" width="36" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-                    <line x1="10" y1="16" x2="18" y2="16" stroke="currentColor" stroke-width="1.5"/>
-                    <line x1="10" y1="22" x2="26" y2="22" stroke="currentColor" stroke-width="1.5"/>
-                    <line x1="10" y1="28" x2="20" y2="28" stroke="currentColor" stroke-width="1.5"/>
-                    <circle cx="38" cy="32" r="2" fill="currentColor"/>
-                  </svg>
+            <div class="console-container">
+              <div class="console-header">
+                <!-- 预留：可以放筛选/清除按钮 -->
+              </div>
+              <div class="console-content" id="consoleContent">
+                <div class="console-empty-state">
+                  <div class="empty-icon">
+                    <svg viewBox="0 0 48 48" width="48" height="48">
+                      <rect x="6" y="8" width="36" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                      <line x1="10" y1="16" x2="18" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="22" x2="26" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="28" x2="20" y2="28" stroke="currentColor" stroke-width="1.5"/>
+                      <circle cx="38" cy="32" r="2" fill="currentColor"/>
+                    </svg>
+                  </div>
+                  <div class="empty-title">No console output</div>
                 </div>
-                <div class="empty-title">No console output</div>
               </div>
             </div>
           </div>

@@ -110,11 +110,11 @@ const ConsolePanel = {
     
     // 将日志添加到UI
     appendLogToUI(log) {
-        const consoleOutput = document.getElementById('consoleOutput');
-        if (!consoleOutput) return;
+        const consoleContent = document.getElementById('consoleContent');
+        if (!consoleContent) return;
 
         // 如果存在空状态，先清除
-        const emptyState = consoleOutput.querySelector('.console-empty-state');
+        const emptyState = consoleContent.querySelector('.console-empty-state');
         if (emptyState) {
             emptyState.remove();
         }
@@ -142,13 +142,13 @@ const ConsolePanel = {
         logElement.appendChild(typeElement);
         logElement.appendChild(messageElement);
 
-        consoleOutput.appendChild(logElement);
+        consoleContent.appendChild(logElement);
 
         // 自动滚动到底部
-        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        consoleContent.scrollTop = consoleContent.scrollHeight;
 
         // 限制UI中的日志数量（只计算.console-log元素）
-        const logElements = consoleOutput.querySelectorAll('.console-log');
+        const logElements = consoleContent.querySelectorAll('.console-log');
         while (logElements.length > this.MAX_LOGS) {
             logElements[0].remove();
         }
@@ -157,10 +157,10 @@ const ConsolePanel = {
     // 清空控制台
     clearConsole() {
         this.logs = [];
-        const consoleOutput = document.getElementById('consoleOutput');
-        if (consoleOutput) {
+        const consoleContent = document.getElementById('consoleContent');
+        if (consoleContent) {
             // 显示统一的空状态提示
-            consoleOutput.innerHTML = `
+            consoleContent.innerHTML = `
                 <div class="console-empty-state">
                     <div class="empty-icon">
                         <svg viewBox="0 0 48 48" width="48" height="48">

@@ -233,19 +233,19 @@ function initializeTabSwitching() {
 // 初始化底部面板显示
 function initializeBottomPanelDisplay() {
     const testcaseBottomPanel = document.querySelector('#testcasePage .bottom-panel');
-    const consoleOutput = document.querySelector('#testcasePage #consoleOutput');
-    
-    if (testcaseBottomPanel && consoleOutput) {
+    const consoleContent = document.querySelector('#testcasePage #consoleContent');
+
+    if (testcaseBottomPanel && consoleContent) {
         // 确保面板可见
         testcaseBottomPanel.style.display = 'block';
-        
+
         // 设置初始高度（如果需要）
         if (!testcaseBottomPanel.style.height) {
             testcaseBottomPanel.style.height = '200px';
         }
-        
+
         // 确保控制台输出区域正确显示
-        consoleOutput.style.display = 'block';
+        consoleContent.style.display = 'block';
         
         // 触发重新计算布局
         window.dispatchEvent(new Event('resize'));
@@ -274,24 +274,24 @@ const ConsoleManager = {
     },
     
     updateConsoleUI(log) {
-        const consoleOutput = document.getElementById('consoleOutput');
-        if (!consoleOutput) return;
-        
+        const consoleContent = document.getElementById('consoleContent');
+        if (!consoleContent) return;
+
         const logElement = document.createElement('div');
         logElement.className = `console-log console-${log.type}`;
         logElement.innerHTML = `<span class="timestamp">[${log.timestamp}]</span> <span class="message">${log.message}</span>`;
-        
-        consoleOutput.appendChild(logElement);
-        
+
+        consoleContent.appendChild(logElement);
+
         // 自动滚动到底部
-        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        consoleContent.scrollTop = consoleContent.scrollHeight;
     },
-    
+
     clearLogs() {
         this.logs = [];
-        const consoleOutput = document.getElementById('consoleOutput');
-        if (consoleOutput) {
-            consoleOutput.innerHTML = '';
+        const consoleContent = document.getElementById('consoleContent');
+        if (consoleContent) {
+            consoleContent.innerHTML = '';
         }
         window.rLog('控制台已清空');
     }
