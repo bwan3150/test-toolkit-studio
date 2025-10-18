@@ -33,7 +33,7 @@ if not exist "%CARGO_TOML%" (
 )
 
 REM 使用 PowerShell 替换版本号
-powershell -Command "(Get-Content '%CARGO_TOML%') -replace '^version\s*=\s*\"[^\"]+\"', 'version = \"%PKG_VERSION%\"' | Set-Content '%CARGO_TOML%'"
+powershell -ExecutionPolicy Bypass -Command "$content = Get-Content '%CARGO_TOML%'; $content -replace '^version\s*=\s*\"[^\"]+\"', 'version = \"%PKG_VERSION%\"' | Set-Content '%CARGO_TOML%'"
 
 echo Building for Windows (win32)...
 

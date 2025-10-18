@@ -15,7 +15,7 @@ set OUTPUT_DIR=%~dp0..\resources\%PLATFORM%\toolkit-engine
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
 echo Syncing dependencies (including dev dependencies)...
-uv sync --group dev
+python -m uv sync --group dev
 if errorlevel 1 (
     echo Error: uv sync failed
     exit /b 1
