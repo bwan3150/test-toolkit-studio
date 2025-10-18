@@ -85,7 +85,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: false  # 不下载 LFS 大文件，从源代码重新构建
-          fetch-tags: true  # 获取 tag 信息，让 electron-builder 能检测到 git tag
 
       - name: 更新 package.json 版本号（仅本地）
         run: |
@@ -293,7 +292,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: false  # 不下载 LFS 大文件，从源代码重新构建
-          fetch-tags: true  # 获取 tag 信息，让 electron-builder 能检测到 git tag
 
       - name: 更新 package.json 版本号（仅本地）
         shell: pwsh
