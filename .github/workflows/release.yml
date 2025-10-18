@@ -20,6 +20,10 @@ on:
     tags:
       - 'v*.*.*'
 
+# 授予 GitHub Actions 写入权限以便提交 package.json 更新
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
   NODE_VERSION: '20'
@@ -54,6 +58,9 @@ jobs:
             VERSION=$(grep '"version"' package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
             TAG="manual-$VERSION"
           fi
+
+          # 确保 VERSION 不包含 'v' 前缀（安全检查）
+          VERSION=${VERSION#v}
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
