@@ -22,6 +22,7 @@ __pycache__/
 # build的配置文件留着
 build/*
 !build/*.plist
+!build/*.md
 !build/*.yml
 !build/*.json
 !build/*.yml

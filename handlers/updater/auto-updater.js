@@ -5,6 +5,7 @@ const { autoUpdater } = require('electron-updater');
 const { ipcMain, dialog } = require('electron');
 const log = require('electron-log');
 const Store = require('electron-store');
+const https = require('https');
 
 const store = new Store();
 
@@ -25,6 +26,36 @@ function setUpdateChannel() {
   const receiveBetaUpdates = store.get('receive_beta_updates', false);
   autoUpdater.allowPrerelease = receiveBetaUpdates;
   log.info(`更新频道设置为: ${receiveBetaUpdates ? 'beta' : 'latest'}`);
+}
+
+// 从 S3 获取 release notes
+function fetchReleaseNotes(version) {
+  return new Promise((resolve) => {
+    const url = `https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/release-notes/${version}.md`;
+
+    log.info(`尝试获取 Release Notes: ${url}`);
+
+    https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        log.warn(`Release Notes 不存在 (状态码: ${res.statusCode})`);
+        resolve(null);
+        return;
+      }
+
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        log.info('✅ 成功获取 Release Notes');
+        resolve(data);
+      });
+    }).on('error', (err) => {
+      log.error('获取 Release Notes 失败:', err.message);
+      resolve(null);
+    });
+  });
 }
 
 /**
@@ -106,16 +137,19 @@ function setupUpdateListeners() {
   });
 
   // 下载完成
-  autoUpdater.on('update-downloaded', (info) => {
+  autoUpdater.on('update-downloaded', async (info) => {
     log.info('更新下载完成，版本:', info.version);
     updateDownloaded = true;
     sendStatusToWindow('update-downloaded', info);
+
+    // 从 S3 获取 release notes
+    const releaseNotes = await fetchReleaseNotes(info.version);
 
     // 通知渲染进程显示更新提示弹窗
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-ready', {
         version: info.version,
-        releaseNotes: info.releaseNotes,
+        releaseNotes: releaseNotes,
         releaseDate: info.releaseDate
       });
     }
@@ -197,7 +231,7 @@ function registerUpdateHandlers() {
 /**
  * 模拟更新（用于测试）
  */
-function simulateUpdate() {
+async function simulateUpdate() {
   log.info('🧪 模拟更新：触发 update-ready 事件');
 
   // 获取当前版本
@@ -205,19 +239,20 @@ function simulateUpdate() {
   const parts = currentVersion.split('.');
   const nextVersion = `${parts[0]}.${parseInt(parts[1]) + 1}.0`;
 
+  // 从 S3 获取 release notes（真实测试）
+  log.info(`🧪 模拟版本: ${currentVersion} → ${nextVersion}`);
+  const releaseNotes = await fetchReleaseNotes(nextVersion);
+
+  if (releaseNotes) {
+    log.info('🧪 成功从 S3 获取 Release Notes');
+  } else {
+    log.warn('🧪 未找到 Release Notes，将显示默认文本');
+  }
+
   // 模拟更新信息
   const mockUpdateInfo = {
     version: nextVersion,
-    releaseNotes: `
-**New Features:**
-- Added automatic update functionality
-- Improved UI performance
-- Bug fixes and stability improvements
-
-**Technical Changes:**
-- Updated to Electron 38
-- Enhanced error handling
-    `.trim(),
+    releaseNotes: releaseNotes,
     releaseDate: new Date().toISOString()
   };
 
@@ -226,7 +261,6 @@ function simulateUpdate() {
 
   // 发送到渲染进程
   if (mainWindow && !mainWindow.isDestroyed()) {
-    log.info(`🧪 模拟新版本: ${currentVersion} → ${nextVersion}`);
     mainWindow.webContents.send('update-ready', mockUpdateInfo);
   }
 }

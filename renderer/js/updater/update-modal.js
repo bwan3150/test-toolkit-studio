@@ -107,14 +107,15 @@
     }
 
     // 更新发布说明
-    if (updateInfo.releaseNotes && updateNotesContent) {
-      updateNotesContent.innerHTML = formatReleaseNotes(updateInfo.releaseNotes);
+    if (updateNotesContent) {
+      if (updateInfo.releaseNotes) {
+        updateNotesContent.innerHTML = formatReleaseNotes(updateInfo.releaseNotes);
+      } else {
+        // 没有更新说明时显示默认文本
+        updateNotesContent.innerHTML = '<p style="color: var(--text-secondary); font-style: italic;">暂无版本更新描述</p>';
+      }
       if (updateNotesGroup) {
         updateNotesGroup.style.display = 'block';
-      }
-    } else {
-      if (updateNotesGroup) {
-        updateNotesGroup.style.display = 'none';
       }
     }
 

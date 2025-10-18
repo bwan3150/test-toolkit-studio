@@ -527,11 +527,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # 更新 package.json 版本号（tag 触发和手动触发都执行）
-  update-package:
-    name: 更新 package.json
+  # 后续处理：上传 Release Notes 和更新 package.json
+  post-build:
+    name: 上传 Release Notes 和更新版本号
     needs: [prepare, build-macos, build-windows]
     runs-on: ubuntu-latest
+    environment: aws-production
     if: |
       needs.build-macos.result == 'success' || needs.build-windows.result == 'success'
     permissions:
@@ -542,6 +543,23 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传 Release Notes 到 S3
+        if: github.event_name == 'push'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-2
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          if [ -f "build/RELEASE_NOTES.md" ]; then
+            echo "上传 RELEASE_NOTES.md 到 S3..."
+            aws s3 cp build/RELEASE_NOTES.md s3://toolkit-studio-updates/release-notes/${VERSION}.md --content-type "text/markdown"
+            echo "✅ Release notes 已上传: s3://toolkit-studio-updates/release-notes/${VERSION}.md"
+          else
+            echo "⚠️  未找到 build/RELEASE_NOTES.md，跳过上传"
+          fi
 
       - name: 更新 package.json 版本号
         run: |
