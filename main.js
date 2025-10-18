@@ -7,14 +7,31 @@ const { promisify } = require('util');
 const execPromise = promisify(exec);
 
 // 导入处理器模块
-const { registerAdbHandlers, getBuiltInAdbPath, getBuiltInScrcpyPath, getBuiltInStbPath } = require('./handlers/adb-handlers');
-const { registerWindowHandlers } = require('./handlers/window-handlers');
-const { registerStoreHandlers } = require('./handlers/store-handlers');
-const { registerOtherHandlers: registerMiscHandlers } = require('./handlers/other-handlers');
-const { registerLogcatHandlers } = require('./handlers/logcat-handlers');
-const { registerAuthHandlers } = require('./handlers/auth-handlers');
-const { registerProjectHandlers } = require('./handlers/project-handlers');
-const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/ios-handlers');
+// TKE 集成模块 - 所有与 TKE（Toolkit Engine）交互的底层功能
+const { registerAdbHandlers, getBuiltInScrcpyPath, getBuiltInStbPath, getTkePath, buildTkeAdbCommand } = require('./handlers/tke-integration/adb-handlers');
+const { registerLogcatHandlers } = require('./handlers/tke-integration/logcat-handlers');
+const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/tke-integration/ios-handlers');
+const { registerDeviceHandlers } = require('./handlers/tke-integration/device-handlers');
+const { registerControllerHandlers } = require('./handlers/tke-integration/controller-handlers');
+const { registerFetcherHandlers } = require('./handlers/tke-integration/fetcher-handlers');
+const { registerRecognizerHandlers } = require('./handlers/tke-integration/recognizer-handlers');
+const { registerParserHandlers } = require('./handlers/tke-integration/parser-handlers');
+const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-handlers');
+const { registerOcrHandlers } = require('./handlers/tke-integration/ocr-handlers');
+
+// Electron 核心模块 - Electron 应用的核心功能
+const { registerWindowHandlers } = require('./handlers/electron-core/window-handlers');
+const { registerStoreHandlers } = require('./handlers/electron-core/store-handlers');
+const { registerLogHandlers } = require('./handlers/electron-core/log-handlers');
+const { registerFilesystemHandlers } = require('./handlers/electron-core/filesystem-handlers');
+const { registerSystemHandlers } = require('./handlers/electron-core/system-handlers');
+
+// 项目管理模块
+const { registerProjectHandlers } = require('./handlers/project/project-handlers');
+
+// API 代理模块 - 与外部 API 服务交互
+const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
+const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
 
 // 全局变量
 let mainWindow;
@@ -34,10 +51,30 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       webSecurity: false,
-      devTools: false  // 彻底禁用开发者工具
+      devTools: false,  // 彻底禁用开发者工具
+      allowRunningInsecureContent: true  // 允许不安全的内容（HTTP请求）
     },
     icon: path.join(__dirname, 'assets', 'icon.png')
   });
+
+  // 禁用CSP（Content Security Policy）以允许外部API请求
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': ['default-src * \'unsafe-inline\' \'unsafe-eval\' data: blob:;']
+      }
+    });
+  });
+
+  // 设置代理（如果需要的话）- 确保可以访问外部API
+  // 允许所有HTTP/HTTPS请求
+  mainWindow.webContents.session.webRequest.onBeforeSendHeaders(
+    { urls: ['http://*/*', 'https://*/*'] },
+    (details, callback) => {
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
 
   // 加载主页面
   mainWindow.loadFile('renderer/html/index.html');
@@ -204,34 +241,68 @@ function createTray() {
 function registerAllHandlers() {
   try {
     console.log('开始注册IPC处理器...');
-    
+
+    // Electron 核心模块
     console.log('注册Store处理器...');
     registerStoreHandlers(app);
-    
-    console.log('注册ADB处理器...');
-    registerAdbHandlers(app);
-    
+
     console.log('注册窗口处理器...');
     registerWindowHandlers(mainWindow);
-    
-    console.log('注册其他处理器...');
-    registerMiscHandlers(app);
-    
+
+    console.log('注册日志处理器...');
+    registerLogHandlers(app);
+
+    console.log('注册文件系统处理器...');
+    registerFilesystemHandlers(app);
+
+    console.log('注册系统工具检查处理器...');
+    registerSystemHandlers(app);
+
+    // TKE 集成模块
+    console.log('注册ADB处理器...');
+    registerAdbHandlers(app);
+
     console.log('注册Logcat处理器...');
     registerLogcatHandlers(app, mainWindow);
-    
-    console.log('注册认证处理器...');
-    registerAuthHandlers();
-    
-    console.log('注册项目处理器...');
-    registerProjectHandlers();
-    
+
+    console.log('注册设备管理处理器...');
+    registerDeviceHandlers(app);
+
     console.log('注册iOS处理器...');
     registerIosHandlers(app);
-    
-    // 注册其他IPC处理器
+
+    console.log('注册TKE Controller处理器...');
+    registerControllerHandlers(app);
+
+    console.log('注册TKE Fetcher处理器...');
+    registerFetcherHandlers(app);
+
+    console.log('注册TKE Recognizer处理器...');
+    registerRecognizerHandlers(app);
+
+    console.log('注册TKE Parser处理器...');
+    registerParserHandlers(app);
+
+    console.log('注册TKE Runner处理器...');
+    registerRunnerHandlers(app);
+
+    console.log('注册TKE OCR处理器...');
+    registerOcrHandlers(app);
+
+    // 项目管理模块
+    console.log('注册项目处理器...');
+    registerProjectHandlers();
+
+    // API 代理模块
+    console.log('注册认证处理器...');
+    registerAuthHandlers();
+
+    console.log('注册Bug Analysis API代理处理器...');
+    registerBugAnalysisProxyHandlers();
+
+    // 注册其他IPC处理器（scrcpy, STB, screenshot等）
     registerOtherHandlers();
-    
+
     console.log('所有IPC处理器注册完成');
   } catch (error) {
     console.error('注册IPC处理器失败:', error);
@@ -269,7 +340,7 @@ function registerOtherHandlers() {
     };
     const color = levelColors[level] || levelColors.log;
     const reset = '\x1b[0m';
-    
+
     console.log(`${color}[Renderer ${level.toUpperCase()}] ${timestamp}:${reset} ${message}`);
   });
 
@@ -534,10 +605,10 @@ function registerOtherHandlers() {
   // 截图功能
   ipcMain.handle('take-screenshot', async (event, deviceId) => {
     try {
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'Toolkit Engine未找到' };
       }
 
       if (!deviceId) {
@@ -557,15 +628,15 @@ function registerOtherHandlers() {
       const remotePath = '/sdcard/screenshot.png';
 
       // 在设备上截图
-      const screenshotCommand = `"${adbPath}" -s ${deviceId} shell screencap -p ${remotePath}`;
+      const screenshotCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'screencap', '-p', remotePath]);
       await execPromise(screenshotCommand);
 
       // 拉取截图到本地
-      const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
+      const pullCommand = buildTkeAdbCommand(tkePath, deviceId, ['pull', remotePath, `"${localPath}"`]);
       await execPromise(pullCommand);
 
       // 删除设备上的截图
-      const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
+      const deleteCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'rm', remotePath]);
       await execPromise(deleteCommand);
 
       return { 
@@ -584,10 +655,10 @@ function registerOtherHandlers() {
   // 录屏功能
   ipcMain.handle('start-recording', async (event, deviceId, duration = 180) => {
     try {
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'Toolkit Engine未找到' };
       }
 
       if (!deviceId) {
@@ -607,18 +678,18 @@ function registerOtherHandlers() {
       const remotePath = '/sdcard/recording.mp4';
 
       // 开始录屏
-      const recordCommand = `"${adbPath}" -s ${deviceId} shell screenrecord --time-limit ${duration} ${remotePath}`;
+      const recordCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'screenrecord', '--time-limit', duration.toString(), remotePath]);
       
       // 异步执行录屏命令
       exec(recordCommand, async (error) => {
         if (!error) {
           // 录屏完成，拉取文件
           try {
-            const pullCommand = `"${adbPath}" -s ${deviceId} pull ${remotePath} "${localPath}"`;
+            const pullCommand = buildTkeAdbCommand(tkePath, deviceId, ['pull', remotePath, `"${localPath}"`]);
             await execPromise(pullCommand);
 
             // 删除设备上的录屏文件
-            const deleteCommand = `"${adbPath}" -s ${deviceId} shell rm ${remotePath}`;
+            const deleteCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'rm', remotePath]);
             await execPromise(deleteCommand);
 
             // 通知前端录屏完成
@@ -658,10 +729,10 @@ function registerOtherHandlers() {
   // 停止录屏
   ipcMain.handle('stop-recording', async (event, deviceId) => {
     try {
-      const adbPath = getBuiltInAdbPath(app);
+      const tkePath = getTkePath(app);
       
-      if (!fs.existsSync(adbPath)) {
-        return { success: false, error: '内置Android SDK未找到' };
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: 'Toolkit Engine未找到' };
       }
 
       if (!deviceId) {
@@ -669,7 +740,7 @@ function registerOtherHandlers() {
       }
 
       // 停止录屏（通过杀死screenrecord进程）
-      const stopCommand = `"${adbPath}" -s ${deviceId} shell pkill -2 screenrecord`;
+      const stopCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', 'pkill', '-2', 'screenrecord']);
       await execPromise(stopCommand);
 
       return { 
@@ -680,8 +751,8 @@ function registerOtherHandlers() {
     } catch (error) {
       // pkill可能不存在，尝试其他方法
       try {
-        const adbPath = getBuiltInAdbPath(app);
-        const killCommand = `"${adbPath}" -s ${deviceId} shell "ps | grep screenrecord | awk '{print $2}' | xargs kill -2"`;
+        const tkePath = getTkePath(app);
+        const killCommand = buildTkeAdbCommand(tkePath, deviceId, ['shell', '"ps | grep screenrecord | awk \'{print $2}\' | xargs kill -2"']);
         await execPromise(killCommand);
         return { success: true, message: '录屏已停止' };
       } catch (killError) {
@@ -707,23 +778,24 @@ function registerOtherHandlers() {
 // 初始化环境
 function initializeEnvironment() {
   // 输出各个工具的路径信息
-  console.log('ADB路径:', getBuiltInAdbPath(app));
+  console.log('TKE路径:', getTkePath(app));
   console.log('Scrcpy路径:', getBuiltInScrcpyPath(app));
   console.log('STB路径:', getBuiltInStbPath(app));
   
   // 检查工具是否存在
-  const adbExists = fs.existsSync(getBuiltInAdbPath(app));
+  const tkeExists = fs.existsSync(getTkePath(app));
   const scrcpyExists = fs.existsSync(getBuiltInScrcpyPath(app));
   const stbExists = fs.existsSync(getBuiltInStbPath(app));
   
-  console.log('ADB存在:', adbExists);
+  console.log('TKE存在:', tkeExists);
   console.log('Scrcpy存在:', scrcpyExists);
   console.log('STB存在:', stbExists);
   
   // 启动ADB服务器
-  if (adbExists) {
-    const adbPath = getBuiltInAdbPath(app);
-    exec(`"${adbPath}" start-server`, (error, stdout, stderr) => {
+  if (tkeExists) {
+    const tkePath = getTkePath(app);
+    const startServerCommand = buildTkeAdbCommand(tkePath, null, ['start-server']);
+    exec(startServerCommand, (error, stdout, stderr) => {
       if (error) {
         console.error('启动ADB服务器失败:', error);
       } else {

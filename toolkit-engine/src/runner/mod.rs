@@ -12,7 +12,7 @@ use tokio::signal;
 pub struct Runner {
     project_path: PathBuf,
     device_id: Option<String>,
-    parser: ScriptParser,
+    pub parser: ScriptParser,  // 为 Toolkit Studio 开放访问
     interpreter: Option<ScriptInterpreter>,
     is_running: bool,
     should_stop: bool,

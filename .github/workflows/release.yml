@@ -1,0 +1,446 @@
+name: Build Release
+
+# 触发条件: 手动触发或推送 tag
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: 0.4.2)'
+        required: false
+        default: ''
+      build_mac:
+        description: '构建 macOS 版本'
+        type: boolean
+        default: true
+      build_windows:
+        description: '构建 Windows 版本'
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+  RUST_VERSION: 'stable'
+
+jobs:
+  # 准备工作: 获取版本信息
+  prepare:
+    name: 准备构建信息
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      date: ${{ steps.version.outputs.date }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 获取版本号
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            TAG=${GITHUB_REF#refs/tags/}
+          elif [[ "${{ github.event.inputs.version }}" != "" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v$VERSION"
+          else
+            VERSION=$(grep '"version"' package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+            TAG="manual-$VERSION"
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+          echo "📦 版本: $VERSION"
+          echo "🏷️  标签: $TAG"
+
+  # macOS 构建
+  build-macos:
+    name: 构建 macOS 应用
+    needs: prepare
+    runs-on: macos-latest
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_mac == 'true')
+    steps:
+      - name: 检出代码（跳过 LFS 大文件）
+        uses: actions/checkout@v4
+        with:
+          lfs: false  # 不下载 LFS 大文件，从源代码重新构建
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      # 设置 Rust 环境
+      - name: 设置 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      # 缓存 Cargo
+      - name: 缓存 Cargo 依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            toolkit-engine/target
+            tester-ai/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # 设置 Python 环境 (用于 opencv-matcher)
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # 安装 uv (Python 包管理器)
+      - name: 安装 uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      # 安装 Node.js 依赖
+      - name: 安装 Node.js 依赖
+        run: |
+          npm install
+          npm audit fix || true
+
+      # 构建 toolkit-engine (TKE)
+      - name: 构建 Toolkit Engine (Rust)
+        working-directory: toolkit-engine
+        run: |
+          echo "=== 构建 TKE for macOS ==="
+
+          # 同步版本号
+          PKG_VERSION=$(grep '"version"' ../package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+          echo "版本号: $PKG_VERSION"
+          sed -i '' -E "s/^version *= *\"[^\"]+\"/version = \"$PKG_VERSION\"/" Cargo.toml
+
+          # 构建
+          cargo build --release
+
+          # 复制到资源目录
+          mkdir -p ../resources/darwin/toolkit-engine
+          cp target/release/tke ../resources/darwin/toolkit-engine/tke
+          chmod +x ../resources/darwin/toolkit-engine/tke
+
+          echo "✅ TKE 构建完成"
+          ls -lh ../resources/darwin/toolkit-engine/tke
+
+      # 构建 opencv-matcher (Python)
+      - name: 构建 OpenCV Matcher (Python)
+        working-directory: opencv-matcher
+        run: |
+          echo "=== 构建 tke-opencv for macOS ==="
+
+          # 同步依赖并打包
+          uv sync --group dev
+          .venv/bin/pyinstaller \
+            --onefile \
+            --name tke-opencv \
+            --clean \
+            --noconfirm \
+            opencv_matcher.py
+
+          # 复制到资源目录
+          mkdir -p ../resources/darwin/toolkit-engine
+          cp dist/tke-opencv ../resources/darwin/toolkit-engine/tke-opencv
+          chmod +x ../resources/darwin/toolkit-engine/tke-opencv
+
+          echo "✅ tke-opencv 构建完成"
+          ls -lh ../resources/darwin/toolkit-engine/tke-opencv
+
+      # 构建 tester-ai (Rust)
+      - name: 构建 AI Tester (Rust)
+        working-directory: tester-ai
+        run: |
+          echo "=== 构建 tester-ai for macOS ==="
+
+          # 同步版本号
+          PKG_VERSION=$(grep '"version"' ../package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+          sed -i '' -E "s/^version *= *\"[^\"]+\"/version = \"$PKG_VERSION\"/" Cargo.toml
+
+          # 构建
+          cargo build --release
+
+          # 复制到资源目录
+          mkdir -p ../resources/darwin/tester-ai
+          cp target/release/tester-ai ../resources/darwin/tester-ai/tester-ai
+          chmod +x ../resources/darwin/tester-ai/tester-ai
+
+          echo "✅ tester-ai 构建完成"
+          ls -lh ../resources/darwin/tester-ai/tester-ai
+
+      # 验证所有二进制文件
+      - name: 验证构建产物
+        run: |
+          echo "=== 验证构建产物 ==="
+
+          echo "📦 TKE:"
+          resources/darwin/toolkit-engine/tke --version || echo "⚠️  tke --version 失败"
+
+          echo "📦 tke-opencv:"
+          resources/darwin/toolkit-engine/tke-opencv --version || echo "⚠️  tke-opencv --version 失败"
+
+          echo "📦 tester-ai:"
+          resources/darwin/tester-ai/tester-ai --version || resources/darwin/tester-ai/tester-ai --help || echo "⚠️  tester-ai 验证失败"
+
+          echo "✅ 所有二进制文件验证完成"
+
+      # 构建 Electron 应用 (macOS)
+      - name: 构建 Electron 应用
+        run: |
+          echo "=== 构建 Electron 应用 for macOS ==="
+          npm run build-mac
+
+          echo "✅ Electron 应用构建完成"
+          ls -lh dist/
+
+      # 重命名应用
+      - name: 重命名应用
+        run: |
+          mkdir -p release
+
+          # 查找生成的 DMG 或 APP
+          if ls dist/*.dmg 1> /dev/null 2>&1; then
+            DMG_FILE=$(ls dist/*.dmg | head -n 1)
+            cp "$DMG_FILE" "release/Toolkit Studio ${{ needs.prepare.outputs.tag }} macOS.dmg"
+            echo "✅ 找到 DMG: $DMG_FILE"
+          elif ls dist/mac/*.app 1> /dev/null 2>&1; then
+            APP_FILE=$(ls -d dist/mac/*.app | head -n 1)
+            # 压缩为 zip
+            cd dist/mac
+            zip -r "../../release/Toolkit Studio ${{ needs.prepare.outputs.tag }} macOS.zip" *.app
+            cd ../..
+            echo "✅ 找到 APP，已压缩为 ZIP"
+          else
+            echo "❌ 未找到 DMG 或 APP 文件"
+            ls -R dist/
+            exit 1
+          fi
+
+      # 上传到 Artifacts
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: release/*
+          retention-days: 30
+
+  # Windows 构建
+  build-windows:
+    name: 构建 Windows 应用
+    needs: prepare
+    runs-on: windows-latest
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.build_windows == 'true')
+    steps:
+      - name: 检出代码（跳过 LFS 大文件）
+        uses: actions/checkout@v4
+        with:
+          lfs: false  # 不下载 LFS 大文件，从源代码重新构建
+
+      # 设置 Node.js 环境
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      # 设置 Rust 环境
+      - name: 设置 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      # 缓存 Cargo
+      - name: 缓存 Cargo 依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            toolkit-engine/target
+            tester-ai/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # 设置 Python 环境
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # 安装 uv (Windows)
+      - name: 安装 uv
+        shell: pwsh
+        run: |
+          irm https://astral.sh/uv/install.ps1 | iex
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # 安装 Node.js 依赖
+      - name: 安装 Node.js 依赖
+        shell: cmd
+        run: |
+          npm install
+          npm audit fix
+
+      # 构建 toolkit-engine (TKE)
+      - name: 构建 Toolkit Engine (Rust)
+        shell: cmd
+        working-directory: toolkit-engine
+        run: |
+          echo === 构建 TKE for Windows ===
+
+          REM 构建
+          cargo build --release
+
+          REM 创建目标目录
+          if not exist "..\resources\win32\toolkit-engine" mkdir "..\resources\win32\toolkit-engine"
+
+          REM 复制到资源目录
+          copy /Y "target\release\tke.exe" "..\resources\win32\toolkit-engine\tke.exe"
+
+          echo ✅ TKE 构建完成
+          dir "..\resources\win32\toolkit-engine\tke.exe"
+
+      # 构建 opencv-matcher (Python)
+      - name: 构建 OpenCV Matcher (Python)
+        shell: cmd
+        working-directory: opencv-matcher
+        run: |
+          echo === 构建 tke-opencv for Windows ===
+
+          REM 同步依赖
+          python -m uv sync --group dev
+
+          REM 打包
+          .venv\Scripts\pyinstaller --onefile --name tke-opencv --clean --noconfirm opencv_matcher.py
+
+          REM 创建目标目录
+          if not exist "..\resources\win32\toolkit-engine" mkdir "..\resources\win32\toolkit-engine"
+
+          REM 复制到资源目录
+          copy /Y "dist\tke-opencv.exe" "..\resources\win32\toolkit-engine\tke-opencv.exe"
+
+          echo ✅ tke-opencv 构建完成
+          dir "..\resources\win32\toolkit-engine\tke-opencv.exe"
+
+      # 构建 tester-ai (Rust)
+      - name: 构建 AI Tester (Rust)
+        shell: cmd
+        working-directory: tester-ai
+        run: |
+          echo === 构建 tester-ai for Windows ===
+
+          REM 构建
+          cargo build --release
+
+          REM 创建目标目录
+          if not exist "..\resources\win32\tester-ai" mkdir "..\resources\win32\tester-ai"
+
+          REM 复制到资源目录
+          copy /Y "target\release\tester-ai.exe" "..\resources\win32\tester-ai\tester-ai.exe"
+
+          echo ✅ tester-ai 构建完成
+          dir "..\resources\win32\tester-ai\tester-ai.exe"
+
+      # 验证所有二进制文件
+      - name: 验证构建产物
+        shell: cmd
+        run: |
+          echo === 验证构建产物 ===
+
+          echo 📦 TKE:
+          resources\win32\toolkit-engine\tke.exe --version
+
+          echo 📦 tke-opencv:
+          resources\win32\toolkit-engine\tke-opencv.exe --version
+
+          echo 📦 tester-ai:
+          resources\win32\tester-ai\tester-ai.exe --version
+
+          echo ✅ 所有二进制文件验证完成
+
+      # 构建 Electron 应用 (Windows)
+      - name: 构建 Electron 应用
+        shell: cmd
+        run: |
+          echo === 构建 Electron 应用 for Windows ===
+          npm run build-win
+
+          echo ✅ Electron 应用构建完成
+          dir dist\
+
+      # 重命名应用
+      - name: 重命名应用
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release
+
+          # 查找生成的安装包
+          $exeFile = Get-ChildItem -Path dist -Filter "*.exe" -Recurse | Select-Object -First 1
+          if ($exeFile) {
+            Copy-Item -Path $exeFile.FullName -Destination "release/Toolkit Studio ${{ needs.prepare.outputs.tag }} Windows.exe"
+            Write-Host "✅ 找到安装包: $($exeFile.FullName)"
+          } else {
+            Write-Host "❌ 未找到安装包"
+            Get-ChildItem -Path dist -Recurse
+            exit 1
+          }
+
+      # 上传到 Artifacts
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: release/*
+          retention-days: 30
+
+  # 创建 GitHub Release
+  create-release:
+    name: 创建 GitHub Release
+    needs: [prepare, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (needs.build-macos.result == 'success' || needs.build-windows.result == 'success') &&
+      (startsWith(github.ref, 'refs/tags/') || github.event.inputs.version != '')
+    permissions:
+      contents: write
+    steps:
+      - name: 下载所有 Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 列出所有文件
+        run: |
+          echo "📦 所有构建产物:"
+          find artifacts -type f -exec ls -lh {} \;
+
+      - name: 创建 Release 草稿
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Toolkit Studio ${{ needs.prepare.outputs.tag }}
+          generate_release_notes: true
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

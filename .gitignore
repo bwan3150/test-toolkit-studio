@@ -5,6 +5,19 @@ package-lock.json
 dist/
 out/
 toolkit-engine/target/
+tester-ai/target/
+
+# Python (opencv-matcher)
+opencv-matcher/.venv/
+opencv-matcher/build/
+opencv-matcher/dist/
+opencv-matcher/*.spec
+opencv-matcher/.python-version
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
 # build的配置文件留着
 build/*
@@ -43,6 +56,11 @@ pids
 
 # 测试项目
 test-projects/
+projects/
+tester-ai/examples/
+
+# 本地
+local/
 
 # Electron
 electron-builder.yml

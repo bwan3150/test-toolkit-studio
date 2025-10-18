@@ -1,25 +1,25 @@
 // Controller模块 - 负责ADB控制
 
-use crate::{Result, TkeError, DeviceInfo};
+use crate::{Result, TkeError, DeviceInfo, AdbManager};
 use std::path::PathBuf;
 use std::process::Command;
-use tracing::{debug, info, error};
-use anyhow::Context;
 
 pub struct Controller {
     device_id: Option<String>,
-    adb_path: PathBuf,
+    adb_manager: AdbManager,
 }
 
 impl Controller {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        // 查找ADB路径
-        let adb_path = which::which("adb")
-            .map_err(|_| TkeError::AdbError("ADB未找到，请确保ADB已安装并在PATH中".to_string()))?;
-        
+        // 使用 AdbManager 来获取 ADB (静默模式)
+        let adb_manager = AdbManager::new()?;
+
+        // 验证 ADB 可用性
+        adb_manager.verify_adb()?;
+
         Ok(Self {
             device_id,
-            adb_path,
+            adb_manager,
         })
     }
     
@@ -30,7 +30,7 @@ impl Controller {
     
     // 获取连接的设备列表
     pub fn get_devices(&self) -> Result<Vec<String>> {
-        let output = Command::new(&self.adb_path)
+        let output = Command::new(self.adb_manager.adb_path())
             .arg("devices")
             .output()
             .map_err(|e| TkeError::AdbError(format!("执行adb devices失败: {}", e)))?;
@@ -65,8 +65,7 @@ impl Controller {
         
         // 获取UI树
         self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
-        
-        info!("UI状态已捕获并保存到workarea");
+
         Ok(())
     }
     
@@ -86,8 +85,7 @@ impl Controller {
         
         // 删除设备上的临时文件
         self.run_adb_command(&["shell", "rm", temp_path])?;
-        
-        debug!("截图已保存到: {:?}", output_path);
+
         Ok(())
     }
     
@@ -107,8 +105,7 @@ impl Controller {
         
         // 删除设备上的临时文件
         self.run_adb_command(&["shell", "rm", temp_path])?;
-        
-        debug!("UI树已保存到: {:?}", output_path);
+
         Ok(())
     }
     
@@ -117,8 +114,7 @@ impl Controller {
         let temp_path = "/sdcard/ui_dump.xml";
         
         // 在设备上dump UI - 忽略输出，因为有些设备会返回非标准输出
-        let dump_output = self.run_adb_command_output(&["shell", "uiautomator", "dump", temp_path])?;
-        debug!("uiautomator dump输出: {}", dump_output);
+        let _dump_output = self.run_adb_command_output(&["shell", "uiautomator", "dump", temp_path])?;
         
         // 等待一下让文件写入完成
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -128,20 +124,18 @@ impl Controller {
         
         // 删除设备上的临时文件（忽略错误）
         let _ = self.run_adb_command(&["shell", "rm", temp_path]);
-        
-        debug!("获取UI XML内容，长度: {}", xml_content.len());
+
         Ok(xml_content)
     }
-    
+
     // 指令2: 转发ADB基础指令
-    
+
     // 点击坐标
     pub fn tap(&self, x: i32, y: i32) -> Result<()> {
         self.run_adb_command(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
-        debug!("点击坐标: ({}, {})", x, y);
         Ok(())
     }
-    
+
     // 滑动
     pub fn swipe(&self, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<()> {
         self.run_adb_command(&[
@@ -150,71 +144,165 @@ impl Controller {
             &x2.to_string(), &y2.to_string(),
             &duration_ms.to_string()
         ])?;
-        debug!("滑动: ({}, {}) -> ({}, {}) 持续{}ms", x1, y1, x2, y2, duration_ms);
         Ok(())
     }
-    
+
     // 长按
     pub fn press(&self, x: i32, y: i32, duration_ms: u32) -> Result<()> {
         // 使用swipe模拟长按
         self.swipe(x, y, x, y, duration_ms)?;
-        debug!("长按坐标: ({}, {}) 持续{}ms", x, y, duration_ms);
         Ok(())
     }
-    
+
     // 输入文本
     pub fn input_text(&self, text: &str) -> Result<()> {
+        // 保存当前输入法
+        let current_ime = self.get_current_ime().unwrap_or_default();
+
+        // 判断文本类型并切换输入法
+        if self.is_chinese_text(text) {
+            // 需要中文输入法 - 切换到中文输入法
+            self.switch_to_chinese_ime()?;
+        } else {
+            // 需要英文输入法 - 切换到英文输入法（或关闭中文输入法）
+            self.switch_to_english_ime()?;
+        }
+
+        // 等待输入法切换完成
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
         // 转义特殊字符
         let escaped = text
             .replace("\"", "\\\"")
             .replace("'", "\\'")
             .replace(" ", "%s");
-        
+
         self.run_adb_command(&["shell", "input", "text", &escaped])?;
-        debug!("输入文本: {}", text);
+
+        // 恢复原来的输入法
+        if !current_ime.is_empty() && !current_ime.contains("not found") {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let _ = self.run_adb_command(&["shell", "ime", "set", &current_ime]);
+        }
+
+        // 不隐藏键盘 - 让后续操作（如点击按钮）自然隐藏，避免在某些页面触发返回
+
         Ok(())
     }
-    
+
+    // 获取当前输入法
+    fn get_current_ime(&self) -> Result<String> {
+        let output = self.run_adb_command_output(&["shell", "settings", "get", "secure", "default_input_method"])?;
+        Ok(output.trim().to_string())
+    }
+
+    // 判断文本是否包含中文
+    fn is_chinese_text(&self, text: &str) -> bool {
+        text.chars().any(|c| {
+            // 判断字符是否在中文 Unicode 范围内
+            matches!(c, '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' | '\u{20000}'..='\u{2A6DF}')
+        })
+    }
+
+    // 切换到英文输入法
+    fn switch_to_english_ime(&self) -> Result<()> {
+        // 获取设备上可用的输入法列表
+        let ime_list = self.run_adb_command_output(&["shell", "ime", "list", "-s"]).unwrap_or_default();
+
+        // 优先使用 Appium Unicode IME（最可靠，专门用于自动化测试）
+        if ime_list.contains("io.appium.settings/.UnicodeIME") {
+            if self.run_adb_command(&["shell", "ime", "set", "io.appium.settings/.UnicodeIME"]).is_ok() {
+                return Ok(());
+            }
+        }
+
+        // 尝试切换到 Google 输入法（支持英文）
+        let english_imes = [
+            "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME",
+            "com.android.inputmethod.latin/.LatinIME",
+            "com.android.inputmethod/.LatinIME",
+        ];
+
+        for ime in &english_imes {
+            if ime_list.contains(ime) {
+                if self.run_adb_command(&["shell", "ime", "set", ime]).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // 切换到中文输入法
+    fn switch_to_chinese_ime(&self) -> Result<()> {
+        // 获取设备上可用的输入法列表
+        let ime_list = self.run_adb_command_output(&["shell", "ime", "list", "-s"]).unwrap_or_default();
+
+        // 尝试切换到中文输入法，按优先级尝试
+        let chinese_imes = [
+            "com.netease.nie.yosemite/.ime.ImeService",  // 网易输入法
+            "com.google.android.inputmethod.pinyin/.PinyinIME",  // Google 拼音
+            "com.sohu.inputmethod.sogou/.SogouIME",  // 搜狗
+            "com.baidu.input/.ImeService",  // 百度
+            "com.iflytek.inputmethod/.FlyIME",  // 讯飞
+        ];
+
+        for ime in &chinese_imes {
+            if ime_list.contains(ime) {
+                if self.run_adb_command(&["shell", "ime", "set", ime]).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     // 按键事件
     pub fn key_event(&self, key_code: &str) -> Result<()> {
         self.run_adb_command(&["shell", "input", "keyevent", key_code])?;
-        debug!("按键事件: {}", key_code);
         Ok(())
     }
-    
+
     // 返回键
     pub fn back(&self) -> Result<()> {
         self.key_event("KEYCODE_BACK")
     }
-    
+
     // 回到主屏
     pub fn home(&self) -> Result<()> {
         self.key_event("KEYCODE_HOME")
     }
-    
+
     // 启动应用
     pub fn launch_app(&self, package: &str, activity: &str) -> Result<()> {
         let component = format!("{}/{}", package, activity);
         self.run_adb_command(&["shell", "am", "start", "-n", &component])?;
-        info!("启动应用: {}", component);
         Ok(())
     }
-    
+
     // 停止应用
     pub fn stop_app(&self, package: &str) -> Result<()> {
         self.run_adb_command(&["shell", "am", "force-stop", package])?;
-        info!("停止应用: {}", package);
         Ok(())
     }
     
     // 清理输入框
     pub fn clear_input(&self) -> Result<()> {
-        // 移到行尾
-        self.key_event("KEYCODE_MOVE_END")?;
-        // 全选并删除
-        for _ in 0..50 {
+        // 简单粗暴的方法：向前删除20次，向后删除20次
+        // 这样无论光标在哪个位置都能清空内容
+
+        // 向前删除 20 次 (KEYCODE_DEL = 向前删除，相当于 Backspace)
+        for _ in 0..20 {
             self.key_event("KEYCODE_DEL")?;
         }
+
+        // 向后删除 20 次 (KEYCODE_FORWARD_DEL = 向后删除，相当于 Delete)
+        for _ in 0..20 {
+            self.key_event("KEYCODE_FORWARD_DEL")?;
+        }
+
         Ok(())
     }
     
@@ -267,7 +355,7 @@ impl Controller {
     
     // 执行ADB命令
     fn run_adb_command(&self, args: &[&str]) -> Result<()> {
-        let mut cmd = Command::new(&self.adb_path);
+        let mut cmd = Command::new(self.adb_manager.adb_path());
         
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {
@@ -289,7 +377,7 @@ impl Controller {
     
     // 执行ADB命令并获取输出
     fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
-        let mut cmd = Command::new(&self.adb_path);
+        let mut cmd = Command::new(self.adb_manager.adb_path());
         
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {

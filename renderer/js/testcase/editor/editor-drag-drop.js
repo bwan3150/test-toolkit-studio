@@ -98,20 +98,39 @@ const EditorDragDrop = {
             if (textData && this.buffer) {
                 // 通过TKE缓冲区更新块编辑器内容
                 window.rLog(`🔧 块编辑器拖拽更新: 命令${commandIndex}, 参数${paramName}, 值${textData}`);
-                
-                // 构造更新后的命令行（临时实现，理想情况下TKE应提供接口）
-                const updatedLine = this.constructUpdatedCommandLine(commandIndex, paramName, textData);
-                
-                if (updatedLine) {
-                    // 通过缓冲区更新内容
-                    await this.buffer.updateFromBlocks({
-                        commandIndex: commandIndex,
-                        updatedLine: updatedLine
-                    });
-                    
+
+                // 获取当前内容
+                const content = this.buffer.getRawContent();
+                const lines = content.split('\n');
+
+                // 找到目标命令行并更新
+                let currentCommandIndex = -1;
+                let updated = false;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (this.isCommandLine(line)) {
+                        currentCommandIndex++;
+                        if (currentCommandIndex === commandIndex) {
+                            // 更新这一行
+                            const updatedLine = this.updateCommandLineParameter(lines[i], paramName, textData);
+                            if (updatedLine) {
+                                lines[i] = updatedLine;
+                                updated = true;
+                                window.rLog(`✅ 更新命令行 ${i}: ${updatedLine}`);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (updated) {
+                    // 更新buffer内容
+                    const newContent = lines.join('\n');
+                    await this.buffer.updateContent(newContent);
                     window.rLog('✅ 块编辑器参数更新完成');
                 } else {
-                    window.rError('❌ 构造更新命令行失败');
+                    window.rError('❌ 未找到目标命令行');
                 }
             } else {
                 window.rError(`❌ 块编辑器未获取到拖拽数据或缓冲区未初始化，textData: ${textData}, buffer: ${!!this.buffer}`);

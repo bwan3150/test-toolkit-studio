@@ -315,8 +315,25 @@ class EditorManager {
     // 设置测试运行状态
     setTestRunning(isRunning, clearHighlight = false) {
         const activeEditor = this.getActiveEditor();
+        window.rLog('EditorManager.setTestRunning 调用:', {
+            isRunning,
+            clearHighlight,
+            activeTabId: this.activeTabId,
+            hasActiveEditor: !!activeEditor,
+            activeEditorType: activeEditor ? activeEditor.constructor.name : 'null',
+            hasSetTestRunning: activeEditor ? typeof activeEditor.setTestRunning : 'no editor'
+        });
+        
         if (activeEditor) {
-            activeEditor.setTestRunning(isRunning, clearHighlight);
+            if (typeof activeEditor.setTestRunning === 'function') {
+                activeEditor.setTestRunning(isRunning, clearHighlight);
+            } else {
+                window.rError('activeEditor 没有 setTestRunning 方法!', {
+                    editorMethods: Object.getOwnPropertyNames(Object.getPrototypeOf(activeEditor))
+                });
+            }
+        } else {
+            window.rWarn('没有活动的编辑器');
         }
     }
     
@@ -432,15 +449,25 @@ let editorManagerInstance = null;
 function initializeEditorManager() {
     if (!editorManagerInstance) {
         editorManagerInstance = new EditorManager();
-        
+
         // 全局引用
         window.EditorManager = editorManagerInstance;
-        
+
         // 更新全局AppGlobals的编辑器引用 - 直接使用EditorManager
-        window.AppGlobals.setCodeEditor(editorManagerInstance);
-        
+        // 添加防御性检查
+        if (window.AppGlobals && typeof window.AppGlobals.setCodeEditor === 'function') {
+            window.AppGlobals.setCodeEditor(editorManagerInstance);
+        } else {
+            window.rError('❌ AppGlobals 未定义或 setCodeEditor 方法不存在', {
+                hasAppGlobals: !!window.AppGlobals,
+                AppGlobalsType: typeof window.AppGlobals,
+                hasSetCodeEditor: window.AppGlobals ? typeof window.AppGlobals.setCodeEditor : 'N/A'
+            });
+            throw new Error('AppGlobals 未正确初始化');
+        }
+
         window.rLog('编辑器管理器初始化完成');
-        
+
         // 初始化后立即加载字体设置
         setTimeout(() => {
             if (window.SettingsModule && window.SettingsModule.loadEditorFontSettings) {
@@ -448,7 +475,7 @@ function initializeEditorManager() {
             }
         }, 100);
     }
-    
+
     return editorManagerInstance;
 }
 

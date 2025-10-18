@@ -233,19 +233,19 @@ function initializeTabSwitching() {
 // 初始化底部面板显示
 function initializeBottomPanelDisplay() {
     const testcaseBottomPanel = document.querySelector('#testcasePage .bottom-panel');
-    const consoleOutput = document.querySelector('#testcasePage #consoleOutput');
-    
-    if (testcaseBottomPanel && consoleOutput) {
+    const consoleContent = document.querySelector('#testcasePage #consoleContent');
+
+    if (testcaseBottomPanel && consoleContent) {
         // 确保面板可见
         testcaseBottomPanel.style.display = 'block';
-        
+
         // 设置初始高度（如果需要）
         if (!testcaseBottomPanel.style.height) {
             testcaseBottomPanel.style.height = '200px';
         }
-        
+
         // 确保控制台输出区域正确显示
-        consoleOutput.style.display = 'block';
+        consoleContent.style.display = 'block';
         
         // 触发重新计算布局
         window.dispatchEvent(new Event('resize'));
@@ -274,24 +274,24 @@ const ConsoleManager = {
     },
     
     updateConsoleUI(log) {
-        const consoleOutput = document.getElementById('consoleOutput');
-        if (!consoleOutput) return;
-        
+        const consoleContent = document.getElementById('consoleContent');
+        if (!consoleContent) return;
+
         const logElement = document.createElement('div');
         logElement.className = `console-log console-${log.type}`;
         logElement.innerHTML = `<span class="timestamp">[${log.timestamp}]</span> <span class="message">${log.message}</span>`;
-        
-        consoleOutput.appendChild(logElement);
-        
+
+        consoleContent.appendChild(logElement);
+
         // 自动滚动到底部
-        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        consoleContent.scrollTop = consoleContent.scrollHeight;
     },
-    
+
     clearLogs() {
         this.logs = [];
-        const consoleOutput = document.getElementById('consoleOutput');
-        if (consoleOutput) {
-            consoleOutput.innerHTML = '';
+        const consoleContent = document.getElementById('consoleContent');
+        if (consoleContent) {
+            consoleContent.innerHTML = '';
         }
         window.rLog('控制台已清空');
     }
@@ -364,12 +364,57 @@ window.TestcaseController = {
         }
     },
     
-    // 运行测试 - 委托给 TKS 集成模块
+    // 运行测试 - 直接调用 IPC handler
     runCurrentTest: async () => {
-        if (window.TKSIntegrationTKEModule) {
-            return await window.TKSIntegrationTKEModule.runCurrentTest();
-        } else if (window.TKSIntegrationModule) {
-            return await window.TKSIntegrationModule.runCurrentTest();
+        try {
+            const currentTab = window.AppGlobals.currentTab;
+            if (!currentTab || !currentTab.path) {
+                window.NotificationModule.showNotification('请先打开一个脚本文件', 'warning');
+                return;
+            }
+
+            const scriptPath = currentTab.path;
+            const deviceId = window.AppGlobals.getCurrentDeviceId();
+            const projectPath = window.AppGlobals.getCurrentProjectPath();
+
+            if (!deviceId) {
+                window.NotificationModule.showNotification('请先选择一个设备', 'warning');
+                return;
+            }
+
+            window.rLog(`🚀 开始运行脚本: ${scriptPath}`);
+            window.NotificationModule.showNotification('开始执行脚本...', 'info');
+
+            // 调用 IPC handler 执行脚本
+            const { ipcRenderer } = require('electron');
+            const result = await ipcRenderer.invoke('tke-run-script', deviceId, projectPath, scriptPath);
+
+            if (result.success) {
+                window.rLog('✅ 脚本执行完成');
+                window.NotificationModule.showNotification('脚本执行完成', 'success');
+
+                // 在控制台输出结果
+                if (window.TestcaseController.ConsoleManager) {
+                    window.TestcaseController.ConsoleManager.addLog(result.output, 'info');
+                }
+            } else {
+                window.rError('❌ 脚本执行失败:', result.error);
+                window.NotificationModule.showNotification(`脚本执行失败: ${result.error}`, 'error');
+
+                // 在控制台输出错误
+                if (window.TestcaseController.ConsoleManager) {
+                    window.TestcaseController.ConsoleManager.addLog(result.error, 'error');
+                    if (result.output) {
+                        window.TestcaseController.ConsoleManager.addLog(result.output, 'error');
+                    }
+                }
+            }
+
+            return result;
+        } catch (error) {
+            window.rError('❌ 运行测试时发生错误:', error);
+            window.NotificationModule.showNotification(`运行测试失败: ${error.message}`, 'error');
+            return { success: false, error: error.message };
         }
     },
     

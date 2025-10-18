@@ -39,16 +39,20 @@ function showNotification(message, type = 'info') {
 
 // 控制台管理
 function addConsoleLog(message, type = 'info') {
-    const consoleOutput = document.getElementById('consoleOutput');
+    const consoleContent = document.getElementById('consoleContent');
+    if (!consoleContent) return;
     const line = document.createElement('div');
     line.className = `console-line ${type}`;
     line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    consoleOutput.appendChild(line);
-    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    consoleContent.appendChild(line);
+    consoleContent.scrollTop = consoleContent.scrollHeight;
 }
 
 function clearConsole() {
-    document.getElementById('consoleOutput').innerHTML = '';
+    const consoleContent = document.getElementById('consoleContent');
+    if (consoleContent) {
+        consoleContent.innerHTML = '';
+    }
 }
 
 // 导出函数

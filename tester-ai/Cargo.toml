@@ -1,0 +1,53 @@
+[package]
+name = "tester-ai"
+version = "0.4.2"
+edition = "2021"
+authors = ["Eric Wang"]
+description = "AI-powered automated testing agent using RIG framework"
+
+[[bin]]
+name = "tester-ai"
+path = "src/main.rs"
+
+[dependencies]
+# RIG 框架 - LLM agent 核心
+rig-core = "0.6.0"
+
+# CLI 框架
+clap = { version = "4.5", features = ["derive"] }
+
+# 异步运行时
+tokio = { version = "1.40", features = ["full"] }
+
+# 错误处理
+anyhow = "1.0"
+thiserror = "1.0"
+
+# 序列化/反序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP 客户端
+reqwest = { version = "0.12", features = ["json"] }
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# XML 解析
+quick-xml = "0.36"
+
+# 正则表达式
+regex = "1.10"
+
+# 时间处理
+chrono = { version = "0.4", features = ["serde"] }
+
+# Base64 编码
+base64 = "0.22"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

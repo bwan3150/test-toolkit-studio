@@ -1,6 +1,6 @@
 [package]
 name = "tke"
-version = "0.3.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["Eric Wang"]
 description = "Toolkit Engine - CLI tool for automated testing"
@@ -34,3 +34,15 @@ regex = "1.10"
 which = "6.0"
 # 时间处理
 chrono = { version = "0.4", features = ["serde"] }
+# OCR相关
+tesseract-rs = { version = "0.1.20", features = ["build-tesseract"], optional = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
+base64 = "0.22"
+
+[features]
+# 默认启用在线和离线 OCR
+default = ["ocr-online", "ocr-offline"]
+# 在线 OCR 功能
+ocr-online = ["reqwest"]
+# 离线 OCR 功能（Tesseract）
+ocr-offline = ["tesseract-rs"]

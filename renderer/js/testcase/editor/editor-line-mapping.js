@@ -3,14 +3,21 @@ const EditorLineMapping = {
     // 计算显示行号：将TKS引擎的原始行号转换为编辑器中显示的行号
     calculateDisplayLineNumber(tksOriginalLineNumber) {
         window.rLog('计算显示行号 - TKS引擎原始行号:', tksOriginalLineNumber);
+        
+        // 获取脚本数据 - 兼容新旧系统
+        const scriptData = this.getScriptData();
+        if (!scriptData) {
+            window.rWarn('无法获取脚本数据，无法计算行号');
+            return -1;
+        }
+        
         window.rLog('脚本模型信息:', {
-            originalLines: this.script.originalLines ? this.script.originalLines.length : '无',
-            commands: this.script.commands.length,
-            mapping: this.script.lineToCommandMap ? this.script.lineToCommandMap.length : '无'
+            originalLines: scriptData.originalLines ? scriptData.originalLines.length : '无',
+            mapping: scriptData.lineToCommandMap ? scriptData.lineToCommandMap.length : '无映射'
         });
         
-        if (!this.textContentEl || !this.script.originalLines) {
-            window.rLog('缺少必要的数据');
+        if (!this.textContentEl || !scriptData.originalLines) {
+            window.rLog('缺少必要的数据 - textContentEl:', !!this.textContentEl, 'originalLines:', !!scriptData.originalLines);
             return -1;
         }
         
@@ -18,13 +25,13 @@ const EditorLineMapping = {
         const originalLineIndex = tksOriginalLineNumber - 1;
         
         // 检查原始行号是否有效
-        if (originalLineIndex < 0 || originalLineIndex >= this.script.originalLines.length) {
-            window.rLog('TKS原始行号超出范围:', tksOriginalLineNumber, '有效范围: 1-' + this.script.originalLines.length);
+        if (originalLineIndex < 0 || originalLineIndex >= scriptData.originalLines.length) {
+            window.rLog('TKS原始行号超出范围:', tksOriginalLineNumber, '有效范围: 1-' + scriptData.originalLines.length);
             return -1;
         }
         
         // 从映射中查找对应的命令索引
-        const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+        const commandIndex = scriptData.lineToCommandMap[originalLineIndex];
         window.rLog('原始行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
         
         if (commandIndex === null) {

@@ -1,4 +1,4 @@
-   // 行高亮功能模块 - 作为EditorTab的扩展方法
+// 行高亮功能模块 - 作为EditorTab的扩展方法
 const EditorHighlighting = {
     // 行高亮功能
     highlightExecutingLine(tksOriginalLineNumber) {
@@ -8,19 +8,26 @@ const EditorHighlighting = {
         window.rLog('上一次高亮行号:', this.currentHighlightedLine);
         window.rLog('测试运行状态:', this.isTestRunning);
         
+        // 获取脚本数据 - 兼容新旧系统
+        const scriptData = this.getScriptData();
+        if (!scriptData) {
+            window.rError('无法获取脚本数据，跳过高亮');
+            return;
+        }
+        
         // 先检查这是否是一个有效的命令行
         let isValidCommandLine = false;
-        if (this.script.originalLines && this.script.lineToCommandMap) {
+        if (scriptData.originalLines && scriptData.lineToCommandMap) {
             const originalLineIndex = tksOriginalLineNumber - 1;
-            if (originalLineIndex >= 0 && originalLineIndex < this.script.lineToCommandMap.length) {
-                isValidCommandLine = this.script.lineToCommandMap[originalLineIndex] !== null;
+            if (originalLineIndex >= 0 && originalLineIndex < scriptData.lineToCommandMap.length) {
+                isValidCommandLine = scriptData.lineToCommandMap[originalLineIndex] !== null;
             }
         }
         
         if (!isValidCommandLine) {
             window.rLog('✓ 非命令行请求，保持当前高亮连续性');
             const originalLineIndex = tksOriginalLineNumber - 1;
-            window.rLog('行内容:', this.script.originalLines ? `"${this.script.originalLines[originalLineIndex]}"` : '无法获取');
+            window.rLog('行内容:', scriptData.originalLines ? `"${scriptData.originalLines[originalLineIndex]}"` : '无法获取');
             window.rLog('=== 高亮请求结束（非命令行，保持当前高亮）===');
             return;
         }
@@ -70,7 +77,7 @@ const EditorHighlighting = {
         } else if (this.currentMode === 'block') {
             // 块模式：将TKS原始行号转换为命令索引（已确认是有效命令行）
             const originalLineIndex = tksOriginalLineNumber - 1;
-            const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+            const commandIndex = scriptData.lineToCommandMap[originalLineIndex];
             window.rLog('块模式 - TKS行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
             
             // 命令索引转换为1基索引进行高亮
@@ -85,12 +92,17 @@ const EditorHighlighting = {
                 hasBlocksContainer: !!this.blocksContainer
             });
         }
-    }
-
-
+    },
     
     highlightErrorLine(tksOriginalLineNumber) {
         window.rLog('收到错误高亮请求 - TKS原始行号:', tksOriginalLineNumber, '当前模式:', this.currentMode);
+        
+        // 获取脚本数据 - 兼容新旧系统
+        const scriptData = this.getScriptData();
+        if (!scriptData) {
+            window.rError('无法获取脚本数据，跳过错误高亮');
+            return;
+        }
         
         // 不清除之前的高亮，直接转换为错误高亮
         
@@ -108,14 +120,14 @@ const EditorHighlighting = {
             }
         } else if (this.currentMode === 'block') {
             // 块模式：将TKS原始行号转换为命令索引
-            if (!this.script.originalLines || !this.script.lineToCommandMap) {
+            if (!scriptData.originalLines || !scriptData.lineToCommandMap) {
                 window.rLog('缺少行号映射数据');
                 return;
             }
             
             const originalLineIndex = tksOriginalLineNumber - 1;
-            if (originalLineIndex >= 0 && originalLineIndex < this.script.lineToCommandMap.length) {
-                const commandIndex = this.script.lineToCommandMap[originalLineIndex];
+            if (originalLineIndex >= 0 && originalLineIndex < scriptData.lineToCommandMap.length) {
+                const commandIndex = scriptData.lineToCommandMap[originalLineIndex];
                 window.rLog('块模式 - TKS错误行号', tksOriginalLineNumber, '映射到命令索引:', commandIndex);
                 
                 if (commandIndex !== null) {
@@ -137,9 +149,8 @@ const EditorHighlighting = {
                 hasBlocksContainer: !!this.blocksContainer
             });
         }
-    }
-
-       
+    },
+    
     clearExecutionHighlight() {
         window.rLog('清除执行高亮');
         this.currentHighlightedLine = null; // 重置当前高亮行号
@@ -183,9 +194,8 @@ const EditorHighlighting = {
         }
         
         window.rLog('已清除所有高亮');
-    }
-
-       
+    },
+    
     // 块模式高亮功能
     highlightExecutingBlock(commandIndex, type) {
         window.rLog('块模式高亮请求:', commandIndex, type, '容器存在:', !!this.blocksContainer);
@@ -258,9 +268,7 @@ const EditorHighlighting = {
         } else {
             window.rLog('无效的块索引:', commandIndex, '有效范围: 1-' + blocks.length);
         }
-    }
-
-
+    },
     
     addLineHighlight(lineNumber, type) {
         window.rLog('添加行高亮:', lineNumber, type);
@@ -325,9 +333,8 @@ const EditorHighlighting = {
         window.rLog('文本高亮已添加到:', targetContainer.className);
         window.rLog('高亮div样式:', highlightDiv.style.cssText);
         window.rLog('高亮div实际父元素:', highlightDiv.parentElement);
-    }
-
-       
+    },
+    
     setTestRunning(isRunning, clearHighlight = false) {
         window.rLog('设置测试运行状态:', isRunning, '清除高亮:', clearHighlight, '当前模式:', this.currentMode);
         this.isTestRunning = isRunning;
@@ -349,8 +356,74 @@ const EditorHighlighting = {
             this.textContentEl.style.opacity = isRunning ? '0.7' : '1';
             this.textContentEl.style.cursor = isRunning ? 'not-allowed' : 'text';
         }
+    },
+    
+    // 获取脚本数据 - 兼容新旧系统
+    getScriptData() {
+        // 新系统：使用TKE buffer + 从内容生成行映射
+        if (this.buffer) {
+            const rawContent = this.buffer.getRawContent();
+            if (!rawContent) {
+                window.rLog('Buffer中无原始内容');
+                return null;
+            }
+            
+            // 从原始内容生成行映射数据
+            const originalLines = rawContent.split('\n');
+            const lineToCommandMap = [];
+            let commandIndex = 0;
+            
+            originalLines.forEach((line, lineIndex) => {
+                const trimmed = line.trim();
+                
+                // 跳过头部信息
+                if (!trimmed || trimmed.startsWith('#') || 
+                    trimmed.startsWith('用例:') || trimmed.startsWith('脚本名:') ||
+                    trimmed === '详情:' || trimmed === '步骤:' ||
+                    trimmed.includes('appPackage:') || trimmed.includes('appActivity:')) {
+                    lineToCommandMap.push(null); // 非命令行
+                    return;
+                }
+                
+                // 这是一个命令行
+                lineToCommandMap.push(commandIndex);
+                commandIndex++;
+            });
+            
+            return {
+                originalLines,
+                lineToCommandMap
+            };
+        }
+        
+        // 旧系统：使用script对象
+        if (this.script && this.script.originalLines && this.script.lineToCommandMap) {
+            return {
+                originalLines: this.script.originalLines,
+                lineToCommandMap: this.script.lineToCommandMap
+            };
+        }
+        
+        window.rError('无法从buffer或script获取脚本数据');
+        return null;
     }
 };
 
 // 导出到全局
 window.EditorHighlighting = EditorHighlighting;
+
+// 记录模块加载（延迟到 rLog 可用时）
+if (window.rLog) {
+    window.rLog('✅ EditorHighlighting 模块已加载，包含方法:', Object.keys(EditorHighlighting));
+    window.rLog('检查 setTestRunning 方法:', {
+        exists: 'setTestRunning' in EditorHighlighting,
+        type: typeof EditorHighlighting.setTestRunning
+    });
+} else {
+    // 如果 rLog 还不可用，使用 console.log
+    console.log('✅ EditorHighlighting 模块已加载，包含方法:', Object.keys(EditorHighlighting));
+    console.log('检查 setTestRunning 方法:', {
+        exists: 'setTestRunning' in EditorHighlighting,
+        type: typeof EditorHighlighting.setTestRunning
+    });
+}

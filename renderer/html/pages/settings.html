@@ -1,0 +1,153 @@
+<!-- Settings Page -->
+<div class="page" id="settingsPage">
+  <div class="page-header">
+    <h2>Settings</h2>
+  </div>
+
+  <div class="settings-content">
+    <div class="settings-section">
+      <h3>User Information</h3>
+      <div class="user-details" id="userDetails">
+        <div class="detail-row">
+          <span class="detail-label">Username:</span>
+          <span class="detail-value" id="settingsUsername">-</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Email:</span>
+          <span class="detail-value" id="settingsEmail">-</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Member Group:</span>
+          <span class="detail-value" id="settingsMemberGroup">-</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Member Since:</span>
+          <span class="detail-value" id="settingsMemberSince">-</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>API Configuration</h3>
+      <div class="form-group">
+        <label>Base URL</label>
+        <input
+          type="url"
+          id="settingsBaseUrl"
+          value="https://api.test-toolkit.app"
+        />
+        <button class="btn btn-secondary" id="updateBaseUrlBtn">
+          Update
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Editor Setting</h3>
+      <div class="form-group">
+        <label>Font</label>
+        <div style="display: flex; gap: 10px; align-items: center">
+          <select id="editorFontFamily" style="flex: 1">
+            <option value="var(--font-mono)">Default Font</option>
+            <option value="Consolas, 'Courier New', monospace">
+              Consolas
+            </option>
+            <option value="'SF Mono', Monaco, monospace">
+              'SF Mono'
+            </option>
+            <option value="'Cascadia Code', monospace">
+              'Cascadia Code'
+            </option>
+            <option value="'Fira Code', monospace">
+              'Fira Code'
+            </option>
+            <option value="'JetBrains Mono', monospace">
+              'JetBrains Mono'
+            </option>
+            <option value="Monaco, monospace">Monaco</option>
+            <option value="'Courier New', monospace">
+              'Courier New'
+            </option>
+          </select>
+          <input
+            type="number"
+            id="editorFontSize"
+            min="10"
+            max="24"
+            value="14"
+            style="width: 60px"
+          />
+          <span>px</span>
+        </div>
+        <button class="btn btn-secondary" id="applyFontSettings">
+          Apply
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Built-in Tools</h3>
+      <div class="tools-status">
+        <div class="status-item">
+          <span>Android SDK:</span>
+          <span class="status-indicator" id="sdkStatus"
+            >Checking...</span
+          >
+        </div>
+        <div class="status-item">
+          <span>ADB:</span>
+          <span class="status-indicator" id="adbStatus"
+            >Checking...</span
+          >
+        </div>
+        <div class="status-item">
+          <span>AAPT:</span>
+          <span class="status-indicator" id="aaptStatus"
+            >Checking...</span
+          >
+        </div>
+        <div class="status-item">
+          <span>Toolkit Engine:</span>
+          <span class="status-indicator" id="tkeStatus"
+            >Checking...</span
+          >
+        </div>
+        <button class="btn btn-secondary" id="checkToolsBtn">
+          Check
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>About</h3>
+      <div class="about-info">
+        <p><strong>Toolkit Studio</strong></p>
+        <p id="about-version">Version: loading...</p>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Dev Tools</h3>
+      <div class="debug-tools">
+        <button class="btn btn-secondary" id="exportLogsBtn">
+          <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+            <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,11L8,15H10.5V18H13.5V15H16L12,11Z"/>
+          </svg>
+          Upload Log
+        </button>
+        <span id="exportLogStatus" style="margin-left: 10px; color: #569cd6; display: none;"></span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <button class="btn btn-danger" id="logoutBtn">
+        <svg class="btn-icon" viewBox="0 0 24 24">
+          <path
+            d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"
+          />
+        </svg>
+        Logout
+      </button>
+    </div>
+  </div>
+</div>

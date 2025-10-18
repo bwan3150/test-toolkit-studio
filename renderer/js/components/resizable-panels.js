@@ -2,14 +2,12 @@
 function initializeResizablePanels() {
     const verticalResizer = document.getElementById('verticalResizer');
     const explorerResizer = document.getElementById('explorerResizer');
-    const bottomPanelResizer = document.getElementById('bottomPanelResizer');
     const rightPanel = document.getElementById('rightPanel');
     const fileExplorer = document.getElementById('fileExplorer');
-    const uiElementsBottomPanel = document.getElementById('uiElementsBottomPanel');
     const testcaseContainer = document.querySelector('.testcase-container');
 
     let isResizing = false;
-    let startX, startY, startWidth, startHeight;
+    let startX, startWidth;
     let currentResizer = null;
 
     // 垂直调整器（调整右面板宽度）
@@ -34,20 +32,6 @@ function initializeResizablePanels() {
             startWidth = fileExplorer.offsetWidth;
             explorerResizer.classList.add('dragging');
             document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-            e.preventDefault();
-        });
-    }
-    
-    // 底部面板调整器（调整底部面板高度）
-    if (bottomPanelResizer && uiElementsBottomPanel) {
-        bottomPanelResizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            currentResizer = 'bottom';
-            startY = e.clientY;
-            startHeight = uiElementsBottomPanel.offsetHeight;
-            bottomPanelResizer.classList.add('dragging');
-            document.body.style.cursor = 'row-resize';
             document.body.style.userSelect = 'none';
             e.preventDefault();
         });
@@ -78,17 +62,6 @@ function initializeResizablePanels() {
                     const newExplorerWidth = Math.max(150, Math.min(500, startWidth + explorerDeltaX));
                     fileExplorer.style.width = newExplorerWidth + 'px';
                     break;
-                    
-                case 'bottom':
-                    // 底部面板垂直调整
-                    const deltaY = startY - e.clientY;
-                    const minHeight = 120;
-                    const maxHeight = window.innerHeight * 0.85; // 最大高度为屏幕85%
-                    const newHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + deltaY));
-                    
-                    uiElementsBottomPanel.style.maxHeight = newHeight + 'px';
-                    uiElementsBottomPanel.style.height = newHeight + 'px';
-                    break;
             }
         });
     });
@@ -111,7 +84,6 @@ function initializeResizablePanels() {
             // 移除所有拖拽条的dragging类
             if (verticalResizer) verticalResizer.classList.remove('dragging');
             if (explorerResizer) explorerResizer.classList.remove('dragging');
-            if (bottomPanelResizer) bottomPanelResizer.classList.remove('dragging');
             
             // 面板调整完成后，重新计算XML标记位置
             if (window.TestcaseController && window.TestcaseController.recalculateXmlMarkersPosition) {
@@ -122,8 +94,6 @@ function initializeResizablePanels() {
             }
         }
     });
-
-    // 控制台已移至底部面板，不再需要切换功能
 }
 
 // 导出函数

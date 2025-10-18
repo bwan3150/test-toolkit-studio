@@ -1,0 +1,579 @@
+/* Bottom Panel - 简化重写版，专注解决滚动问题 */
+
+/* 主容器 */
+.bottom-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    height: 300px;
+    min-height: 150px;
+    z-index: 100;
+}
+
+.bottom-panel.collapsed {
+    height: 36px !important;
+}
+
+.bottom-panel.collapsed .bottom-panel-content {
+    display: none !important;
+}
+
+/* 拖拽条 */
+.bottom-panel-resizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: transparent;
+    cursor: row-resize;
+    z-index: 102;
+}
+
+.bottom-panel-resizer:hover {
+    background: rgba(249, 168, 37, 0.1);
+}
+
+/* Header - 固定高度 36px */
+.bottom-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 36px;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    user-select: none;
+}
+
+.bottom-panel-tabs {
+    display: flex;
+    height: 100%;
+    flex: 1;
+    overflow-x: auto;
+}
+
+.bottom-tab-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.bottom-tab-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.bottom-tab-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.bottom-tab-btn.active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-weight: 500;
+}
+
+.bottom-tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-primary);
+}
+
+.bottom-panel-toolbar {
+    display: flex;
+    gap: 2px;
+    padding: 0 4px;
+}
+
+.bottom-panel-toolbar .btn-icon {
+    width: 28px;
+    height: 28px;
+    padding: 6px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.bottom-panel-toolbar .btn-icon:hover {
+    background: var(--bg-hover);
+}
+
+/* 内容区域 - 使用 calc 计算剩余高度 */
+.bottom-panel-content {
+    height: calc(100% - 36px); /* 总高度减去 header */
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+.bottom-panel-content-pane {
+    display: none;
+    height: 100%;
+}
+
+.bottom-panel-content-pane.active {
+    display: block;
+}
+
+/* ============================================
+ * Tab 1: 当前元素列表
+ * ============================================ */
+.elements-list-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.elements-list-header {
+    flex-shrink: 0;
+    /* 预留：未来可以添加搜索栏样式 */
+}
+
+.elements-list-content {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.elements-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.elements-table thead {
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 10;
+}
+
+.elements-table th {
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.elements-table th.col-index { width: 60px; }
+.elements-table th.col-type { width: 200px; }
+.elements-table th.col-content { width: auto; }
+.elements-table th.col-bounds { width: 120px; }
+.elements-table th.col-size { width: 100px; }
+.elements-table th.col-actions { width: 60px; }
+
+.elements-table tbody tr {
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.elements-table tbody tr:hover {
+    background: var(--bg-hover);
+}
+
+.elements-table td {
+    padding: 8px 12px;
+    color: var(--text-primary);
+}
+
+.index-badge {
+    padding: 2px 8px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-primary);
+}
+
+.type-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.type-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.content-text {
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bounds-code, .size-code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent-info);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.action-btn {
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+}
+
+/* ============================================
+ * 统一空状态样式 - 适用于所有tab
+ * ============================================ */
+
+/* 元素列表专用容器 */
+.table-empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 元素属性、元素库、控制台的空状态容器 */
+.properties-empty-state,
+.locator-empty-state,
+.console-empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-disabled);
+}
+
+/* 通用的空状态消息容器 */
+.empty-message {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-disabled);
+}
+
+/* 空状态图标 */
+.empty-icon {
+    opacity: 0.3;
+    color: var(--text-disabled);
+}
+
+.empty-icon svg {
+    display: block;
+}
+
+/* 空状态标题 */
+.empty-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+/* 空状态描述 */
+.empty-desc {
+    font-size: 11px;
+    color: var(--text-disabled);
+    text-align: center;
+    max-width: 300px;
+}
+
+/* ============================================
+ * Tab 2: 元素属性
+ * ============================================ */
+.element-props-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.element-props-header {
+    flex-shrink: 0;
+    /* 工具栏由JS动态生成 */
+}
+
+.element-props-content {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* 元素属性工具栏（由JS动态生成到header中） */
+.properties-toolbar {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.element-id {
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+
+.toolbar-right {
+    display: flex;
+    gap: 4px;
+}
+
+.tool-btn {
+    width: 28px;
+    height: 28px;
+    padding: 6px;
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.tool-btn:hover {
+    background: var(--bg-hover);
+}
+
+.properties-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.properties-table td.prop-key {
+    width: 140px;
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.properties-table td.prop-value {
+    padding: 6px 12px;
+    color: var(--text-primary);
+}
+
+.properties-table tr:hover {
+    background: var(--bg-hover);
+}
+
+/* ============================================
+ * Tab 3: 元素库
+ * ============================================ */
+.locator-lib-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.locator-lib-header {
+    flex-shrink: 0;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.locator-lib-header .search-input {
+    width: 100%;
+    padding: 7px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.locator-lib-header .search-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.locator-lib-content {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* 有卡片时才显示padding和gap */
+.locator-lib-content.with-cards {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.locator-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: grab;
+}
+
+.locator-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+}
+
+.locator-card-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.locator-card-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.locator-card-name {
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.locator-card-note {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* ============================================
+ * Tab 4: 控制台
+ * ============================================ */
+.console-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.console-header {
+    flex-shrink: 0;
+    /* 预留：可以放筛选按钮 */
+}
+
+.console-content {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.console-log {
+    display: flex;
+    gap: 8px;
+    padding: 4px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.console-log:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.console-timestamp {
+    color: var(--text-disabled);
+    font-size: 11px;
+    min-width: 90px;
+}
+
+.console-type {
+    font-weight: 700;
+    min-width: 60px;
+    text-transform: uppercase;
+    font-size: 10px;
+}
+
+.console-type-log, .console-type-info { color: var(--accent-info); }
+.console-type-warn { color: var(--accent-warning); }
+.console-type-error { color: var(--accent-danger); }
+
+.console-message {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+/* ============================================
+ * 滚动条样式
+ * ============================================ */
+.elements-list-content::-webkit-scrollbar,
+.element-props-content::-webkit-scrollbar,
+.locator-lib-content::-webkit-scrollbar,
+.console-content::-webkit-scrollbar {
+    width: 12px;
+}
+
+.elements-list-content::-webkit-scrollbar-track,
+.element-props-content::-webkit-scrollbar-track,
+.locator-lib-content::-webkit-scrollbar-track,
+.console-content::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.elements-list-content::-webkit-scrollbar-thumb,
+.element-props-content::-webkit-scrollbar-thumb,
+.locator-lib-content::-webkit-scrollbar-thumb,
+.console-content::-webkit-scrollbar-thumb {
+    background: #555555;
+    border-radius: 6px;
+}
+
+.elements-list-content::-webkit-scrollbar-thumb:hover,
+.element-props-content::-webkit-scrollbar-thumb:hover,
+.locator-lib-content::-webkit-scrollbar-thumb:hover,
+.console-content::-webkit-scrollbar-thumb:hover {
+    background: #777777;
+}
+
+/* 拖拽时禁止选择 */
+body.bottom-panel-dragging {
+    cursor: row-resize !important;
+    user-select: none !important;
+}

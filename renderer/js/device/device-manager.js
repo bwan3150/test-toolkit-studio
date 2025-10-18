@@ -17,7 +17,7 @@ async function loadConnectionGuideModal() {
             container.innerHTML = html;
         }
     } catch (error) {
-        console.error('Failed to load connection guide modal:', error);
+        window.rError('Failed to load connection guide modal:', error);
     }
 }
 
@@ -140,7 +140,7 @@ async function initializeDevicePage() {
     if (newDeviceForm) {
         newDeviceForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            console.log('表单提交事件触发');
+            window.rLog('表单提交事件触发');
             
             if (!window.AppGlobals.currentProject) {
                 window.NotificationModule.showNotification('Please open a project first', 'warning');
@@ -154,7 +154,7 @@ async function initializeDevicePage() {
                 deviceConfig[key] = value === 'true' ? true : value === 'false' ? false : value;
             }
             
-            console.log('收集到的表单数据:', deviceConfig);
+            window.rLog('收集到的表单数据:', deviceConfig);
             
             // 根据平台处理连接信息
             if (deviceConfig.connectionType === 'wifi') {
@@ -230,7 +230,7 @@ async function initializeDevicePage() {
     // 监听配对成功事件
     const { ipcRenderer } = getGlobals();
     ipcRenderer.on('pairing-success', (event, data) => {
-        console.log('收到配对成功事件:', data);
+        window.rLog('收到配对成功事件:', data);
         window.NotificationModule.showNotification(
             `配对成功！来自设备: ${data.remoteAddress}`, 
             'success'
@@ -282,12 +282,12 @@ function updatePlatformFields() {
         requiredInputs.forEach(input => {
             input.disabled = false;
         });
-        console.log(`显示配置组: ${configKey}-config`);
+        window.rLog(`显示配置组: ${configKey}-config`);
     } else {
         console.warn(`未找到配置组: ${configKey}-config`);
     }
     
-    console.log(`更新字段显示: ${configKey}`);
+    window.rLog(`更新字段显示: ${configKey}`);
 }
 
 // 切换高级设置显示
@@ -424,7 +424,7 @@ async function loadSavedDevices() {
             }
         }
     } catch (error) {
-        console.error('Failed to load saved devices:', error);
+        window.rError('Failed to load saved devices:', error);
     }
 }
 
@@ -441,7 +441,7 @@ async function checkIosDeviceStatus(device) {
             const data = await response.json();
             device.wdaStatus = 'connected';
             device.wdaInfo = data;
-            console.log('iOS 设备 WDA 状态检测成功（USB）:', device.id);
+            window.rLog('iOS 设备 WDA 状态检测成功（USB）:', device.id);
         } else {
             device.wdaStatus = 'disconnected';
         }
@@ -470,7 +470,7 @@ async function checkIosDeviceStatus(device) {
                                 device.connectionType = 'wifi';
                                 device.ipAddress = config.ipAddress;
                                 device.port = config.port || 8100;
-                                console.log('iOS 设备 WDA 状态检测成功（WiFi）:', device.id);
+                                window.rLog('iOS 设备 WDA 状态检测成功（WiFi）:', device.id);
                                 return;
                             }
                         }
@@ -478,12 +478,12 @@ async function checkIosDeviceStatus(device) {
                 }
             }
         } catch (wifiError) {
-            console.log('WiFi WDA 状态检测失败:', wifiError.message);
+            window.rLog('WiFi WDA 状态检测失败:', wifiError.message);
             device.wdaError = wifiError.message;
         }
         
         device.wdaStatus = 'disconnected';
-        console.log('iOS 设备 WDA 状态检测失败:', device.id);
+        window.rLog('iOS 设备 WDA 状态检测失败:', device.id);
     }
 }
 
@@ -530,7 +530,7 @@ async function refreshConnectedDevices() {
                     }
                 }
             } catch (error) {
-                console.error('Error loading saved devices:', error);
+                window.rError('Error loading saved devices:', error);
             }
         }
         
@@ -731,7 +731,7 @@ async function refreshDeviceList() {
                     }
                 }
             } catch (error) {
-                console.error('Error loading device configs:', error);
+                window.rError('Error loading device configs:', error);
             }
         }
         
@@ -1258,7 +1258,7 @@ function showPairingMethod(method) {
     const showQrBtn = document.getElementById('showQrCodeBtn');
     
     if (!codeSection || !qrSection) {
-        console.error('配对区域元素未找到');
+        window.rError('配对区域元素未找到');
         return;
     }
     
@@ -1342,7 +1342,7 @@ async function connectWithPairingCode() {
         }
         
     } catch (error) {
-        console.error('Pairing with code failed:', error);
+        window.rError('Pairing with code failed:', error);
         window.NotificationModule.showNotification(`Pairing failed: ${error.message}`, 'error');
     }
 }
@@ -1440,7 +1440,7 @@ async function generateQRCode() {
         }
         
     } catch (error) {
-        console.error('生成QR码失败:', error);
+        window.rError('生成QR码失败:', error);
         window.NotificationModule.showNotification(`生成QR码失败: ${error.message}`, 'error');
     }
 }
@@ -1454,7 +1454,7 @@ function displayQRCode(dataURL, serviceName, pairingCode, expiryTime, localIP, p
     const refreshBtn = document.getElementById('refreshQrBtn');
     
     if (!qrDisplay || !qrCanvas || !qrInfo) {
-        console.error('QR code display elements not found');
+        window.rError('QR code display elements not found');
         return;
     }
     
@@ -1591,10 +1591,10 @@ async function startPairingStatusCheck() {
             if (checkCount >= maxChecks) {
                 // 检查超时
                 clearInterval(checkInterval);
-                console.log('配对状态检查超时');
+                window.rLog('配对状态检查超时');
             }
         } catch (error) {
-            console.error('检查配对状态失败:', error);
+            window.rError('检查配对状态失败:', error);
         }
     }, 5000); // 每5秒检查一次
 }
@@ -1677,10 +1677,10 @@ async function installApkToDevice(deviceId, apkPath) {
         if (packageInfo.success && packageInfo.packageName) {
             // 成功获取到包名
             packageName = packageInfo.packageName;
-            console.log('成功获取APK包名:', packageName);
+            window.rLog('成功获取APK包名:', packageName);
         } else if (packageInfo.needDirectInstall) {
             // aapt不可用，直接尝试安装
-            console.log('aapt不可用，直接尝试安装APK...');
+            window.rLog('aapt不可用，直接尝试安装APK...');
             hideApkInstallLoading();
             
             // 直接尝试安装，不需要包名
@@ -1689,13 +1689,19 @@ async function installApkToDevice(deviceId, apkPath) {
             
             if (installResult.success) {
                 hideApkInstallLoading();
+                
+                // 如果有包名信息（从安装结果中获取），尝试自动启动
+                if (installResult.packageName) {
+                    await autoLaunchAppAfterInstall(deviceId, installResult.packageName);
+                }
+                
                 window.NotificationModule.showNotification('APK安装成功！', 'success');
                 await refreshConnectedDevices();
                 return;
             } else if (installResult.packageName) {
                 // 从安装错误中获取到了包名
                 packageName = installResult.packageName;
-                console.log('从安装错误中获取到包名:', packageName);
+                window.rLog('从安装错误中获取到包名:', packageName);
                 // 继续后续流程
             } else {
                 hideApkInstallLoading();
@@ -1709,24 +1715,30 @@ async function installApkToDevice(deviceId, apkPath) {
             return;
         }
         
-        console.log('获取到APK包名:', packageName);
+        window.rLog('获取到APK包名:', packageName);
         
         // 更新loading状态，显示包名
         updateApkInstallLoading('正在安装...', '', packageName);
         
         // 第二步：尝试直接安装
         const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
-        console.log('收到安装结果:', result);
+        window.rLog('收到安装结果:', result);
         
         if (result.success) {
             // 安装成功
             hideApkInstallLoading();
+            
+            // 尝试自动启动应用
+            if (packageName) {
+                await autoLaunchAppAfterInstall(deviceId, packageName);
+            }
+            
             window.NotificationModule.showNotification('APK安装成功！', 'success');
             await refreshConnectedDevices();
         } else {
             // 显示详细错误信息
             const errorMsg = result.error || '安装失败';
-            console.log('APK安装失败:', errorMsg);
+            window.rLog('APK安装失败:', errorMsg);
             
             // 检查是否需要卸载重装（签名冲突或版本冲突）
             const needUninstallReinstall = errorMsg.includes('签名不匹配') || 
@@ -1735,7 +1747,7 @@ async function installApkToDevice(deviceId, apkPath) {
                                           errorMsg.includes('INSTALL_FAILED') ||
                                           result.details?.includes('INSTALL_FAILED');
             
-            console.log('是否需要卸载重装:', needUninstallReinstall, '错误信息:', errorMsg);
+            window.rLog('是否需要卸载重装:', needUninstallReinstall, '错误信息:', errorMsg);
             
             if (needUninstallReinstall) {
                 // 第三步：安装失败时，隐藏loading并显示确认框
@@ -1748,7 +1760,7 @@ async function installApkToDevice(deviceId, apkPath) {
             }
         }
     } catch (error) {
-        console.error('安装APK失败:', error);
+        window.rError('安装APK失败:', error);
         hideApkInstallLoading();
         window.NotificationModule.showNotification(`安装失败: ${error.message}`, 'error');
     }
@@ -1797,7 +1809,7 @@ function hideApkInstallLoading() {
 function showApkInstallModalWithPackage(deviceId, apkPath, packageName) {
     const modal = document.getElementById('apkInstallModal');
     if (!modal) {
-        console.error('找不到APK安装模态框');
+        window.rError('找不到APK安装模态框');
         return;
     }
     
@@ -1939,6 +1951,11 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
         const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
         
         if (installResult.success) {
+            // 尝试自动启动应用
+            if (packageName) {
+                await autoLaunchAppAfterInstall(deviceId, packageName);
+            }
+            
             window.NotificationModule.showNotification('APK安装成功！', 'success');
             await refreshConnectedDevices();
         } else {
@@ -1946,7 +1963,7 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
         }
         
     } catch (error) {
-        console.error('卸载并重装失败:', error);
+        window.rError('卸载并重装失败:', error);
         window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
     }
 }
@@ -1956,7 +1973,7 @@ async function uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageN
     const { ipcRenderer } = getGlobals();
     
     try {
-        console.log(`开始卸载重装流程，包名: ${packageName}`);
+        window.rLog(`开始卸载重装流程，包名: ${packageName}`);
         
         // 显示卸载loading
         showApkInstallLoading('正在卸载...', '');
@@ -1980,6 +1997,11 @@ async function uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageN
         hideApkInstallLoading();
         
         if (installResult.success) {
+            // 尝试自动启动应用
+            if (packageName) {
+                await autoLaunchAppAfterInstall(deviceId, packageName);
+            }
+            
             window.NotificationModule.showNotification('APK安装成功！', 'success');
             await refreshConnectedDevices();
         } else {
@@ -1987,7 +2009,7 @@ async function uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageN
         }
         
     } catch (error) {
-        console.error('卸载并重装失败:', error);
+        window.rError('卸载并重装失败:', error);
         hideApkInstallLoading();
         window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
     }
@@ -2004,6 +2026,153 @@ window.initializeIpSync = initializeIpSync;
 window.showPairingMethod = showPairingMethod;
 window.connectWithPairingCode = connectWithPairingCode;
 window.generateQRCode = generateQRCode;
+
+// 自动启动刚安装的应用
+async function autoLaunchAppAfterInstall(deviceId, packageName) {
+    if (!deviceId || !packageName) {
+        window.rLog('缺少设备ID或包名，跳过自动启动');
+        return;
+    }
+    
+    try {
+        window.NotificationModule.showNotification('正在启动应用...', 'info');
+        
+        // 首先尝试获取应用的主Activity
+        const mainActivity = await getMainActivity(deviceId, packageName);
+        
+        if (mainActivity) {
+            // 使用TKE ADB启动应用
+            await launchAppWithTKE(deviceId, packageName, mainActivity);
+        } else {
+            // 如果无法获取主Activity，使用monkey方式启动
+            await launchAppWithMonkey(deviceId, packageName);
+        }
+        
+    } catch (error) {
+        window.rError('自动启动应用失败:', error);
+        // 静默失败，不显示错误通知，因为安装已经成功了
+    }
+}
+
+// 执行TKE ADB命令的辅助函数
+async function executeTkeAdbCommand(deviceId, adbArgs) {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        const result = await ipcRenderer.invoke('execute-tke-adb-command', deviceId, adbArgs);
+        return result;
+    } catch (error) {
+        window.rError('执行TKE ADB命令失败:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// 获取应用的主Activity
+async function getMainActivity(deviceId, packageName) {
+    try {
+        // 使用TKE ADB直通命令获取包信息
+        const dumpsysResult = await executeTkeAdbCommand(deviceId, ['shell', 'dumpsys', 'package', packageName]);
+        
+        if (dumpsysResult.success && dumpsysResult.output) {
+            // 从输出中解析主Activity
+            const lines = dumpsysResult.output.split('\n');
+            
+            for (const line of lines) {
+                // 查找intent-filter中的MAIN和LAUNCHER
+                if (line.includes('android.intent.action.MAIN') || line.includes('MAIN')) {
+                    // 往上查找对应的Activity
+                    const activityMatch = dumpsysResult.output.match(new RegExp(`${packageName}/([^\\s]+).*?android\\.intent\\.action\\.MAIN`, 's'));
+                    if (activityMatch) {
+                        const activityName = activityMatch[1];
+                        window.rLog('找到主Activity:', activityName);
+                        return activityName.startsWith('.') ? packageName + activityName : activityName;
+                    }
+                }
+            }
+            
+            // 尝试另一种解析方式
+            const activityPattern = new RegExp(`Activity #\\d+.*?${packageName}/([^\\s}]+)`, 'g');
+            const activities = [...dumpsysResult.output.matchAll(activityPattern)];
+            
+            if (activities.length > 0) {
+                const activityName = activities[0][1];
+                window.rLog('找到Activity:', activityName);
+                return activityName.startsWith('.') ? packageName + activityName : activityName;
+            }
+        }
+        
+        // 尝试使用pm dump获取
+        const pmResult = await executeTkeAdbCommand(deviceId, ['shell', 'pm', 'dump', packageName]);
+        
+        if (pmResult.success && pmResult.output) {
+            // 查找主Activity
+            const mainActivityMatch = pmResult.output.match(/android\.intent\.action\.MAIN.*?\n.*?([A-Za-z0-9_.]+)/);
+            if (mainActivityMatch) {
+                const activityName = mainActivityMatch[1];
+                window.rLog('通过pm dump找到主Activity:', activityName);
+                return activityName.startsWith('.') ? packageName + activityName : activityName;
+            }
+        }
+        
+        window.rLog('未找到主Activity');
+        return null;
+        
+    } catch (error) {
+        window.rError('获取主Activity失败:', error);
+        return null;
+    }
+}
+
+// 使用TKE ADB启动应用
+async function launchAppWithTKE(deviceId, packageName, activityName) {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        const componentName = `${packageName}/${activityName}`;
+        window.rLog('使用TKE ADB启动应用:', componentName);
+        
+        const result = await executeTkeAdbCommand(deviceId, [
+            'shell', 'am', 'start', '-n', componentName
+        ]);
+        
+        if (result.success) {
+            window.rLog('应用启动成功');
+            window.NotificationModule.showNotification(`应用 ${packageName} 已启动`, 'success');
+        } else {
+            window.rError('TKE ADB启动失败:', result.error);
+            // 尝试备用方案
+            await launchAppWithMonkey(deviceId, packageName);
+        }
+        
+    } catch (error) {
+        window.rError('TKE ADB启动失败:', error);
+        // 尝试备用方案
+        await launchAppWithMonkey(deviceId, packageName);
+    }
+}
+
+// 使用monkey方式启动应用（备用方案）
+async function launchAppWithMonkey(deviceId, packageName) {
+    const { ipcRenderer } = getGlobals();
+    
+    try {
+        window.rLog('使用monkey方式启动应用:', packageName);
+        
+        const result = await executeTkeAdbCommand(deviceId, [
+            'shell', 'monkey', '-p', packageName, '-c', 'android.intent.category.LAUNCHER', '1'
+        ]);
+        
+        if (result.success) {
+            window.rLog('应用启动成功（monkey方式）');
+            window.NotificationModule.showNotification(`应用 ${packageName} 已启动`, 'success');
+        } else {
+            window.rError('Monkey启动失败:', result.error);
+        }
+        
+    } catch (error) {
+        window.rError('Monkey启动失败:', error);
+    }
+}
 
 // 导出函数
 window.DeviceManagerModule = {

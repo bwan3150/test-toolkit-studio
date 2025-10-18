@@ -10,37 +10,18 @@ const ElementsListPanel = {
         // 监听UI元素更新事件
         document.addEventListener('uiElementsUpdated', (event) => {
             this.updateElements(event.detail.elements);
-            
-            // 确保底部面板可见并设置正确高度
-            const bottomPanel = document.getElementById('uiElementsBottomPanel');
-            if (bottomPanel) {
-                bottomPanel.style.display = 'flex';
-                bottomPanel.style.height = '300px'; // 设置合适的高度
-                bottomPanel.classList.remove('collapsed');
-                
-                // 确保UI元素标签页处于激活状态
-                const elementsTab = document.querySelector('.tab-btn[data-tab="elements-list"]');
-                const elementsPane = document.getElementById('elementsListPane');
-                if (elementsTab && !elementsTab.classList.contains('active')) {
-                    elementsTab.click(); // 激活UI元素标签页
-                } else if (elementsPane) {
-                    // 如果已经激活，确保面板显示
-                    elementsPane.style.display = 'flex';
-                    elementsPane.classList.add('active');
-                }
+
+            // 确保底部面板展开并切换到UI元素Tab
+            if (window.BottomPanelManager) {
+                window.BottomPanelManager.expand();
+                window.BottomPanelManager.switchTab('elements-list');
             }
         });
-        
-        // 绑定搜索功能
-        const searchInput = document.querySelector('#elementsListPane .search-input');
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.filterElements(e.target.value);
-            });
-        }
-        
+
         // 初始渲染空状态
         this.renderElements();
+
+        window.rLog('✅ ElementsListPanel 初始化完成');
     },
     
     // 更新元素列表（由device-screen-manager调用）
@@ -49,63 +30,143 @@ const ElementsListPanel = {
         this.renderElements();
     },
     
-    // 渲染元素列表
+    // 渲染元素列表 - 全新的表格样式
     renderElements(filteredElements = null) {
-        const container = document.getElementById('elementsListContainer');
+        const container = document.getElementById('elementsListContent');
         if (!container) {
-            window.rError('元素列表容器(elementsListContainer)未找到');
+            window.rError('元素列表容器(elementsListContent)未找到');
             return;
         }
-        
+
         const elements = filteredElements || this.currentElements;
-        
+
         if (elements.length === 0) {
+            // 空状态 - 显示表格结构但无数据
             container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-text">暂无UI元素</div>
-                    <div class="empty-state-hint">点击上方"XML Overlay"按钮获取页面元素</div>
+                <div class="table-empty-state">
+                    <table class="elements-table">
+                        <thead>
+                            <tr>
+                                <th class="col-index">#</th>
+                                <th class="col-type">类型</th>
+                                <th class="col-content">内容</th>
+                                <th class="col-bounds">位置</th>
+                                <th class="col-size">尺寸</th>
+                                <th class="col-actions">操作</th>
+                            </tr>
+                        </thead>
+                    </table>
+                    <div class="empty-message">
+                        <div class="empty-icon">
+                            <svg viewBox="0 0 48 48" width="48" height="48">
+                                <rect x="8" y="12" width="32" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                                <line x1="8" y1="18" x2="40" y2="18" stroke="currentColor" stroke-width="2"/>
+                                <line x1="16" y1="24" x2="32" y2="24" stroke="currentColor" stroke-width="1.5"/>
+                                <line x1="16" y1="28" x2="28" y2="28" stroke="currentColor" stroke-width="1.5"/>
+                                <line x1="16" y1="32" x2="30" y2="32" stroke="currentColor" stroke-width="1.5"/>
+                            </svg>
+                        </div>
+                        <div class="empty-title">No elements captured</div>
+                    </div>
                 </div>
             `;
             return;
         }
-        
+
         // 计算元素的尺寸和中心点
         const elementsWithSize = elements.map(el => {
-            const width = el.bounds ? (el.bounds[2] - el.bounds[0]) : (el.width || 0);
-            const height = el.bounds ? (el.bounds[3] - el.bounds[1]) : (el.height || 0);
-            const centerX = el.bounds ? Math.round((el.bounds[0] + el.bounds[2]) / 2) : (el.centerX || 0);
-            const centerY = el.bounds ? Math.round((el.bounds[1] + el.bounds[3]) / 2) : (el.centerY || 0);
-            
+            const width = el.bounds.x2 - el.bounds.x1;
+            const height = el.bounds.y2 - el.bounds.y1;
+            const centerX = Math.round((el.bounds.x1 + el.bounds.x2) / 2);
+            const centerY = Math.round((el.bounds.y1 + el.bounds.y2) / 2);
             return { ...el, width, height, centerX, centerY };
         });
-        
-        const elementsHTML = elementsWithSize.map((el, idx) => `
-            <div class="element-item" data-index="${idx}">
-                <div class="element-main" onclick="window.ElementsListPanel.selectElement(${idx})">
-                    <div class="element-header">
-                        <span class="element-index">[${el.index}]</span>
-                        <span class="element-type">${el.className ? el.className.split('.').pop() : 'Unknown'}</span>
-                    </div>
-                    ${el.text ? `<div class="element-text">文本: ${this.escapeHtml(el.text)}</div>` : ''}
-                    ${el.contentDesc ? `<div class="element-desc">描述: ${this.escapeHtml(el.contentDesc)}</div>` : ''}
-                    ${el.hint ? `<div class="element-hint">提示: ${this.escapeHtml(el.hint)}</div>` : ''}
-                    <div class="element-size">${el.width}×${el.height} @ (${el.centerX},${el.centerY})</div>
-                </div>
-                <div class="element-actions">
-                    <button class="btn-icon-small save-to-locator-btn" 
-                            onclick="event.stopPropagation(); window.LocatorLibraryPanel.saveElementToLocator(${el.index})" 
-                            title="入库"
-                            style="background: transparent; border: none; padding: 4px;">
-                        <svg viewBox="0 0 24 24" width="20" height="20">
-                            <path fill="#FF9800" d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('');
-        
-        container.innerHTML = elementsHTML;
-        window.rLog(`✅ 已将 ${elements.length} 个UI元素显示在UI库中`);
+
+        // 全新的表格式布局
+        const tableHTML = `
+            <table class="elements-table">
+                <thead>
+                    <tr>
+                        <th class="col-index">#</th>
+                        <th class="col-type">类型</th>
+                        <th class="col-content">内容</th>
+                        <th class="col-bounds">位置</th>
+                        <th class="col-size">尺寸</th>
+                        <th class="col-actions">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${elementsWithSize.map((el, idx) => `
+                        <tr class="element-row" data-index="${idx}" onclick="window.ElementsListPanel.selectElement(${idx})">
+                            <td class="col-index">
+                                <span class="index-badge">${el.index}</span>
+                            </td>
+                            <td class="col-type">
+                                <div class="type-cell">
+                                    <span class="type-icon">${this.getTypeIcon(el)}</span>
+                                    <span class="type-name">${el.className ? el.className.split('.').pop() : 'Unknown'}</span>
+                                </div>
+                            </td>
+                            <td class="col-content">
+                                <div class="content-cell">
+                                    ${el.text ? `<div class="content-text" title="${this.escapeHtml(el.text)}">${this.escapeHtml(this.truncate(el.text, 30))}</div>` : ''}
+                                    ${el.contentDesc ? `<div class="content-desc" title="${this.escapeHtml(el.contentDesc)}">desc: ${this.escapeHtml(this.truncate(el.contentDesc, 20))}</div>` : ''}
+                                    ${!el.text && !el.contentDesc ? '<span class="text-muted">—</span>' : ''}
+                                </div>
+                            </td>
+                            <td class="col-bounds">
+                                <code class="bounds-code">(${el.centerX}, ${el.centerY})</code>
+                            </td>
+                            <td class="col-size">
+                                <code class="size-code">${el.width}×${el.height}</code>
+                            </td>
+                            <td class="col-actions">
+                                <button class="action-btn"
+                                        onclick="event.stopPropagation(); window.LocatorLibraryPanel.saveElementToLocator(${el.index})"
+                                        title="保存到元素库">
+                                    <svg viewBox="0 0 16 16" width="14" height="14">
+                                        <path fill="currentColor" d="M13.5 2h-11C1.67 2 1 2.67 1 3.5v9c0 .83.67 1.5 1.5 1.5h11c.83 0 1.5-.67 1.5-1.5v-9c0-.83-.67-1.5-1.5-1.5zM8 11.5c-1.38 0-2.5-1.12-2.5-2.5S6.62 6.5 8 6.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM11 5H3V3h8v2z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        container.innerHTML = tableHTML;
+        window.rLog(`✅ 已将 ${elements.length} 个UI元素显示在表格中`);
+    },
+
+    // 获取类型图标 - JetBrains风格SVG图标
+    getTypeIcon(element) {
+        const className = element.className?.toLowerCase() || '';
+        if (className.includes('button')) {
+            return '<svg class="type-icon-svg" viewBox="0 0 16 16"><rect x="2" y="5" width="12" height="6" rx="2" fill="currentColor"/></svg>';
+        }
+        if (className.includes('text') || className.includes('edit')) {
+            return '<svg class="type-icon-svg" viewBox="0 0 16 16"><path d="M4 3h8v2H4V3zm0 4h8v2H4V7zm0 4h5v2H4v-2z" fill="currentColor"/></svg>';
+        }
+        if (className.includes('image')) {
+            return '<svg class="type-icon-svg" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/><path d="M2 12l3-3 2 2 4-4 3 3v2H2v-2z" fill="currentColor"/></svg>';
+        }
+        if (className.includes('view') || className.includes('layout')) {
+            return '<svg class="type-icon-svg" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+        }
+        if (className.includes('list')) {
+            return '<svg class="type-icon-svg" viewBox="0 0 16 16"><path d="M3 3h1v1H3V3zm2 0h8v1H5V3zM3 7h1v1H3V7zm2 0h8v1H5V7zm-2 4h1v1H3v-1zm2 0h8v1H5v-1z" fill="currentColor"/></svg>';
+        }
+        if (className.includes('scroll')) {
+            return '<svg class="type-icon-svg" viewBox="0 0 16 16"><rect x="2" y="2" width="10" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="4" width="1" height="4" rx="0.5" fill="currentColor"/></svg>';
+        }
+        return '<svg class="type-icon-svg" viewBox="0 0 16 16"><rect x="6" y="6" width="4" height="4" fill="currentColor"/></svg>';
+    },
+
+    // 截断文本
+    truncate(text, maxLength) {
+        if (!text) return '';
+        return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
     },
     
     // 选择元素

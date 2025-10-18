@@ -1,0 +1,248 @@
+<!-- Testcase Page -->
+<div class="page" id="testcasePage">
+  <div class="testcase-header">
+    <div class="project-path-bar">
+      <h2>Testcase</h2>
+    </div>
+    <div class="device-selector">
+      <select id="deviceSelect">
+        <option value="">Select Device</option>
+      </select>
+      <button class="btn btn-icon" id="refreshDeviceBtn">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="testcase-container">
+    <!-- File Explorer -->
+    <div class="file-explorer" id="fileExplorer">
+      <div class="explorer-header">
+        <h3>Case Explorer</h3>
+      </div>
+      <div class="file-tree" id="fileTree"></div>
+      <!-- Explorer Resizer -->
+      <div class="explorer-resizer" id="explorerResizer"></div>
+    </div>
+
+    <!-- Code Editor -->
+    <div class="editor-container">
+      <div class="editor-tabs" id="editorTabs">
+        <!-- 动态生成tab -->
+      </div>
+      <div id="editorWorkspace" class="editor-workspace">
+        <!-- 编辑器标签将在这里动态生成 -->
+      </div>
+
+      <!-- Bottom Panel - 统一的下方面板系统 -->
+      <div class="bottom-panel" id="bottomPanel">
+        <!-- Resizer -->
+        <div class="bottom-panel-resizer" id="bottomPanelResizer"></div>
+
+        <!-- Header with Tabs -->
+        <div class="bottom-panel-header">
+          <div class="bottom-panel-tabs">
+            <!-- Tabs will be rendered by BottomPanelManager -->
+          </div>
+          <div class="bottom-panel-toolbar">
+            <button class="btn-icon" id="clearConsoleBtn" title="清空控制台" style="display: none;">
+              <svg viewBox="0 0 24 24">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
+            </button>
+            <button class="btn-icon" id="togglePanelBtn" title="收起/展开">
+              <svg viewBox="0 0 24 24">
+                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="bottom-panel-content">
+          <!-- Tab 1: 当前元素 -->
+          <div class="bottom-panel-content-pane" data-pane-id="elements-list">
+            <div class="elements-list-container">
+              <div class="elements-list-header">
+                <!-- 预留：可以放搜索/筛选功能 -->
+              </div>
+              <div class="elements-list-content" id="elementsListContent">
+                <!-- 空状态或表格由JS动态生成 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: 元素属性 -->
+          <div class="bottom-panel-content-pane" data-pane-id="element-props">
+            <div class="element-props-container">
+              <div class="element-props-header" id="elementPropsHeader">
+                <!-- 工具栏由JS动态生成 -->
+              </div>
+              <div class="element-props-content" id="elementPropsContent">
+                <!-- 空状态或属性表格由JS动态生成 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: 元素库 -->
+          <div class="bottom-panel-content-pane" data-pane-id="locator-lib">
+            <div class="locator-lib-container">
+              <div class="locator-lib-header">
+                <input type="text" class="search-input" id="locatorSearchInput" placeholder="Filter locators by name..." />
+              </div>
+              <div class="locator-lib-content" id="locatorLibContent">
+                <!-- 空状态或卡片列表由JS动态生成 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: 控制台 -->
+          <div class="bottom-panel-content-pane" data-pane-id="console">
+            <div class="console-container">
+              <div class="console-header">
+                <!-- 预留：可以放筛选/清除按钮 -->
+              </div>
+              <div class="console-content" id="consoleContent">
+                <div class="console-empty-state">
+                  <div class="empty-icon">
+                    <svg viewBox="0 0 48 48" width="48" height="48">
+                      <rect x="6" y="8" width="36" height="32" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                      <line x1="10" y1="16" x2="18" y2="16" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="22" x2="26" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="28" x2="20" y2="28" stroke="currentColor" stroke-width="1.5"/>
+                      <circle cx="38" cy="32" r="2" fill="currentColor"/>
+                    </svg>
+                  </div>
+                  <div class="empty-title">No console output</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vertical Resizer -->
+    <div class="vertical-resizer" id="verticalResizer"></div>
+
+    <!-- Right Panel -->
+    <div class="right-panel" id="rightPanel">
+      <!-- Run Button -->
+      <div class="run-section">
+        <button class="btn btn-primary btn-block" id="runTestBtn">
+          <svg class="btn-icon" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          Run Test
+        </button>
+      </div>
+
+      <!-- Device Screen -->
+      <div class="device-screen">
+        <div class="screen-header">
+          <h4>Device Screen</h4>
+          <div class="mode-slider-container">
+            <div class="mode-slider" id="modeSlider">
+              <div class="slider-track">
+                <div
+                  class="slider-indicator"
+                  id="sliderIndicator"
+                ></div>
+              </div>
+              <div class="mode-options">
+                <div
+                  class="mode-option active"
+                  data-mode="normal"
+                  title="纯屏幕模式"
+                >
+                  <svg class="mode-icon" viewBox="0 0 24 24">
+                    <path
+                      d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zM7 4V3h10v1H7zm0 14V6h10v12H7z"
+                    />
+                  </svg>
+                </div>
+                <div
+                  class="mode-option"
+                  data-mode="xml"
+                  title="XML Overlay模式"
+                >
+                  <svg class="mode-icon" viewBox="0 0 24 24">
+                    <path
+                      d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27C12.59 15.41 11.11 16 9.5 16A6.5 6.5 0 0 1 3 9.5A6.5 6.5 0 0 1 9.5 3m0 2C7.01 5 5 7.01 5 9.5S7.01 14 9.5 14 14 11.99 14 9.5 11.99 5 9.5 5Z"
+                    />
+                  </svg>
+                </div>
+                <div
+                  class="mode-option"
+                  data-mode="crop"
+                  title="裁切模式"
+                >
+                  <svg class="mode-icon" viewBox="0 0 24 24">
+                    <path
+                      d="M7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7zM7 15V7h8v8H7z"
+                    />
+                  </svg>
+                </div>
+                <div
+                  class="mode-option"
+                  data-mode="coordinate"
+                  title="坐标模式"
+                >
+                  <svg class="mode-icon" viewBox="0 0 24 24">
+                    <path
+                      d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="screen-content" id="screenContent">
+          <img
+            id="deviceScreenshot"
+            src=""
+            alt="Device screen"
+            style="display: none"
+          />
+          <div class="screen-placeholder">No device connected</div>
+          <!-- 截图模式的选择框 -->
+          <div
+            id="screenshotSelector"
+            class="screenshot-selector"
+            style="display: none"
+          >
+            <div class="selector-box"></div>
+            <div class="selector-controls">
+              <button
+                class="btn btn-primary btn-small"
+                id="confirmScreenshotBtn"
+              >
+                确定
+              </button>
+              <button
+                class="btn btn-secondary btn-small"
+                id="cancelScreenshotBtn"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+          <!-- 坐标模式的点击标记 -->
+          <div
+            id="coordinateMarker"
+            class="coordinate-marker"
+            style="display: none"
+          >
+            <div class="coordinate-dot"></div>
+            <div class="coordinate-label"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

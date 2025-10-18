@@ -1,6 +1,6 @@
 {
   "name": "test-toolkit-studio",
-  "version": "0.3.2",
+  "version": "0.4.2",
   "description": "A cross-platform IDE for UI automation testing",
   "main": "main.js",
   "scripts": {
@@ -38,19 +38,17 @@
     },
     "asar": true,
     "files": [
-      "**/*",
-      "!toolkit-engine",
-      "!toolkit-engine/**/*",
-      "!build",
-      "!dist",
-      "!out",
-      "!.git",
-      "!.github",
-      "!.vscode",
-      "!.idea",
-      "!**/*.md",
-      "!**/*.log",
-      "!.DS_Store"
+        "main.js",
+        "package.json",
+        "package-lock.json",
+        "build/**/*",
+        "assets/**/*",
+        "renderer/**/*",
+        "handlers/**/*",
+        "!**/.DS_Store",
+        "!**/Thumbs.db",
+        "!**/*.log",
+        "!**/*.md"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

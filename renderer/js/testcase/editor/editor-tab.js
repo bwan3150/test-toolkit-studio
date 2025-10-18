@@ -176,13 +176,51 @@ class EditorTab {
         this.ensureModulesMixed();
         
         this.init();
+        
+        // 检查混入的方法是否存在
+        window.rLog('EditorTab 实例创建完成，检查混入方法:', {
+            hasSetTestRunning: typeof this.setTestRunning === 'function',
+            hasHighlightExecutingLine: typeof this.highlightExecutingLine === 'function',
+            hasHighlightErrorLine: typeof this.highlightErrorLine === 'function',
+            hasClearExecutionHighlight: typeof this.clearExecutionHighlight === 'function',
+            uniqueId: this.uniqueId
+        });
+        
+        // 如果仍然缺失方法，最后尝试
+        if (typeof this.setTestRunning !== 'function') {
+            window.rError('❌ EditorTab 实例仍然缺少 setTestRunning 方法！');
+        } else {
+            window.rLog('✅ EditorTab 实例成功获得 setTestRunning 方法');
+        }
     }
     
     // 确保所有模块方法都已混合到原型中
     ensureModulesMixed() {
-        if (!this.setupLocatorInputDragDrop && typeof window.mixinEditorModules === 'function') {
-            if (window.rLog) window.rLog('🔧 EditorTab实例化时检测到方法缺失，尝试混合模块...');
+        // 检查关键方法是否存在
+        if (!this.setTestRunning && typeof window.mixinEditorModules === 'function') {
+            if (window.rLog) window.rLog('🔧 EditorTab实例化时检测到setTestRunning方法缺失，尝试混合模块...');
             window.mixinEditorModules();
+        }
+        
+        // 再次确认混入是否成功
+        if (!this.setTestRunning) {
+            window.rError('❌ 混入失败！setTestRunning 方法仍然不存在');
+            window.rError('当前原型方法:', Object.getOwnPropertyNames(Object.getPrototypeOf(this)));
+            
+            // 强制重新混入
+            if (window.EditorHighlighting) {
+                window.rLog('🔧 强制重新混入 EditorHighlighting 方法');
+                // 直接复制所有方法到实例
+                for (let key in window.EditorHighlighting) {
+                    if (typeof window.EditorHighlighting[key] === 'function') {
+                        this[key] = window.EditorHighlighting[key].bind(this);
+                        window.rLog(`  ✓ 混入方法: ${key}`);
+                    }
+                }
+                window.rLog('✅ EditorHighlighting 方法混入成功');
+            } else {
+                window.rError('❌ window.EditorHighlighting 不存在！');
+            }
         }
     }
     
@@ -528,17 +566,31 @@ class EditorTab {
             window.rError('找不到编辑器容器');
         }
         
-        this.textContentEl = this.editorContainer.querySelector('.text-content');
-        this.lineNumbersEl = this.editorContainer.querySelector('.line-numbers');
-        
-        window.rLog('文本模式DOM元素:', {
-            textContentEl: this.textContentEl,
-            lineNumbersEl: this.lineNumbersEl,
-            statusIndicatorEl: this.statusIndicatorEl
-        });
-        
-        this.setupTextModeListeners();
-        this.updateLineNumbers();
+        // 确保DOM元素在下一个事件循环中被查询，以便HTML完全渲染
+        setTimeout(() => {
+            this.textContentEl = this.editorContainer.querySelector('.text-content');
+            this.lineNumbersEl = this.editorContainer.querySelector('.line-numbers');
+            
+            window.rLog('文本模式DOM元素:', {
+                textContentEl: this.textContentEl,
+                lineNumbersEl: this.lineNumbersEl,
+                statusIndicatorEl: this.statusIndicatorEl,
+                textContentElExists: !!this.textContentEl,
+                lineNumbersElExists: !!this.lineNumbersEl
+            });
+            
+            // 在DOM元素获取后才设置监听器和更新行号
+            if (this.textContentEl && this.lineNumbersEl) {
+                this.setupTextModeListeners();
+                this.updateLineNumbers();
+            } else {
+                window.rError('DOM元素获取失败:', {
+                    textContentEl: !!this.textContentEl,
+                    lineNumbersEl: !!this.lineNumbersEl,
+                    containerHTML: this.editorContainer.innerHTML.substring(0, 200)
+                });
+            }
+        }, 0);
         
         // 更新状态指示器
         this.updateStatusIndicator();
@@ -577,7 +629,7 @@ class EditorTab {
     renderBlocks() {
         // 获取命令
         const commands = this.getCommands();
-        
+
         let blocksHtml = '';
         
         // 为每个命令块生成HTML，包括块间的插入按钮
@@ -1681,8 +1733,7 @@ class EditorTab {
         try {
             // 创建TKE缓冲区用于文件操作
             this.buffer = new window.TKEEditorBuffer(filePath);
-            await this.buffer.initialize();
-            
+
             // 加载文件内容
             await this.buffer.loadFromFile();
             
@@ -1870,7 +1921,10 @@ function mixinEditorModules() {
 
     if (window.EditorHighlighting) {
         Object.assign(EditorTab.prototype, window.EditorHighlighting);
-        if (window.rLog) window.rLog('✅ EditorHighlighting 模块已混入');
+        if (window.rLog) {
+            window.rLog('✅ EditorHighlighting 模块已混入');
+            window.rLog('混入后 EditorTab.prototype 是否有 setTestRunning:', typeof EditorTab.prototype.setTestRunning);
+        }
     }
 
     if (window.EditorLineMapping) {
