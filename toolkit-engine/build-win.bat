@@ -9,31 +9,8 @@ echo ===============================
 REM 获取脚本所在目录（toolkit-engine目录）
 cd /d "%~dp0"
 
-REM 同步版本号：package.json → Cargo.toml
-set PACKAGE_JSON=%~dp0..\package.json
-if not exist "%PACKAGE_JSON%" (
-    echo Error: package.json not found at %PACKAGE_JSON%
-    exit /b 1
-)
-
-REM 从 package.json 提取版本号
-for /f "tokens=2 delims=:, " %%a in ('findstr /r "\"version\"" "%PACKAGE_JSON%"') do (
-    set PKG_VERSION=%%a
-    goto :version_found
-)
-:version_found
-set PKG_VERSION=%PKG_VERSION:"=%
-echo Sync version: %PKG_VERSION%
-
-REM 更新 Cargo.toml 版本号
-set CARGO_TOML=%~dp0Cargo.toml
-if not exist "%CARGO_TOML%" (
-    echo Error: Cargo.toml not found at %CARGO_TOML%
-    exit /b 1
-)
-
-REM 使用 PowerShell 替换版本号
-powershell -ExecutionPolicy Bypass -Command "$content = Get-Content '%CARGO_TOML%'; $content -replace '^version\s*=\s*\"[^\"]+\"', 'version = \"%PKG_VERSION%\"' | Set-Content '%CARGO_TOML%'"
+REM 版本号同步暂时跳过（手动管理 Cargo.toml 版本号）
+echo Note: Version sync skipped (manage Cargo.toml version manually)
 
 echo Building for Windows (win32)...
 
