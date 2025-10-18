@@ -241,13 +241,17 @@ jobs:
           echo "✅ 所有二进制文件验证完成"
 
       # 构建 Electron 应用 (macOS)
-      - name: 构建 Electron 应用
+      - name: 构建 Electron 应用并上传到 S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-2
         run: |
           echo "=== 构建 Electron 应用 for macOS ==="
-          # 添加 --publish never 禁用自动发布
-          npx electron-builder --mac --publish never
+          # electron-builder 会自动生成 latest-mac.yml 并上传到 S3
+          npx electron-builder --mac
 
-          echo "✅ Electron 应用构建完成"
+          echo "✅ Electron 应用构建完成并已上传到 S3"
           ls -lh dist/
 
       # 重命名应用
@@ -280,46 +284,6 @@ jobs:
           name: macos-app
           path: release/*
           retention-days: 30
-
-      # 上传到 S3（用于自动更新）
-      - name: 上传 macOS 更新文件到 S3
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ap-southeast-2
-        run: |
-          echo "📤 上传 macOS 更新文件到 S3..."
-
-          # 检查必需的文件是否存在
-          if ls dist/*.zip 1> /dev/null 2>&1; then
-            echo "✅ 找到 .zip 文件"
-            aws s3 cp dist/*.zip s3://toolkit-studio-updates/app/
-          else
-            echo "⚠️  未找到 .zip 文件"
-          fi
-
-          if ls dist/*.zip.blockmap 1> /dev/null 2>&1; then
-            echo "✅ 找到 .blockmap 文件"
-            aws s3 cp dist/*.zip.blockmap s3://toolkit-studio-updates/app/
-          else
-            echo "⚠️  未找到 .blockmap 文件"
-          fi
-
-          if [ -f "dist/latest-mac.yml" ]; then
-            echo "✅ 找到 latest-mac.yml"
-            aws s3 cp dist/latest-mac.yml s3://toolkit-studio-updates/app/
-          else
-            echo "❌ 未找到 latest-mac.yml（必需文件！）"
-            exit 1
-          fi
-
-          echo "✅ macOS 更新文件已上传到 S3"
-
-          # 验证上传
-          echo ""
-          echo "📋 验证上传结果："
-          aws s3 ls s3://toolkit-studio-updates/app/ | grep -E "(latest-mac.yml|\.zip|\.blockmap)" || true
-        if: github.event_name == 'push' || github.event.inputs.version != ''
 
   # Windows 构建
   build-windows:
@@ -482,14 +446,18 @@ jobs:
           echo ✅ 所有二进制文件验证完成
 
       # 构建 Electron 应用 (Windows)
-      - name: 构建 Electron 应用
+      - name: 构建 Electron 应用并上传到 S3
         shell: cmd
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-2
         run: |
           echo === 构建 Electron 应用 for Windows ===
-          REM 添加 --publish never 禁用自动发布
-          npx electron-builder --win --publish never
+          REM electron-builder 会自动生成 latest.yml 并上传到 S3
+          npx electron-builder --win
 
-          echo ✅ Electron 应用构建完成
+          echo ✅ Electron 应用构建完成并已上传到 S3
           dir dist\
 
       # 重命名应用
@@ -516,53 +484,6 @@ jobs:
           name: windows-app
           path: release/*
           retention-days: 30
-
-      # 上传到 S3（用于自动更新）
-      - name: 上传 Windows 更新文件到 S3
-        shell: pwsh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ap-southeast-2
-        run: |
-          Write-Host "📤 上传 Windows 更新文件到 S3..."
-
-          # 检查必需的文件是否存在
-          $exeFiles = Get-ChildItem -Path dist -Filter "*.exe" -Recurse
-          if ($exeFiles) {
-            Write-Host "✅ 找到 .exe 文件"
-            foreach ($file in $exeFiles) {
-              aws s3 cp $file.FullName s3://toolkit-studio-updates/app/
-            }
-          } else {
-            Write-Host "⚠️  未找到 .exe 文件"
-          }
-
-          $blockmapFiles = Get-ChildItem -Path dist -Filter "*.exe.blockmap" -Recurse
-          if ($blockmapFiles) {
-            Write-Host "✅ 找到 .blockmap 文件"
-            foreach ($file in $blockmapFiles) {
-              aws s3 cp $file.FullName s3://toolkit-studio-updates/app/
-            }
-          } else {
-            Write-Host "⚠️  未找到 .blockmap 文件"
-          }
-
-          if (Test-Path "dist/latest.yml") {
-            Write-Host "✅ 找到 latest.yml"
-            aws s3 cp dist/latest.yml s3://toolkit-studio-updates/app/
-          } else {
-            Write-Host "❌ 未找到 latest.yml（必需文件！）"
-            exit 1
-          }
-
-          Write-Host "✅ Windows 更新文件已上传到 S3"
-
-          # 验证上传
-          Write-Host ""
-          Write-Host "📋 验证上传结果："
-          aws s3 ls s3://toolkit-studio-updates/app/
-        if: github.event_name == 'push' || github.event.inputs.version != ''
 
   # 创建 GitHub Release
   create-release:
