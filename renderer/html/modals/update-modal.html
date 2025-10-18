@@ -1,0 +1,31 @@
+<!-- 应用更新弹窗 -->
+<div class="modal" id="updateModal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Update Available</h3>
+      <button class="modal-close" id="closeUpdateModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="update-info">
+        <div class="form-group">
+          <label>New Version</label>
+          <p class="update-version-text"><strong id="updateVersion">0.0.0</strong></p>
+        </div>
+        <div class="form-group">
+          <p class="info-text">
+            The update has been downloaded and is ready to install.
+            Click "Install and Restart" to apply the update now.
+          </p>
+        </div>
+        <div class="form-group" id="updateNotesGroup" style="display: none;">
+          <label>Release Notes</label>
+          <div class="update-notes-content" id="updateNotesContent"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="updateLaterBtn">Later</button>
+      <button class="btn btn-primary" id="updateNowBtn">Install and Restart</button>
+    </div>
+  </div>
+</div>
