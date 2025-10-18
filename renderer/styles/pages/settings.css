@@ -111,11 +111,6 @@
     display: flex;
     align-items: center;
     padding: 10px 0;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.about-row:last-child {
-    border-bottom: none;
 }
 
 .about-label {
@@ -171,7 +166,7 @@
 }
 
 .toggle-switch input:checked + .toggle-slider {
-    background-color: #007ACC;
+    background-color: var(--accent-primary);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
