@@ -15,5 +15,5 @@ fi
 echo "Running Toolkit Studio(Electron) in Dev..."
 export ELECTRON_DEV_MODE=true
 export ELECTRON_PROJECT_ROOT="$(pwd)"
-export ELECTRON_SIMULATE_UPDATE=true  # 测试更新弹窗
+export ELECTRON_SIMULATE_UPDATE=false  # 测试更新弹窗
 npm start

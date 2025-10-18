@@ -81,14 +81,7 @@
       closeUpdateModal.addEventListener('click', hideUpdateModal);
     }
 
-    // 点击遮罩层关闭（可选）
-    if (updateModal) {
-      updateModal.addEventListener('click', (e) => {
-        if (e.target === updateModal) {
-          hideUpdateModal();
-        }
-      });
-    }
+    // 不允许点击遮罩层关闭（重要更新提示）
   }
 
   /**
@@ -201,10 +194,17 @@
       window.rLog('⚡ 用户确认安装更新，即将重启应用...');
     }
 
-    // 禁用按钮防止重复点击
+    // 禁用所有按钮和关闭操作
     if (updateNowBtn) {
       updateNowBtn.disabled = true;
-      updateNowBtn.textContent = 'Installing...';
+      updateNowBtn.innerHTML = '<span class="spinner"></span> Installing...';
+    }
+    if (updateLaterBtn) {
+      updateLaterBtn.disabled = true;
+    }
+    if (closeUpdateModal) {
+      closeUpdateModal.disabled = true;
+      closeUpdateModal.style.display = 'none';
     }
 
     try {
@@ -221,6 +221,13 @@
           updateNowBtn.disabled = false;
           updateNowBtn.textContent = 'Install and Restart';
         }
+        if (updateLaterBtn) {
+          updateLaterBtn.disabled = false;
+        }
+        if (closeUpdateModal) {
+          closeUpdateModal.disabled = false;
+          closeUpdateModal.style.display = 'block';
+        }
       }
       // 如果成功，应用会自动重启，不需要处理
     } catch (error) {
@@ -232,6 +239,13 @@
       if (updateNowBtn) {
         updateNowBtn.disabled = false;
         updateNowBtn.textContent = 'Install and Restart';
+      }
+      if (updateLaterBtn) {
+        updateLaterBtn.disabled = false;
+      }
+      if (closeUpdateModal) {
+        closeUpdateModal.disabled = false;
+        closeUpdateModal.style.display = 'block';
       }
     }
   }

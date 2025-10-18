@@ -142,16 +142,35 @@ function setupUpdateListeners() {
     updateDownloaded = true;
     sendStatusToWindow('update-downloaded', info);
 
-    // 从 S3 获取 release notes
-    const releaseNotes = await fetchReleaseNotes(info.version);
+    try {
+      // 从 S3 获取 release notes
+      log.info('开始获取 Release Notes...');
+      const releaseNotes = await fetchReleaseNotes(info.version);
 
-    // 通知渲染进程显示更新提示弹窗
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-ready', {
-        version: info.version,
-        releaseNotes: releaseNotes,
-        releaseDate: info.releaseDate
-      });
+      if (releaseNotes) {
+        log.info('✅ 成功获取 Release Notes，长度:', releaseNotes.length);
+      } else {
+        log.warn('⚠️  未获取到 Release Notes');
+      }
+
+      // 通知渲染进程显示更新提示弹窗
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-ready', {
+          version: info.version,
+          releaseNotes: releaseNotes,
+          releaseDate: info.releaseDate
+        });
+      }
+    } catch (error) {
+      log.error('处理更新下载完成事件时出错:', error);
+      // 即使获取 release notes 失败，也要通知渲染进程
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-ready', {
+          version: info.version,
+          releaseNotes: null,
+          releaseDate: info.releaseDate
+        });
+      }
     }
   });
 
@@ -196,12 +215,22 @@ function registerUpdateHandlers() {
       }
 
       log.info('用户确认安装更新，准备重启应用...');
-      // quitAndInstall 会关闭应用并安装更新
-      setImmediate(() => {
-        autoUpdater.quitAndInstall(false, true);
-      });
-      return { success: true };
+      log.info('调用 autoUpdater.quitAndInstall()...');
+
+      try {
+        // quitAndInstall 会关闭应用并安装更新
+        // 参数: isSilent=true (静默重启), isForceRunAfter=true (安装后立即启动)
+        setImmediate(() => {
+          log.info('执行 quitAndInstall...');
+          autoUpdater.quitAndInstall(true, true);
+        });
+        return { success: true };
+      } catch (error) {
+        log.error('quitAndInstall 调用失败:', error);
+        return { success: false, error: error.message };
+      }
     } else {
+      log.warn('尝试安装更新但 updateDownloaded = false');
       return { success: false, error: '更新尚未下载完成' };
     }
   });
