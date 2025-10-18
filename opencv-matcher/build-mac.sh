@@ -11,6 +11,28 @@ echo "==============================================="
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# 读取版本号：package.json → BUILD_VERSION 环境变量
+PACKAGE_JSON="$SCRIPT_DIR/../package.json"
+if [ ! -f "$PACKAGE_JSON" ]; then
+    echo "Error: package.json not found at $PACKAGE_JSON"
+    exit 1
+fi
+
+PKG_VERSION=$(grep '"version"' "$PACKAGE_JSON" | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+if [ -z "$PKG_VERSION" ]; then
+    echo "Error: cannot extract version from $PACKAGE_JSON"
+    exit 1
+fi
+
+# 导出 BUILD_VERSION 环境变量
+export BUILD_VERSION="$PKG_VERSION"
+echo "Build version: $BUILD_VERSION"
+
+# 生成 _version.py 文件（打包时嵌入版本号）
+echo "# 自动生成的版本文件 - 请勿手动修改" > _version.py
+echo "__version__ = '$BUILD_VERSION'" >> _version.py
+echo "✓ 已生成 _version.py: $BUILD_VERSION"
+
 # 获取当前操作系统
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
@@ -29,6 +51,9 @@ echo "使用 PyInstaller 打包..."
     --clean \
     --noconfirm \
     opencv_matcher.py
+
+# 清理生成的 _version.py
+rm -f _version.py
 
 # 检查打包是否成功
 if [ ! -f "dist/tke-opencv" ]; then

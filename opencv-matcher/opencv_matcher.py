@@ -8,9 +8,14 @@ import cv2
 import numpy as np
 import json
 import sys
+import os
 from pathlib import Path
 
-__version__ = "0.5.0"
+# 尝试从 _version.py 导入版本号（构建时生成），否则从环境变量读取
+try:
+    from _version import __version__
+except ImportError:
+    __version__ = os.environ.get('BUILD_VERSION', 'unknown')
 
 
 def non_max_suppression(boxes, overlap_thresh=0.5):

@@ -10,7 +10,7 @@ cd "$SCRIPT_DIR"
 echo "==============================="
 
 
-# 同步版本号：package.json → Cargo.toml
+# 读取版本号：package.json → BUILD_VERSION 环境变量
 PACKAGE_JSON="$SCRIPT_DIR/../package.json"
 if [ ! -f "$PACKAGE_JSON" ]; then
     echo "Error: package.json not found at $PACKAGE_JSON"
@@ -22,22 +22,10 @@ if [ -z "$PKG_VERSION" ]; then
     echo "Error: cannot extract version from $PACKAGE_JSON"
     exit 1
 fi
-echo "Sync version: $PKG_VERSION"
 
-CARGO_TOML="$SCRIPT_DIR/Cargo.toml"
-if [ ! -f "$CARGO_TOML" ]; then
-    echo "Error: Cargo.toml not found at $CARGO_TOML"
-    exit 1
-fi
-
-# 跨平台 sed 替换（Linux 用 -i，macOS 用 -i ""）
-if sed --version >/dev/null 2>&1; then
-    # GNU sed (Linux)
-    sed -i -E "s/^version *= *\"[^\"]+\"/version = \"$PKG_VERSION\"/" "$CARGO_TOML"
-else
-    # BSD sed (macOS)
-    sed -i "" -E "s/^version *= *\"[^\"]+\"/version = \"$PKG_VERSION\"/" "$CARGO_TOML"
-fi
+# 导出 BUILD_VERSION 环境变量供 build.rs 使用
+export BUILD_VERSION="$PKG_VERSION"
+echo "Build version: $BUILD_VERSION"
 
 echo "Building Toolkit Engine..."
 

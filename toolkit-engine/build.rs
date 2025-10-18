@@ -1,10 +1,15 @@
 // build.rs - 构建脚本，自动判断平台并将对应的 ADB 嵌入到可执行文件中
+// 同时处理版本号注入
 
 use std::env;
 use std::fs;
 use std::path::Path;
 
 fn main() {
+    // 1. 处理版本号注入
+    inject_version();
+
+    // 2. 处理 ADB 嵌入
     println!("cargo:rerun-if-changed=resources/");
     
     // 获取目标平台信息
@@ -68,13 +73,24 @@ fn main() {
 fn create_empty_adb_binary() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let adb_rs_path = Path::new(&out_dir).join("embedded_adb.rs");
-    
-    let empty_adb_const = 
+
+    let empty_adb_const =
         "// 空的 ADB 二进制数据 - 将使用系统 ADB\n\
          pub const EMBEDDED_ADB_BINARY: &[u8] = &[];\n\
          pub const ADB_BINARY_NAME: &str = \"adb\";\n\
          pub const HAS_BUNDLED_ADB: bool = false;";
-    
+
     fs::write(&adb_rs_path, empty_adb_const)
         .expect("无法写入空 ADB 常量文件");
+}
+
+/// 注入版本号到编译时环境变量
+/// 如果 BUILD_VERSION 环境变量不存在，使用 "unknown" 暴露配置问题
+fn inject_version() {
+    println!("cargo:rerun-if-env-changed=BUILD_VERSION");
+
+    let version = env::var("BUILD_VERSION").unwrap_or_else(|_| "unknown".to_string());
+
+    println!("cargo:rustc-env=BUILD_VERSION={}", version);
+    println!("cargo:warning=TKE 版本号: {}", version);
 }

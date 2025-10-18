@@ -9,6 +9,30 @@ echo ===============================================
 REM 获取脚本所在目录（opencv-matcher目录）
 cd /d "%~dp0"
 
+REM 读取版本号：package.json → BUILD_VERSION 环境变量
+set PACKAGE_JSON=%~dp0..\package.json
+if not exist "%PACKAGE_JSON%" (
+    echo Error: package.json not found
+    exit /b 1
+)
+
+REM 使用 PowerShell 提取版本号
+for /f "delims=" %%i in ('powershell -Command "(Get-Content '%PACKAGE_JSON%' | ConvertFrom-Json).version"') do set PKG_VERSION=%%i
+
+if "%PKG_VERSION%"=="" (
+    echo Error: cannot extract version from package.json
+    exit /b 1
+)
+
+REM 导出 BUILD_VERSION 环境变量
+set BUILD_VERSION=%PKG_VERSION%
+echo Build version: %BUILD_VERSION%
+
+REM 生成 _version.py 文件（打包时嵌入版本号）
+echo # 自动生成的版本文件 - 请勿手动修改 > _version.py
+echo __version__ = '%BUILD_VERSION%' >> _version.py
+echo 已生成 _version.py: %BUILD_VERSION%
+
 REM Windows 平台配置
 set PLATFORM=win32
 set OUTPUT_DIR=%~dp0..\resources\%PLATFORM%\toolkit-engine
@@ -27,6 +51,9 @@ if errorlevel 1 (
     echo Error: PyInstaller failed
     exit /b 1
 )
+
+REM 清理生成的 _version.py
+if exist "_version.py" del /f /q "_version.py"
 
 REM 检查打包是否成功
 if not exist "dist\tke-opencv.exe" (

@@ -12,7 +12,7 @@ use handlers::*;
 #[derive(Parser)]
 #[command(name = "tke")]
 #[command(about = "Toolkit Engine")]
-#[command(version)]
+#[command(version = env!("BUILD_VERSION"))]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

@@ -9,8 +9,24 @@ echo ===============================
 REM 获取脚本所在目录（tester-ai目录）
 cd /d "%~dp0"
 
-REM 版本号同步暂时跳过（手动管理 Cargo.toml 版本号）
-echo Note: Version sync skipped (manage Cargo.toml version manually)
+REM 读取版本号：package.json → BUILD_VERSION 环境变量
+set PACKAGE_JSON=%~dp0..\package.json
+if not exist "%PACKAGE_JSON%" (
+    echo Error: package.json not found
+    exit /b 1
+)
+
+REM 使用 PowerShell 提取版本号
+for /f "delims=" %%i in ('powershell -Command "(Get-Content '%PACKAGE_JSON%' | ConvertFrom-Json).version"') do set PKG_VERSION=%%i
+
+if "%PKG_VERSION%"=="" (
+    echo Error: cannot extract version from package.json
+    exit /b 1
+)
+
+REM 导出 BUILD_VERSION 环境变量供 build.rs 使用
+set BUILD_VERSION=%PKG_VERSION%
+echo Build version: %BUILD_VERSION%
 
 echo Building for Windows (win32)...
 

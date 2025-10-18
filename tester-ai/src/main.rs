@@ -9,7 +9,7 @@ use tracing_subscriber::EnvFilter;
 
 /// AI 自动化测试员 - 基于 RIG 框架的智能测试工具
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version = env!("BUILD_VERSION"), about, long_about = None)]
 struct Args {
     /// 从 stdin 读取 JSON 输入
     #[arg(long)]
