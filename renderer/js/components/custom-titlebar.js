@@ -8,14 +8,10 @@ class CustomTitleBar {
     }
 
     init() {
-        // 只在Windows平台初始化
-        if (process.platform !== 'win32') {
-            return;
-        }
-
+        // 所有平台都初始化自定义标题栏
         // 绑定按钮事件
         this.bindEvents();
-        
+
         // 初始化窗口状态
         this.updateMaximizeButton();
     }
@@ -54,25 +50,16 @@ class CustomTitleBar {
     async updateMaximizeButton() {
         const isMaximized = await window.AppGlobals.ipcRenderer.invoke('window-is-maximized');
         this.isMaximized = isMaximized;
-        
+
         const maximizeBtn = document.getElementById('maximize-btn');
         if (maximizeBtn) {
-            const svg = maximizeBtn.querySelector('svg');
+            // macOS 风格：绿色按钮始终显示全屏图标，只改变 title
             if (isMaximized) {
                 document.body.classList.add('window-maximized');
-                maximizeBtn.title = '还原';
-                // 更新图标为还原图标
-                svg.innerHTML = `
-                    <path d="M2,2 L8,2 L8,8 L2,8 Z" stroke="currentColor" stroke-width="1" fill="none"/>
-                    <path d="M0,0 L6,0 L6,6" stroke="currentColor" stroke-width="1" fill="none"/>
-                `;
+                maximizeBtn.title = '退出全屏';
             } else {
                 document.body.classList.remove('window-maximized');
-                maximizeBtn.title = '最大化';
-                // 更新图标为最大化图标
-                svg.innerHTML = `
-                    <path d="M0,0 L10,0 L10,10 L0,10 Z" stroke="currentColor" stroke-width="1" fill="none"/>
-                `;
+                maximizeBtn.title = '全屏';
             }
         }
     }

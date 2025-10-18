@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
 
 
 def non_max_suppression(boxes, overlap_thresh=0.5):

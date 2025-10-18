@@ -46,7 +46,7 @@ function createWindow() {
     height: 900,
     minWidth: 1200,
     minHeight: 800,
-    frame: false,
+    frame: false,  // 所有平台都使用自定义标题栏
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,

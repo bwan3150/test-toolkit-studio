@@ -1,6 +1,6 @@
 [package]
 name = "tke"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2021"
 authors = ["Eric Wang"]
 description = "Toolkit Engine - CLI tool for automated testing"

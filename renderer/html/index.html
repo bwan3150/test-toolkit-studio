@@ -25,44 +25,31 @@
 
     <!-- Title bar area for dragging -->
     <div class="titlebar-area">
-      <!-- 自定义标题栏 - 仅在Windows上显示 -->
-      <div class="custom-titlebar platform-win32-only">
-        <div class="titlebar-drag-region">
-          <div class="titlebar-title">Test Toolkit Studio</div>
+      <!-- 自定义标题栏 - macOS 风格三色灯 -->
+      <div class="custom-titlebar">
+        <div class="titlebar-controls-left">
+          <!-- 红色 - 关闭 -->
+          <button class="titlebar-dot close-dot" id="close-btn" title="关闭">
+            <svg width="6" height="6" viewBox="0 0 6 6" class="dot-icon">
+              <path d="M1,1 L5,5 M5,1 L1,5" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
+            </svg>
+          </button>
+          <!-- 黄色 - 最小化 -->
+          <button class="titlebar-dot minimize-dot" id="minimize-btn" title="最小化">
+            <svg width="6" height="6" viewBox="0 0 6 6" class="dot-icon">
+              <path d="M1,3 L5,3" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
+            </svg>
+          </button>
+          <!-- 绿色 - 全屏/最大化 -->
+          <button class="titlebar-dot maximize-dot" id="maximize-btn" title="全屏">
+            <svg width="6" height="6" viewBox="0 0 6 6" class="dot-icon">
+              <path d="M1,1 L5,1 L5,5 L1,5 Z" stroke="none" fill="currentColor" />
+              <path d="M2.5,2 L3.5,2 M3.5,2 L3.5,4 M3.5,4 L2.5,4" stroke="currentColor" stroke-width="0.8" fill="none" stroke-linecap="round" />
+            </svg>
+          </button>
         </div>
-        <div class="titlebar-controls">
-          <button
-            class="titlebar-btn minimize-btn"
-            id="minimize-btn"
-            title="最小化"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10">
-              <path d="M0,5 L10,5" stroke="currentColor" stroke-width="1" />
-            </svg>
-          </button>
-          <button
-            class="titlebar-btn maximize-btn"
-            id="maximize-btn"
-            title="最大化"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10">
-              <path
-                d="M0,0 L10,0 L10,10 L0,10 Z"
-                stroke="currentColor"
-                stroke-width="1"
-                fill="none"
-              />
-            </svg>
-          </button>
-          <button class="titlebar-btn close-btn" id="close-btn" title="关闭">
-            <svg width="10" height="10" viewBox="0 0 10 10">
-              <path
-                d="M0,0 L10,10 M10,0 L0,10"
-                stroke="currentColor"
-                stroke-width="1"
-              />
-            </svg>
-          </button>
+        <div class="titlebar-drag-region">
+          <div class="titlebar-title">Toolkit Studio</div>
         </div>
       </div>
     </div>
