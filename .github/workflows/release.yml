@@ -293,21 +293,21 @@ jobs:
           # 检查必需的文件是否存在
           if ls dist/*.zip 1> /dev/null 2>&1; then
             echo "✅ 找到 .zip 文件"
-            aws s3 cp dist/*.zip s3://toolkit-studio-updates/app/ --acl public-read
+            aws s3 cp dist/*.zip s3://toolkit-studio-updates/app/
           else
             echo "⚠️  未找到 .zip 文件"
           fi
 
           if ls dist/*.zip.blockmap 1> /dev/null 2>&1; then
             echo "✅ 找到 .blockmap 文件"
-            aws s3 cp dist/*.zip.blockmap s3://toolkit-studio-updates/app/ --acl public-read
+            aws s3 cp dist/*.zip.blockmap s3://toolkit-studio-updates/app/
           else
             echo "⚠️  未找到 .blockmap 文件"
           fi
 
           if [ -f "dist/latest-mac.yml" ]; then
             echo "✅ 找到 latest-mac.yml"
-            aws s3 cp dist/latest-mac.yml s3://toolkit-studio-updates/app/ --acl public-read
+            aws s3 cp dist/latest-mac.yml s3://toolkit-studio-updates/app/
           else
             echo "❌ 未找到 latest-mac.yml（必需文件！）"
             exit 1
@@ -532,7 +532,7 @@ jobs:
           if ($exeFiles) {
             Write-Host "✅ 找到 .exe 文件"
             foreach ($file in $exeFiles) {
-              aws s3 cp $file.FullName s3://toolkit-studio-updates/app/ --acl public-read
+              aws s3 cp $file.FullName s3://toolkit-studio-updates/app/
             }
           } else {
             Write-Host "⚠️  未找到 .exe 文件"
@@ -542,7 +542,7 @@ jobs:
           if ($blockmapFiles) {
             Write-Host "✅ 找到 .blockmap 文件"
             foreach ($file in $blockmapFiles) {
-              aws s3 cp $file.FullName s3://toolkit-studio-updates/app/ --acl public-read
+              aws s3 cp $file.FullName s3://toolkit-studio-updates/app/
             }
           } else {
             Write-Host "⚠️  未找到 .blockmap 文件"
@@ -550,7 +550,7 @@ jobs:
 
           if (Test-Path "dist/latest.yml") {
             Write-Host "✅ 找到 latest.yml"
-            aws s3 cp dist/latest.yml s3://toolkit-studio-updates/app/ --acl public-read
+            aws s3 cp dist/latest.yml s3://toolkit-studio-updates/app/
           } else {
             Write-Host "❌ 未找到 latest.yml（必需文件！）"
             exit 1
