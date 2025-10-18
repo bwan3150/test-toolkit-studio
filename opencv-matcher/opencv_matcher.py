@@ -10,6 +10,8 @@ import json
 import sys
 from pathlib import Path
 
+__version__ = "0.4.2"
+
 
 def non_max_suppression(boxes, overlap_thresh=0.5):
     """
@@ -174,6 +176,11 @@ def template_match(screenshot_path, template_path, threshold=0.75, match_index=0
 
 def main():
     """命令行入口"""
+    # 处理 --version 参数
+    if len(sys.argv) == 2 and sys.argv[1] in ['--version', '-v']:
+        print(f"tke-opencv {__version__}")
+        sys.exit(0)
+
     if len(sys.argv) < 3:
         result = {
             "success": False,

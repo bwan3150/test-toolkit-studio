@@ -45,14 +45,12 @@ echo Build successfully
 echo Output: %OUTPUT_DIR%\tke-opencv.exe
 echo Size: %SIZE_MB% MB
 
-REM 测试可执行文件
-echo.
-echo Testing executable...
-"%OUTPUT_DIR%\tke-opencv.exe" 2>nul | findstr /C:"" >nul
+REM 验证二进制文件能否运行
+"%OUTPUT_DIR%\tke-opencv.exe" --version >nul 2>&1
 if errorlevel 1 (
     echo Warning: tke-opencv might not be executable
 ) else (
-    echo tke-opencv executable test passed
+    echo tke-opencv --version successful
 )
 
 echo.

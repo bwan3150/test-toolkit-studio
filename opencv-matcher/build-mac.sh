@@ -49,10 +49,12 @@ echo "✓ 打包成功"
 echo "  输出: $OUTPUT_DIR/tke-opencv"
 echo "  大小: $SIZE"
 
-# 测试可执行文件
-echo ""
-echo "测试可执行文件..."
-"$OUTPUT_DIR/tke-opencv" 2>&1 | head -1 || true
+# 验证二进制文件能否运行
+if "$OUTPUT_DIR/tke-opencv" --version > /dev/null 2>&1; then
+    echo "✓ tke-opencv --version successful"
+else
+    echo "⚠ Warning: tke-opencv might not be executable"
+fi
 
 echo ""
 echo "==============================================="
