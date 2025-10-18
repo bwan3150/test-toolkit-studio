@@ -4,6 +4,9 @@
 const { autoUpdater } = require('electron-updater');
 const { ipcMain, dialog } = require('electron');
 const log = require('electron-log');
+const Store = require('electron-store');
+
+const store = new Store();
 
 // 配置日志
 log.transports.file.level = 'info';
@@ -17,12 +20,22 @@ autoUpdater.autoInstallOnAppQuit = true;
 let mainWindow = null;
 let updateDownloaded = false;
 
+// 设置更新 channel（beta 或 latest）
+function setUpdateChannel() {
+  const receiveBetaUpdates = store.get('receive_beta_updates', false);
+  autoUpdater.allowPrerelease = receiveBetaUpdates;
+  log.info(`更新频道设置为: ${receiveBetaUpdates ? 'beta' : 'latest'}`);
+}
+
 /**
  * 初始化自动更新
  * @param {BrowserWindow} win - 主窗口实例
  */
 function initAutoUpdater(win) {
   mainWindow = win;
+
+  // 设置更新频道
+  setUpdateChannel();
 
   // 监听更新事件
   setupUpdateListeners();
@@ -51,6 +64,9 @@ function checkForUpdates() {
     log.info('开发模式，跳过更新检查');
     return;
   }
+
+  // 重新设置更新频道（以防用户改变了设置）
+  setUpdateChannel();
 
   log.info('开始检查更新...');
   autoUpdater.checkForUpdates();
@@ -162,6 +178,19 @@ function registerUpdateHandlers() {
       updateDownloaded,
       currentVersion: require('electron').app.getVersion()
     };
+  });
+
+  // 设置更新频道（beta 或 latest）
+  ipcMain.handle('set-update-channel', (event, channel) => {
+    try {
+      const isBeta = channel === 'beta';
+      autoUpdater.allowPrerelease = isBeta;
+      log.info(`更新频道已切换为: ${channel}`);
+      return { success: true, channel };
+    } catch (error) {
+      log.error('设置更新频道失败:', error);
+      return { success: false, error: error.message };
+    }
   });
 }
 

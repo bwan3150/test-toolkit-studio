@@ -10,16 +10,32 @@ function initializeSettingsPage() {
     const aboutVersion = document.getElementById('about-version');
     const exportLogsBtn = document.getElementById('exportLogsBtn');
     const exportLogStatus = document.getElementById('exportLogStatus');
-    
+    const betaUpdatesToggle = document.getElementById('betaUpdatesToggle');
+
     // 编辑器字体设置
     const editorFontFamily = document.getElementById('editorFontFamily');
     const editorFontSize = document.getElementById('editorFontSize');
     const applyFontSettings = document.getElementById('applyFontSettings');
-    
+
     // 加载应用版本
     if (aboutVersion) {
         ipcRenderer.invoke('get-app-version').then(version => {
-            aboutVersion.textContent = `Version: ${version}`;
+            aboutVersion.textContent = version;
+        });
+    }
+
+    // 加载 Beta 更新设置
+    if (betaUpdatesToggle) {
+        ipcRenderer.invoke('store-get', 'receive_beta_updates').then(enabled => {
+            betaUpdatesToggle.checked = enabled === true;
+        });
+
+        // 监听 toggle 变化
+        betaUpdatesToggle.addEventListener('change', async () => {
+            const enabled = betaUpdatesToggle.checked;
+            await ipcRenderer.invoke('store-set', 'receive_beta_updates', enabled);
+            await ipcRenderer.invoke('set-update-channel', enabled ? 'beta' : 'latest');
+            window.rLog(`Beta updates ${enabled ? 'enabled' : 'disabled'}`);
         });
     }
     
