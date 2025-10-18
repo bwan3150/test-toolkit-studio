@@ -333,9 +333,9 @@ window.TestcaseController = {
         }
     },
     
-    toggleCaseFolder: (caseContainer) => {
+    toggleCaseFolder: (caseContainer, casePath, autoOpenFirst) => {
         if (window.TestcaseExplorerModule) {
-            return window.TestcaseExplorerModule.toggleCaseFolder(caseContainer);
+            return window.TestcaseExplorerModule.toggleCaseFolder(caseContainer, casePath, autoOpenFirst);
         }
     },
     

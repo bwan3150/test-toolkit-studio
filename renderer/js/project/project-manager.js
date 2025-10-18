@@ -618,14 +618,39 @@ async function navigateToTestcase(record, index) {
         // 显示通知
         window.NotificationModule.showNotification(`已跳转到测试用例页面: ${caseName}`, 'info');
         
-        // 尝试展开对应的case文件夹
-        setTimeout(() => {
+        // 尝试展开对应的case文件夹并自动打开第一个脚本
+        setTimeout(async () => {
+            window.rLog(`🔍 尝试查找case容器: ${caseName}`);
             const caseContainer = document.querySelector(`[data-case-path*="${caseName}"]`);
-            if (caseContainer && window.TestcaseController.toggleCaseFolder) {
-                const scriptsContainer = caseContainer.querySelector('.scripts-container');
-                if (scriptsContainer && scriptsContainer.classList.contains('collapsed')) {
-                    window.TestcaseController.toggleCaseFolder(caseContainer);
-                }
+
+            if (!caseContainer) {
+                window.rError(`❌ 未找到case容器: ${caseName}`);
+                return;
+            }
+
+            window.rLog(`✅ 找到case容器: ${caseContainer.dataset.casePath}`);
+
+            if (!window.TestcaseController.toggleCaseFolder) {
+                window.rError(`❌ toggleCaseFolder函数不存在`);
+                return;
+            }
+
+            const scriptsContainer = caseContainer.querySelector('.scripts-container');
+            if (!scriptsContainer) {
+                window.rError(`❌ 未找到scripts-container`);
+                return;
+            }
+
+            window.rLog(`📁 scripts-container状态: collapsed=${scriptsContainer.classList.contains('collapsed')}`);
+
+            if (scriptsContainer.classList.contains('collapsed')) {
+                const casePath = caseContainer.dataset.casePath;
+                window.rLog(`🚀 开始展开并打开第一个脚本，casePath=${casePath}`);
+                // 传入autoOpenFirst=true参数，自动打开第一个脚本
+                await window.TestcaseController.toggleCaseFolder(caseContainer, casePath, true);
+                window.rLog(`✅ toggleCaseFolder调用完成`);
+            } else {
+                window.rLog(`ℹ️ 文件夹已经展开，跳过`);
             }
         }, 500);
         

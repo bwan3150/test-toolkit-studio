@@ -87,11 +87,12 @@ function createCollapsibleCaseItem(caseName, casePath) {
     caseContainer.appendChild(scriptsContainer);
     
     // 单击文件夹切换展开/折叠状态
-    caseHeader.addEventListener('click', (e) => {
+    caseHeader.addEventListener('click', async (e) => {
         e.stopPropagation();
         e.preventDefault();
         try {
-            toggleCaseFolder(caseContainer, casePath);
+            // 用户手动点击时，不自动打开第一个脚本（autoOpenFirst=false）
+            await toggleCaseFolder(caseContainer, casePath, false);
         } catch (error) {
             window.rError('切换文件夹状态失败:', error);
         }
@@ -110,28 +111,32 @@ function createCollapsibleCaseItem(caseName, casePath) {
 async function loadCaseScripts(caseItem, casePath) {
     const { path, fs } = getGlobals();
     const scriptsContainer = caseItem.querySelector('.scripts-container');
-    
+
     if (!scriptsContainer) {
         window.rError('loadCaseScripts: scripts-container not found', caseItem);
-        return;
+        return [];
     }
 
     // 清空现有内容
     scriptsContainer.innerHTML = '';
-    
+
     const scriptPath = path.join(casePath, 'script');
+    const scriptPaths = []; // 收集脚本路径
+
     try {
         const scripts = await fs.readdir(scriptPath);
         window.rLog(`加载case脚本: ${casePath}, 找到${scripts.length}个文件`);
-        
+
         for (const script of scripts) {
             if (script.endsWith('.tks') || script.endsWith('.yaml')) {
+                const fullScriptPath = path.join(scriptPath, script);
                 const scriptItem = createScriptItem(
                     script,
-                    path.join(scriptPath, script),
+                    fullScriptPath,
                     casePath
                 );
                 scriptsContainer.appendChild(scriptItem);
+                scriptPaths.push(fullScriptPath); // 添加到路径列表
             }
         }
     } catch (error) {
@@ -145,41 +150,63 @@ async function loadCaseScripts(caseItem, casePath) {
         emptyMsg.style.fontSize = '12px';
         scriptsContainer.appendChild(emptyMsg);
     }
+
+    return scriptPaths; // 返回脚本路径列表
 }
 
 // 切换case文件夹的展开状态
-function toggleCaseFolder(caseItem, casePath) {
+async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
+    window.rLog(`📂 toggleCaseFolder 调用: casePath=${casePath}, autoOpenFirst=${autoOpenFirst}`);
+
     const scriptsContainer = caseItem.querySelector('.scripts-container');
     const caseIcon = caseItem.querySelector('.case-icon');
-    
+
     if (!scriptsContainer) {
         window.rError('未找到 scripts-container 元素');
-        return;
+        return [];
     }
-    
+
     const isCurrentlyCollapsed = scriptsContainer.classList.contains('collapsed');
-    
+    window.rLog(`📂 当前折叠状态: ${isCurrentlyCollapsed}`);
+
     if (isCurrentlyCollapsed) {
         // 展开
         scriptsContainer.classList.remove('collapsed');
         expandedCases.add(casePath);
-        
+        window.rLog(`📂 展开文件夹`);
+
         // 更改图标为打开的文件夹（如果图标存在）
         if (caseIcon) {
             caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
         }
-        
+
         // 异步加载脚本文件
-        loadCaseScripts(caseItem, casePath);
+        window.rLog(`📂 开始加载脚本文件`);
+        const scriptPaths = await loadCaseScripts(caseItem, casePath);
+        window.rLog(`📂 加载完成，共 ${scriptPaths.length} 个脚本`);
+
+        // 如果需要自动打开第一个脚本
+        if (autoOpenFirst && scriptPaths.length > 0) {
+            window.rLog(`📂 自动打开第一个脚本: ${scriptPaths[0]}`);
+            await openFile(scriptPaths[0]);
+            window.rLog(`📂 脚本已打开`);
+        } else {
+            window.rLog(`📂 不自动打开脚本 (autoOpenFirst=${autoOpenFirst}, 脚本数=${scriptPaths.length})`);
+        }
+
+        return scriptPaths;
     } else {
         // 折叠
         scriptsContainer.classList.add('collapsed');
         expandedCases.delete(casePath);
-        
+        window.rLog(`📂 折叠文件夹`);
+
         // 更改图标为关闭的文件夹（如果图标存在）
         if (caseIcon) {
             caseIcon.innerHTML = '<path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>';
         }
+
+        return [];
     }
 }
 
