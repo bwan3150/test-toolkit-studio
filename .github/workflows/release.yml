@@ -187,16 +187,17 @@ jobs:
       # 验证所有二进制文件
       - name: 验证构建产物
         run: |
+          set -e  # 遇到错误立即退出
           echo "=== 验证构建产物 ==="
 
           echo "📦 TKE:"
-          resources/darwin/toolkit-engine/tke --version || echo "⚠️  tke --version 失败"
+          resources/darwin/toolkit-engine/tke --version
 
           echo "📦 tke-opencv:"
-          resources/darwin/toolkit-engine/tke-opencv --version || echo "⚠️  tke-opencv --version 失败"
+          resources/darwin/toolkit-engine/tke-opencv --version
 
           echo "📦 tester-ai:"
-          resources/darwin/tester-ai/tester-ai --version || resources/darwin/tester-ai/tester-ai --help || echo "⚠️  tester-ai 验证失败"
+          resources/darwin/tester-ai/tester-ai --version || resources/darwin/tester-ai/tester-ai --help
 
           echo "✅ 所有二进制文件验证完成"
 
@@ -204,7 +205,8 @@ jobs:
       - name: 构建 Electron 应用
         run: |
           echo "=== 构建 Electron 应用 for macOS ==="
-          npm run build-mac
+          # 添加 --publish never 禁用自动发布
+          npx electron-builder --mac --publish never
 
           echo "✅ Electron 应用构建完成"
           ls -lh dist/
@@ -286,12 +288,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # 安装 uv (Windows)
+      # 安装 uv (Windows) - 使用 pip 安装更可靠
       - name: 安装 uv
-        shell: pwsh
+        shell: cmd
         run: |
-          irm https://astral.sh/uv/install.ps1 | iex
-          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          pip install uv
+          uv --version
 
       # 安装 Node.js 依赖
       - name: 安装 Node.js 依赖
@@ -326,11 +328,17 @@ jobs:
         run: |
           echo === 构建 tke-opencv for Windows ===
 
-          REM 同步依赖
-          python -m uv sync --group dev
+          REM 同步依赖（使用 uv 命令而不是 python -m uv）
+          uv sync --group dev
 
           REM 打包
           .venv\Scripts\pyinstaller --onefile --name tke-opencv --clean --noconfirm opencv_matcher.py
+
+          REM 检查打包是否成功
+          if not exist "dist\tke-opencv.exe" (
+            echo ❌ 打包失败：未找到 dist\tke-opencv.exe
+            exit /b 1
+          )
 
           REM 创建目标目录
           if not exist "..\resources\win32\toolkit-engine" mkdir "..\resources\win32\toolkit-engine"
@@ -368,12 +376,15 @@ jobs:
 
           echo 📦 TKE:
           resources\win32\toolkit-engine\tke.exe --version
+          if errorlevel 1 exit /b 1
 
           echo 📦 tke-opencv:
           resources\win32\toolkit-engine\tke-opencv.exe --version
+          if errorlevel 1 exit /b 1
 
           echo 📦 tester-ai:
           resources\win32\tester-ai\tester-ai.exe --version
+          if errorlevel 1 exit /b 1
 
           echo ✅ 所有二进制文件验证完成
 
@@ -382,7 +393,8 @@ jobs:
         shell: cmd
         run: |
           echo === 构建 Electron 应用 for Windows ===
-          npm run build-win
+          REM 添加 --publish never 禁用自动发布
+          npx electron-builder --win --publish never
 
           echo ✅ Electron 应用构建完成
           dir dist\
