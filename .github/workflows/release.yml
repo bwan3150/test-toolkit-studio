@@ -84,12 +84,12 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            # 提交更改
+            # 提交更改并推送到 main 分支
             git add package.json
             git commit -m "Update: version tag $VERSION by GitHub Action"
-            git push
+            git push origin HEAD:main
 
-            echo "✅ package.json 已更新并提交"
+            echo "✅ package.json 已更新并提交到 main 分支"
           else
             echo "✅ package.json 版本已是最新 ($VERSION)，无需更新"
           fi
