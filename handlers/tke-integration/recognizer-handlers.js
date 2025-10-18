@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { getTkePath } = require('./adb-handlers');
+const { extractJsonFromOutput } = require('./tke-utils');
 
 // 通用的 TKE 命令执行函数
 async function execTkeCommand(app, args) {
@@ -43,13 +44,12 @@ async function execTkeCommand(app, args) {
           console.warn('TKE命令警告:', stderr);
         }
 
-        // 验证输出是否为 JSON
-        const output = stdout.trim();
+        // 从输出中提取有效的 JSON（处理混合输出的情况，如 JSON + WARN 日志）
         try {
-          JSON.parse(output);
-          resolve(output); // 返回原始 JSON 字符串
+          const jsonOutput = extractJsonFromOutput(stdout);
+          resolve(jsonOutput); // 返回提取的 JSON 字符串
         } catch (e) {
-          reject(new Error(`TKE 输出不是有效的 JSON: ${output}`));
+          reject(e);
         }
       }
     });
