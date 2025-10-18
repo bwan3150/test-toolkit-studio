@@ -218,116 +218,102 @@ async function loadUserInfo() {
 // 检查所有内置工具状态
 async function checkAllToolsStatus() {
     const { ipcRenderer } = window.AppGlobals;
-    const sdkStatus = document.getElementById('sdkStatus');
-    const adbStatus = document.getElementById('adbStatus');
-    const aaptStatus = document.getElementById('aaptStatus');
-    const tkeStatus = document.getElementById('tkeStatus');
-    
+    const tkeVersionStatus = document.getElementById('tkeVersionStatus');
+    const tkeAdbVersionStatus = document.getElementById('tkeAdbVersionStatus');
+    const opencvVersionStatus = document.getElementById('opencvVersionStatus');
+    const testerAiVersionStatus = document.getElementById('testerAiVersionStatus');
+
     // 设置所有状态为检查中
-    if (sdkStatus) {
-        sdkStatus.textContent = 'Checking...';
-        sdkStatus.className = 'status-indicator checking';
+    if (tkeVersionStatus) {
+        tkeVersionStatus.textContent = 'Checking...';
+        tkeVersionStatus.className = 'status-indicator checking';
     }
-    if (adbStatus) {
-        adbStatus.textContent = 'Checking...';
-        adbStatus.className = 'status-indicator checking';
+    if (tkeAdbVersionStatus) {
+        tkeAdbVersionStatus.textContent = 'Checking...';
+        tkeAdbVersionStatus.className = 'status-indicator checking';
     }
-    if (aaptStatus) {
-        aaptStatus.textContent = 'Checking...';
-        aaptStatus.className = 'status-indicator checking';
+    if (opencvVersionStatus) {
+        opencvVersionStatus.textContent = 'Checking...';
+        opencvVersionStatus.className = 'status-indicator checking';
     }
-    if (tkeStatus) {
-        tkeStatus.textContent = 'Checking...';
-        tkeStatus.className = 'status-indicator checking';
+    if (testerAiVersionStatus) {
+        testerAiVersionStatus.textContent = 'Checking...';
+        testerAiVersionStatus.className = 'status-indicator checking';
     }
-    
-    const platform = process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux';
-    
-    // 检查ADB和Android SDK
+
+    // 检查 TKE 引擎版本
     try {
-        const adbResult = await ipcRenderer.invoke('adb-devices');
-        
-        if (adbResult.success) {
-            // 获取ADB版本
-            try {
-                const adbVersionResult = await ipcRenderer.invoke('check-adb-version');
-                if (adbStatus) {
-                    const versionText = adbVersionResult.success ? `Available (${adbVersionResult.version})` : 'Available';
-                    adbStatus.textContent = versionText;
-                    adbStatus.className = 'status-indicator success';
-                }
-            } catch (error) {
-                if (adbStatus) {
-                    adbStatus.textContent = 'Available';
-                    adbStatus.className = 'status-indicator success';
-                }
-            }
-            
-            if (sdkStatus) {
-                sdkStatus.textContent = `Available (${platform})`;
-                sdkStatus.className = 'status-indicator success';
-            }
-        } else {
-            if (adbStatus) {
-                adbStatus.textContent = 'Not Available';
-                adbStatus.className = 'status-indicator error';
-            }
-            if (sdkStatus) {
-                sdkStatus.textContent = 'Not Found';
-                sdkStatus.className = 'status-indicator error';
+        const tkeResult = await ipcRenderer.invoke('get-tke-version');
+        if (tkeVersionStatus) {
+            if (tkeResult.success) {
+                tkeVersionStatus.textContent = `${tkeResult.version}`;
+                tkeVersionStatus.className = 'status-indicator success';
+            } else {
+                tkeVersionStatus.textContent = tkeResult.error || 'Not Available';
+                tkeVersionStatus.className = 'status-indicator error';
             }
         }
     } catch (error) {
-        if (adbStatus) {
-            adbStatus.textContent = 'Error';
-            adbStatus.className = 'status-indicator error';
-        }
-        if (sdkStatus) {
-            sdkStatus.textContent = 'Error';
-            sdkStatus.className = 'status-indicator error';
+        if (tkeVersionStatus) {
+            tkeVersionStatus.textContent = `Error: ${error.message}`;
+            tkeVersionStatus.className = 'status-indicator error';
         }
     }
-    
-    // 检查AAPT（如果有实现）
+
+    // 检查 TKE 内嵌 ADB 版本
     try {
-        const aaptResult = await ipcRenderer.invoke('check-aapt-status');
-        if (aaptResult && aaptResult.success) {
-            if (aaptStatus) {
-                const versionText = aaptResult.version && aaptResult.version !== 'Available' ? `Available (${aaptResult.version})` : 'Available';
-                aaptStatus.textContent = versionText;
-                aaptStatus.className = 'status-indicator success';
-            }
-        } else {
-            if (aaptStatus) {
-                aaptStatus.textContent = 'Not Available';
-                aaptStatus.className = 'status-indicator error';
+        const tkeAdbResult = await ipcRenderer.invoke('get-tke-adb-version');
+        if (tkeAdbVersionStatus) {
+            if (tkeAdbResult.success) {
+                tkeAdbVersionStatus.textContent = `${tkeAdbResult.version}`;
+                tkeAdbVersionStatus.className = 'status-indicator success';
+            } else {
+                tkeAdbVersionStatus.textContent = tkeAdbResult.error || 'Not Available';
+                tkeAdbVersionStatus.className = 'status-indicator error';
             }
         }
     } catch (error) {
-        if (aaptStatus) {
-            aaptStatus.textContent = 'Not Implemented';
-            aaptStatus.className = 'status-indicator warning';
+        if (tkeAdbVersionStatus) {
+            tkeAdbVersionStatus.textContent = `Error: ${error.message}`;
+            tkeAdbVersionStatus.className = 'status-indicator error';
         }
     }
-    
-    // 检查TKE
+
+    // 检查 AI 测试模块版本（较快，先检查）
     try {
-        const tkeResult = await ipcRenderer.invoke('check-tke-status');
-        if (tkeResult && tkeResult.success) {
-            if (tkeStatus) {
-                tkeStatus.textContent = `Available (v${tkeResult.version || 'Unknown'})`;
-                tkeStatus.className = 'status-indicator success';
-            }
-        } else {
-            if (tkeStatus) {
-                tkeStatus.textContent = tkeResult?.error || 'Not Available';
-                tkeStatus.className = 'status-indicator error';
+        const testerAiResult = await ipcRenderer.invoke('get-tester-ai-version');
+        if (testerAiVersionStatus) {
+            if (testerAiResult.success) {
+                testerAiVersionStatus.textContent = `${testerAiResult.version}`;
+                testerAiVersionStatus.className = 'status-indicator success';
+            } else {
+                testerAiVersionStatus.textContent = testerAiResult.error || 'Not Available';
+                testerAiVersionStatus.className = 'status-indicator error';
             }
         }
     } catch (error) {
-        if (tkeStatus) {
-            tkeStatus.textContent = 'Not Available';
-            tkeStatus.className = 'status-indicator error';
+        if (testerAiVersionStatus) {
+            testerAiVersionStatus.textContent = `Error: ${error.message}`;
+            testerAiVersionStatus.className = 'status-indicator error';
+        }
+    }
+
+    // 检查本地视觉模块（TKE-OpenCV）版本（较慢，放最后）
+    try {
+        const opencvResult = await ipcRenderer.invoke('get-tke-opencv-version');
+        if (opencvVersionStatus) {
+            if (opencvResult.success) {
+                opencvVersionStatus.textContent = `${opencvResult.version}`;
+                opencvVersionStatus.className = 'status-indicator success';
+            } else {
+                opencvVersionStatus.textContent = opencvResult.error || 'Not Available';
+                opencvVersionStatus.className = 'status-indicator error';
+            }
+        }
+    } catch (error) {
+        if (opencvVersionStatus) {
+            opencvVersionStatus.textContent = `Error: ${error.message}`;
+            opencvVersionStatus.className = 'status-indicator error';
         }
     }
 }
