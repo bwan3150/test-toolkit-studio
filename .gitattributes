@@ -1,12 +1,10 @@
 # Git LFS 配置
 # 将 resources 目录下的所有二进制文件设置为 LFS 大文件
-
 # 可执行文件
 resources/**/*.exe filter=lfs diff=lfs merge=lfs -text
 resources/**/tke filter=lfs diff=lfs merge=lfs -text
 resources/**/tke-opencv filter=lfs diff=lfs merge=lfs -text
 resources/**/tester-ai filter=lfs diff=lfs merge=lfs -text
-
 # 其他大文件（如有）
 resources/**/*.dylib filter=lfs diff=lfs merge=lfs -text
 resources/**/*.so filter=lfs diff=lfs merge=lfs -text
