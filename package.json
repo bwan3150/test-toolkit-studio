@@ -24,7 +24,9 @@
     "adb-qc": "^1.0.4",
     "axios": "^1.6.2",
     "csv-parse": "^5.5.3",
+    "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.6.2",
     "iconv-lite": "^0.6.3",
     "jimp": "^1.6.0",
     "js-yaml": "^4.1.0",
@@ -37,18 +39,26 @@
       "output": "dist"
     },
     "asar": true,
+    "publish": [
+      {
+        "provider": "s3",
+        "bucket": "toolkit-studio-updates",
+        "region": "ap-southeast-2",
+        "path": "/app"
+      }
+    ],
     "files": [
-        "main.js",
-        "package.json",
-        "package-lock.json",
-        "build/**/*",
-        "assets/**/*",
-        "renderer/**/*",
-        "handlers/**/*",
-        "!**/.DS_Store",
-        "!**/Thumbs.db",
-        "!**/*.log",
-        "!**/*.md"
+      "main.js",
+      "package.json",
+      "package-lock.json",
+      "build/**/*",
+      "assets/**/*",
+      "renderer/**/*",
+      "handlers/**/*",
+      "!**/.DS_Store",
+      "!**/Thumbs.db",
+      "!**/*.log",
+      "!**/*.md"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

@@ -33,6 +33,9 @@ const { registerProjectHandlers } = require('./handlers/project/project-handlers
 const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
 const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
 
+// 自动更新模块
+const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/auto-updater');
+
 // 全局变量
 let mainWindow;
 let scrcpyProcess = null;
@@ -300,6 +303,10 @@ function registerAllHandlers() {
     console.log('注册Bug Analysis API代理处理器...');
     registerBugAnalysisProxyHandlers();
 
+    // 自动更新模块
+    console.log('注册自动更新处理器...');
+    registerUpdateHandlers();
+
     // 注册其他IPC处理器（scrcpy, STB, screenshot等）
     registerOtherHandlers();
 
@@ -313,10 +320,13 @@ function registerAllHandlers() {
 app.whenReady().then(() => {
   createWindow();
   createTray();
-  
+
   // 注册IPC处理器
   registerAllHandlers();
-  
+
+  // 初始化自动更新（窗口创建后）
+  initAutoUpdater(mainWindow);
+
   // 初始化环境
   initializeEnvironment();
 });
