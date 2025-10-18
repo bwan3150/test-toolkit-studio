@@ -69,31 +69,6 @@ jobs:
           echo "📦 版本: $VERSION"
           echo "🏷️  标签: $TAG"
 
-      - name: 更新 package.json 版本号
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # 读取当前 package.json 中的版本
-          CURRENT_VERSION=$(grep '"version"' package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
-
-          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
-            echo "更新 package.json: $CURRENT_VERSION → $VERSION"
-            sed -i -E "s/\"version\": *\"[^\"]+\"/\"version\": \"$VERSION\"/" package.json
-
-            # 配置 git
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-
-            # 提交更改并推送到 main 分支
-            git add package.json
-            git commit -m "Update: version tag $VERSION by GitHub Action"
-            git push origin HEAD:main
-
-            echo "✅ package.json 已更新并提交到 main 分支"
-          else
-            echo "✅ package.json 版本已是最新 ($VERSION)，无需更新"
-          fi
-
   # macOS 构建
   build-macos:
     name: 构建 macOS 应用
@@ -111,6 +86,18 @@ jobs:
         with:
           lfs: false  # 不下载 LFS 大文件，从源代码重新构建
           fetch-tags: true  # 获取 tag 信息，让 electron-builder 能检测到 git tag
+
+      - name: 更新 package.json 版本号（仅本地）
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          CURRENT_VERSION=$(grep '"version"' package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+
+          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
+            echo "本地更新 package.json: $CURRENT_VERSION → $VERSION"
+            sed -i '' -E "s/\"version\": *\"[^\"]+\"/\"version\": \"$VERSION\"/" package.json
+          else
+            echo "package.json 版本已是最新: $VERSION"
+          fi
 
       # 设置 Node.js 环境
       - name: 设置 Node.js
@@ -307,6 +294,21 @@ jobs:
         with:
           lfs: false  # 不下载 LFS 大文件，从源代码重新构建
           fetch-tags: true  # 获取 tag 信息，让 electron-builder 能检测到 git tag
+
+      - name: 更新 package.json 版本号（仅本地）
+        shell: pwsh
+        run: |
+          $VERSION = "${{ needs.prepare.outputs.version }}"
+          $content = Get-Content package.json -Raw
+          $currentVersion = ($content | Select-String -Pattern '"version"\s*:\s*"([^"]+)"').Matches.Groups[1].Value
+
+          if ($currentVersion -ne $VERSION) {
+            Write-Host "本地更新 package.json: $currentVersion → $VERSION"
+            $content = $content -replace '"version"\s*:\s*"[^"]+"', """version"": ""$VERSION"""
+            $content | Set-Content package.json -NoNewline
+          } else {
+            Write-Host "package.json 版本已是最新: $VERSION"
+          }
 
       # 设置 Node.js 环境
       - name: 设置 Node.js
@@ -526,3 +528,44 @@ jobs:
           files: artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 更新 package.json 版本号（tag 触发和手动触发都执行）
+  update-package:
+    name: 更新 package.json
+    needs: [prepare, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: |
+      needs.build-macos.result == 'success' || needs.build-windows.result == 'success'
+    permissions:
+      contents: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 更新 package.json 版本号
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          # 读取当前 package.json 中的版本
+          CURRENT_VERSION=$(grep '"version"' package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+
+          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
+            echo "更新 package.json: $CURRENT_VERSION → $VERSION"
+            sed -i -E "s/\"version\": *\"[^\"]+\"/\"version\": \"$VERSION\"/" package.json
+
+            # 配置 git
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            # 提交更改并推送到 main 分支
+            git add package.json
+            git commit -m "Update: version tag $VERSION by GitHub Action"
+            git push
+
+            echo "✅ package.json 已更新并提交到 main 分支"
+          else
+            echo "✅ package.json 版本已是最新 ($VERSION)，无需更新"
+          fi
