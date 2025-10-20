@@ -18,6 +18,12 @@ autoUpdater.autoDownload = false;
 // 禁用自动安装（等待用户确认）
 autoUpdater.autoInstallOnAppQuit = true;
 
+// macOS 特殊配置：允许降级（用于测试）
+if (process.platform === 'darwin') {
+  autoUpdater.allowDowngrade = true;
+  log.info('🍎 macOS: 已启用 allowDowngrade');
+}
+
 let mainWindow = null;
 let updateDownloaded = false;
 
@@ -176,8 +182,18 @@ function setupUpdateListeners() {
 
   // 更新错误
   autoUpdater.on('error', (err) => {
-    log.error('更新错误:', err);
-    sendStatusToWindow('update-error', err);
+    log.error('❌ 更新错误:', err);
+    log.error('错误详情:', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+      code: err.code
+    });
+    sendStatusToWindow('update-error', {
+      message: err.message || '未知错误',
+      code: err.code,
+      name: err.name
+    });
   });
 }
 
@@ -214,23 +230,33 @@ function registerUpdateHandlers() {
         return { success: true, simulated: true };
       }
 
-      log.info('用户确认安装更新，准备重启应用...');
-      log.info('调用 autoUpdater.quitAndInstall()...');
+      log.info('⚡ 用户确认安装更新，即将重启应用...');
 
       try {
-        // quitAndInstall 会关闭应用并安装更新
-        // 参数: isSilent=true (静默重启), isForceRunAfter=true (安装后立即启动)
-        setImmediate(() => {
-          log.info('执行 quitAndInstall...');
-          autoUpdater.quitAndInstall(true, true);
-        });
+        // macOS 和 Windows 需要不同的参数
+        const isMac = process.platform === 'darwin';
+
+        if (isMac) {
+          log.info('🍎 macOS: 使用 quitAndInstall(false, true)');
+          // macOS: isSilent=false, isForceRunAfter=true
+          setImmediate(() => {
+            autoUpdater.quitAndInstall(false, true);
+          });
+        } else {
+          log.info('🪟 Windows: 使用 quitAndInstall(true, true)');
+          // Windows: isSilent=true, isForceRunAfter=true
+          setImmediate(() => {
+            autoUpdater.quitAndInstall(true, true);
+          });
+        }
+
         return { success: true };
       } catch (error) {
-        log.error('quitAndInstall 调用失败:', error);
+        log.error('❌ quitAndInstall 调用失败:', error);
         return { success: false, error: error.message };
       }
     } else {
-      log.warn('尝试安装更新但 updateDownloaded = false');
+      log.warn('⚠️  尝试安装更新但 updateDownloaded = false');
       return { success: false, error: '更新尚未下载完成' };
     }
   });
