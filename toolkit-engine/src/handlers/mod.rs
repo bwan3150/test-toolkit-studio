@@ -7,6 +7,7 @@ pub mod parser;
 pub mod runner;
 pub mod ocr;
 pub mod adb;
+pub mod aapt;
 
 // 重新导出命令枚举，方便 main.rs 使用
 pub use controller::ControllerCommands;
