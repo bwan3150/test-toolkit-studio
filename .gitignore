@@ -5,6 +5,7 @@ dist/
 out/
 toolkit-engine/target/
 tester-ai/target/
+resources/
 
 # Python (opencv-matcher)
 opencv-matcher/.venv/
