@@ -45,7 +45,7 @@
         "bucket": "toolkit-studio-updates",
         "region": "ap-southeast-2",
         "path": "/app",
-        "acl": null
+        "acl": "public-read"
       }
     ],
     "files": [
