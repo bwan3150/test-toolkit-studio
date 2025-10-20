@@ -44,7 +44,8 @@
         "provider": "s3",
         "bucket": "toolkit-studio-updates",
         "region": "ap-southeast-2",
-        "path": "/app"
+        "path": "/app",
+        "acl": null
       }
     ],
     "files": [
