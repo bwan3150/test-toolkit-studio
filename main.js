@@ -9,6 +9,7 @@ const execPromise = promisify(exec);
 // 导入处理器模块
 // TKE 集成模块 - 所有与 TKE（Toolkit Engine）交互的底层功能
 const { registerAdbHandlers, getBuiltInScrcpyPath, getBuiltInStbPath, getTkePath, buildTkeAdbCommand } = require('./handlers/tke-integration/adb-handlers');
+const { registerAaptHandlers } = require('./handlers/tke-integration/aapt-handlers');
 const { registerLogcatHandlers } = require('./handlers/tke-integration/logcat-handlers');
 const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/tke-integration/ios-handlers');
 const { registerDeviceHandlers } = require('./handlers/tke-integration/device-handlers');
@@ -264,6 +265,9 @@ function registerAllHandlers() {
     // TKE 集成模块
     console.log('注册ADB处理器...');
     registerAdbHandlers(app);
+
+    console.log('注册AAPT处理器...');
+    registerAaptHandlers(app);
 
     console.log('注册Logcat处理器...');
     registerLogcatHandlers(app, mainWindow);
