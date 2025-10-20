@@ -1,6 +1,6 @@
 {
   "name": "test-toolkit-studio",
-  "version": "0.5.2-beta",
+  "version": "0.5.3-beta",
   "description": "A cross-platform IDE for UI automation testing",
   "main": "main.js",
   "scripts": {
