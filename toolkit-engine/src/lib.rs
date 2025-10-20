@@ -7,6 +7,7 @@ pub mod models;
 
 // 功能模块（对应 tke 命令）
 pub mod adb;
+pub mod aapt;
 pub mod ocr;
 pub mod controller;
 pub mod fetcher;
@@ -15,7 +16,7 @@ pub mod parser;
 pub mod runner;
 
 // 导出工具类
-pub use utils::{JsonOutput, AdbManager};
+pub use utils::{JsonOutput, AdbManager, AaptManager};
 
 // 导出功能模块
 pub use controller::Controller;
@@ -50,6 +51,9 @@ use thiserror::Error;
 pub enum TkeError {
     #[error("ADB错误: {0}")]
     AdbError(String),
+
+    #[error("AAPT错误: {0}")]
+    AaptError(String),
 
     #[error("文件IO错误: {0}")]
     IoError(#[from] std::io::Error),

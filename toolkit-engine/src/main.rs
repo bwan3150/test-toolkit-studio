@@ -63,6 +63,12 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// AAPT - THIS IS JUST AAPT!!!!! directly aapt
+    Aapt {
+        /// forward aapt command to inner aapt
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// OCR - extract words from image
     Ocr {
         /// image path
@@ -87,11 +93,11 @@ enum Commands {
 async fn main() -> tke::Result<()> {
     let cli = Cli::parse();
 
-    // 检查是否是 ADB 直通命令
-    let is_adb_command = matches!(cli.command, Commands::Adb { .. });
+    // 检查是否是 ADB/AAPT 直通命令
+    let is_passthrough_command = matches!(cli.command, Commands::Adb { .. } | Commands::Aapt { .. });
 
-    // 对于 ADB 直通命令，完全跳过日志初始化和项目信息输出
-    let project_path = if !is_adb_command {
+    // 对于 ADB/AAPT 直通命令，完全跳过日志初始化和项目信息输出
+    let project_path = if !is_passthrough_command {
         // 初始化日志
         let level = if cli.verbose {
             tracing::Level::DEBUG
@@ -132,7 +138,7 @@ async fn main() -> tke::Result<()> {
 
         project_path
     } else {
-        // ADB 直通模式：获取项目路径但不输出任何信息
+        // ADB/AAPT 直通模式：获取项目路径但不输出任何信息
         cli.project.unwrap_or_else(|| {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         })
@@ -157,6 +163,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Adb { args } => {
             adb::handle(args, cli.device).await
+        }
+        Commands::Aapt { args } => {
+            aapt::handle(args).await
         }
         Commands::Ocr { image, online, url, lang } => {
             ocr::handle(image, online, url, lang).await

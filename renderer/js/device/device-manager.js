@@ -1659,106 +1659,47 @@ function setupDragAndDropForDevice(deviceCard, deviceId) {
 // 安装APK到设备
 async function installApkToDevice(deviceId, apkPath) {
     const { ipcRenderer } = getGlobals();
-    
+
     if (!deviceId || !apkPath) {
         window.NotificationModule.showNotification('设备ID或APK路径无效', 'error');
         return;
     }
-    
-    // 显示loading modal
-    showApkInstallLoading('正在处理APK...', '');
-    
+
     try {
-        // 第一步：先尝试获取APK的包名
+        // 第一步：先用 AAPT 获取包名和主Activity
+        showApkInstallLoading('正在解析APK信息...', '');
+
         const packageInfo = await ipcRenderer.invoke('get-apk-package-name', apkPath);
-        
-        let packageName = null;
-        
-        if (packageInfo.success && packageInfo.packageName) {
-            // 成功获取到包名
-            packageName = packageInfo.packageName;
-            window.rLog('成功获取APK包名:', packageName);
-        } else if (packageInfo.needDirectInstall) {
-            // aapt不可用，直接尝试安装
-            window.rLog('aapt不可用，直接尝试安装APK...');
+
+        if (!packageInfo.success || !packageInfo.packageName) {
             hideApkInstallLoading();
-            
-            // 直接尝试安装，不需要包名
-            showApkInstallLoading('正在安装APK...', '');
-            const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, false);
-            
-            if (installResult.success) {
-                hideApkInstallLoading();
-                
-                // 如果有包名信息（从安装结果中获取），尝试自动启动
-                if (installResult.packageName) {
-                    await autoLaunchAppAfterInstall(deviceId, installResult.packageName);
-                }
-                
-                window.NotificationModule.showNotification('APK安装成功！', 'success');
-                await refreshConnectedDevices();
-                return;
-            } else if (installResult.packageName) {
-                // 从安装错误中获取到了包名
-                packageName = installResult.packageName;
-                window.rLog('从安装错误中获取到包名:', packageName);
-                // 继续后续流程
-            } else {
-                hideApkInstallLoading();
-                window.NotificationModule.showNotification(`安装失败: ${installResult.error || '未知错误'}`, 'error');
-                return;
-            }
-        } else {
-            // 其他错误情况
-            hideApkInstallLoading();
-            window.NotificationModule.showNotification(`无法处理APK：${packageInfo.error || '未知错误'}`, 'error');
+            window.NotificationModule.showNotification('无法解析APK文件', 'error');
             return;
         }
-        
-        window.rLog('获取到APK包名:', packageName);
-        
-        // 更新loading状态，显示包名
-        updateApkInstallLoading('正在安装...', '', packageName);
-        
-        // 第二步：尝试直接安装
-        const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
+
+        const packageName = packageInfo.packageName;
+        window.rLog('通过 AAPT 获取到包名:', packageName);
+
+        // 第二步：开始安装
+        updateApkInstallLoading('正在安装APK...', '', packageName);
+
+        const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, false);
         window.rLog('收到安装结果:', result);
-        
+
         if (result.success) {
-            // 安装成功
+            // 安装成功，使用已获取的包名启动应用
             hideApkInstallLoading();
-            
-            // 尝试自动启动应用
-            if (packageName) {
-                await autoLaunchAppAfterInstall(deviceId, packageName);
-            }
-            
+            await autoLaunchAppAfterInstall(deviceId, packageName);
             window.NotificationModule.showNotification('APK安装成功！', 'success');
             await refreshConnectedDevices();
-        } else {
-            // 显示详细错误信息
-            const errorMsg = result.error || '安装失败';
-            window.rLog('APK安装失败:', errorMsg);
-            
-            // 检查是否需要卸载重装（签名冲突或版本冲突）
-            const needUninstallReinstall = errorMsg.includes('签名不匹配') || 
-                                          (result.details && result.details.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE')) ||
-                                          errorMsg.includes('is older than current') ||
-                                          errorMsg.includes('INSTALL_FAILED') ||
-                                          result.details?.includes('INSTALL_FAILED');
-            
-            window.rLog('是否需要卸载重装:', needUninstallReinstall, '错误信息:', errorMsg);
-            
-            if (needUninstallReinstall) {
-                // 第三步：安装失败时，隐藏loading并显示确认框
-                hideApkInstallLoading();
-                showApkInstallModalWithPackage(deviceId, apkPath, packageName);
-            } else {
-                // 其他错误，隐藏loading并显示错误
-                hideApkInstallLoading();
-                window.NotificationModule.showNotification(`APK安装失败: ${errorMsg}`, 'error');
-            }
+            return;
         }
+
+        // 第三步：安装失败，显示确认对话框询问是否卸载重装
+        window.rLog('安装失败，显示卸载重装确认对话框');
+        hideApkInstallLoading();
+        showApkInstallModalWithPackage(deviceId, apkPath, packageName);
+
     } catch (error) {
         window.rError('安装APK失败:', error);
         hideApkInstallLoading();
