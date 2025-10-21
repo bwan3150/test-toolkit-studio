@@ -372,19 +372,30 @@ const EditorHighlighting = {
             const originalLines = rawContent.split('\n');
             const lineToCommandMap = [];
             let commandIndex = 0;
-            
+            let inStepsSection = false; // 标记是否进入步骤部分
+
             originalLines.forEach((line, lineIndex) => {
                 const trimmed = line.trim();
-                
-                // 跳过头部信息
-                if (!trimmed || trimmed.startsWith('#') || 
-                    trimmed.startsWith('用例:') || trimmed.startsWith('脚本名:') ||
-                    trimmed === '详情:' || trimmed === '步骤:' ||
-                    trimmed.includes('appPackage:') || trimmed.includes('appActivity:')) {
-                    lineToCommandMap.push(null); // 非命令行
+
+                // 检测步骤部分
+                if (trimmed === '步骤:') {
+                    inStepsSection = true;
+                    lineToCommandMap.push(null);
                     return;
                 }
-                
+
+                // 在步骤部分之前,全部跳过
+                if (!inStepsSection) {
+                    lineToCommandMap.push(null);
+                    return;
+                }
+
+                // 跳过空行和注释
+                if (!trimmed || trimmed.startsWith('#')) {
+                    lineToCommandMap.push(null);
+                    return;
+                }
+
                 // 这是一个命令行
                 lineToCommandMap.push(commandIndex);
                 commandIndex++;
