@@ -16,8 +16,19 @@ function initializeTestcasePage() {
     const deviceSelect = document.getElementById('deviceSelect');
     
     window.rLog('初始化测试用例页面');
-    
-    // Run Test按钮事件处理已移至tks-integration.js模块
+
+    // 绑定 Run Test 按钮
+    if (runTestBtn) {
+        runTestBtn.addEventListener('click', async () => {
+            window.rLog('Run Test 按钮点击');
+            if (window.ScriptRunner) {
+                await window.ScriptRunner.runCurrentScript();
+            } else {
+                window.rError('ScriptRunner 模块未加载');
+            }
+        });
+    }
+
     // clearConsoleBtn事件在下面的 initializeUIElementsPanel 中处理
     
     // 绑定 XML 覆盖层切换按钮
