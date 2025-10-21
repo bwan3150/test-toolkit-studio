@@ -36,7 +36,9 @@ echo ">>> [5/5] Building AI Tester (Rust)..."
 # 6. 构建 Electron 应用（macOS）
 echo ""
 echo ">>> Building Electron app for macOS..."
-npm run build-mac
+# 使用 unsigned 版本，本地开发无需签名
+# 如需签名版本，请使用: npm run build-mac
+npm run build-mac-unsigned
 
 echo ""
 echo "=========================================="
