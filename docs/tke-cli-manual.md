@@ -280,41 +280,97 @@ Error: ElementNotFound("未找到包含文本 'xxx' 的元素")
 
 ## tke run
 
-### 执行脚本
+**注意:** 所有 `tke run` 命令均返回 JSON 格式输出，便于程序解析。
+
+### 执行单行脚本指令
 
 ```bash
-❯ tke run script tests/login.tks
+❯ tke run step "点击 [{100, 200}]"
 
-开始执行脚本: "tests/login.tks"
-
-执行结果:
-  状态: 成功 ✓
-  用例ID: TC001
-  脚本名: 登录测试
-  开始时间: 2025-10-07 14:30:00
-  结束时间: 2025-10-07 14:30:15
-  总步骤数: 10
-  成功步骤: 10
+{"success":true,"command":"点击 [{100, 200}]","duration_ms":234,"error":null}
 ```
 
-### 执行项目所有脚本
+```bash
+# 执行失败示例
+❯ tke run step "点击 [{不存在的元素}]"
+
+{"success":false,"command":"点击 [{不存在的元素}]","error":"元素未找到: 不存在的元素"}
+```
+
+### 执行单个脚本文件
+
+```bash
+❯ tke run script cases/case_001/script/login.tks
+
+{"success":true,"case_id":"TC001","script_name":"登录测试","start_time":"2025-10-21T14:30:00+08:00","end_time":"2025-10-21T14:30:15+08:00","error":null,"steps":[{"index":0,"command":"启动 [com.example.app, .MainActivity]","success":true,"error":null,"duration_ms":1234},{"index":1,"command":"点击 [{登录按钮}]","success":true,"error":null,"duration_ms":345},{"index":2,"command":"输入 [{用户名输入框}, testuser]","success":true,"error":null,"duration_ms":567}]}
+```
+
+格式化后的 JSON：
+```json
+{
+  "success": true,
+  "case_id": "TC001",
+  "script_name": "登录测试",
+  "start_time": "2025-10-21T14:30:00+08:00",
+  "end_time": "2025-10-21T14:30:15+08:00",
+  "error": null,
+  "steps": [
+    {
+      "index": 0,
+      "command": "启动 [com.example.app, .MainActivity]",
+      "success": true,
+      "error": null,
+      "duration_ms": 1234
+    },
+    {
+      "index": 1,
+      "command": "点击 [{登录按钮}]",
+      "success": true,
+      "error": null,
+      "duration_ms": 345
+    }
+  ]
+}
+```
+
+### 执行项目中所有脚本
 
 ```bash
 ❯ tke run project
 
-开始执行项目中的所有脚本...
+{"success":true,"total_scripts":5,"successful_scripts":4,"failed_scripts":1,"scripts":[{"success":true,"case_id":"TC001","script_name":"登录测试","start_time":"2025-10-21T14:30:00+08:00","end_time":"2025-10-21T14:30:15+08:00","error":null,"total_steps":10,"successful_steps":10},{"success":true,"case_id":"TC002","script_name":"设置测试","start_time":"2025-10-21T14:30:20+08:00","end_time":"2025-10-21T14:30:35+08:00","error":null,"total_steps":8,"successful_steps":8},{"success":false,"case_id":"TC003","script_name":"支付测试","start_time":"2025-10-21T14:30:40+08:00","end_time":"2025-10-21T14:30:50+08:00","error":"元素未找到: pay_button","total_steps":5,"successful_steps":3}]}
+```
 
-项目执行结果:
-  总脚本数: 5
-  成功脚本: 4
-  失败脚本: 1
-
-  ✓ 登录测试 (TC001)
-  ✓ 设置测试 (TC002)
-  ✗ 支付测试 (TC003)
-      错误: 元素未找到: pay_button
-  ✓ 退出测试 (TC004)
-  ✓ 搜索测试 (TC005)
+格式化后的 JSON：
+```json
+{
+  "success": true,
+  "total_scripts": 5,
+  "successful_scripts": 4,
+  "failed_scripts": 1,
+  "scripts": [
+    {
+      "success": true,
+      "case_id": "TC001",
+      "script_name": "登录测试",
+      "start_time": "2025-10-21T14:30:00+08:00",
+      "end_time": "2025-10-21T14:30:15+08:00",
+      "error": null,
+      "total_steps": 10,
+      "successful_steps": 10
+    },
+    {
+      "success": false,
+      "case_id": "TC003",
+      "script_name": "支付测试",
+      "start_time": "2025-10-21T14:30:40+08:00",
+      "end_time": "2025-10-21T14:30:50+08:00",
+      "error": "元素未找到: pay_button",
+      "total_steps": 5,
+      "successful_steps": 3
+    }
+  ]
+}
 ```
 
 ## 全局选项

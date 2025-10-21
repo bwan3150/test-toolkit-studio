@@ -1,6 +1,6 @@
 // Controller 命令处理器
 
-use tke::{Result, TkeError, Controller, JsonOutput};
+use tke::{Result, Controller, JsonOutput};
 
 /// Controller 命令枚举
 #[derive(clap::Subcommand)]

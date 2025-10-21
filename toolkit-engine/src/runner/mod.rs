@@ -1,13 +1,11 @@
 // Runner模块 - 脚本执行器
 
 use crate::{
-    Result, TkeError, TksScript, ScriptParser, ScriptInterpreter, 
+    Result, TkeError, TksScript, ScriptParser, ScriptInterpreter,
     ExecutionResult, StepResult
 };
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH, Instant};
-use tracing::{info, error, warn};
-use tokio::signal;
 
 pub struct Runner {
     project_path: PathBuf,
@@ -35,12 +33,51 @@ impl Runner {
         self.device_id = device_id;
     }
     
+    // 运行单行脚本指令
+    pub async fn run_single_step(&mut self, line: &str) -> Result<StepResult> {
+        // 构造一个最小的脚本来解析单行指令
+        let minimal_script = format!("用例: 单步执行\n脚本名: 单步\n\n步骤:\n{}", line);
+
+        // 解析脚本
+        let script = self.parser.parse(&minimal_script)?;
+
+        if script.steps.is_empty() {
+            return Err(TkeError::ScriptParseError("无效的脚本指令".to_string()));
+        }
+
+        // 初始化解释器
+        let mut interpreter = ScriptInterpreter::new(
+            self.project_path.clone(),
+            self.device_id.clone()
+        )?;
+
+        let step = &script.steps[0];
+        let start_time = Instant::now();
+
+        // 执行单个步骤
+        match interpreter.interpret_step(step).await {
+            Ok(()) => Ok(StepResult {
+                index: 0,
+                command: line.to_string(),
+                success: true,
+                error: None,
+                duration_ms: start_time.elapsed().as_millis() as u64,
+            }),
+            Err(e) => Ok(StepResult {
+                index: 0,
+                command: line.to_string(),
+                success: false,
+                error: Some(e.to_string()),
+                duration_ms: start_time.elapsed().as_millis() as u64,
+            })
+        }
+    }
+
     // 运行脚本文件
     pub async fn run_script_file(&mut self, script_path: &PathBuf) -> Result<ExecutionResult> {
         // 解析脚本
         let script = self.parser.parse_file(script_path)?;
-        info!("成功解析脚本: {} ({})", script.script_name, script.case_id);
-        
+
         // 执行脚本
         self.run_script(script).await
     }
@@ -49,8 +86,7 @@ impl Runner {
     pub async fn run_script_content(&mut self, content: &str) -> Result<ExecutionResult> {
         // 解析脚本
         let script = self.parser.parse(content)?;
-        info!("成功解析脚本内容: {} ({})", script.script_name, script.case_id);
-        
+
         // 执行脚本
         self.run_script(script).await
     }
@@ -59,18 +95,18 @@ impl Runner {
     pub async fn run_script(&mut self, script: TksScript) -> Result<ExecutionResult> {
         self.is_running = true;
         self.should_stop = false;
-        
+
         // 初始化解释器
         let mut interpreter = ScriptInterpreter::new(
-            self.project_path.clone(), 
+            self.project_path.clone(),
             self.device_id.clone()
         )?;
-        
+
         let start_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        
+
         let mut result = ExecutionResult {
             success: true,
             case_id: script.case_id.clone(),
@@ -82,31 +118,16 @@ impl Runner {
             steps: Vec::new(),
             error: None,
         };
-        
-        info!("开始执行脚本: {} (共{}个步骤)", script.script_name, script.steps.len());
-        
-        // 设置Ctrl+C信号处理
-        let stop_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let stop_flag_clone = stop_flag.clone();
-        
-        tokio::spawn(async move {
-            if let Ok(()) = signal::ctrl_c().await {
-                stop_flag_clone.store(true, std::sync::atomic::Ordering::Relaxed);
-            }
-        });
-        
+
         // 执行每个步骤
         for (index, step) in script.steps.iter().enumerate() {
             // 检查是否需要停止
-            if self.should_stop || stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            if self.should_stop {
                 result.success = false;
                 result.error = Some("执行被中止".to_string());
-                warn!("脚本执行被中止");
                 break;
             }
-            
-            info!("执行步骤 {}/{}: {}", index + 1, script.steps.len(), step.raw);
-            
+
             let step_start = Instant::now();
             let step_result = match interpreter.interpret_step(step).await {
                 Ok(()) => StepResult {
@@ -117,10 +138,9 @@ impl Runner {
                     duration_ms: step_start.elapsed().as_millis() as u64,
                 },
                 Err(e) => {
-                    error!("步骤执行失败: {}", e);
                     result.success = false;
                     result.error = Some(e.to_string());
-                    
+
                     StepResult {
                         index,
                         command: step.raw.clone(),
@@ -130,46 +150,37 @@ impl Runner {
                     }
                 }
             };
-            
+
             result.steps.push(step_result.clone());
-            
+
             // 如果步骤失败，停止执行
             if !step_result.success {
                 break;
             }
-            
+
             // 步骤间短暂延迟
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
-        
+
         let end_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        
+
         result.end_time = chrono::DateTime::from_timestamp(end_time as i64 / 1000, 0)
             .unwrap_or_default()
             .to_rfc3339();
-        
+
         self.is_running = false;
-        
+
         // 保存执行结果
         self.save_result(&result, &script).await?;
-        
-        if result.success {
-            info!("脚本执行完成: {} ({})", script.script_name, 
-                  if result.success { "成功" } else { "失败" });
-        } else {
-            error!("脚本执行失败: {} - {}", script.script_name, 
-                   result.error.as_ref().unwrap_or(&"未知错误".to_string()));
-        }
-        
+
         Ok(result)
     }
     
     // 停止执行
     pub fn stop(&mut self) {
-        info!("收到停止请求");
         self.should_stop = true;
     }
     
@@ -218,8 +229,7 @@ impl Runner {
         
         tokio::fs::write(&result_path, json).await
             .map_err(|e| TkeError::IoError(e))?;
-        
-        info!("执行结果已保存到: {:?}", result_path);
+
         Ok(())
     }
     
@@ -231,14 +241,6 @@ impl Runner {
         
         if script.steps.is_empty() {
             return Err(TkeError::ScriptParseError("脚本没有定义任何步骤".to_string()));
-        }
-        
-        // 检查启动命令
-        let has_launch = script.steps.iter()
-            .any(|step| matches!(step.command, crate::TksCommand::Launch));
-        
-        if !has_launch {
-            warn!("脚本没有启动应用的步骤");
         }
         
         Ok(())
@@ -270,34 +272,28 @@ impl Runner {
             
             let case_dir = entry.path();
             let script_dir = case_dir.join("script");
-            
+
             if !script_dir.exists() {
                 continue;
             }
-            
+
             // 查找.tks文件
             let mut script_entries = tokio::fs::read_dir(script_dir).await
                 .map_err(|e| TkeError::IoError(e))?;
-            
+
             while let Some(script_entry) = script_entries.next_entry().await
                 .map_err(|e| TkeError::IoError(e))? {
-                
+
                 let script_path = script_entry.path();
                 if script_path.extension().and_then(|s| s.to_str()) == Some("tks") {
-                    info!("运行脚本: {:?}", script_path);
-                    
-                    match self.run_script_file(&script_path).await {
-                        Ok(result) => results.push(result),
-                        Err(e) => {
-                            error!("脚本执行失败: {:?} - {}", script_path, e);
-                            // 继续执行其他脚本
-                        }
+                    // 执行脚本，失败也继续执行其他脚本
+                    if let Ok(result) = self.run_script_file(&script_path).await {
+                        results.push(result);
                     }
                 }
             }
         }
-        
-        info!("项目脚本执行完成，共执行 {} 个脚本", results.len());
+
         Ok(results)
     }
 }

@@ -119,14 +119,15 @@ async fn main() -> tke::Result<()> {
         });
 
         // 对于输出JSON的命令,完全静默,不输出任何日志
-        // 包括: Fetcher、Parser、OCR、Controller、Recognizer
+        // 包括: Fetcher、Parser、OCR、Controller、Recognizer、Run
         let is_json_output_command = matches!(
             cli.command,
             Commands::Fetcher { .. } |
             Commands::Parser { .. } |
             Commands::Ocr { .. } |
             Commands::Controller { .. } |
-            Commands::Recognizer { .. }
+            Commands::Recognizer { .. } |
+            Commands::Run { .. }
         );
 
         if !is_json_output_command {
