@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 加载拆分的 testcase 子模块
         await loadScript('../js/testcase/explorer/testcase-explorer.js');
+        await loadScript('../js/testcase/explorer/context-menu-actions.js'); // 右键菜单操作
         await loadScript('../js/testcase/screen/device-screen-manager.js');
         await loadScript('../js/testcase/screen/screen-mode-manager.js');
 
@@ -155,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseController', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
-            'AppNotifications', 'AppGlobals'
+            'AppNotifications', 'AppGlobals', 'ContextMenuActions'
             // ApiClient 是可选的，稍后单独检查
         ];
         
