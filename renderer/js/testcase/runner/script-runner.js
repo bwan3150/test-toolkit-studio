@@ -115,6 +115,17 @@ class ScriptRunner {
 
                 window.rLog(`执行第 ${i + 1}/${commandLines.length} 个命令 (原始行号: ${originalLineNumber}): ${commandLine}`);
 
+                // 在执行命令前刷新设备截图,让用户看到手机当前状态
+                try {
+                    if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
+                        window.rLog('🔄 刷新设备截图...');
+                        await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                    }
+                } catch (error) {
+                    window.rWarn('截图刷新失败:', error);
+                    // 截图失败不影响脚本执行,继续
+                }
+
                 // 高亮当前执行行
                 editor.highlightExecutingLine?.(originalLineNumber);
 
@@ -155,6 +166,18 @@ class ScriptRunner {
             // 检查是否全部成功
             if (!this.shouldStop && this.currentLineIndex === commandLines.length - 1) {
                 window.rLog('脚本执行成功完成');
+
+                // 最后一步执行完后,刷新设备截图显示最终状态
+                try {
+                    if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
+                        window.rLog('🔄 刷新设备截图显示最终状态...');
+                        await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                    }
+                } catch (error) {
+                    window.rWarn('最终截图刷新失败:', error);
+                    // 截图失败不影响成功提示
+                }
+
                 window.notifications?.show('脚本执行成功', 'success');
 
                 // 成功完成时清除高亮
