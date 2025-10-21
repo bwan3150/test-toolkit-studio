@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         // 2. 加载UI模块
-        await loadScript('../js/components/notifications.js');
+        // notifications 已迁移到 utils/app-notifications.js,在 index.html 中静态加载
         await loadScript('../js/components/navigation.js');
         // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
         // 初始化编辑器管理器
@@ -128,6 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 加载拆分的 testcase 子模块
         await loadScript('../js/testcase/explorer/testcase-explorer.js');
+        await loadScript('../js/testcase/explorer/context-menu-actions.js'); // 右键菜单操作
         await loadScript('../js/testcase/screen/device-screen-manager.js');
         await loadScript('../js/testcase/screen/screen-mode-manager.js');
 
@@ -155,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseController', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
-            'NotificationModule', 'AppGlobals'
+            'AppNotifications', 'AppGlobals', 'ContextMenuActions'
             // ApiClient 是可选的，稍后单独检查
         ];
         
@@ -283,7 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // console.log('✅ Test Toolkit Studio 已就绪'); // 完全禁用所有日志
         
         // 显示应用加载成功的通知
-        window.NotificationModule.showNotification('应用已成功加载', 'success');
+        // 应用加载成功 - 不需要通知用户
         
     } catch (error) {
         window.rError('❌ 应用初始化失败:', error);

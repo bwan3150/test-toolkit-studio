@@ -1340,8 +1340,16 @@ class LogManager {
 
     // 显示通知
     showNotification(message, type = 'info') {
-        if (window.NotificationModule) {
-            window.NotificationModule.showNotification(message, type);
+        if (window.AppNotifications) {
+            const methods = {
+                'success': 'success',
+                'error': 'error',
+                'warning': 'warn',
+                'warn': 'warn',
+                'info': 'info'
+            };
+            const method = methods[type] || 'info';
+            window.AppNotifications[method](message);
         }
     }
 }

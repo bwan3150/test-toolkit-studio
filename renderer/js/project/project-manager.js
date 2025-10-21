@@ -48,7 +48,7 @@ function initializeProjectPage() {
             
             // 状态栏会通过 setCurrentProject 自动更新
             
-            window.NotificationModule.showNotification('Closed project', 'info');
+            // 项目关闭 - 不需要Toast
         });
     }
     
@@ -62,14 +62,14 @@ function initializeProjectPage() {
                     const result = await ipcRenderer.invoke('create-project-structure', projectPath);
                     if (result.success) {
                         await loadProject(projectPath);
-                        window.NotificationModule.showNotification('Project created successfully', 'success');
+                        window.AppNotifications?.success('Project created successfully');
                     } else {
-                        window.NotificationModule.showNotification(`Failed to create project: ${result.error}`, 'error');
+                        window.AppNotifications?.error(`Failed to create project: ${result.error}`);
                     }
                 }
             } catch (error) {
                 console.error('Error in create project:', error);
-                window.NotificationModule.showNotification(`Error: ${error.message}`, 'error');
+                window.AppNotifications?.error(`Error: ${error.message}`);
             }
         });
     }
@@ -88,7 +88,7 @@ function initializeProjectPage() {
                 }
             } catch (error) {
                 console.error('Error in open project:', error);
-                window.NotificationModule.showNotification(`Error: ${error.message}`, 'error');
+                window.AppNotifications?.error(`Error: ${error.message}`);
             }
         });
     }
@@ -97,7 +97,7 @@ function initializeProjectPage() {
         importCsvBtn.addEventListener('click', async () => {
             const { currentProject } = getGlobals();
             if (!currentProject) {
-                window.NotificationModule.showNotification('Please open a project first', 'warning');
+                window.AppNotifications?.warn('Please open a project first');
                 return;
             }
             
@@ -120,9 +120,9 @@ function initializeProjectPage() {
                         
                         // 在表格中显示测试用例
                         await displayTestCasesTable(records);
-                        window.NotificationModule.showNotification(`Imported ${records.length} test cases`, 'success');
+                        window.AppNotifications?.success(`Imported ${records.length} test cases`);
                     } catch (error) {
-                        window.NotificationModule.showNotification(`Failed to parse CSV: ${error.message}`, 'error');
+                        window.AppNotifications?.error(`Failed to parse CSV: ${error.message}`);
                     }
                 }
             }
@@ -360,7 +360,7 @@ async function openProject(projectPath) {
         projectPath = projectPath.path;
     } else if (typeof projectPath !== 'string') {
         console.error('Invalid project path:', projectPath);
-        window.NotificationModule.showNotification('无效的项目路径', 'error');
+        window.AppNotifications?.error('无效的项目路径');
         return;
     }
     
@@ -382,7 +382,7 @@ async function openProject(projectPath) {
             }
         } else {
             // 用户选择从历史记录中移除
-            window.NotificationModule.showNotification('项目已从历史记录中移除', 'info');
+            // 已从历史移除 - 不需要Toast
             await removeFromHistory(projectPath);
         }
         return;
@@ -616,7 +616,7 @@ async function navigateToTestcase(record, index) {
         await window.TestcaseController.loadFileTree();
         
         // 显示通知
-        window.NotificationModule.showNotification(`已跳转到测试用例页面: ${caseName}`, 'info');
+        // 不需要Toast - 用户通过页面切换已知道
         
         // 尝试展开对应的case文件夹并自动打开第一个脚本
         setTimeout(async () => {
@@ -656,7 +656,7 @@ async function navigateToTestcase(record, index) {
         
     } catch (error) {
         console.error('Failed to navigate to testcase:', error);
-        window.NotificationModule.showNotification(`跳转失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`跳转失败: ${error.message}`);
     }
 }
 
@@ -709,7 +709,7 @@ async function checkExistingCases(totalCases) {
 async function createTestCase(record, index) {
     const { path, fs } = getGlobals();
     if (!window.AppGlobals.currentProject) {
-        window.NotificationModule.showNotification('No project loaded', 'error');
+        window.AppNotifications?.error('No project loaded');
         return;
     }
     
@@ -773,9 +773,9 @@ async function createTestCase(record, index) {
         // 重新加载文件树
         await window.TestcaseController.loadFileTree();
         
-        window.NotificationModule.showNotification(`Created test case: ${caseName}`, 'success');
+        window.AppNotifications?.success(`Created test case: ${caseName}`);
     } catch (error) {
-        window.NotificationModule.showNotification(`Failed to create test case: ${error.message}`, 'error');
+        window.AppNotifications?.error(`Failed to create test case: ${error.message}`);
     }
 }
 
@@ -836,7 +836,7 @@ async function removeFromHistory(projectPath) {
     projectHistory = projectHistory.filter(p => p.path !== projectPath);
     await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
     await loadProjectHistory();
-    window.NotificationModule.showNotification('Project removed from history', 'success');
+    window.AppNotifications?.success('Project removed from history');
 }
 
 // 更新项目路径
@@ -851,7 +851,7 @@ async function updateProjectPath(oldPath, newPath) {
         projectHistory[projectIndex].lastAccessed = new Date().toISOString();
         await ipcRenderer.invoke('store-set', 'project_history', projectHistory);
         await loadProjectHistory();
-        window.NotificationModule.showNotification('项目路径已更新', 'success');
+        window.AppNotifications?.success('项目路径已更新');
     }
 }
 

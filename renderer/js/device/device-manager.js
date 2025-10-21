@@ -143,7 +143,7 @@ async function initializeDevicePage() {
             window.rLog('表单提交事件触发');
             
             if (!window.AppGlobals.currentProject) {
-                window.NotificationModule.showNotification('Please open a project first', 'warning');
+                window.AppNotifications?.warn('Please open a project first');
                 return;
             }
             
@@ -203,11 +203,10 @@ async function initializeDevicePage() {
             
             try {
                 await fs.writeFile(devicePath, yaml.dump(deviceConfig));
-                window.NotificationModule.showNotification(
-                    mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully',
-                    'success'
+                window.AppNotifications?.success(
+                    mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully'
                 );
-                
+
                 deviceForm.style.display = 'none';
                 newDeviceForm.reset();
                 delete deviceForm.dataset.mode;
@@ -216,7 +215,7 @@ async function initializeDevicePage() {
                 await loadSavedDevices();
                 await refreshDeviceList();
             } catch (error) {
-                window.NotificationModule.showNotification(`Failed to save device: ${error.message}`, 'error');
+                window.AppNotifications?.error(`Failed to save device: ${error.message}`);
             }
         });
     }
@@ -231,11 +230,8 @@ async function initializeDevicePage() {
     const { ipcRenderer } = getGlobals();
     ipcRenderer.on('pairing-success', (event, data) => {
         window.rLog('收到配对成功事件:', data);
-        window.NotificationModule.showNotification(
-            `配对成功！来自设备: ${data.remoteAddress}`, 
-            'success'
-        );
-        
+        window.AppNotifications?.success(`配对成功！来自设备: ${data.remoteAddress}`);
+
         // 重置QR码显示
         setTimeout(() => {
             resetQRDisplay();
@@ -755,7 +751,7 @@ async function refreshDeviceList() {
 // 从连接的设备创建设备
 async function createDeviceFromConnected(deviceId) {
     if (!window.AppGlobals.currentProject) {
-        window.NotificationModule.showNotification('Please open a project first', 'warning');
+        window.AppNotifications?.warn('Please open a project first');
         return;
     }
     
@@ -839,7 +835,7 @@ async function createDeviceFromConnected(deviceId) {
     deviceForm.querySelector('h3').textContent = 'Add New Device';
     deviceForm.style.display = 'block';
     deviceForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    window.NotificationModule.showNotification('Please complete the device configuration', 'info');
+    window.AppNotifications?.info('Please complete the device configuration');
 }
 
 // 编辑设备配置
@@ -956,7 +952,7 @@ async function editDevice(filename) {
         deviceForm.querySelector('h3').textContent = 'Edit Device';
         deviceForm.style.display = 'block';
     } catch (error) {
-        window.NotificationModule.showNotification(`Failed to load device: ${error.message}`, 'error');
+        window.AppNotifications?.error(`Failed to load device: ${error.message}`);
     }
 }
 
@@ -969,11 +965,11 @@ async function deleteDevice(filename) {
         try {
             const devicePath = path.join(window.AppGlobals.currentProject, 'devices', filename);
             await fs.unlink(devicePath);
-            window.NotificationModule.showNotification('Device configuration deleted', 'success');
+            window.AppNotifications?.success('Device configuration deleted');
             await loadSavedDevices();
             await refreshDeviceList();
         } catch (error) {
-            window.NotificationModule.showNotification(`Failed to delete device: ${error.message}`, 'error');
+            window.AppNotifications?.error(`Failed to delete device: ${error.message}`);
         }
     }
 }
@@ -984,9 +980,9 @@ function copyToClipboard(elementId) {
     const element = document.getElementById(elementId);
     if (element && element.textContent && element.textContent !== '-') {
         navigator.clipboard.writeText(element.textContent).then(() => {
-            window.NotificationModule.showNotification('已复制到剪贴板', 'success');
+            window.AppNotifications?.success('已复制到剪贴板');
         }).catch(err => {
-            window.NotificationModule.showNotification('复制失败', 'error');
+            window.AppNotifications?.error('复制失败');
         });
     }
 }
@@ -1006,34 +1002,34 @@ window.retryWdaConnection = retryWdaConnection;
 // 无线设备连接功能
 async function connectWirelessDevice(ipAddress, port = 5555) {
     if (!ipAddress) {
-        window.NotificationModule.showNotification('请输入设备IP地址', 'warning');
+        window.AppNotifications?.warn('请输入设备IP地址');
         return;
     }
     
     const { ipcRenderer } = getGlobals();
     
     // 显示连接中状态
-    window.NotificationModule.showNotification('正在连接无线设备...', 'info');
+    window.AppNotifications?.info('正在连接无线设备...');
     
     try {
         const result = await ipcRenderer.invoke('adb-connect-wireless', ipAddress, port);
         
         if (result.success) {
-            window.NotificationModule.showNotification(result.message || '连接成功', 'success');
+            window.AppNotifications?.success(result.message || '连接成功');
             // 连接成功后刷新设备列表
             await refreshConnectedDevices();
         } else {
             // 如果连接失败，可能需要先配对
             if (result.error && result.error.includes('unauthorized')) {
-                window.NotificationModule.showNotification('设备未授权，请先使用配对码进行配对', 'warning');
+                window.AppNotifications?.warn('设备未授权，请先使用配对码进行配对');
             } else {
-                window.NotificationModule.showNotification(result.error || '连接失败', 'error');
+                window.AppNotifications?.error(result.error || '连接失败');
             }
         }
         
         return result;
     } catch (error) {
-        window.NotificationModule.showNotification(`连接失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`连接失败: ${error.message}`);
         return { success: false, error: error.message };
     }
 }
@@ -1089,14 +1085,14 @@ function hideWdaGuide() {
 // 重试WDA连接
 async function retryWdaConnection(deviceId) {
     hideWdaGuide();
-    window.NotificationModule.showNotification('正在重试WDA连接...', 'info');
+    window.AppNotifications?.info('正在重试WDA连接...');
     await refreshConnectedDevices();
 }
 
 // 断开无线设备连接
 async function disconnectWirelessDevice(ipAddress, port = 5555) {
     if (!ipAddress) {
-        window.NotificationModule.showNotification('请提供设备IP地址', 'warning');
+        window.AppNotifications?.warn('请提供设备IP地址');
         return;
     }
     
@@ -1106,16 +1102,16 @@ async function disconnectWirelessDevice(ipAddress, port = 5555) {
         const result = await ipcRenderer.invoke('adb-disconnect-wireless', ipAddress, port);
         
         if (result.success) {
-            window.NotificationModule.showNotification(result.message, 'success');
+            window.AppNotifications?.success(result.message);
             // 断开连接后刷新设备列表
             await refreshConnectedDevices();
         } else {
-            window.NotificationModule.showNotification(result.error, 'error');
+            window.AppNotifications?.error(result.error);
         }
         
         return result;
     } catch (error) {
-        window.NotificationModule.showNotification(`断开连接失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`断开连接失败: ${error.message}`);
         return { success: false, error: error.message };
     }
 }
@@ -1288,14 +1284,14 @@ async function connectWithPairingCode() {
         
         // 验证输入
         if (!deviceIp || !adbPort || !pairingPort || !pairingCode) {
-            window.NotificationModule.showNotification('Please fill in all fields', 'warning');
+            window.AppNotifications?.warn('Please fill in all fields');
             return;
         }
         
         // 验证IP地址格式
         const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
         if (!ipRegex.test(deviceIp)) {
-            window.NotificationModule.showNotification('Invalid IP address format', 'error');
+            window.AppNotifications?.error('Invalid IP address format');
             return;
         }
         
@@ -1303,27 +1299,27 @@ async function connectWithPairingCode() {
         const adbPortNum = parseInt(adbPort);
         const pairingPortNum = parseInt(pairingPort);
         if (isNaN(adbPortNum) || isNaN(pairingPortNum) || adbPortNum < 1 || adbPortNum > 65535 || pairingPortNum < 1 || pairingPortNum > 65535) {
-            window.NotificationModule.showNotification('Invalid port number (must be 1-65535)', 'error');
+            window.AppNotifications?.error('Invalid port number (must be 1-65535)');
             return;
         }
         
-        window.NotificationModule.showNotification('Connecting with pairing code...', 'info');
+        window.AppNotifications?.info('Connecting with pairing code...');
         
         // 使用配对码连接
         const pairResult = await ipcRenderer.invoke('adb-pair-wireless', deviceIp, pairingPortNum, pairingCode);
         
         if (!pairResult.success) {
-            window.NotificationModule.showNotification(`Pairing failed: ${pairResult.error}`, 'error');
+            window.AppNotifications?.error(`Pairing failed: ${pairResult.error}`);
             return;
         }
         
-        window.NotificationModule.showNotification('Device paired successfully!', 'success');
+        window.AppNotifications?.success('Device paired successfully!');
         
         // 连接到设备
         const connectResult = await ipcRenderer.invoke('adb-connect-wireless', deviceIp, adbPortNum);
         
         if (connectResult.success) {
-            window.NotificationModule.showNotification('Device connected successfully!', 'success');
+            window.AppNotifications?.success('Device connected successfully!');
             
             // 刷新设备列表
             await refreshConnectedDevices();
@@ -1338,12 +1334,12 @@ async function connectWithPairingCode() {
             // 关闭弹窗
             hideConnectionGuide();
         } else {
-            window.NotificationModule.showNotification(`Connection failed: ${connectResult.error}`, 'error');
+            window.AppNotifications?.error(`Connection failed: ${connectResult.error}`);
         }
         
     } catch (error) {
         window.rError('Pairing with code failed:', error);
-        window.NotificationModule.showNotification(`Pairing failed: ${error.message}`, 'error');
+        window.AppNotifications?.error(`Pairing failed: ${error.message}`);
     }
 }
 
@@ -1404,13 +1400,13 @@ async function generateQRCode() {
     
     try {
         // 显示加载状态
-        window.NotificationModule.showNotification('正在生成QR码...', 'info');
+        window.AppNotifications?.info('正在生成QR码...');
         
         // 生成配对数据
         const pairingDataResult = await ipcRenderer.invoke('generate-qr-pairing-data');
         
         if (!pairingDataResult.success) {
-            window.NotificationModule.showNotification(`生成配对数据失败: ${pairingDataResult.error}`, 'error');
+            window.AppNotifications?.error(`生成配对数据失败: ${pairingDataResult.error}`);
             return;
         }
         
@@ -1420,7 +1416,7 @@ async function generateQRCode() {
         const qrResult = await ipcRenderer.invoke('generate-qr-code', qrData, { width: 200 });
         
         if (!qrResult.success) {
-            window.NotificationModule.showNotification(`生成QR码失败: ${qrResult.error}`, 'error');
+            window.AppNotifications?.error(`生成QR码失败: ${qrResult.error}`);
             return;
         }
         
@@ -1431,17 +1427,17 @@ async function generateQRCode() {
         const serviceResult = await ipcRenderer.invoke('start-adb-pairing-service', serviceName, pairingCode, localIP, pairingPort);
         
         if (serviceResult.success) {
-            window.NotificationModule.showNotification('QR码生成成功，请在设备上扫描', 'success');
+            window.AppNotifications?.success('QR码生成成功，请在设备上扫描');
             
             // 开始检查配对状态
             startPairingStatusCheck();
         } else {
-            window.NotificationModule.showNotification(`启动配对服务失败: ${serviceResult.error}`, 'warning');
+            window.AppNotifications?.warn(`启动配对服务失败: ${serviceResult.error}`);
         }
         
     } catch (error) {
         window.rError('生成QR码失败:', error);
-        window.NotificationModule.showNotification(`生成QR码失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`生成QR码失败: ${error.message}`);
     }
 }
 
@@ -1519,7 +1515,7 @@ function startQRTimer() {
             // 过期
             clearInterval(qrTimer);
             resetQRDisplay();
-            window.NotificationModule.showNotification('QR码已过期，请重新生成', 'warning');
+            window.AppNotifications?.warn('QR码已过期，请重新生成');
             return;
         }
         
@@ -1578,7 +1574,7 @@ async function startPairingStatusCheck() {
             if (statusResult.success && statusResult.hasNewDevices) {
                 // 发现新设备，配对可能成功
                 clearInterval(checkInterval);
-                window.NotificationModule.showNotification('检测到新设备连接，配对可能成功！', 'success');
+                window.AppNotifications?.success('检测到新设备连接，配对可能成功！');
                 
                 // 刷新设备列表
                 await refreshConnectedDevices();
@@ -1629,7 +1625,7 @@ function setupDragAndDropForDevice(deviceCard, deviceId) {
         // 检查是否为APK文件
         const file = files[0];
         if (!file.name.toLowerCase().endsWith('.apk')) {
-            window.NotificationModule.showNotification('请拖入APK文件', 'warning');
+            window.AppNotifications?.warn('请拖入APK文件');
             return;
         }
         
@@ -1641,13 +1637,13 @@ function setupDragAndDropForDevice(deviceCard, deviceId) {
             filePath = webUtils.getPathForFile(file);
         } catch (error) {
             window.rError('无法获取文件路径:', error.message);
-            window.NotificationModule.showNotification('无法获取文件路径，请确保应用有文件访问权限', 'error');
+            window.AppNotifications?.error('无法获取文件路径，请确保应用有文件访问权限');
             return;
         }
         
         if (!filePath) {
             window.rError('文件路径为空');
-            window.NotificationModule.showNotification('无法获取文件路径', 'error');
+            window.AppNotifications?.error('无法获取文件路径');
             return;
         }
         
@@ -1661,7 +1657,7 @@ async function installApkToDevice(deviceId, apkPath) {
     const { ipcRenderer } = getGlobals();
 
     if (!deviceId || !apkPath) {
-        window.NotificationModule.showNotification('设备ID或APK路径无效', 'error');
+        window.AppNotifications?.error('设备ID或APK路径无效');
         return;
     }
 
@@ -1673,7 +1669,7 @@ async function installApkToDevice(deviceId, apkPath) {
 
         if (!packageInfo.success || !packageInfo.packageName) {
             hideApkInstallLoading();
-            window.NotificationModule.showNotification('无法解析APK文件', 'error');
+            window.AppNotifications?.error('无法解析APK文件');
             return;
         }
 
@@ -1690,7 +1686,7 @@ async function installApkToDevice(deviceId, apkPath) {
             // 安装成功，使用已获取的包名启动应用
             hideApkInstallLoading();
             await autoLaunchAppAfterInstall(deviceId, packageName);
-            window.NotificationModule.showNotification('APK安装成功！', 'success');
+            window.AppNotifications?.success('APK安装成功！');
             await refreshConnectedDevices();
             return;
         }
@@ -1703,7 +1699,7 @@ async function installApkToDevice(deviceId, apkPath) {
     } catch (error) {
         window.rError('安装APK失败:', error);
         hideApkInstallLoading();
-        window.NotificationModule.showNotification(`安装失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`安装失败: ${error.message}`);
     }
 }
 
@@ -1826,7 +1822,7 @@ function hideApkInstallModal() {
 // 取消APK安装
 window.cancelApkInstall = function() {
     hideApkInstallModal();
-    window.NotificationModule.showNotification('已取消安装', 'info');
+    window.AppNotifications?.info('已取消安装');
 };
 
 // 确认卸载并安装
@@ -1849,7 +1845,7 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
     
     try {
         // 先尝试获取APK的包名
-        window.NotificationModule.showNotification('正在获取APK信息...', 'info');
+        window.AppNotifications?.info('正在获取APK信息...');
         
         // 尝试通过aapt获取包名
         let packageName = null;
@@ -1859,36 +1855,36 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
             packageName = packageInfo.packageName;
         } else {
             // 如果无法自动获取包名，尝试通过安装错误信息获取
-            window.NotificationModule.showNotification('无法自动获取包名，尝试直接安装...', 'warning');
+            window.AppNotifications?.warn('无法自动获取包名，尝试直接安装...');
             
             // 直接尝试强制安装，不卸载
             const directInstallResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
             if (directInstallResult.success) {
-                window.NotificationModule.showNotification('APK安装成功！', 'success');
+                window.AppNotifications?.success('APK安装成功！');
                 await refreshConnectedDevices();
                 return; // 安装成功，直接返回
             } else if (directInstallResult.packageName) {
                 // 从安装错误中获取到了包名，使用该包名继续卸载重装流程
                 packageName = directInstallResult.packageName;
-                window.NotificationModule.showNotification(`从错误信息中获取到包名: ${packageName}，继续卸载重装...`, 'info');
+                window.AppNotifications?.info(`从错误信息中获取到包名: ${packageName}，继续卸载重装...`);
                 // 不return，继续执行后面的卸载重装逻辑
             } else {
-                window.NotificationModule.showNotification('无法获取包名，请手动卸载原应用后重试', 'error');
+                window.AppNotifications?.error('无法获取包名，请手动卸载原应用后重试');
                 return;
             }
         }
         
         // 卸载应用（卸载的是与APK相同包名的已安装版本）
-        window.NotificationModule.showNotification(`正在卸载已安装的 ${packageName}...`, 'info');
+        window.AppNotifications?.info(`正在卸载已安装的 ${packageName}...`);
         const uninstallResult = await ipcRenderer.invoke('adb-uninstall-app', deviceId, packageName);
         
         if (!uninstallResult.success) {
             // 如果卸载失败，可能是应用不存在，直接尝试安装
-            window.NotificationModule.showNotification('原应用可能不存在，尝试直接安装...', 'info');
+            window.AppNotifications?.info('原应用可能不存在，尝试直接安装...');
         }
         
         // 安装新的APK
-        window.NotificationModule.showNotification('正在安装APK...', 'info');
+        window.AppNotifications?.info('正在安装APK...');
         const installResult = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, true);
         
         if (installResult.success) {
@@ -1897,15 +1893,15 @@ async function uninstallAndReinstallApk(deviceId, apkPath) {
                 await autoLaunchAppAfterInstall(deviceId, packageName);
             }
             
-            window.NotificationModule.showNotification('APK安装成功！', 'success');
+            window.AppNotifications?.success('APK安装成功！');
             await refreshConnectedDevices();
         } else {
-            window.NotificationModule.showNotification(`安装失败: ${installResult.error}`, 'error');
+            window.AppNotifications?.error(`安装失败: ${installResult.error}`);
         }
         
     } catch (error) {
         window.rError('卸载并重装失败:', error);
-        window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`操作失败: ${error.message}`);
     }
 }
 
@@ -1943,16 +1939,16 @@ async function uninstallAndReinstallWithKnownPackage(deviceId, apkPath, packageN
                 await autoLaunchAppAfterInstall(deviceId, packageName);
             }
             
-            window.NotificationModule.showNotification('APK安装成功！', 'success');
+            window.AppNotifications?.success('APK安装成功！');
             await refreshConnectedDevices();
         } else {
-            window.NotificationModule.showNotification(`安装失败: ${installResult.error}`, 'error');
+            window.AppNotifications?.error(`安装失败: ${installResult.error}`);
         }
         
     } catch (error) {
         window.rError('卸载并重装失败:', error);
         hideApkInstallLoading();
-        window.NotificationModule.showNotification(`操作失败: ${error.message}`, 'error');
+        window.AppNotifications?.error(`操作失败: ${error.message}`);
     }
 }
 
@@ -1976,7 +1972,7 @@ async function autoLaunchAppAfterInstall(deviceId, packageName) {
     }
     
     try {
-        window.NotificationModule.showNotification('正在启动应用...', 'info');
+        window.AppNotifications?.info('正在启动应用...');
         
         // 首先尝试获取应用的主Activity
         const mainActivity = await getMainActivity(deviceId, packageName);
@@ -2078,7 +2074,7 @@ async function launchAppWithTKE(deviceId, packageName, activityName) {
         
         if (result.success) {
             window.rLog('应用启动成功');
-            window.NotificationModule.showNotification(`应用 ${packageName} 已启动`, 'success');
+            window.AppNotifications?.success(`应用 ${packageName} 已启动`);
         } else {
             window.rError('TKE ADB启动失败:', result.error);
             // 尝试备用方案
@@ -2105,7 +2101,7 @@ async function launchAppWithMonkey(deviceId, packageName) {
         
         if (result.success) {
             window.rLog('应用启动成功（monkey方式）');
-            window.NotificationModule.showNotification(`应用 ${packageName} 已启动`, 'success');
+            window.AppNotifications?.success(`应用 ${packageName} 已启动`);
         } else {
             window.rError('Monkey启动失败:', result.error);
         }

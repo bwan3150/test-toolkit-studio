@@ -109,20 +109,16 @@ class StatusBarManager {
 
         const fullPath = this.currentProjectElement.parentElement.dataset.fullPath;
         if (!fullPath) {
-            if (window.NotificationModule) {
-                window.NotificationModule.showNotification('No project path to copy', 'warning');
-            }
+            window.AppNotifications?.warn('No project path to copy');
             return;
         }
 
         try {
             await navigator.clipboard.writeText(fullPath);
-            if (window.NotificationModule) {
-                window.NotificationModule.showNotification('Project path copied to clipboard', 'success');
-            }
+            window.AppNotifications?.success('Project path copied to clipboard');
         } catch (error) {
             console.error('Failed to copy to clipboard:', error);
-            
+
             // 备用方案：尝试使用选择+复制
             try {
                 const textArea = document.createElement('textarea');
@@ -135,15 +131,11 @@ class StatusBarManager {
                 textArea.select();
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
-                
-                if (window.NotificationModule) {
-                    window.NotificationModule.showNotification('Project path copied to clipboard', 'success');
-                }
+
+                window.AppNotifications?.success('Project path copied to clipboard');
             } catch (fallbackError) {
                 console.error('Fallback copy method also failed:', fallbackError);
-                if (window.NotificationModule) {
-                    window.NotificationModule.showNotification('Failed to copy to clipboard', 'error');
-                }
+                window.AppNotifications?.error('Failed to copy to clipboard');
             }
         }
     }

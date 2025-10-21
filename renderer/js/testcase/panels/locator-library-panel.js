@@ -94,7 +94,7 @@ const LocatorLibraryPanel = {
         
         if (!element) {
             window.rError(`无法找到index为${elementIndex}的元素`);
-            window.NotificationModule.showNotification('元素不存在', 'error');
+            window.AppNotifications?.error('元素不存在');
             return;
         }
         
@@ -137,7 +137,7 @@ const LocatorLibraryPanel = {
             locatorTab.click();
         }
         
-        window.NotificationModule.showNotification(`定位器 "${name}" 已保存`, 'success');
+        window.AppNotifications?.success(`定位器 "${name}" 已保存`);
     },
     
     // 提示输入定位器名称
@@ -221,7 +221,7 @@ const LocatorLibraryPanel = {
                 const note = noteInput.value.trim();
 
                 if (!name) {
-                    window.NotificationModule.showNotification('请输入定位器名称', 'warning');
+                    window.AppNotifications?.warn('请输入定位器名称');
                     return;
                 }
 
@@ -444,7 +444,7 @@ const LocatorLibraryPanel = {
         if (!newName || newName === oldName) return;
         
         if (this.locators[newName]) {
-            window.NotificationModule.showNotification('该名称已存在', 'error');
+            window.AppNotifications?.error('该名称已存在');
             return;
         }
         
@@ -453,7 +453,7 @@ const LocatorLibraryPanel = {
         
         await this.saveLocators();
         this.renderLocators();
-        window.NotificationModule.showNotification('重命名成功', 'success');
+        window.AppNotifications?.success('重命名成功');
     },
     
     // 使用定位器（插入到编辑器）
@@ -483,11 +483,11 @@ const LocatorLibraryPanel = {
         // 如果有活动的编辑器，插入代码
         if (window.UnifiedEditorModule && window.UnifiedEditorModule.insertCode) {
             window.UnifiedEditorModule.insertCode(code);
-            window.NotificationModule.showNotification('定位器已插入到编辑器', 'success');
+            window.AppNotifications?.success('定位器已插入到编辑器');
         } else {
             // 复制到剪贴板
             navigator.clipboard.writeText(code);
-            window.NotificationModule.showNotification('定位器代码已复制到剪贴板', 'success');
+            window.AppNotifications?.success('定位器代码已复制到剪贴板');
         }
     },
     
@@ -527,7 +527,7 @@ const LocatorLibraryPanel = {
         await this.saveLocators();
         this.renderLocators();
         
-        window.NotificationModule.showNotification(`定位器 "${name}" 已删除`, 'info');
+        window.AppNotifications?.info(`定位器 "${name}" 已删除`);
     },
     
     // 筛选定位器

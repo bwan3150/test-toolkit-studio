@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 项目说明
-Electron 桌面应用，用于自动化测试。
+Electron 桌面应用，用于自动化测试。项目禁止使用开发者模式调试, renderer层的调试只允许使用./renderer/js/utils/renderer-logger.js提供的能力将日志传输到cli中进行debug
 
 ## Commands
 

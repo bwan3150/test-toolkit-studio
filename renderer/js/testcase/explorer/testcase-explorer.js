@@ -155,8 +155,16 @@ async function loadCaseScripts(caseItem, casePath) {
 }
 
 // 切换case文件夹的展开状态
-async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
-    window.rLog(`📂 toggleCaseFolder 调用: casePath=${casePath}, autoOpenFirst=${autoOpenFirst}`);
+async function toggleCaseFolder(caseItem, casePath = null, autoOpenFirst = false) {
+    // 优先从 DOM 读取最新的 casePath（处理重命名后的情况）
+    const actualCasePath = caseItem.dataset?.casePath || casePath;
+
+    if (!actualCasePath) {
+        window.rError('toggleCaseFolder: 无法获取 casePath');
+        return [];
+    }
+
+    window.rLog(`📂 toggleCaseFolder 调用: casePath=${actualCasePath}, autoOpenFirst=${autoOpenFirst}`);
 
     const scriptsContainer = caseItem.querySelector('.scripts-container');
     const caseIcon = caseItem.querySelector('.case-icon');
@@ -172,7 +180,7 @@ async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
     if (isCurrentlyCollapsed) {
         // 展开
         scriptsContainer.classList.remove('collapsed');
-        expandedCases.add(casePath);
+        expandedCases.add(actualCasePath);
         window.rLog(`📂 展开文件夹`);
 
         // 更改图标为打开的文件夹（如果图标存在）
@@ -180,9 +188,9 @@ async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
             caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
         }
 
-        // 异步加载脚本文件
-        window.rLog(`📂 开始加载脚本文件`);
-        const scriptPaths = await loadCaseScripts(caseItem, casePath);
+        // 异步加载脚本文件（使用最新的路径）
+        window.rLog(`📂 开始加载脚本文件，路径: ${actualCasePath}`);
+        const scriptPaths = await loadCaseScripts(caseItem, actualCasePath);
         window.rLog(`📂 加载完成，共 ${scriptPaths.length} 个脚本`);
 
         // 如果需要自动打开第一个脚本
@@ -198,7 +206,7 @@ async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
     } else {
         // 折叠
         scriptsContainer.classList.add('collapsed');
-        expandedCases.delete(casePath);
+        expandedCases.delete(actualCasePath);
         window.rLog(`📂 折叠文件夹`);
 
         // 更改图标为关闭的文件夹（如果图标存在）
@@ -343,46 +351,95 @@ async function openFile(filePath) {
             }
         } else {
             window.rError(`打开文件失败: ${result.error}`);
-            if (window.NotificationModule) {
-                window.NotificationModule.showNotification(`Failed to open file: ${result.error}`, 'error');
-            }
+            window.AppNotifications?.error(`Failed to open file: ${result.error}`);
         }
     } catch (error) {
         window.rError('打开文件时发生错误:', error);
-        if (window.NotificationModule) {
-            window.NotificationModule.showNotification(`Error opening file: ${error.message}`, 'error');
-        }
+        window.AppNotifications?.error(`Error opening file: ${error.message}`);
     }
 }
 
 // 显示case右键菜单
 function showCaseContextMenu(event, caseName, casePath) {
+    // 移除已存在的右键菜单
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
     const contextMenu = document.createElement('div');
     contextMenu.className = 'context-menu';
-    
+
     const menuItems = [
-        { text: '新建脚本', action: () => createNewScript(caseName, casePath) },
-        { text: '重命名', action: () => renameCase(caseName, casePath) },
-        { text: '删除', action: () => deleteCase(caseName, casePath) },
-        { text: '在文件管理器中显示', action: () => showInFileManager(casePath) }
+        {
+            text: '新建脚本',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.createNewScript(caseName, casePath);
+            }
+        },
+        {
+            text: '重命名',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.renameCase(caseName, casePath);
+            }
+        },
+        {
+            text: '删除',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.deleteCase(caseName, casePath);
+            }
+        },
+        {
+            text: '在文件管理器中显示',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.showInFileManager(casePath);
+            }
+        }
     ];
-    
+
     menuItems.forEach(item => {
         const menuItem = document.createElement('div');
         menuItem.className = 'context-menu-item';
         menuItem.textContent = item.text;
         menuItem.addEventListener('click', () => {
-            item.action();
-            document.body.removeChild(contextMenu);
+            try {
+                item.action();
+            } catch (error) {
+                window.rError('执行菜单操作失败:', error);
+                window.AppNotifications?.error(`操作失败: ${error.message}`);
+            }
+            if (document.body.contains(contextMenu)) {
+                document.body.removeChild(contextMenu);
+            }
         });
         contextMenu.appendChild(menuItem);
     });
-    
+
     contextMenu.style.left = event.pageX + 'px';
     contextMenu.style.top = event.pageY + 'px';
-    
+
     document.body.appendChild(contextMenu);
-    
+
     // 点击其他地方关闭菜单
     const closeMenu = (e) => {
         if (!contextMenu.contains(e.target)) {
@@ -395,33 +452,89 @@ function showCaseContextMenu(event, caseName, casePath) {
 
 // 显示文件右键菜单
 function showFileContextMenu(event, fileName, filePath) {
+    // 移除已存在的右键菜单
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
     const contextMenu = document.createElement('div');
     contextMenu.className = 'context-menu';
-    
+
     const menuItems = [
-        { text: '打开', action: () => openFile(filePath) },
-        { text: '重命名', action: () => renameFile(fileName, filePath) },
-        { text: '删除', action: () => deleteFile(fileName, filePath) },
-        { text: '复制', action: () => copyFile(fileName, filePath) },
-        { text: '在文件管理器中显示', action: () => showInFileManager(filePath) }
+        {
+            text: '打开',
+            action: () => openFile(filePath)
+        },
+        {
+            text: '重命名',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.renameFile(fileName, filePath);
+            }
+        },
+        {
+            text: '删除',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.deleteFile(fileName, filePath);
+            }
+        },
+        {
+            text: '复制',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.copyFile(fileName, filePath);
+            }
+        },
+        {
+            text: '在文件管理器中显示',
+            action: () => {
+                if (!window.ContextMenuActions) {
+                    window.rError('ContextMenuActions 模块未加载');
+                    window.AppNotifications?.error('功能模块未加载，请刷新页面');
+                    return;
+                }
+                window.ContextMenuActions.showInFileManager(filePath);
+            }
+        }
     ];
-    
+
     menuItems.forEach(item => {
         const menuItem = document.createElement('div');
         menuItem.className = 'context-menu-item';
         menuItem.textContent = item.text;
         menuItem.addEventListener('click', () => {
-            item.action();
-            document.body.removeChild(contextMenu);
+            try {
+                item.action();
+            } catch (error) {
+                window.rError('执行菜单操作失败:', error);
+                window.AppNotifications?.error(`操作失败: ${error.message}`);
+            }
+            if (document.body.contains(contextMenu)) {
+                document.body.removeChild(contextMenu);
+            }
         });
         contextMenu.appendChild(menuItem);
     });
-    
+
     contextMenu.style.left = event.pageX + 'px';
     contextMenu.style.top = event.pageY + 'px';
-    
+
     document.body.appendChild(contextMenu);
-    
+
     // 点击其他地方关闭菜单
     const closeMenu = (e) => {
         if (!contextMenu.contains(e.target)) {
@@ -432,159 +545,19 @@ function showFileContextMenu(event, fileName, filePath) {
     setTimeout(() => document.addEventListener('click', closeMenu), 10);
 }
 
-// 创建新脚本
-async function createNewScript(caseName, casePath) {
-    const { path, fs } = getGlobals();
-    
-    const scriptName = prompt('请输入脚本名称（不含扩展名）:');
-    if (!scriptName) return;
-    
-    const scriptPath = path.join(casePath, scriptName + '.tks');
-    
-    try {
-        // 检查文件是否已存在
-        const exists = await fs.access(scriptPath).then(() => true).catch(() => false);
-        if (exists) {
-            alert('文件已存在');
-            return;
-        }
-        
-        // 创建新文件
-        await fs.writeFile(scriptPath, '// 新测试脚本\n');
-        await loadFileTree();
-        
-        // 打开新创建的文件
-        openFile(scriptPath);
-        
-        window.NotificationModule.showNotification('脚本创建成功', 'success');
-    } catch (error) {
-        window.rError('创建脚本失败:', error);
-        alert('创建脚本失败: ' + error.message);
-    }
-}
+// 注意：所有右键菜单操作（新建、重命名、删除、复制等）已迁移到 context-menu-actions.js
 
-// 重命名case
-async function renameCase(oldName, oldPath) {
-    const { path, fs } = getGlobals();
-    
-    const newName = prompt('请输入新名称:', oldName);
-    if (!newName || newName === oldName) return;
-    
-    const parentDir = path.dirname(oldPath);
-    const newPath = path.join(parentDir, newName);
-    
-    try {
-        await fs.rename(oldPath, newPath);
-        await loadFileTree();
-        window.NotificationModule.showNotification('重命名成功', 'success');
-    } catch (error) {
-        window.rError('重命名失败:', error);
-        alert('重命名失败: ' + error.message);
+/**
+ * 更新 expandedCases 集合中的路径（用于处理重命名）
+ * @param {string} oldPath - 旧路径
+ * @param {string} newPath - 新路径
+ */
+function updateExpandedCasePath(oldPath, newPath) {
+    if (expandedCases.has(oldPath)) {
+        expandedCases.delete(oldPath);
+        expandedCases.add(newPath);
+        window.rLog(`📂 已更新 expandedCases: ${oldPath} -> ${newPath}`);
     }
-}
-
-// 删除case
-async function deleteCase(caseName, casePath) {
-    const { fs } = getGlobals();
-    
-    if (!confirm(`确定要删除case "${caseName}" 吗？此操作不可恢复。`)) return;
-    
-    try {
-        await fs.rm(casePath, { recursive: true });
-        await loadFileTree();
-        window.NotificationModule.showNotification('删除成功', 'success');
-    } catch (error) {
-        window.rError('删除失败:', error);
-        alert('删除失败: ' + error.message);
-    }
-}
-
-// 重命名文件
-async function renameFile(oldName, oldPath) {
-    const { path, fs } = getGlobals();
-    
-    const nameWithoutExt = path.parse(oldName).name;
-    const ext = path.parse(oldName).ext;
-    const newName = prompt('请输入新名称:', nameWithoutExt);
-    
-    if (!newName || newName === nameWithoutExt) return;
-    
-    const parentDir = path.dirname(oldPath);
-    const newPath = path.join(parentDir, newName + ext);
-    
-    try {
-        await fs.rename(oldPath, newPath);
-        await loadFileTree();
-        
-        // 如果重命名的是当前打开的文件，更新currentScript
-        if (window.AppGlobals.currentScript === oldPath) {
-            window.AppGlobals.currentScript = newPath;
-            if (window.EditorManager) {
-                window.EditorManager.updateCurrentFilePath(newPath);
-            }
-        }
-        
-        window.NotificationModule.showNotification('重命名成功', 'success');
-    } catch (error) {
-        window.rError('重命名失败:', error);
-        alert('重命名失败: ' + error.message);
-    }
-}
-
-// 删除文件
-async function deleteFile(fileName, filePath) {
-    const { fs } = getGlobals();
-    
-    if (!confirm(`确定要删除文件 "${fileName}" 吗？此操作不可恢复。`)) return;
-    
-    try {
-        await fs.unlink(filePath);
-        await loadFileTree();
-        
-        // 如果删除的是当前打开的文件，清空编辑器
-        if (window.AppGlobals.currentScript === filePath) {
-            window.AppGlobals.currentScript = null;
-            if (window.EditorManager) {
-                window.EditorManager.clearEditor();
-            }
-        }
-        
-        window.NotificationModule.showNotification('删除成功', 'success');
-    } catch (error) {
-        window.rError('删除失败:', error);
-        alert('删除失败: ' + error.message);
-    }
-}
-
-// 复制文件
-async function copyFile(fileName, filePath) {
-    const { path, fs } = getGlobals();
-    
-    const nameWithoutExt = path.parse(fileName).name;
-    const ext = path.parse(fileName).ext;
-    const newName = prompt('请输入新文件名称:', nameWithoutExt + '_copy');
-    
-    if (!newName) return;
-    
-    const parentDir = path.dirname(filePath);
-    const newPath = path.join(parentDir, newName + ext);
-    
-    try {
-        const content = await fs.readFile(filePath, 'utf8');
-        await fs.writeFile(newPath, content);
-        await loadFileTree();
-        
-        window.NotificationModule.showNotification('复制成功', 'success');
-    } catch (error) {
-        window.rError('复制失败:', error);
-        alert('复制失败: ' + error.message);
-    }
-}
-
-// 在文件管理器中显示
-function showInFileManager(targetPath) {
-    const { ipcRenderer } = getGlobals();
-    ipcRenderer.invoke('show-item-in-folder', targetPath);
 }
 
 // 导出模块
@@ -594,5 +567,6 @@ window.TestcaseExplorerModule = {
     createTreeItem,
     openFile,
     toggleCaseFolder,
-    loadCaseScripts
+    loadCaseScripts,
+    updateExpandedCasePath
 };

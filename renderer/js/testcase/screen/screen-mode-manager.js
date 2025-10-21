@@ -433,7 +433,7 @@ const ScreenModeManager = {
         const projectPath = window.AppGlobals.currentProject;
         
         if (!projectPath) {
-            window.NotificationModule.showNotification('请先打开项目', 'error');
+            window.AppNotifications?.error('请先打开项目');
             return;
         }
         
@@ -444,7 +444,7 @@ const ScreenModeManager = {
             // 检查截图文件是否存在（fs 已经是 fs.promises）
             const screenshotExists = await fs.access(screenshotPath).then(() => true).catch(() => false);
             if (!screenshotExists) {
-                window.NotificationModule.showNotification('请先刷新设备屏幕截图', 'error');
+                window.AppNotifications?.error('请先刷新设备屏幕截图');
                 document.getElementById('screenshotSelector').style.display = 'none';
                 return;
             }
@@ -500,7 +500,7 @@ const ScreenModeManager = {
             
         } catch (error) {
             window.rError('截取图片失败:', error);
-            window.NotificationModule.showNotification('截取失败: ' + error.message, 'error');
+            window.AppNotifications?.error('截取失败: ' + error.message);
             document.getElementById('screenshotSelector').style.display = 'none';
         }
     },
@@ -532,7 +532,7 @@ const ScreenModeManager = {
                     document.body.removeChild(modal);
                     resolve(value);
                 } else {
-                    window.NotificationModule.showNotification('请输入别名', 'warning');
+                    window.AppNotifications?.warn('请输入别名');
                 }
             };
             
@@ -558,7 +558,7 @@ const ScreenModeManager = {
         const projectPath = window.AppGlobals.currentProject;
         
         if (!projectPath) {
-            window.NotificationModule.showNotification('请先打开项目', 'error');
+            window.AppNotifications?.error('请先打开项目');
             return false;
         }
         
@@ -570,7 +570,7 @@ const ScreenModeManager = {
             
             // 检查别名是否已经存在于LocatorLibraryPanel中
             if (window.LocatorLibraryPanel && window.LocatorLibraryPanel.locators[alias]) {
-                window.NotificationModule.showNotification(`定位器名称 "${alias}" 已存在，请使用其他名称`, 'error');
+                window.AppNotifications?.error(`定位器名称 "${alias}" 已存在，请使用其他名称`);
                 return false;
             }
             
@@ -606,13 +606,13 @@ const ScreenModeManager = {
                 }
             }
             
-            window.NotificationModule.showNotification(`图像定位器 "${alias}" 已保存`, 'success');
+            window.AppNotifications?.success(`图像定位器 "${alias}" 已保存`);
             window.rLog(`图像定位器已保存: ${imagePath}`);
             return true;
             
         } catch (error) {
             window.rError('保存图片定位器失败:', error);
-            window.NotificationModule.showNotification('保存失败: ' + error.message, 'error');
+            window.AppNotifications?.error('保存失败: ' + error.message);
             return false;
         }
     },
@@ -655,10 +655,10 @@ const ScreenModeManager = {
             // 复制到剪贴板
             try {
                 await navigator.clipboard.writeText(coordText);
-                window.NotificationModule.showNotification(`坐标 ${coordText} 已复制到剪贴板`, 'success');
+                window.AppNotifications?.success(`坐标 ${coordText} 已复制到剪贴板`);
             } catch (err) {
                 window.rError('Failed to copy coordinates:', err);
-                window.NotificationModule.showNotification('复制坐标失败', 'error');
+                window.AppNotifications?.error('复制坐标失败');
             }
             
             // 3秒后自动隐藏标记
