@@ -176,7 +176,7 @@ class ScriptRunner {
 
                 const totalDuration = Date.now() - startTime;
                 window.ExecutionOutput?.scriptSuccess(scriptName, totalDuration);
-                window.AppNotifications?.success('脚本执行成功');
+                // 不需要Toast - 控制台已经显示了执行成功
 
                 // 成功完成时清除高亮
                 editor.setTestRunning?.(false, true);

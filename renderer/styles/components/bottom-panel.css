@@ -504,6 +504,8 @@
     font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.5;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .console-log {
@@ -512,6 +514,9 @@
     padding: 4px 12px;
     white-space: pre-wrap;
     word-break: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
 }
 
 .console-log:hover {
@@ -522,6 +527,8 @@
     color: var(--text-disabled);
     font-size: 11px;
     min-width: 90px;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .console-type {
@@ -529,15 +536,20 @@
     min-width: 60px;
     text-transform: uppercase;
     font-size: 10px;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .console-type-log, .console-type-info { color: var(--accent-info); }
 .console-type-warn { color: var(--accent-warning); }
 .console-type-error { color: var(--accent-danger); }
+.console-type-success { color: var(--accent-success); }
 
 .console-message {
     flex: 1;
     color: var(--text-primary);
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 /* ============================================

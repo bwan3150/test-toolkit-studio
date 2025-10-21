@@ -180,10 +180,10 @@ const ElementPropertiesPanel = {
         
         try {
             await navigator.clipboard.writeText(info);
-            window.NotificationModule.showNotification('元素信息已复制到剪贴板', 'success');
+            window.AppNotifications?.success('元素信息已复制到剪贴板');
         } catch (err) {
             window.rError('复制失败:', err);
-            window.NotificationModule.showNotification('复制失败', 'error');
+            window.AppNotifications?.error('复制失败');
         }
     },
     

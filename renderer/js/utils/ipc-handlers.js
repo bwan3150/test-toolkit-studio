@@ -21,7 +21,7 @@ function initializeIpcHandlers() {
     });
 
     ipcRenderer.on('menu-stop-test', () => {
-        window.NotificationModule.showNotification('Stop test not yet implemented', 'info');
+        window.AppNotifications?.info('Stop test not yet implemented');
     });
 
     ipcRenderer.on('menu-refresh-device', () => {

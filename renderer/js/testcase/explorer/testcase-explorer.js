@@ -343,15 +343,11 @@ async function openFile(filePath) {
             }
         } else {
             window.rError(`打开文件失败: ${result.error}`);
-            if (window.NotificationModule) {
-                window.NotificationModule.showNotification(`Failed to open file: ${result.error}`, 'error');
-            }
+            window.AppNotifications?.error(`Failed to open file: ${result.error}`);
         }
     } catch (error) {
         window.rError('打开文件时发生错误:', error);
-        if (window.NotificationModule) {
-            window.NotificationModule.showNotification(`Error opening file: ${error.message}`, 'error');
-        }
+        window.AppNotifications?.error(`Error opening file: ${error.message}`);
     }
 }
 
@@ -456,7 +452,7 @@ async function createNewScript(caseName, casePath) {
         // 打开新创建的文件
         openFile(scriptPath);
         
-        window.NotificationModule.showNotification('脚本创建成功', 'success');
+        window.AppNotifications?.success('脚本创建成功');
     } catch (error) {
         window.rError('创建脚本失败:', error);
         alert('创建脚本失败: ' + error.message);
@@ -476,7 +472,7 @@ async function renameCase(oldName, oldPath) {
     try {
         await fs.rename(oldPath, newPath);
         await loadFileTree();
-        window.NotificationModule.showNotification('重命名成功', 'success');
+        window.AppNotifications?.success('重命名成功');
     } catch (error) {
         window.rError('重命名失败:', error);
         alert('重命名失败: ' + error.message);
@@ -492,7 +488,7 @@ async function deleteCase(caseName, casePath) {
     try {
         await fs.rm(casePath, { recursive: true });
         await loadFileTree();
-        window.NotificationModule.showNotification('删除成功', 'success');
+        window.AppNotifications?.success('删除成功');
     } catch (error) {
         window.rError('删除失败:', error);
         alert('删除失败: ' + error.message);
@@ -524,7 +520,7 @@ async function renameFile(oldName, oldPath) {
             }
         }
         
-        window.NotificationModule.showNotification('重命名成功', 'success');
+        window.AppNotifications?.success('重命名成功');
     } catch (error) {
         window.rError('重命名失败:', error);
         alert('重命名失败: ' + error.message);
@@ -549,7 +545,7 @@ async function deleteFile(fileName, filePath) {
             }
         }
         
-        window.NotificationModule.showNotification('删除成功', 'success');
+        window.AppNotifications?.success('删除成功');
     } catch (error) {
         window.rError('删除失败:', error);
         alert('删除失败: ' + error.message);
@@ -574,7 +570,7 @@ async function copyFile(fileName, filePath) {
         await fs.writeFile(newPath, content);
         await loadFileTree();
         
-        window.NotificationModule.showNotification('复制成功', 'success');
+        window.AppNotifications?.success('复制成功');
     } catch (error) {
         window.rError('复制失败:', error);
         alert('复制失败: ' + error.message);

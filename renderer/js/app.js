@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseController', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
-            'NotificationModule', 'AppGlobals'
+            'AppNotifications', 'AppGlobals'
             // ApiClient 是可选的，稍后单独检查
         ];
         
@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // console.log('✅ Test Toolkit Studio 已就绪'); // 完全禁用所有日志
         
         // 显示应用加载成功的通知
-        window.NotificationModule.showNotification('应用已成功加载', 'success');
+        // 应用加载成功 - 不需要通知用户
         
     } catch (error) {
         window.rError('❌ 应用初始化失败:', error);

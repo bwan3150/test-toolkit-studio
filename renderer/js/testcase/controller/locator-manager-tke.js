@@ -301,17 +301,11 @@ class LocatorManagerTKE {
                 throw new Error(`不支持的locator类型: ${locator.type}`);
             }
 
-            window.NotificationModule.showNotification(
-                `Locator '${name}' 测试成功，位置: (${result.x}, ${result.y})`,
-                'success'
-            );
+            window.AppNotifications?.success(`Locator '${name}' 测试成功，位置: (${result.x}, ${result.y})`);
 
             return result;
         } catch (error) {
-            window.NotificationModule.showNotification(
-                `Locator '${name}' 测试失败: ${error.message}`,
-                'error'
-            );
+            window.AppNotifications?.error(`Locator '${name}' 测试失败: ${error.message}`);
             throw error;
         }
     }
@@ -337,7 +331,7 @@ class LocatorManagerTKE {
             }
         } catch (error) {
             console.error('处理拖放失败:', error);
-            window.NotificationModule.showNotification('处理拖放文件失败', 'error');
+            window.AppNotifications?.error('处理拖放文件失败');
         }
     }
 
@@ -366,12 +360,9 @@ class LocatorManagerTKE {
                     fs.writeFileSync(imgPath, buffer);
                     await this.addImageLocator(locatorName, imgPath);
 
-                    window.NotificationModule.showNotification(
-                        `已添加图像locator: ${locatorName}`,
-                        'success'
-                    );
+                    window.AppNotifications?.success(`已添加图像locator: ${locatorName}`);
                 } catch (error) {
-                    window.NotificationModule.showNotification('保存图像文件失败', 'error');
+                    window.AppNotifications?.error('保存图像文件失败');
                 }
             };
 

@@ -96,15 +96,12 @@ class ApiClient {
         try {
             // 清除本地token
             await getIpcRenderer().invoke('logout');
-            
+
             // 显示通知
-            if (window.NotificationModule) {
-                window.NotificationModule.showNotification(
-                    '登录已过期，请重新登录', 
-                    'warning'
-                );
+            if (window.AppNotifications) {
+                window.AppNotifications.warn('登录已过期，请重新登录');
             }
-            
+
             // 跳转到登录页面
             await getIpcRenderer().invoke('navigate-to-login');
         } catch (error) {
@@ -258,9 +255,7 @@ const apiClient = new ApiClient();
 setTimeout(() => {
     ipcRenderer.on('token-refreshed', () => {
         console.log('收到token刷新通知');
-        if (window.NotificationModule) {
-            window.NotificationModule.showNotification('登录状态已自动续期', 'success');
-        }
+        window.AppNotifications?.success('登录状态已自动续期');
     });
 }, 100);
 

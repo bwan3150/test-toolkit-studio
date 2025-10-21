@@ -135,9 +135,4 @@ const AppNotifications = {
 // 导出到全局
 window.AppNotifications = AppNotifications;
 
-// 兼容旧的NotificationModule接口
-window.NotificationModule = {
-    showNotification: (message, type) => AppNotifications.show(message, type)
-};
-
 window.rLog('✅ 应用通知模块已加载');

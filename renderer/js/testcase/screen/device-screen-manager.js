@@ -46,12 +46,12 @@ async function refreshDeviceScreen() {
     const projectPath = window.AppGlobals.currentProject;
     
     if (!deviceSelect?.value) {
-        window.NotificationModule.showNotification('请先选择设备', 'warning');
+        window.AppNotifications?.deviceRequired();
         return;
     }
-    
+
     if (!projectPath) {
-        window.NotificationModule.showNotification('请先打开项目', 'error');
+        window.AppNotifications?.projectRequired();
         return;
     }
 
@@ -74,7 +74,7 @@ async function refreshDeviceScreen() {
     if (!captureResult.success) {
         const error = captureResult.error || '未知错误';
         window.rError('截图失败:', error);
-        window.NotificationModule.showNotification(`截图失败: ${error}`, 'error');
+        window.AppNotifications?.error(`截图失败: ${error}`);
 
         // 隐藏截图，显示默认占位符
         const img = document.getElementById('deviceScreenshot');
@@ -95,7 +95,7 @@ async function refreshDeviceScreen() {
         result = JSON.parse(captureResult.output);
     } catch (e) {
         window.rError('解析TKE输出失败:', e);
-        window.NotificationModule.showNotification('解析截图结果失败', 'error');
+        window.AppNotifications?.error('解析截图结果失败');
         return;
     }
 
@@ -183,7 +183,7 @@ async function updateDeviceInfoAndGetUIStructure(xmlPath) {
 
         if (!extractResult.success) {
             window.rError('TKE 提取UI元素失败:', extractResult.error);
-            window.NotificationModule.showNotification('提取UI元素失败: ' + (extractResult.error || '未知错误'), 'error');
+            window.AppNotifications?.error('提取UI元素失败: ' + (extractResult.error || '未知错误'));
             return;
         }
 
@@ -193,7 +193,7 @@ async function updateDeviceInfoAndGetUIStructure(xmlPath) {
             elements = JSON.parse(extractResult.output);
         } catch (e) {
             window.rError('解析TKE输出失败:', e);
-            window.NotificationModule.showNotification('解析UI元素失败', 'error');
+            window.AppNotifications?.error('解析UI元素失败');
             return;
         }
 
@@ -226,7 +226,7 @@ async function updateDeviceInfoAndGetUIStructure(xmlPath) {
 
     } catch (error) {
         window.rError('Error updating device info:', error);
-        window.NotificationModule.showNotification('更新设备信息失败: ' + error.message, 'error');
+        window.AppNotifications?.error('更新设备信息失败: ' + error.message);
     }
 }
 
@@ -240,7 +240,7 @@ async function toggleXmlOverlay() {
     const deviceSelect = document.getElementById('deviceSelect');
     
     if (!deviceSelect?.value) {
-        window.NotificationModule.showNotification('请先选择设备', 'warning');
+        window.AppNotifications?.deviceRequired();
         return;
     }
     
@@ -263,7 +263,7 @@ async function enableXmlOverlay(deviceId) {
     window.rLog(`🎯 启用 XML Overlay, deviceId = ${deviceId}`);
     
     try {
-        window.NotificationModule.showNotification('正在准备截图和UI树...', 'info');
+        // 不需要提示 - 用户已通过UI操作知道
         
         const { ipcRenderer } = getGlobals();
         const projectPath = window.AppGlobals.currentProject;
@@ -361,18 +361,14 @@ async function enableXmlOverlay(deviceId) {
         
         // 成功后设置状态为 true
         ScreenState.setXmlOverlayEnabled(true);
-        
-        window.NotificationModule.showNotification(
-            `XML Overlay已启用，识别到${ScreenState.currentUIElements.length}个元素`, 
-            'success'
-        );
-        
+
+        // 不需要Toast - 用户通过滑块UI已知道切换成功
         window.rLog(`✅ XML Overlay 启用成功! 元素数量 = ${ScreenState.currentUIElements.length}`);
         
     } catch (error) {
         const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || '未知错误';
         window.rError('❌ 启用XML Overlay失败:', errorMsg, error);
-        window.NotificationModule.showNotification(`启用XML Overlay失败: ${errorMsg}`, 'error');
+        window.AppNotifications?.error(`启用XML Overlay失败: ${errorMsg}`);
         ScreenState.setXmlOverlayEnabled(false);
     }
 }
@@ -411,7 +407,7 @@ function disableXmlOverlay() {
         ScreenState.resizeObserver = null;
     }
     
-    window.NotificationModule.showNotification('XML Overlay已关闭', 'info');
+    // 不需要Toast - 用户通过滑块UI已知道
 }
 
 // 更新 XML overlay（当屏幕刷新时）

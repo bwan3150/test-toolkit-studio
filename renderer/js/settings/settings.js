@@ -56,7 +56,7 @@ function initializeSettingsPage() {
     if (updateBaseUrlBtn) {
         updateBaseUrlBtn.addEventListener('click', async () => {
             await ipcRenderer.invoke('store-set', 'base_url', settingsBaseUrl.value);
-            window.NotificationModule.showNotification('Base URL updated', 'success');
+            window.AppNotifications?.success('Base URL updated');
         });
     }
     
@@ -88,13 +88,13 @@ function initializeSettingsPage() {
                         exportLogStatus.textContent = 'Succeed';
                         exportLogStatus.style.color = '#4ec9b0';
                     }
-                    window.NotificationModule.showNotification('Log Upload Successfully', 'success');
+                    window.AppNotifications?.success('Log Upload Successfully');
                 } else {
                     if (exportLogStatus) {
                         exportLogStatus.textContent = result.message || 'Failed';
                         exportLogStatus.style.color = '#f48771';
                     }
-                    window.NotificationModule.showNotification(result.message || 'Failed', 'error');
+                    window.AppNotifications?.error(result.message || 'Failed');
                 }
                 
                 // 3秒后隐藏状态
@@ -106,7 +106,7 @@ function initializeSettingsPage() {
                 
             } catch (error) {
                 window.rError('上传日志失败:', error);
-                window.NotificationModule.showNotification(`Failed: ${error.message}`, 'error');
+                window.AppNotifications?.error(`Failed: ${error.message}`);
                 if (exportLogStatus) {
                     exportLogStatus.textContent = 'Failed';
                     exportLogStatus.style.color = '#f48771';
@@ -126,7 +126,7 @@ function initializeSettingsPage() {
             const fontSize = parseInt(editorFontSize.value);
             
             if (fontSize < 10 || fontSize > 24) {
-                window.NotificationModule.showNotification('字体大小必须在10-24px之间', 'error');
+                window.AppNotifications?.error('字体大小必须在10-24px之间');
                 return;
             }
             
@@ -137,7 +137,7 @@ function initializeSettingsPage() {
             // 应用到当前编辑器
             applyEditorFontSettings(fontFamily, fontSize);
             
-            window.NotificationModule.showNotification('字体设置已应用', 'success');
+            window.AppNotifications?.success('字体设置已应用');
         });
     }
     

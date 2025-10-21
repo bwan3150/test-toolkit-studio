@@ -263,16 +263,16 @@ class EditorManager {
     // 带通知的保存当前文件
     saveCurrentFileWithNotification() {
         if (!this.activeTabId) {
-            window.NotificationModule?.showNotification('没有打开的文件', 'warning');
+            window.AppNotifications?.warn('没有打开的文件');
             return Promise.reject(new Error('没有打开的文件'));
         }
-        
+
         return this.saveCurrentFile()
             .then(() => {
-                window.NotificationModule?.showNotification('文件保存成功', 'success');
+                window.AppNotifications?.success('文件保存成功');
             })
             .catch(error => {
-                window.NotificationModule?.showNotification(`保存失败: ${error.message}`, 'error');
+                window.AppNotifications?.error(`保存失败: ${error.message}`);
                 throw error;
             });
     }
