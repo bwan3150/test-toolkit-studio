@@ -14,41 +14,34 @@ class ScriptRunner {
     async runCurrentScript() {
         // 防止重复点击
         if (this.isRunning) {
-            window.rLog('脚本正在运行中,忽略重复点击');
             return;
         }
-
-        window.rLog('开始运行当前脚本');
 
         // 获取当前活动编辑器
         const editor = window.EditorManager?.getActiveEditor();
         if (!editor) {
-            window.rError('没有活动的编辑器');
-            window.notifications?.show('没有活动的编辑器', 'error');
+            window.AppNotifications?.error('没有活动的编辑器');
             return;
         }
 
         // 获取设备ID和项目路径
         const deviceId = document.getElementById('deviceSelect')?.value;
         if (!deviceId) {
-            window.rError('请先选择设备');
-            window.notifications?.show('请先选择设备', 'error');
+            window.AppNotifications?.deviceRequired();
             return;
         }
 
         // 获取项目路径 (统一使用 AppGlobals)
         const projectPath = window.AppGlobals?.currentProject;
         if (!projectPath) {
-            window.rError('没有打开的项目');
-            window.notifications?.show('没有打开的项目', 'error');
+            window.AppNotifications?.projectRequired();
             return;
         }
 
         // 获取脚本内容
         const scriptContent = editor.buffer?.getRawContent();
         if (!scriptContent) {
-            window.rError('脚本内容为空');
-            window.notifications?.show('脚本内容为空', 'error');
+            window.AppNotifications?.error('脚本内容为空');
             return;
         }
 
@@ -85,17 +78,21 @@ class ScriptRunner {
         });
 
         if (commandLines.length === 0) {
-            window.rError('脚本中没有可执行的命令');
-            window.notifications?.show('脚本中没有可执行的命令', 'error');
+            window.AppNotifications?.error('脚本中没有可执行的命令');
             return;
         }
 
-        window.rLog(`找到 ${commandLines.length} 个命令行`);
+        // 获取脚本名称(用于日志)
+        const scriptName = editor.filePath ? editor.filePath.split('/').pop() : '未命名脚本';
 
         // 设置运行状态
         this.isRunning = true;
         this.shouldStop = false;
         this.currentLineIndex = 0;
+        const startTime = Date.now();
+
+        // 输出脚本开始执行
+        window.ExecutionOutput?.scriptStart(scriptName);
 
         // 设置编辑器为运行状态
         editor.setTestRunning?.(true, false);
@@ -104,32 +101,32 @@ class ScriptRunner {
             // 逐行执行命令
             for (let i = 0; i < commandLines.length; i++) {
                 if (this.shouldStop) {
-                    window.rLog('测试被用户中止');
-                    window.notifications?.show('测试已中止', 'warning');
+                    window.ExecutionOutput?.warn('测试被用户中止');
                     break;
                 }
 
                 this.currentLineIndex = i;
                 const commandLine = commandLines[i];
                 const originalLineNumber = lineNumberMap[i];
+                const stepIndex = i + 1;
 
-                window.rLog(`执行第 ${i + 1}/${commandLines.length} 个命令 (原始行号: ${originalLineNumber}): ${commandLine}`);
+                // 输出步骤开始
+                window.ExecutionOutput?.stepStart(stepIndex, commandLines.length, commandLine);
 
-                // 在执行命令前刷新设备截图,让用户看到手机当前状态
+                // 在执行命令前刷新设备截图
                 try {
                     if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                        window.rLog('🔄 刷新设备截图...');
                         await window.DeviceScreenManagerModule.refreshDeviceScreen();
                     }
                 } catch (error) {
-                    window.rWarn('截图刷新失败:', error);
-                    // 截图失败不影响脚本执行,继续
+                    // 截图失败不影响脚本执行
                 }
 
                 // 高亮当前执行行
                 editor.highlightExecutingLine?.(originalLineNumber);
 
                 // 执行命令
+                const stepStartTime = Date.now();
                 try {
                     const result = await window.AppGlobals.ipcRenderer.invoke(
                         'tke-run-step',
@@ -138,25 +135,28 @@ class ScriptRunner {
                         commandLine
                     );
 
-                    window.rLog('命令执行结果:', result);
+                    const stepDuration = Date.now() - stepStartTime;
 
                     if (!result.success) {
-                        // 执行失败,高亮错误行
-                        window.rError(`命令执行失败 (行 ${originalLineNumber}): ${result.error}`);
+                        // 执行失败
                         editor.highlightErrorLine?.(originalLineNumber);
-                        window.notifications?.show(`执行失败: ${result.error}`, 'error');
+                        window.ExecutionOutput?.stepFailed(stepIndex, result.error || '未知错误');
+                        window.AppNotifications?.error('执行失败');
 
                         // 停止执行
                         break;
                     }
 
-                    // 短暂延迟,让高亮效果更明显
+                    // 执行成功
+                    window.ExecutionOutput?.stepSuccess(stepIndex, stepDuration);
+
+                    // 短暂延迟
                     await this.sleep(300);
 
                 } catch (error) {
-                    window.rError(`命令执行异常 (行 ${originalLineNumber}):`, error);
                     editor.highlightErrorLine?.(originalLineNumber);
-                    window.notifications?.show(`执行异常: ${error.message}`, 'error');
+                    window.ExecutionOutput?.stepFailed(stepIndex, error.message);
+                    window.AppNotifications?.error('执行异常');
 
                     // 停止执行
                     break;
@@ -165,24 +165,30 @@ class ScriptRunner {
 
             // 检查是否全部成功
             if (!this.shouldStop && this.currentLineIndex === commandLines.length - 1) {
-                window.rLog('脚本执行成功完成');
-
                 // 最后一步执行完后,刷新设备截图显示最终状态
                 try {
                     if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                        window.rLog('🔄 刷新设备截图显示最终状态...');
                         await window.DeviceScreenManagerModule.refreshDeviceScreen();
                     }
                 } catch (error) {
-                    window.rWarn('最终截图刷新失败:', error);
                     // 截图失败不影响成功提示
                 }
 
-                window.notifications?.show('脚本执行成功', 'success');
+                const totalDuration = Date.now() - startTime;
+                window.ExecutionOutput?.scriptSuccess(scriptName, totalDuration);
+                window.AppNotifications?.success('脚本执行成功');
 
                 // 成功完成时清除高亮
                 editor.setTestRunning?.(false, true);
             } else {
+                // 失败或中止
+                const totalDuration = Date.now() - startTime;
+                if (this.shouldStop) {
+                    window.ExecutionOutput?.warn(`脚本执行已中止 (耗时 ${(totalDuration / 1000).toFixed(2)}s)`);
+                } else {
+                    window.ExecutionOutput?.scriptFailed(scriptName, '执行过程中出现错误');
+                }
+
                 // 失败或中止时保持高亮
                 editor.setTestRunning?.(false, false);
             }

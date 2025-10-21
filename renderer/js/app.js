@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         // 2. 加载UI模块
-        await loadScript('../js/components/notifications.js');
+        // notifications 已迁移到 utils/app-notifications.js,在 index.html 中静态加载
         await loadScript('../js/components/navigation.js');
         // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
         // 初始化编辑器管理器
