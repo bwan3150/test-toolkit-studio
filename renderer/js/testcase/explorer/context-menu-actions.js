@@ -16,20 +16,33 @@ function getGlobals() {
  * @param {string} casePath - Case路径
  */
 async function createNewScript(caseName, casePath) {
+    window.rLog(`📝 创建新脚本被调用 - caseName: ${caseName}, casePath: ${casePath}`);
+
     const { path, ipcRenderer } = getGlobals();
 
-    // 弹窗输入脚本名称
-    const scriptName = prompt('请输入脚本名称（不含扩展名）:');
-    if (!scriptName || scriptName.trim() === '') {
-        return;
+    // 查找可用的文件名
+    const scriptDir = path.join(casePath, 'script');
+    let scriptName = 'new_script';
+    let scriptPath = path.join(scriptDir, scriptName + '.tks');
+
+    // 如果文件已存在，添加序号
+    let counter = 1;
+    while (true) {
+        const checkResult = await ipcRenderer.invoke('file-exists', scriptPath);
+        if (!checkResult.exists) {
+            break;
+        }
+        scriptName = `new_script(${counter})`;
+        scriptPath = path.join(scriptDir, scriptName + '.tks');
+        counter++;
     }
 
-    const scriptDir = path.join(casePath, 'script');
-    const scriptPath = path.join(scriptDir, scriptName.trim() + '.tks');
+    window.rLog(`📝 准备创建文件: ${scriptPath}`);
 
     try {
         // 使用 IPC handler 创建文件
         const result = await ipcRenderer.invoke('fs-create-file', scriptPath, '// 新测试脚本\n');
+        window.rLog(`📝 IPC调用结果:`, result);
 
         if (result.success) {
             window.AppNotifications?.success('脚本创建成功');
@@ -39,15 +52,24 @@ async function createNewScript(caseName, casePath) {
                 await window.TestcaseExplorerModule.loadFileTree();
             }
 
-            // 打开新创建的文件
-            if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.openFile) {
-                await window.TestcaseExplorerModule.openFile(scriptPath);
+            // 等待 DOM 更新
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 找到新创建的文件并进入重命名模式
+            const scriptItems = document.querySelectorAll('.script-item');
+            for (const item of scriptItems) {
+                if (item.dataset.scriptPath === scriptPath) {
+                    window.rLog(`📝 找到新创建的文件，进入重命名模式`);
+                    startInlineRename(item, scriptName + '.tks', scriptPath, true);
+                    break;
+                }
             }
         } else {
+            window.rError(`📝 创建失败: ${result.error}`);
             window.AppNotifications?.error(`创建失败: ${result.error}`);
         }
     } catch (error) {
-        window.rError('创建脚本失败:', error);
+        window.rError('📝 创建脚本异常:', error);
         window.AppNotifications?.error(`创建失败: ${error.message}`);
     }
 }
@@ -58,33 +80,19 @@ async function createNewScript(caseName, casePath) {
  * @param {string} oldPath - 旧路径
  */
 async function renameCase(oldName, oldPath) {
-    const { path, ipcRenderer } = getGlobals();
+    window.rLog(`📝 重命名Case被调用 - oldName: ${oldName}, oldPath: ${oldPath}`);
 
-    const newName = prompt('请输入新名称:', oldName);
-    if (!newName || newName.trim() === '' || newName === oldName) {
-        return;
-    }
-
-    const parentDir = path.dirname(oldPath);
-    const newPath = path.join(parentDir, newName.trim());
-
-    try {
-        const result = await ipcRenderer.invoke('fs-rename', oldPath, newPath);
-
-        if (result.success) {
-            window.AppNotifications?.success('重命名成功');
-
-            // 刷新文件树
-            if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
-                await window.TestcaseExplorerModule.loadFileTree();
-            }
-        } else {
-            window.AppNotifications?.error(`重命名失败: ${result.error}`);
+    // 找到对应的 case-container 元素
+    const caseContainers = document.querySelectorAll('.case-container');
+    for (const container of caseContainers) {
+        if (container.dataset.casePath === oldPath) {
+            window.rLog(`📝 找到Case元素，进入内联编辑模式`);
+            startCaseInlineRename(container, oldName, oldPath);
+            return;
         }
-    } catch (error) {
-        window.rError('重命名失败:', error);
-        window.AppNotifications?.error(`重命名失败: ${error.message}`);
     }
+
+    window.rError('📝 未找到对应的Case元素');
 }
 
 /**
@@ -126,44 +134,19 @@ async function deleteCase(caseName, casePath) {
  * @param {string} oldPath - 旧文件路径
  */
 async function renameFile(oldName, oldPath) {
-    const { path, ipcRenderer } = getGlobals();
+    window.rLog(`📝 重命名文件被调用 - oldName: ${oldName}, oldPath: ${oldPath}`);
 
-    const nameWithoutExt = path.parse(oldName).name;
-    const ext = path.parse(oldName).ext;
-
-    const newName = prompt('请输入新名称:', nameWithoutExt);
-    if (!newName || newName.trim() === '' || newName === nameWithoutExt) {
-        return;
-    }
-
-    const parentDir = path.dirname(oldPath);
-    const newPath = path.join(parentDir, newName.trim() + ext);
-
-    try {
-        const result = await ipcRenderer.invoke('fs-rename', oldPath, newPath);
-
-        if (result.success) {
-            window.AppNotifications?.success('重命名成功');
-
-            // 如果重命名的是当前打开的文件，更新 EditorManager
-            if (window.AppGlobals.currentScript === oldPath) {
-                window.AppGlobals.currentScript = newPath;
-                if (window.EditorManager && window.EditorManager.updateCurrentFilePath) {
-                    window.EditorManager.updateCurrentFilePath(newPath);
-                }
-            }
-
-            // 刷新文件树
-            if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
-                await window.TestcaseExplorerModule.loadFileTree();
-            }
-        } else {
-            window.AppNotifications?.error(`重命名失败: ${result.error}`);
+    // 找到对应的 script-item 元素
+    const scriptItems = document.querySelectorAll('.script-item');
+    for (const item of scriptItems) {
+        if (item.dataset.scriptPath === oldPath) {
+            window.rLog(`📝 找到文件元素，进入内联编辑模式`);
+            startInlineRename(item, oldName, oldPath, false);
+            return;
         }
-    } catch (error) {
-        window.rError('重命名失败:', error);
-        window.AppNotifications?.error(`重命名失败: ${error.message}`);
     }
+
+    window.rError('📝 未找到对应的文件元素');
 }
 
 /**
@@ -211,21 +194,22 @@ async function deleteFile(fileName, filePath) {
  * @param {string} filePath - 文件路径
  */
 async function copyFile(fileName, filePath) {
+    window.rLog(`📝 复制文件被调用 - fileName: ${fileName}, filePath: ${filePath}`);
+
     const { path, ipcRenderer } = getGlobals();
 
     const nameWithoutExt = path.parse(fileName).name;
     const ext = path.parse(fileName).ext;
 
-    const newName = prompt('请输入新文件名称:', nameWithoutExt + '_copy');
-    if (!newName || newName.trim() === '') {
-        return;
-    }
-
+    // 生成默认的副本名称
+    const newName = nameWithoutExt + '_copy';
     const parentDir = path.dirname(filePath);
-    const newPath = path.join(parentDir, newName.trim() + ext);
+    const newPath = path.join(parentDir, newName + ext);
+    window.rLog(`📝 准备复制: ${filePath} -> ${newPath}`);
 
     try {
         const result = await ipcRenderer.invoke('fs-copy-file', filePath, newPath);
+        window.rLog(`📝 复制IPC结果:`, result);
 
         if (result.success) {
             window.AppNotifications?.success('复制成功');
@@ -234,13 +218,268 @@ async function copyFile(fileName, filePath) {
             if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
                 await window.TestcaseExplorerModule.loadFileTree();
             }
+
+            // 等待 DOM 更新
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 找到复制的文件并进入重命名模式
+            const scriptItems = document.querySelectorAll('.script-item');
+            for (const item of scriptItems) {
+                if (item.dataset.scriptPath === newPath) {
+                    window.rLog(`📝 找到复制的文件，进入重命名模式`);
+                    startInlineRename(item, newName + ext, newPath, true);
+                    break;
+                }
+            }
         } else {
+            window.rError(`📝 复制失败: ${result.error}`);
             window.AppNotifications?.error(`复制失败: ${result.error}`);
         }
     } catch (error) {
-        window.rError('复制失败:', error);
+        window.rError('📝 复制异常:', error);
         window.AppNotifications?.error(`复制失败: ${error.message}`);
     }
+}
+
+// ============ 内联编辑功能 ============
+
+/**
+ * 启动 Case 内联重命名
+ * @param {HTMLElement} caseContainer - Case 容器元素
+ * @param {string} oldName - 旧名称
+ * @param {string} oldPath - 旧路径
+ */
+function startCaseInlineRename(caseContainer, oldName, oldPath) {
+    const { path, ipcRenderer } = getGlobals();
+
+    const caseLabel = caseContainer.querySelector('.case-label');
+    if (!caseLabel) {
+        window.rError('📝 未找到 case-label 元素');
+        return;
+    }
+
+    // 创建输入框
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'case-name-input';
+    input.value = oldName;
+    input.style.cssText = `
+        background: var(--input-bg, #3c3c3c);
+        border: 1px solid var(--accent-primary, #0e639c);
+        border-radius: 2px;
+        color: var(--text-primary, #cccccc);
+        font-size: 13px;
+        padding: 2px 4px;
+        outline: none;
+        width: 100%;
+        font-family: inherit;
+    `;
+
+    // 替换 label 为 input
+    caseLabel.style.display = 'none';
+    caseLabel.parentNode.insertBefore(input, caseLabel.nextSibling);
+
+    // 聚焦并选择文本
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    // 完成重命名的函数
+    const finishRename = async () => {
+        const newName = input.value.trim();
+
+        // 移除输入框，恢复 label
+        input.remove();
+        caseLabel.style.display = '';
+
+        if (!newName || newName === oldName) {
+            window.rLog('📝 用户取消重命名或未修改');
+            return;
+        }
+
+        const parentDir = path.dirname(oldPath);
+        const newPath = path.join(parentDir, newName);
+        window.rLog(`📝 准备重命名Case: ${oldPath} -> ${newPath}`);
+
+        try {
+            const result = await ipcRenderer.invoke('fs-rename', oldPath, newPath);
+            window.rLog(`📝 重命名IPC结果:`, result);
+
+            if (result.success) {
+                window.AppNotifications?.success('重命名成功');
+
+                // 刷新文件树
+                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
+                    await window.TestcaseExplorerModule.loadFileTree();
+                }
+            } else {
+                window.rError(`📝 重命名失败: ${result.error}`);
+                window.AppNotifications?.error(`重命名失败: ${result.error}`);
+            }
+        } catch (error) {
+            window.rError('📝 重命名异常:', error);
+            window.AppNotifications?.error(`重命名失败: ${error.message}`);
+        }
+    };
+
+    // 取消重命名的函数
+    const cancelRename = () => {
+        window.rLog('📝 取消重命名');
+        input.remove();
+        caseLabel.style.display = '';
+    };
+
+    // 回车确认
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            finishRename();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelRename();
+        }
+    });
+
+    // 失去焦点时确认
+    input.addEventListener('blur', () => {
+        finishRename();
+    });
+
+    // 阻止点击事件冒泡
+    input.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+}
+
+/**
+ * 启动脚本文件内联重命名
+ * @param {HTMLElement} scriptItem - 脚本元素
+ * @param {string} oldName - 旧文件名
+ * @param {string} oldPath - 旧文件路径
+ * @param {boolean} selectAll - 是否全选文本
+ */
+function startInlineRename(scriptItem, oldName, oldPath, selectAll = false) {
+    const { path, ipcRenderer } = getGlobals();
+
+    const scriptLabel = scriptItem.querySelector('.script-label');
+    if (!scriptLabel) {
+        window.rError('📝 未找到 script-label 元素');
+        return;
+    }
+
+    const nameWithoutExt = path.parse(oldName).name;
+    const ext = path.parse(oldName).ext;
+
+    // 保存原始文本
+    const originalText = scriptLabel.textContent;
+
+    // 创建输入框
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'script-name-input';
+    input.value = nameWithoutExt;
+    input.style.cssText = `
+        background: var(--input-bg, #3c3c3c);
+        border: 1px solid var(--accent-primary, #0e639c);
+        border-radius: 2px;
+        color: var(--text-primary, #cccccc);
+        font-size: 13px;
+        padding: 2px 4px;
+        outline: none;
+        width: 100%;
+        font-family: inherit;
+    `;
+
+    // 替换 label 为 input
+    scriptLabel.style.display = 'none';
+    scriptItem.insertBefore(input, scriptLabel.nextSibling);
+
+    // 聚焦并选择文本
+    input.focus();
+    if (selectAll) {
+        input.select();
+    } else {
+        // 不全选时，光标放在末尾
+        input.setSelectionRange(input.value.length, input.value.length);
+    }
+
+    // 完成重命名的函数
+    const finishRename = async () => {
+        const newName = input.value.trim();
+
+        // 移除输入框，恢复 label
+        input.remove();
+        scriptLabel.style.display = '';
+
+        if (!newName || newName === nameWithoutExt) {
+            // 用户取消或未修改
+            window.rLog('📝 用户取消重命名或未修改');
+            return;
+        }
+
+        const parentDir = path.dirname(oldPath);
+        const newPath = path.join(parentDir, newName + ext);
+        window.rLog(`📝 准备重命名: ${oldPath} -> ${newPath}`);
+
+        try {
+            const result = await ipcRenderer.invoke('fs-rename', oldPath, newPath);
+            window.rLog(`📝 重命名IPC结果:`, result);
+
+            if (result.success) {
+                window.AppNotifications?.success('重命名成功');
+
+                // 如果重命名的是当前打开的文件，更新 EditorManager
+                if (window.AppGlobals.currentScript === oldPath) {
+                    window.AppGlobals.currentScript = newPath;
+                    if (window.EditorManager && window.EditorManager.updateCurrentFilePath) {
+                        window.EditorManager.updateCurrentFilePath(newPath);
+                    }
+                }
+
+                // 刷新文件树
+                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
+                    await window.TestcaseExplorerModule.loadFileTree();
+                }
+            } else {
+                window.rError(`📝 重命名失败: ${result.error}`);
+                window.AppNotifications?.error(`重命名失败: ${result.error}`);
+            }
+        } catch (error) {
+            window.rError('📝 重命名异常:', error);
+            window.AppNotifications?.error(`重命名失败: ${error.message}`);
+        }
+    };
+
+    // 取消重命名的函数
+    const cancelRename = () => {
+        window.rLog('📝 取消重命名');
+        input.remove();
+        scriptLabel.style.display = '';
+    };
+
+    // 回车确认
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            finishRename();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelRename();
+        }
+    });
+
+    // 失去焦点时确认
+    input.addEventListener('blur', () => {
+        finishRename();
+    });
+
+    // 阻止点击事件冒泡
+    input.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 }
 
 // ============ 通用操作 ============
