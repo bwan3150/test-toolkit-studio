@@ -81,7 +81,7 @@ mv "$TEMP_FILE" "$RELEASE_FILE"
 # Git操作
 echo -e "${GREEN}=== 执行Git操作 ===${NC}"
 
-git add .
+git add "$RELEASE_FILE"
 git commit -m "Update: release note for version $NEW_TAG"
 git push
 
