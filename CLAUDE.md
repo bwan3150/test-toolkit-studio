@@ -12,11 +12,10 @@ Electron 桌面应用，用于自动化测试。
 - 核心的代码处理逻辑都要交给CLI工具toolkit engine(tke), App的electron js前端只是tke核心逻辑的外围封装
 - 额外加入独立的ai tester模块, 用于根据一条测试用例, 开始实时逐轮次操作手机, 在手机中探索, 直到完成测试要求, 途中AI的所有操作将被记录为.tks脚本, 可以用于直接运行
 
-## 关键路径（重构后）
-- HTML 文件在 `renderer/html/` 
-- 从 HTML 引用 JS：`renderer/js/xxx.js`
-- 从 HTML 引用 CSS：`renderer/styles/xxx.css`
-- 从 HTML 引用图片：`../../assets/xxx`
+## 逻辑分层(极其重要!)
+- 本项目为electron桌面端App, 内部附带着rust打包成的二进制可执行文件tke, tester-ai等(项目源代码作为子项目就在./toolkit-engine和./tester-ai下)
+- ./handlers文件夹下放着和系统交互的js代码, 和tke, tester-ai等可执行文件交互的js代码, 请求其他api服务器的代理js代码
+- ./renderer文件夹下放着html+css+js专注于UI逻辑, 只允许与handlers交互进行处理, 不能直接请求外部api和与tke, tester-ai等可执行文件交互, 保持项目分层逻辑的统一
 
 ## 代码规范补充
 - **必须**：使用 `window.rLog()`, `window.rError()` 等，不用 `console.log()`
