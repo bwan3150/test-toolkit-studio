@@ -1671,21 +1671,8 @@ class EditorTab {
     }
     
     highlightTKSSyntax(text) {
-        // 新TKS语法高亮
-        return text
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            // 高亮命令名
-            .replace(/(启动|关闭|点击|按压|滑动|拖动|定向拖动|输入|清理|隐藏键盘|返回|等待|断言|读取)/g, '<span class="syntax-action">$1</span>')
-            // 高亮图片元素 @{图片名称}
-            .replace(/@\{([^}]+)\}/g, '@{<span class="syntax-string">$1</span>}')
-            // 高亮坐标 {x,y}
-            .replace(/\{(\d+\s*,\s*\d+)\}/g, '{<span class="syntax-coordinate">$1</span>}')
-            // 高亮XML元素 {元素名称}
-            .replace(/\{([^}]+)\}/g, '{<span class="syntax-xml-element">$1</span>}')
-            // 高亮参数列表
-            .replace(/\[([^\]]+)\]/g, '[<span class="syntax-param">$1</span>]');
+        // 使用 TKSSyntaxHighlighter 进行语法高亮
+        return window.TKSSyntaxHighlighter.highlight(text);
     }
     
     updateLineNumbers() {
