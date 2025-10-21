@@ -138,16 +138,11 @@
     margin-left: 22px;
     padding-left: 12px;
     border-left: 1px solid var(--border-color);
-    max-height: 1000px;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
-    opacity: 1;
     margin-top: 4px;
 }
 
 .scripts-container.collapsed {
-    max-height: 0;
-    opacity: 0;
+    display: none;
 }
 
 .script-item {

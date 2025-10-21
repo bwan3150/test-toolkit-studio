@@ -8,6 +8,127 @@ function getGlobals() {
     return window.AppGlobals;
 }
 
+// ============ DOM 辅助函数 ============
+
+/**
+ * 手动创建脚本项目的 DOM 元素
+ * @param {string} scriptName - 脚本名称
+ * @param {string} scriptPath - 脚本路径
+ * @param {string} casePath - 所属 Case 路径
+ * @returns {HTMLElement} 创建的脚本元素
+ */
+function createScriptItemDOM(scriptName, scriptPath, casePath) {
+    const scriptItem = document.createElement('div');
+    scriptItem.className = 'script-item';
+    scriptItem.dataset.scriptPath = scriptPath;
+    scriptItem.dataset.casePath = casePath;
+    scriptItem.dataset.scriptName = scriptName;
+
+    // 脚本图标
+    const scriptContainer = document.createElement('div');
+    scriptContainer.className = 'icon-container script-container';
+    const scriptIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    scriptIcon.className = 'script-icon';
+    scriptIcon.setAttribute('viewBox', '0 0 24 24');
+    scriptIcon.innerHTML = '<path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/>';
+    scriptContainer.appendChild(scriptIcon);
+
+    // 脚本名称
+    const scriptLabel = document.createElement('span');
+    scriptLabel.className = 'script-label';
+    scriptLabel.textContent = scriptName;
+
+    scriptItem.appendChild(scriptContainer);
+    scriptItem.appendChild(scriptLabel);
+
+    // 点击打开文件
+    scriptItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.openFile) {
+            window.TestcaseExplorerModule.openFile(scriptPath);
+        }
+    });
+
+    // 右键菜单
+    scriptItem.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // 调用自身模块的 renameFile, deleteFile, copyFile 等函数
+        showFileContextMenu(e, scriptName, scriptPath);
+    });
+
+    return scriptItem;
+}
+
+/**
+ * 显示文件右键菜单（内部使用）
+ */
+function showFileContextMenu(event, fileName, filePath) {
+    const menuItems = [
+        { text: '重命名', action: () => {
+            const scriptItem = document.querySelector(`.script-item[data-script-path="${filePath}"]`);
+            if (scriptItem) {
+                renameFile(fileName, filePath);
+            }
+        }},
+        { text: '删除', action: () => deleteFile(fileName, filePath) },
+        { text: '复制', action: () => copyFile(fileName, filePath) },
+        { text: '在文件管理器中显示', action: () => showInFileManager(filePath) }
+    ];
+
+    // 创建简单的上下文菜单
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) existingMenu.remove();
+
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'context-menu';
+    contextMenu.style.cssText = `
+        position: fixed;
+        left: ${event.clientX}px;
+        top: ${event.clientY}px;
+        background: var(--panel-bg, #252526);
+        border: 1px solid var(--border-color, #3e3e42);
+        border-radius: 4px;
+        padding: 4px 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        z-index: 10000;
+        min-width: 160px;
+    `;
+
+    menuItems.forEach(item => {
+        const menuItem = document.createElement('div');
+        menuItem.className = 'context-menu-item';
+        menuItem.textContent = item.text;
+        menuItem.style.cssText = `
+            padding: 6px 12px;
+            cursor: pointer;
+            color: var(--text-primary, #cccccc);
+            font-size: 13px;
+        `;
+        menuItem.addEventListener('mouseenter', () => {
+            menuItem.style.background = 'var(--hover-bg, #2a2d2e)';
+        });
+        menuItem.addEventListener('mouseleave', () => {
+            menuItem.style.background = 'transparent';
+        });
+        menuItem.addEventListener('click', () => {
+            item.action();
+            contextMenu.remove();
+        });
+        contextMenu.appendChild(menuItem);
+    });
+
+    document.body.appendChild(contextMenu);
+
+    const closeMenu = () => {
+        if (document.body.contains(contextMenu)) {
+            contextMenu.remove();
+            document.removeEventListener('click', closeMenu);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 10);
+}
+
 // ============ Case 右键菜单操作 ============
 
 /**
@@ -47,23 +168,48 @@ async function createNewScript(caseName, casePath) {
         if (result.success) {
             window.AppNotifications?.success('脚本创建成功');
 
-            // 刷新文件树
-            if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
-                await window.TestcaseExplorerModule.loadFileTree();
-            }
+            // 找到对应的 case-container 和 scripts-container
+            const caseContainers = document.querySelectorAll('.case-container');
+            let scriptsContainer = null;
 
-            // 等待 DOM 更新
-            await new Promise(resolve => setTimeout(resolve, 100));
+            for (const container of caseContainers) {
+                if (container.dataset.casePath === casePath) {
+                    scriptsContainer = container.querySelector('.scripts-container');
 
-            // 找到新创建的文件并进入重命名模式
-            const scriptItems = document.querySelectorAll('.script-item');
-            for (const item of scriptItems) {
-                if (item.dataset.scriptPath === scriptPath) {
-                    window.rLog(`📝 找到新创建的文件，进入重命名模式`);
-                    startInlineRename(item, scriptName + '.tks', scriptPath, true);
+                    // 如果 case 是折叠状态，先展开
+                    const caseItem = container.querySelector('.case-item');
+                    if (caseItem && !caseItem.classList.contains('expanded')) {
+                        // 调用 TestcaseExplorerModule 的 toggleCaseFolder 来展开
+                        if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.toggleCaseFolder) {
+                            window.TestcaseExplorerModule.toggleCaseFolder(caseName, casePath);
+                        }
+                        // 重新获取 scripts-container（因为可能刚被创建）
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                        scriptsContainer = container.querySelector('.scripts-container');
+                    }
                     break;
                 }
             }
+
+            if (!scriptsContainer) {
+                window.rError('📝 无法找到 scripts-container，回退到刷新文件树');
+                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
+                    await window.TestcaseExplorerModule.loadFileTree();
+                }
+                return;
+            }
+
+            // 手动创建新的脚本 DOM 元素
+            const newScriptItem = createScriptItemDOM(scriptName + '.tks', scriptPath, casePath);
+            scriptsContainer.appendChild(newScriptItem);
+
+            window.rLog(`📝 已手动添加新脚本到DOM: ${scriptPath}`);
+
+            // 等待短暂时间确保 DOM 更新
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // 进入重命名模式
+            startInlineRename(newScriptItem, scriptName + '.tks', scriptPath, true);
         } else {
             window.rError(`📝 创建失败: ${result.error}`);
             window.AppNotifications?.error(`创建失败: ${result.error}`);
@@ -214,23 +360,42 @@ async function copyFile(fileName, filePath) {
         if (result.success) {
             window.AppNotifications?.success('复制成功');
 
-            // 刷新文件树
-            if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
-                await window.TestcaseExplorerModule.loadFileTree();
-            }
+            // 找到原文件的 DOM 元素以确定所属的 case
+            const originalScriptItems = document.querySelectorAll('.script-item');
+            let casePath = null;
+            let scriptsContainer = null;
 
-            // 等待 DOM 更新
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            // 找到复制的文件并进入重命名模式
-            const scriptItems = document.querySelectorAll('.script-item');
-            for (const item of scriptItems) {
-                if (item.dataset.scriptPath === newPath) {
-                    window.rLog(`📝 找到复制的文件，进入重命名模式`);
-                    startInlineRename(item, newName + ext, newPath, true);
+            for (const item of originalScriptItems) {
+                if (item.dataset.scriptPath === filePath) {
+                    casePath = item.dataset.casePath;
+                    // 找到所属 case 的 scripts-container
+                    const caseContainer = item.closest('.case-item');
+                    if (caseContainer) {
+                        scriptsContainer = caseContainer.querySelector('.scripts-container');
+                    }
                     break;
                 }
             }
+
+            if (!scriptsContainer || !casePath) {
+                window.rError('📝 无法找到 scripts-container 或 casePath，回退到刷新文件树');
+                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
+                    await window.TestcaseExplorerModule.loadFileTree();
+                }
+                return;
+            }
+
+            // 手动创建新的脚本 DOM 元素
+            const newScriptItem = createScriptItemDOM(newName + ext, newPath, casePath);
+            scriptsContainer.appendChild(newScriptItem);
+
+            window.rLog(`📝 已手动添加新脚本到DOM: ${newPath}`);
+
+            // 等待短暂时间确保 DOM 更新
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // 进入重命名模式
+            startInlineRename(newScriptItem, newName + ext, newPath, true);
         } else {
             window.rError(`📝 复制失败: ${result.error}`);
             window.AppNotifications?.error(`复制失败: ${result.error}`);
@@ -307,10 +472,27 @@ function startCaseInlineRename(caseContainer, oldName, oldPath) {
             if (result.success) {
                 window.AppNotifications?.success('重命名成功');
 
-                // 刷新文件树
-                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
-                    await window.TestcaseExplorerModule.loadFileTree();
+                // 直接更新 DOM，不重新加载文件树
+                caseLabel.textContent = newName;
+                caseContainer.dataset.casePath = newPath;
+                caseContainer.dataset.caseName = newName;
+
+                // 更新所有脚本的 casePath
+                const scriptItems = caseContainer.querySelectorAll('.script-item');
+                scriptItems.forEach(item => {
+                    const oldScriptPath = item.dataset.scriptPath;
+                    const scriptFileName = path.basename(oldScriptPath);
+                    const newScriptPath = path.join(newPath, 'script', scriptFileName);
+                    item.dataset.scriptPath = newScriptPath;
+                    item.dataset.casePath = newPath;
+                });
+
+                // 更新 expandedCases 集合
+                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.updateExpandedCasePath) {
+                    window.TestcaseExplorerModule.updateExpandedCasePath(oldPath, newPath);
                 }
+
+                window.rLog('📝 Case重命名完成，已更新DOM和展开状态');
             } else {
                 window.rError(`📝 重命名失败: ${result.error}`);
                 window.AppNotifications?.error(`重命名失败: ${result.error}`);
@@ -437,10 +619,12 @@ function startInlineRename(scriptItem, oldName, oldPath, selectAll = false) {
                     }
                 }
 
-                // 刷新文件树
-                if (window.TestcaseExplorerModule && window.TestcaseExplorerModule.loadFileTree) {
-                    await window.TestcaseExplorerModule.loadFileTree();
-                }
+                // 直接更新 DOM，不重建整个树
+                scriptLabel.textContent = newName + ext;
+                scriptItem.dataset.scriptPath = newPath;
+                scriptItem.dataset.scriptName = newName + ext;
+
+                window.rLog(`📝 已更新DOM: 脚本路径 ${newPath}`);
             } else {
                 window.rError(`📝 重命名失败: ${result.error}`);
                 window.AppNotifications?.error(`重命名失败: ${result.error}`);

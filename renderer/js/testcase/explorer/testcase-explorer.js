@@ -155,8 +155,16 @@ async function loadCaseScripts(caseItem, casePath) {
 }
 
 // 切换case文件夹的展开状态
-async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
-    window.rLog(`📂 toggleCaseFolder 调用: casePath=${casePath}, autoOpenFirst=${autoOpenFirst}`);
+async function toggleCaseFolder(caseItem, casePath = null, autoOpenFirst = false) {
+    // 优先从 DOM 读取最新的 casePath（处理重命名后的情况）
+    const actualCasePath = caseItem.dataset?.casePath || casePath;
+
+    if (!actualCasePath) {
+        window.rError('toggleCaseFolder: 无法获取 casePath');
+        return [];
+    }
+
+    window.rLog(`📂 toggleCaseFolder 调用: casePath=${actualCasePath}, autoOpenFirst=${autoOpenFirst}`);
 
     const scriptsContainer = caseItem.querySelector('.scripts-container');
     const caseIcon = caseItem.querySelector('.case-icon');
@@ -172,7 +180,7 @@ async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
     if (isCurrentlyCollapsed) {
         // 展开
         scriptsContainer.classList.remove('collapsed');
-        expandedCases.add(casePath);
+        expandedCases.add(actualCasePath);
         window.rLog(`📂 展开文件夹`);
 
         // 更改图标为打开的文件夹（如果图标存在）
@@ -180,9 +188,9 @@ async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
             caseIcon.innerHTML = '<path d="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"/>';
         }
 
-        // 异步加载脚本文件
-        window.rLog(`📂 开始加载脚本文件`);
-        const scriptPaths = await loadCaseScripts(caseItem, casePath);
+        // 异步加载脚本文件（使用最新的路径）
+        window.rLog(`📂 开始加载脚本文件，路径: ${actualCasePath}`);
+        const scriptPaths = await loadCaseScripts(caseItem, actualCasePath);
         window.rLog(`📂 加载完成，共 ${scriptPaths.length} 个脚本`);
 
         // 如果需要自动打开第一个脚本
@@ -198,7 +206,7 @@ async function toggleCaseFolder(caseItem, casePath, autoOpenFirst = false) {
     } else {
         // 折叠
         scriptsContainer.classList.add('collapsed');
-        expandedCases.delete(casePath);
+        expandedCases.delete(actualCasePath);
         window.rLog(`📂 折叠文件夹`);
 
         // 更改图标为关闭的文件夹（如果图标存在）
@@ -353,6 +361,12 @@ async function openFile(filePath) {
 
 // 显示case右键菜单
 function showCaseContextMenu(event, caseName, casePath) {
+    // 移除已存在的右键菜单
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
     const contextMenu = document.createElement('div');
     contextMenu.className = 'context-menu';
 
@@ -438,6 +452,12 @@ function showCaseContextMenu(event, caseName, casePath) {
 
 // 显示文件右键菜单
 function showFileContextMenu(event, fileName, filePath) {
+    // 移除已存在的右键菜单
+    const existingMenu = document.querySelector('.context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
     const contextMenu = document.createElement('div');
     contextMenu.className = 'context-menu';
 
@@ -527,6 +547,19 @@ function showFileContextMenu(event, fileName, filePath) {
 
 // 注意：所有右键菜单操作（新建、重命名、删除、复制等）已迁移到 context-menu-actions.js
 
+/**
+ * 更新 expandedCases 集合中的路径（用于处理重命名）
+ * @param {string} oldPath - 旧路径
+ * @param {string} newPath - 新路径
+ */
+function updateExpandedCasePath(oldPath, newPath) {
+    if (expandedCases.has(oldPath)) {
+        expandedCases.delete(oldPath);
+        expandedCases.add(newPath);
+        window.rLog(`📂 已更新 expandedCases: ${oldPath} -> ${newPath}`);
+    }
+}
+
 // 导出模块
 window.TestcaseExplorerModule = {
     loadFileTree,
@@ -534,5 +567,6 @@ window.TestcaseExplorerModule = {
     createTreeItem,
     openFile,
     toggleCaseFolder,
-    loadCaseScripts
+    loadCaseScripts,
+    updateExpandedCasePath
 };
