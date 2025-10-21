@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toolkit Studio - AI驱动的自动化测试IDE</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background: #0d0d0d;
+            color: #f0f0f0;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* 导航栏 */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(13, 13, 13, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+            display: flex;
+            align-items: center;
+            height: 72px;
+        }
+
+        .logo {
+            height: 40px;
+            margin-right: 16px;
+        }
+
+        .logo-text {
+            font-size: 20px;
+            font-weight: 600;
+            color: #f0f0f0;
+            letter-spacing: -0.5px;
+        }
+
+        /* 主要内容区域 */
+        .hero-section {
+            padding: 160px 40px 80px;
+            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero-logo {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 40px;
+        }
+
+        h1 {
+            font-size: 56px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            background: linear-gradient(180deg, #ffffff 0%, #999999 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 24px;
+            color: #999;
+            margin-bottom: 16px;
+            font-weight: 400;
+        }
+
+        .description {
+            font-size: 18px;
+            color: #666;
+            max-width: 800px;
+            margin: 0 auto 60px;
+            line-height: 1.5;
+        }
+
+        /* 下载按钮区域 */
+        .download-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            margin: 0 auto 80px;
+            max-width: 500px;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 16px;
+        }
+
+        .beta-warning {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            padding: 0;
+            max-width: 400px;
+        }
+
+        .download-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: #f0f0f0;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .download-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .download-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .download-btn .version {
+            font-size: 11px;
+            color: #999;
+            display: block;
+            margin-top: 2px;
+        }
+
+        .download-btn .platform-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .download-btn .platform-info > span:first-child {
+            font-size: 14px;
+        }
+
+        .download-btn.loading {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .download-btn.loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        /* 功能展示区 */
+        .feature-section {
+            padding: 80px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-item {
+            margin-bottom: 140px;
+        }
+
+        .feature-title {
+            font-size: 36px;
+            font-weight: 600;
+            margin-bottom: 40px;
+            text-align: center;
+            color: #f0f0f0;
+        }
+
+        .feature-media {
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+            display: block;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 核心功能网格 */
+        .core-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            padding: 80px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .core-feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 32px;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .core-feature-card:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .core-feature-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #fe7600 0%, #ff9a00 100%);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .core-feature-icon svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+            z-index: 1;
+            position: relative;
+        }
+
+        .core-feature-icon::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            top: 0;
+            left: -100%;
+            transform: skewX(-20deg);
+            transition: left 0.5s;
+        }
+
+        .core-feature-card:hover .core-feature-icon::before {
+            left: 100%;
+        }
+
+        .icon-project { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .icon-ai { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .icon-script { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .icon-device { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .icon-element { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .icon-fix { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
+
+        .future-badge {
+            display: inline-block;
+            background: rgba(254, 118, 0, 0.2);
+            border: 1px solid #fe7600;
+            color: #fe7600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .core-feature-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #f0f0f0;
+        }
+
+        .core-feature-desc {
+            font-size: 15px;
+            color: #999;
+            line-height: 1.6;
+        }
+
+        /* 底部 */
+        footer {
+            padding: 60px 40px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #666;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 36px;
+            }
+
+            .subtitle {
+                font-size: 20px;
+            }
+
+            .feature-title {
+                font-size: 28px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .download-section {
+                padding: 0 20px;
+            }
+
+            .download-buttons {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .download-btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .beta-warning {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav>
+        <div class="nav-container">
+            <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
+            <span class="logo-text">Toolkit</span>
+        </div>
+    </nav>
+
+    <!-- 主英雄区域 -->
+    <section class="hero-section">
+        <img src="toolkit_studio_logo.png" alt="Toolkit Studio Logo" class="hero-logo">
+        <h1>Toolkit Studio</h1>
+        <p class="subtitle">测试工具箱Studio</p>
+        <p class="description">
+            深度融合AI的UI自动化测试脚本编写集成开发环境与自动化测试执行环境
+        </p>
+
+        <!-- 下载按钮 -->
+        <div class="download-section">
+            <div class="download-buttons">
+                <a href="#" class="download-btn loading" id="macDownloadBtn">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                    </svg>
+                    <div class="platform-info">
+                        <span>macOS</span>
+                        <span class="version" id="macVersion">加载中...</span>
+                    </div>
+                </a>
+
+                <a href="#" class="download-btn loading" id="winDownloadBtn">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                    </svg>
+                    <div class="platform-info">
+                        <span>Windows</span>
+                        <span class="version" id="winVersion">加载中...</span>
+                    </div>
+                </a>
+            </div>
+
+            <p class="beta-warning">
+                当前为测试版本，可能存在bug
+            </p>
+        </div>
+    </section>
+
+    <!-- 核心功能 -->
+    <section class="core-features">
+        <div class="core-feature-card">
+            <div class="core-feature-icon icon-project">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 3h18v2H3V3zm0 4h10v2H3V7zm0 4h18v2H3v-2zm0 4h10v2H3v-2zm0 4h18v2H3v-2z"/>
+                </svg>
+            </div>
+            <h3 class="core-feature-title">项目管理</h3>
+            <p class="core-feature-desc">自动创建结构化测试项目文件夹，从CSV导入测试用例</p>
+        </div>
+        <div class="core-feature-card">
+            <div class="core-feature-icon icon-ai">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+            </div>
+            <h3 class="core-feature-title">AI仿生测试<span class="future-badge">Coming Soon</span></h3>
+            <p class="core-feature-desc">AI观察App并与设备交互，自动记录为自动化脚本</p>
+        </div>
+        <div class="core-feature-card">
+            <div class="core-feature-icon icon-script">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                </svg>
+            </div>
+            <h3 class="core-feature-title">脚本编辑</h3>
+            <p class="core-feature-desc">语法高亮和多标签，运行时实时反馈步骤和失败位置</p>
+        </div>
+        <div class="core-feature-card">
+            <div class="core-feature-icon icon-device">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                </svg>
+            </div>
+            <h3 class="core-feature-title">设备连接</h3>
+            <p class="core-feature-desc">多设备管理，实时状态检测和屏幕预览</p>
+        </div>
+        <div class="core-feature-card">
+            <div class="core-feature-icon icon-element">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </div>
+            <h3 class="core-feature-title">元素定位</h3>
+            <p class="core-feature-desc">点击屏幕获取元素，查看XML结构，直接创建脚本</p>
+        </div>
+        <div class="core-feature-card">
+            <div class="core-feature-icon icon-fix">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
+                </svg>
+            </div>
+            <h3 class="core-feature-title">AI修正<span class="future-badge">Coming Soon</span></h3>
+            <p class="core-feature-desc">自动判断和修正脚本中的元素定位缺失/偏移问题</p>
+        </div>
+    </section>
+
+    <!-- 功能展示 -->
+    <section class="feature-section">
+        <div class="feature-item">
+            <h2 class="feature-title">海量测试用例，一键导入</h2>
+            <img src="create_proj.gif" alt="创建项目" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">XML、截图、坐标点，三种识别模式随心搭配</h2>
+            <img src="detect_modes.gif" alt="检测模式" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">拖拽交互，轻松生成自动化脚本</h2>
+            <img src="block_editor.gif" alt="块编辑器" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">块编辑器 or 文本编辑器，一键切换</h2>
+            <img src="editor_switch.gif" alt="编辑器切换" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">ToolkitScript 自创脚本语言，简单易懂</h2>
+            <img src="tks_language.png" alt="TKS语言" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">运行用例，逐行高亮追踪</h2>
+            <img src="script_operation.gif" alt="脚本运行" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">设备无线连接，消除USB接口焦虑</h2>
+            <img src="wireless_device.png" alt="无线设备" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">流式日志抓取，辅助测试排查</h2>
+            <img src="logviewer.gif" alt="日志查看器" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">内置全套AndroidSDK，即装即用</h2>
+            <img src="android_sdk.png" alt="Android SDK" class="feature-media">
+        </div>
+
+        <div class="feature-item">
+            <h2 class="feature-title">.tks引擎，效率翻倍</h2>
+            <img src="vs.png" alt="性能对比" class="feature-media">
+        </div>
+    </section>
+
+    <!-- 底部 -->
+    <footer>
+        <p>&copy; 2025 Toolkit Studio </p>
+    </footer>
+
+    <script>
+        // S3 配置
+        const S3_BASE_URL = 'https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/app';
+
+        // 使用 beta 频道（因为还没有正式版）
+        const CHANNEL = 'beta'; // 可以改为 'latest' 使用正式版
+
+        // 从 S3 获取 beta-mac.yml 或 latest-mac.yml 解析版本和下载链接
+        async function fetchMacVersion() {
+            try {
+                const ymlFile = CHANNEL === 'beta' ? 'beta-mac.yml' : 'latest-mac.yml';
+                const response = await fetch(`${S3_BASE_URL}/${ymlFile}`);
+                if (!response.ok) throw new Error(`Failed to fetch ${ymlFile}`);
+
+                const text = await response.text();
+                console.log(`${ymlFile}:`, text);
+
+                // 解析版本号
+                const versionMatch = text.match(/version:\s*([^\s]+)/);
+                if (!versionMatch) throw new Error('Failed to parse version');
+                const version = versionMatch[1];
+
+                // 优先查找 DMG 文件（arm64优先）
+                let filename = null;
+                const dmgArm64Match = text.match(/url:\s*([^\n]*\.dmg)/);
+                if (dmgArm64Match) {
+                    filename = dmgArm64Match[1].trim();
+                } else {
+                    // 如果没有DMG，退回到path字段
+                    const pathMatch = text.match(/path:\s*(.+)/);
+                    if (pathMatch) {
+                        filename = pathMatch[1].trim();
+                    }
+                }
+
+                if (filename) {
+                    const downloadUrl = `${S3_BASE_URL}/${filename}`;
+                    console.log('macOS 文件名:', filename);
+                    return { version, downloadUrl };
+                }
+
+                throw new Error('Failed to parse download path');
+            } catch (error) {
+                console.error('获取 macOS 版本失败:', error);
+                return null;
+            }
+        }
+
+        // 从 S3 获取 beta.yml 或 latest.yml 解析版本和下载链接
+        async function fetchWinVersion() {
+            try {
+                const ymlFile = CHANNEL === 'beta' ? 'beta.yml' : 'latest.yml';
+                const response = await fetch(`${S3_BASE_URL}/${ymlFile}`);
+                if (!response.ok) throw new Error(`Failed to fetch ${ymlFile}`);
+
+                const text = await response.text();
+                console.log(`${ymlFile}:`, text);
+
+                // 解析 YAML 内容（简单解析）
+                const versionMatch = text.match(/version:\s*([^\s]+)/);
+                const pathMatch = text.match(/path:\s*(.+)/);
+
+                if (versionMatch && pathMatch) {
+                    const version = versionMatch[1];
+                    const filename = pathMatch[1];
+
+                    // 构建下载 URL
+                    const downloadUrl = `${S3_BASE_URL}/${filename}`;
+
+                    return { version, downloadUrl };
+                }
+
+                throw new Error('Failed to parse version info');
+            } catch (error) {
+                console.error('获取 Windows 版本失败:', error);
+                return null;
+            }
+        }
+
+        // 初始化下载按钮
+        async function initializeDownloadButtons() {
+            const macBtn = document.getElementById('macDownloadBtn');
+            const winBtn = document.getElementById('winDownloadBtn');
+            const macVersionEl = document.getElementById('macVersion');
+            const winVersionEl = document.getElementById('winVersion');
+
+            // 获取 macOS 版本
+            const macInfo = await fetchMacVersion();
+            if (macInfo) {
+                macVersionEl.textContent = `v${macInfo.version}`;
+                macBtn.href = macInfo.downloadUrl;
+                macBtn.classList.remove('loading');
+                console.log('macOS 下载链接:', macInfo.downloadUrl);
+            } else {
+                macVersionEl.textContent = '暂不可用';
+                macBtn.classList.remove('loading');
+                macBtn.style.opacity = '0.5';
+                macBtn.style.pointerEvents = 'none';
+            }
+
+            // 获取 Windows 版本
+            const winInfo = await fetchWinVersion();
+            if (winInfo) {
+                winVersionEl.textContent = `v${winInfo.version}`;
+                winBtn.href = winInfo.downloadUrl;
+                winBtn.classList.remove('loading');
+                console.log('Windows 下载链接:', winInfo.downloadUrl);
+            } else {
+                winVersionEl.textContent = '暂不可用';
+                winBtn.classList.remove('loading');
+                winBtn.style.opacity = '0.5';
+                winBtn.style.pointerEvents = 'none';
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', initializeDownloadButtons);
+    </script>
+</body>
+</html>
