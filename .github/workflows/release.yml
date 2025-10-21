@@ -227,6 +227,35 @@ jobs:
 
           echo "✅ 所有二进制文件验证完成"
 
+      # 配置 macOS 代码签名
+      - name: 配置 macOS 代码签名
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          echo "=== 配置 macOS 代码签名 ==="
+
+          # 创建临时 keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # 创建并解锁 keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 导入证书
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          # 设置为默认 keychain 并允许 codesign 使用
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "✅ 代码签名配置完成"
+          security find-identity -v -p codesigning
+
       # 构建 Electron 应用 (macOS)
       - name: 构建 Electron 应用
         env:
@@ -244,6 +273,12 @@ jobs:
             echo "✅ Electron 应用构建完成（未上传到 S3，仅测试构建）"
           fi
           ls -lh dist/
+
+      # 清理 keychain
+      - name: 清理 keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
 
       # 重命名应用
       - name: 重命名应用
