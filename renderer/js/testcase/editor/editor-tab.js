@@ -224,27 +224,51 @@ class EditorTab {
         }
     }
     
-    // 临时适配方法：获取命令列表
+    // 获取命令列表 - 使用 TKSBlockParser
     getCommands() {
-        if (!this.buffer || !this.buffer.parsedStructure || !this.buffer.parsedStructure.steps) {
+        if (!this.buffer) {
             return [];
         }
-        
-        const steps = this.buffer.parsedStructure.steps;
-        
-        // 将TKE的解析结果转换为编辑器期望的格式
-        return steps.map((step, index) => {
-            // TKE返回格式：{ index, command: "启动 [com.example.test_toolkit, .MainActivity]", lineNumber }
-            const commandText = step.command;
-            if (!commandText) {
-                window.rError('🔍 step中没有command字段:', step);
-                return { type: 'unknown', params: {} };
-            }
-            
-            // 解析TKS命令文本
-            const parsed = this.parseTKSCommandText(commandText);
-            return parsed;
+
+        // 获取原始 TKS 代码
+        const tksCode = this.buffer.getRawContent();
+
+        // 使用 TKSBlockParser 解析
+        const blocks = window.TKSBlockParser.parse(tksCode);
+
+        // 转换为编辑器期望的格式
+        return blocks.map(block => {
+            return {
+                type: block.command,
+                params: this.convertBlockParamsToEditorFormat(block.params, block.command),
+                lineNumber: block.lineNumber,
+                raw: block.raw
+            };
         });
+    }
+
+    // 将块参数转换为编辑器格式
+    convertBlockParamsToEditorFormat(params, command) {
+        const result = {};
+        const paramsDef = window.TKSBlockParser.getCommandParamsDef(command);
+
+        params.forEach((param, index) => {
+            const def = paramsDef[index];
+            if (!def) return;
+
+            // 根据参数类型处理值
+            if (param.type === 'coordinate') {
+                result[def.name] = `{${param.value.join(',')}}`;
+            } else if (param.type === 'image-locator') {
+                result[def.name] = `@{${param.value}}`;
+            } else if (param.type === 'locator') {
+                result[def.name] = `{${param.value}}`;
+            } else {
+                result[def.name] = param.value.toString();
+            }
+        });
+
+        return result;
     }
     
     // 解析TKS命令文本，提取命令和参数
@@ -853,12 +877,22 @@ class EditorTab {
         
         this.textContentEl.addEventListener('input', () => {
             if (this.isTestRunning) return;
-            
-            // 从文本更新脚本模型 - 使用innerText保留换行符
-            const tksCode = this.textContentEl.innerText || '';
+
+            // 1. 保存光标位置
+            const cursorPosition = window.EditorCursor.saveCursorPosition(this.textContentEl);
+
+            // 2. 获取纯文本内容
+            const tksCode = window.EditorCursor.getPlainText(this.textContentEl);
             window.rLog(`文本编辑器输入事件，内容长度: ${tksCode.length}，包含换行: ${tksCode.includes('\n')}`);
-            
-            // ScriptModel 已移除，直接使用 TKEEditorBuffer
+
+            // 3. 重新渲染高亮 HTML
+            const highlightedHTML = this.highlightTKSSyntax(tksCode);
+            this.textContentEl.innerHTML = highlightedHTML;
+
+            // 4. 恢复光标位置
+            window.EditorCursor.restoreCursorPosition(this.textContentEl, cursorPosition);
+
+            // 5. 更新行号和触发变化
             this.updateLineNumbers();
             this.triggerChange();
         });
@@ -1677,10 +1711,10 @@ class EditorTab {
     
     updateLineNumbers() {
         if (!this.lineNumbersEl || !this.textContentEl) return;
-        
-        const text = this.textContentEl.innerText || '';
+
+        const text = window.EditorCursor.getPlainText(this.textContentEl);
         const lines = text.split('\n');
-        const lineNumbersHtml = lines.map((_, index) => 
+        const lineNumbersHtml = lines.map((_, index) =>
             `<div class="line-number">${index + 1}</div>`
         ).join('');
         this.lineNumbersEl.innerHTML = lineNumbersHtml;

@@ -1,15 +1,13 @@
-// 基于TKE的编辑器缓冲区
-// 通过IPC调用主进程的TKE handlers进行解析
+// TKS 编辑器缓冲区 - 简化版
+// 纯文本存储，不依赖 TKE parser
 
 class TKEEditorBuffer {
     constructor(filePath) {
         this.filePath = filePath;
         this.rawContent = '';
-        this.parsedStructure = null;
         this.isDirty = false;
         this.listeners = new Set();
         this.saveTimeout = null;
-        this.ipcRenderer = require('electron').ipcRenderer;
 
         window.rLog(`📝 TKEEditorBuffer初始化: ${filePath}`);
     }
@@ -20,9 +18,6 @@ class TKEEditorBuffer {
             const fs = window.nodeRequire('fs').promises;
             this.rawContent = await fs.readFile(this.filePath, 'utf8');
 
-            // 使用TKE解析文件结构
-            await this.parseWithTKE();
-
             this.isDirty = false;
             this.notifyListeners('loaded', { content: this.rawContent });
             window.rLog(`📖 文件加载成功: ${this.filePath}`);
@@ -32,76 +27,27 @@ class TKEEditorBuffer {
         }
     }
 
-    // 使用TKE解析文件结构（通过IPC）
-    async parseWithTKE() {
-        try {
-            window.rLog(`🚀 调用TKE解析文件（IPC）...`);
-
-            const result = await this.ipcRenderer.invoke(
-                'tke-parser-parse',
-                null,
-                null,
-                this.filePath
-            );
-
-            if (!result.success) {
-                throw new Error(result.error || 'TKE解析失败');
-            }
-
-            const jsonResult = JSON.parse(result.output);
-
-            this.parsedStructure = {
-                success: jsonResult.success,
-                caseId: jsonResult.case_id,
-                scriptName: jsonResult.script_name,
-                detailsCount: Object.keys(jsonResult.details || {}).length,
-                stepsCount: jsonResult.steps ? jsonResult.steps.length : 0,
-                steps: jsonResult.steps ? jsonResult.steps.map((step, index) => ({
-                    index: index,
-                    command: step.command,
-                    lineNumber: step.line_number,
-                    commandType: step.command_type,
-                    params: step.params
-                })) : []
-            };
-
-            window.rLog(`🔍 TKE解析完成: ${this.parsedStructure.stepsCount}个步骤`);
-            this.notifyListeners('parsed', { structure: this.parsedStructure });
-        } catch (error) {
-            window.rError(`❌ TKE解析失败: ${error.message}`);
-            this.parsedStructure = null;
-        }
-    }
-
     getRawContent() {
         return this.rawContent;
-    }
-
-    getParsedStructure() {
-        return this.parsedStructure;
     }
 
     async updateFromText(newContent) {
         if (this.rawContent === newContent) return;
 
         this.rawContent = newContent;
-        await this.parseWithTKE();
         this.markDirty();
         this.notifyListeners('content-changed', {
             source: 'text',
-            content: this.rawContent,
-            structure: this.parsedStructure
+            content: this.rawContent
         });
     }
 
     async updateContent(newContent) {
         this.rawContent = newContent;
-        await this.parseWithTKE();
         this.markDirty();
         this.notifyListeners('content-changed', {
             source: 'direct',
-            content: this.rawContent,
-            structure: this.parsedStructure
+            content: this.rawContent
         });
     }
 
