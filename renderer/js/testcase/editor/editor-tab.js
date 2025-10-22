@@ -1,3 +1,8 @@
+// 文件加载检测
+if (window.rLog) {
+    window.rLog('🔧 editor-tab.js 开始加载...');
+}
+
 class EditorTab {
     constructor(container, editorManager) {
         this.container = container;
@@ -16,22 +21,22 @@ class EditorTab {
                 color: '#c586c0',
                 icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C5.36,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M13,3H11V13H13"/></svg>',
                 commands: [
-                    { 
-                        type: 'launch', 
-                        label: '启动', 
+                    {
+                        type: '启动',
+                        label: '启动',
                         tksCommand: '启动',
                         params: [
-                            { name: 'package', type: 'text', placeholder: '包名', default: 'com.example.test_toolkit' },
-                            { name: 'activity', type: 'text', placeholder: 'Activity名字', default: '.MainActivity' }
+                            { name: '包名', type: 'text', placeholder: '包名', default: 'com.example.test_toolkit' },
+                            { name: 'Activity', type: 'text', placeholder: 'Activity名字', default: '.MainActivity' }
                         ]
                     },
-                    { 
-                        type: 'close', 
+                    {
+                        type: '关闭',
                         label: '关闭',
                         tksCommand: '关闭',
                         params: [
-                            { name: 'package', type: 'text', placeholder: '包名', default: 'com.example.app' },
-                            { name: 'activity', type: 'text', placeholder: 'Activity名字', default: '.MainActivity' }
+                            { name: '包名', type: 'text', placeholder: '包名', default: 'com.example.app' },
+                            { name: 'Activity', type: 'text', placeholder: 'Activity名字', default: '.MainActivity' }
                         ]
                     }
                 ]
@@ -40,52 +45,52 @@ class EditorTab {
                 color: '#569cd6',
                 icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 14a8 8 0 0 1-8 8"/><path d="M18 11v-1a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1"/><path d="M10 9.5V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v10"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
                 commands: [
-                    { 
-                        type: 'click', 
+                    {
+                        type: '点击',
                         label: '点击',
                         tksCommand: '点击',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' }
+                            { name: '元素', type: 'element', placeholder: '坐标/XML/图片元素', default: '' }
                         ]
                     },
-                    { 
-                        type: 'press', 
+                    {
+                        type: '按压',
                         label: '按压',
                         tksCommand: '按压',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
-                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
+                            { name: '元素', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
+                            { name: '时长/ms', type: 'number', placeholder: '持续时长/ms', default: '1000' }
                         ]
                     },
-                    { 
-                        type: 'swipe', 
+                    {
+                        type: '滑动',
                         label: '滑动',
                         tksCommand: '滑动',
                         params: [
-                            { name: 'startPoint', type: 'coordinate', placeholder: '起点坐标', default: '{200,400}' },
-                            { name: 'endPoint', type: 'coordinate', placeholder: '终点坐标', default: '{300,600}' },
-                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
+                            { name: '起点', type: 'coordinate', placeholder: '起点坐标', default: '{200,400}' },
+                            { name: '终点', type: 'coordinate', placeholder: '终点坐标', default: '{300,600}' },
+                            { name: '时长/ms', type: 'number', placeholder: '持续时长/ms', default: '1000' }
                         ]
                     },
-                    { 
-                        type: 'drag', 
+                    {
+                        type: '拖动',
                         label: '拖动',
                         tksCommand: '拖动',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
-                            { name: 'endPoint', type: 'coordinate', placeholder: '终点坐标', default: '{500,800}' },
-                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
+                            { name: '元素', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
+                            { name: '终点', type: 'coordinate', placeholder: '终点坐标', default: '{500,800}' },
+                            { name: '时长/ms', type: 'number', placeholder: '持续时长/ms', default: '1000' }
                         ]
                     },
-                    { 
-                        type: 'directional_drag', 
+                    {
+                        type: '定向拖动',
                         label: '定向拖动',
                         tksCommand: '定向拖动',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
-                            { name: 'direction', type: 'select', placeholder: '方向', default: 'up', options: ['up', 'down', 'left', 'right'] },
-                            { name: 'distance', type: 'number', placeholder: '拖动距离', default: '300' },
-                            { name: 'duration', type: 'number', placeholder: '持续时长/ms', default: '1000' }
+                            { name: '元素', type: 'element', placeholder: '坐标/XML/图片元素', default: '' },
+                            { name: '方向', type: 'select', placeholder: '方向', default: 'up', options: ['up', 'down', 'left', 'right'] },
+                            { name: '距离', type: 'number', placeholder: '拖动距离', default: '300' },
+                            { name: '时长/ms', type: 'number', placeholder: '持续时长/ms', default: '1000' }
                         ]
                     }
                 ]
@@ -94,25 +99,25 @@ class EditorTab {
                 color: '#4ec9b0',
                 icon: '⌨',
                 commands: [
-                    { 
-                        type: 'input', 
+                    {
+                        type: '输入',
                         label: '输入',
                         tksCommand: '输入',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML元素', default: '' },
-                            { name: 'text', type: 'text', placeholder: '输入的文本内容', default: '' }
+                            { name: '输入框', type: 'element', placeholder: '坐标/XML元素', default: '' },
+                            { name: '文本', type: 'text', placeholder: '输入的文本内容', default: '' }
                         ]
                     },
-                    { 
-                        type: 'clear', 
+                    {
+                        type: '清理',
                         label: '清理',
                         tksCommand: '清理',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML元素', default: '' }
+                            { name: '输入框', type: 'element', placeholder: '坐标/XML元素', default: '' }
                         ]
                     },
-                    { 
-                        type: 'hide_keyboard', 
+                    {
+                        type: '隐藏键盘',
                         label: '隐藏键盘',
                         tksCommand: '隐藏键盘',
                         params: []
@@ -123,16 +128,16 @@ class EditorTab {
                 color: '#ce9178',
                 icon: '⏱',
                 commands: [
-                    { 
-                        type: 'wait', 
+                    {
+                        type: '等待',
                         label: '等待',
                         tksCommand: '等待',
                         params: [
-                            { name: 'duration', type: 'number', placeholder: '等待时长/ms', default: '1000' }
+                            { name: '时长/ms', type: 'number', placeholder: '等待时长/ms', default: '1000' }
                         ]
                     },
-                    { 
-                        type: 'back', 
+                    {
+                        type: '返回',
                         label: '返回',
                         tksCommand: '返回',
                         params: []
@@ -143,13 +148,13 @@ class EditorTab {
                 color: '#f48771',
                 icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/></svg>',
                 commands: [
-                    { 
-                        type: 'assert', 
+                    {
+                        type: '断言',
                         label: '断言',
                         tksCommand: '断言',
                         params: [
-                            { name: 'target', type: 'element', placeholder: 'XML/图片元素', default: '' },
-                            { name: 'condition', type: 'select', options: ['存在', '不存在', '可见', '不可见'], default: '存在' }
+                            { name: '元素', type: 'element', placeholder: 'XML/图片元素', default: '' },
+                            { name: '状态', type: 'select', options: ['存在', '不存在', '可见', '不可见'], default: '存在' }
                         ]
                     }
                 ]
@@ -158,14 +163,14 @@ class EditorTab {
                 color: '#9cdcfe',
                 icon: '📖',
                 commands: [
-                    { 
-                        type: 'read', 
+                    {
+                        type: '读取',
                         label: '读取',
                         tksCommand: '读取',
                         params: [
-                            { name: 'target', type: 'element', placeholder: '坐标/XML元素', default: '' },
-                            { name: 'leftRight', type: 'number', placeholder: '左右扩展', default: '' },
-                            { name: 'upDown', type: 'number', placeholder: '上下扩展', default: '' }
+                            { name: '中心坐标或元素', type: 'element', placeholder: '坐标/XML元素', default: '' },
+                            { name: '宽度', type: 'number', placeholder: '左右扩展', default: '' },
+                            { name: '高度', type: 'number', placeholder: '上下扩展', default: '' }
                         ]
                     }
                 ]
@@ -874,113 +879,55 @@ class EditorTab {
             window.rLog('textContent元素未找到');
             return;
         }
-        
+
+        // 输入法组合状态标志
+        let isComposing = false;
+
+        // 输入法开始组合
+        this.textContentEl.addEventListener('compositionstart', () => {
+            isComposing = true;
+        });
+
+        // 输入法结束组合
+        this.textContentEl.addEventListener('compositionend', () => {
+            isComposing = false;
+            // 组合结束后立即触发一次更新
+            this.updateEditorHighlight();
+        });
+
         this.textContentEl.addEventListener('input', () => {
             if (this.isTestRunning) return;
 
-            // 1. 保存光标位置
-            const cursorPosition = window.EditorCursor.saveCursorPosition(this.textContentEl);
-
-            // 2. 获取纯文本内容
-            const tksCode = window.EditorCursor.getPlainText(this.textContentEl);
-            window.rLog(`文本编辑器输入事件，内容长度: ${tksCode.length}，包含换行: ${tksCode.includes('\n')}`);
-
-            // 3. 重新渲染高亮 HTML
-            const highlightedHTML = this.highlightTKSSyntax(tksCode);
-            this.textContentEl.innerHTML = highlightedHTML;
-
-            // 4. 恢复光标位置
-            window.EditorCursor.restoreCursorPosition(this.textContentEl, cursorPosition);
-
-            // 5. 更新行号和触发变化
-            this.updateLineNumbers();
-            this.triggerChange();
-        });
-        
-        this.textContentEl.addEventListener('keydown', (e) => {
-            if (this.isTestRunning) {
-                e.preventDefault();
+            // 如果正在输入法组合中，不更新高亮
+            if (isComposing) {
                 return;
             }
-            
-            // 只处理编辑器特定的快捷键
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                document.execCommand('insertText', false, '  ');
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                document.execCommand('insertText', false, '\n');
-            }
-            // 其他按键正常处理，不阻止
+
+            this.updateEditorHighlight();
         });
-        
-        // 添加拖放支持
-        this.textContentEl.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.dataTransfer.dropEffect = 'copy';
-        });
-        
-        this.textContentEl.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // 获取拖拽的文本数据
-            const text = e.dataTransfer.getData('text/plain');
-            
-            if (text) {
-                // 根据鼠标位置创建插入点
-                const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-                if (range) {
-                    // 确保插入点在文本编辑器内
-                    if (this.textContentEl.contains(range.startContainer)) {
-                        // 清除当前选区并设置新位置
-                        const selection = window.getSelection();
-                        selection.removeAllRanges();
-                        selection.addRange(range);
-                        
-                        // 插入文本
-                        range.deleteContents();
-                        const textNode = document.createTextNode(text);
-                        range.insertNode(textNode);
-                        
-                        // 移动光标到插入文本的末尾
-                        range.setStartAfter(textNode);
-                        range.setEndAfter(textNode);
-                        range.collapse(true);
-                        selection.removeAllRanges();
-                        selection.addRange(range);
-                        
-                        // 更新脚本模型
-                        const tksCode = this.textContentEl.innerText || '';
-                        // ScriptModel 已移除，直接使用 TKEEditorBuffer
-                        this.updateLineNumbers();
-                        this.triggerChange();
-                    }
-                } else {
-                    // 降级方案：使用当前光标位置
-                    const selection = window.getSelection();
-                    if (selection.rangeCount > 0) {
-                        const range = selection.getRangeAt(0);
-                        range.deleteContents();
-                        const textNode = document.createTextNode(text);
-                        range.insertNode(textNode);
-                        
-                        // 移动光标到插入文本的末尾
-                        range.setStartAfter(textNode);
-                        range.setEndAfter(textNode);
-                        selection.removeAllRanges();
-                        selection.addRange(range);
-                        
-                        // 更新脚本模型
-                        const tksCode = this.textContentEl.innerText || '';
-                        // ScriptModel 已移除，直接使用 TKEEditorBuffer
-                        this.updateLineNumbers();
-                        this.triggerChange();
-                    }
-                }
-            }
-        });
+    }
+
+    // 更新编辑器高亮（提取为独立方法）
+    updateEditorHighlight() {
+        if (!this.textContentEl) return;
+
+        // 1. 保存光标位置
+        const cursorPosition = window.EditorCursor.saveCursorPosition(this.textContentEl);
+
+        // 2. 获取纯文本内容
+        const tksCode = window.EditorCursor.getPlainText(this.textContentEl);
+        window.rLog(`文本编辑器输入事件，内容长度: ${tksCode.length}，包含换行: ${tksCode.includes('\n')}`);
+
+        // 3. 重新渲染高亮 HTML
+        const highlightedHTML = this.highlightTKSSyntax(tksCode);
+        this.textContentEl.innerHTML = highlightedHTML;
+
+        // 4. 恢复光标位置
+        window.EditorCursor.restoreCursorPosition(this.textContentEl, cursorPosition);
+
+        // 5. 更新行号和触发变化
+        this.updateLineNumbers();
+        this.triggerChange();
     }
     
     setupBlockModeListeners() {
@@ -1774,7 +1721,8 @@ class EditorTab {
             
             window.rLog(`📁 EditorTab文件设置完成: ${filePath}`);
         } catch (error) {
-            window.rError(`❌ EditorTab设置文件失败: ${error.message}`, error);
+            const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || '未知错误';
+            window.rError(`❌ EditorTab设置文件失败: ${errorMsg}`, error);
             throw error; // 重新抛出错误供上层处理
         }
     }
@@ -1979,6 +1927,13 @@ if (!EditorTab.prototype.setupLocatorInputDragDrop) {
         if (window.rLog) window.rLog('🔧 延迟混合执行...');
         mixinEditorModules();
     }, 0);
+}
+
+// 导出 EditorTab 类到全局
+window.EditorTab = EditorTab;
+
+if (window.rLog) {
+    window.rLog('✅ EditorTab 类已导出到全局');
 }
 
 // 旧的ScriptModel已被TKEEditorBuffer完全替代，所有.tks解析和处理都由TKE负责

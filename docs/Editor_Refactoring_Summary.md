@@ -249,6 +249,85 @@ ln -s $(pwd) ~/.vscode/extensions/tks-language-support
 - [ ] 代码格式化
 - [ ] 发布到 VSCode Marketplace
 
+## 后续修复 (2025-10-22)
+
+### 文件打开错误处理优化
+
+**问题**:
+- 打开文件时出现空错误对象 `{}` 的错误日志
+- `EditorManager.createTab()` 调用异步 `setFile()` 但没有正确等待
+- 错误对象缺少 message 属性时日志不清晰
+
+**修复**:
+
+1. **editor-manager.js**:
+   - 将 `createTab()` 改为 async 函数
+   - 使用 `await editorTab.setFile()` 正确等待文件加载
+   - 添加 try-catch 捕获并记录错误,但允许标签创建继续
+
+2. **testcase-explorer.js**:
+   - 在调用 `createTab()` 时添加 `await`
+   - 改进错误日志格式:
+     ```javascript
+     const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || '未知错误';
+     ```
+
+3. **editor-tab.js**:
+   - 改进 `setFile()` 中的错误日志,使用相同的错误信息提取逻辑
+
+**效果**:
+- ✅ 错误会被正确捕获和显示
+- ✅ 即使文件加载失败,编辑器标签仍会创建(显示空编辑器)
+- ✅ 错误日志更详细,便于调试
+
+### EditorTab 类导出修复
+
+**问题**:
+- `EditorTab is not defined` 错误
+- `editor-tab.js` 中定义了 `EditorTab` 类但没有导出到全局作用域
+- `editor-manager.js` 无法访问 `EditorTab` 类
+
+**修复**:
+
+**editor-tab.js** (文件末尾):
+```javascript
+// 导出 EditorTab 类到全局
+window.EditorTab = EditorTab;
+
+if (window.rLog) {
+    window.rLog('✅ EditorTab 类已导出到全局');
+}
+```
+
+**效果**:
+- ✅ `EditorManager` 可以正常创建 `EditorTab` 实例
+- ✅ 文件可以正常打开和编辑
+
+### 语法错误修复 - 孤立代码删除
+
+**问题**:
+- `editor-tab.js` 文件包含语法错误，导致整个文件无法加载
+- Node.js 语法检查报错: `SyntaxError: Unexpected token '.'` at line 933
+- 第932-1017行有大量孤立的 `addEventListener` 代码不属于任何方法
+- 这些代码在 `updateEditorHighlight()` 方法结束后，`setupBlockModeListeners()` 方法开始前
+
+**修复**:
+
+删除了第932-1017行的孤立代码（重复的旧代码）:
+```bash
+sed -i '' '932,1017d' editor-tab.js
+```
+
+**验证**:
+```bash
+node -c editor-tab.js  # ✅ 语法检查通过
+```
+
+**效果**:
+- ✅ `editor-tab.js` 文件可以正常加载
+- ✅ `EditorTab` 类可以正常导出到全局
+- ✅ 文件打开功能恢复正常
+
 ## 测试建议
 
 1. **文本模式**:

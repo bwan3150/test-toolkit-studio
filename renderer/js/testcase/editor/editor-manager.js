@@ -52,40 +52,51 @@ class EditorManager {
     }
     
     // 创建新标签和编辑器实例
-    createTab(tab) {
+    async createTab(tab) {
         window.rLog('创建标签:', tab);
-        
+
+        // 检查 EditorTab 是否可用
+        if (typeof EditorTab === 'undefined' || !window.EditorTab) {
+            window.rError('❌ EditorTab 类未定义！请检查 editor-tab.js 是否正确加载');
+            window.rError('window.EditorTab:', typeof window.EditorTab);
+            window.rError('EditorTab:', typeof EditorTab);
+            throw new Error('EditorTab is not defined');
+        }
+
         if (!this.tabsContainer) {
             window.rError('找不到标签容器');
             return;
         }
-        
+
         // 创建标签DOM元素
         const tabElement = this.createTabElement(tab);
         this.tabsContainer.appendChild(tabElement);
-        
+
         // 为该标签创建编辑器容器
         const editorTabContainer = this.createEditorTabContainer(tab.id);
-        
+
         // 创建编辑器实例，传入管理器引用
         const editorTab = new EditorTab(editorTabContainer, this);
-        
+
         // 新 tab 会自动从管理器读取当前模式
-        
+
         this.editors.set(tab.id, editorTab);
-        
+
         // 设置编辑器文件（使用TKE缓冲区）
         if (tab.filePath) {
-            editorTab.setFile(tab.filePath).catch(error => {
-                window.rError(`❌ 设置编辑器文件失败: ${error.message}`);
-            });
+            try {
+                await editorTab.setFile(tab.filePath);
+            } catch (error) {
+                window.rError(`❌ 设置编辑器文件失败:`, error);
+                // 即使设置文件失败，也继续创建标签（显示空编辑器）
+            }
         }
-        
+
         // 设置变更监听器
         editorTab.on('change', (content) => {
             this.handleContentChange(tab.id, content);
         });
-        
+
         window.rLog('标签创建完成:', tab.id);
     }
     
