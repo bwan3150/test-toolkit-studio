@@ -261,8 +261,12 @@
     <script src="../js/testcase/editor/utils/editor-line-mapping.js"></script>
     <script src="../js/testcase/editor/utils/editor-font-settings.js"></script>
     <script src="../js/testcase/editor/utils/editor-drag-drop.js"></script>
-    <!-- Editor - Core -->
+    <!-- Editor - Highlighting (加载顺序: 子模块 → 主模块) -->
+    <script src="../js/testcase/editor/highlighting/execution-highlighter.js"></script>
+    <script src="../js/testcase/editor/highlighting/error-highlighter.js"></script>
+    <script src="../js/testcase/editor/highlighting/highlight-utils.js"></script>
     <script src="../js/testcase/editor/editor-highlighting.js"></script>
+    <!-- Editor - Core -->
     <script src="../js/testcase/editor/editor-tab.js"></script>
     <script src="../js/testcase/editor/editor-manager.js"></script>
     <!-- Testcase Runner -->
