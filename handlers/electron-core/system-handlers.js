@@ -93,6 +93,28 @@ function registerSystemHandlers(app) {
     }
   });
 
+  // 获取 TKE 内嵌 AAPT 版本
+  ipcMain.handle('get-tke-aapt-version', async () => {
+    try {
+      const tkePath = getBinaryPath('tke', 'toolkit-engine', app);
+
+      if (!fs.existsSync(tkePath)) {
+        return { success: false, error: '可执行文件不存在' };
+      }
+
+      const { stdout } = await execPromise(`"${tkePath}" aapt version`);
+      const version = stdout.trim().split('\n')[0].trim();
+
+      return {
+        success: true,
+        version: version
+      };
+    } catch (error) {
+      console.error('获取 TKE AAPT 版本失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 获取 TKE-OpenCV 版本
   ipcMain.handle('get-tke-opencv-version', async () => {
     try {

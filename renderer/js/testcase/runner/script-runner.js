@@ -82,9 +82,6 @@ class ScriptRunner {
             return;
         }
 
-        // 获取脚本名称(用于日志)
-        const scriptName = editor.filePath ? editor.filePath.split('/').pop() : '未命名脚本';
-
         // 设置运行状态
         this.isRunning = true;
         this.shouldStop = false;
@@ -92,7 +89,7 @@ class ScriptRunner {
         const startTime = Date.now();
 
         // 输出脚本开始执行
-        window.ExecutionOutput?.scriptStart(scriptName);
+        window.ExecutionOutput?.scriptStart();
 
         // 设置编辑器为运行状态
         editor.setTestRunning?.(true, false);
@@ -175,7 +172,7 @@ class ScriptRunner {
                 }
 
                 const totalDuration = Date.now() - startTime;
-                window.ExecutionOutput?.scriptSuccess(scriptName, totalDuration);
+                window.ExecutionOutput?.scriptSuccess(totalDuration);
                 // 不需要Toast - 控制台已经显示了执行成功
 
                 // 成功完成时清除高亮
@@ -186,7 +183,7 @@ class ScriptRunner {
                 if (this.shouldStop) {
                     window.ExecutionOutput?.warn(`脚本执行已中止 (耗时 ${(totalDuration / 1000).toFixed(2)}s)`);
                 } else {
-                    window.ExecutionOutput?.scriptFailed(scriptName, '执行过程中出现错误');
+                    window.ExecutionOutput?.scriptFailed('执行过程中出现错误');
                 }
 
                 // 失败或中止时保持高亮

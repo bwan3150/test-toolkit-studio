@@ -6,30 +6,29 @@
 const ExecutionOutput = {
     /**
      * 输出脚本开始执行信息
-     * @param {string} scriptName - 脚本名称
      */
-    scriptStart(scriptName) {
-        this.log('info', `开始执行脚本: ${scriptName}`);
+    scriptStart() {
+        this.log('info', `开始执行脚本`);
     },
 
     /**
      * 输出脚本执行成功信息
-     * @param {string} scriptName - 脚本名称
      * @param {number} duration - 执行时长(毫秒)
      */
-    scriptSuccess(scriptName, duration) {
+    scriptSuccess(duration) {
         const seconds = (duration / 1000).toFixed(2);
-        this.log('success', `脚本执行成功: ${scriptName} (耗时 ${seconds}s)`);
+        this.log('success', `脚本执行成功 (耗时 ${seconds}s)`);
     },
 
     /**
      * 输出脚本执行失败信息
-     * @param {string} scriptName - 脚本名称
      * @param {string} error - 错误信息
      */
-    scriptFailed(scriptName, error) {
-        this.log('error', `脚本执行失败: ${scriptName}`);
-        this.log('error', `错误: ${error}`);
+    scriptFailed(error) {
+        this.log('error', `脚本执行失败`);
+        if (error) {
+            this.log('error', `错误: ${error}`);
+        }
     },
 
     /**

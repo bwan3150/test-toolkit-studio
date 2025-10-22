@@ -236,6 +236,7 @@ async function checkAllToolsStatus() {
     const { ipcRenderer } = window.AppGlobals;
     const tkeVersionStatus = document.getElementById('tkeVersionStatus');
     const tkeAdbVersionStatus = document.getElementById('tkeAdbVersionStatus');
+    const tkeAaptVersionStatus = document.getElementById('tkeAaptVersionStatus');
     const opencvVersionStatus = document.getElementById('opencvVersionStatus');
     const testerAiVersionStatus = document.getElementById('testerAiVersionStatus');
 
@@ -247,6 +248,10 @@ async function checkAllToolsStatus() {
     if (tkeAdbVersionStatus) {
         tkeAdbVersionStatus.textContent = 'Checking...';
         tkeAdbVersionStatus.className = 'status-indicator checking';
+    }
+    if (tkeAaptVersionStatus) {
+        tkeAaptVersionStatus.textContent = 'Checking...';
+        tkeAaptVersionStatus.className = 'status-indicator checking';
     }
     if (opencvVersionStatus) {
         opencvVersionStatus.textContent = 'Checking...';
@@ -292,6 +297,25 @@ async function checkAllToolsStatus() {
         if (tkeAdbVersionStatus) {
             tkeAdbVersionStatus.textContent = `Error: ${error.message}`;
             tkeAdbVersionStatus.className = 'status-indicator error';
+        }
+    }
+
+    // 检查 TKE 内嵌 AAPT 版本
+    try {
+        const tkeAaptResult = await ipcRenderer.invoke('get-tke-aapt-version');
+        if (tkeAaptVersionStatus) {
+            if (tkeAaptResult.success) {
+                tkeAaptVersionStatus.textContent = `${tkeAaptResult.version}`;
+                tkeAaptVersionStatus.className = 'status-indicator success';
+            } else {
+                tkeAaptVersionStatus.textContent = tkeAaptResult.error || 'Not Available';
+                tkeAaptVersionStatus.className = 'status-indicator error';
+            }
+        }
+    } catch (error) {
+        if (tkeAaptVersionStatus) {
+            tkeAaptVersionStatus.textContent = `Error: ${error.message}`;
+            tkeAaptVersionStatus.className = 'status-indicator error';
         }
     }
 
