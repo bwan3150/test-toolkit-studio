@@ -12,7 +12,6 @@ pub mod ocr;
 pub mod controller;
 pub mod fetcher;
 pub mod recognizer;
-pub mod parser;
 pub mod runner;
 
 // 导出工具类
@@ -22,8 +21,7 @@ pub use utils::{JsonOutput, AdbManager, AaptManager};
 pub use controller::Controller;
 pub use fetcher::Fetcher;
 pub use recognizer::Recognizer;
-pub use parser::{ScriptParser, ScriptInterpreter};
-pub use runner::Runner;
+pub use runner::{Runner, ScriptParser, ScriptInterpreter};
 
 // 导出 OCR 功能
 pub use ocr::{ocr, OcrResult, OcrText};

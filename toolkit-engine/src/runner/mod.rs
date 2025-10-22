@@ -1,7 +1,15 @@
 // Runner模块 - 脚本执行器
 
+// 子模块
+mod parser;
+mod interpreter;
+
+// 导出
+pub use parser::ScriptParser;
+pub use interpreter::ScriptInterpreter;
+
 use crate::{
-    Result, TkeError, TksScript, ScriptParser, ScriptInterpreter,
+    Result, TkeError, TksScript,
     ExecutionResult, StepResult
 };
 use std::path::PathBuf;

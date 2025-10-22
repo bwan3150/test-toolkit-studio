@@ -54,7 +54,7 @@ impl ScriptParser {
     // 解析脚本内容
     pub fn parse(&self, content: &str) -> Result<TksScript> {
         let lines: Vec<&str> = content.lines().collect();
-        
+
         let mut script = TksScript {
             case_id: String::new(),
             script_name: String::new(),
@@ -62,64 +62,32 @@ impl ScriptParser {
             steps: Vec::new(),
             file_path: None,
         };
-        
-        let mut current_section = None;
-        let mut in_details = false;
-        
+
+        // 找到 "步骤:" 标记
+        let mut in_steps = false;
+
         for (line_num, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
-            
+
             // 跳过空行和注释
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            
-            // 解析用例ID
-            if trimmed.starts_with("用例:") {
-                script.case_id = trimmed[6..].trim().to_string();
-                continue;
-            }
-            
-            // 解析脚本名
-            if trimmed.starts_with("脚本名:") {
-                script.script_name = trimmed[9..].trim().to_string();
-                continue;
-            }
-            
-            // 进入详情部分
-            if trimmed == "详情:" {
-                in_details = true;
-                current_section = Some("details");
-                continue;
-            }
-            
-            // 进入步骤部分
+
+            // 找到步骤部分
             if trimmed == "步骤:" {
-                in_details = false;
-                current_section = Some("steps");
+                in_steps = true;
                 continue;
             }
-            
-            // 解析详情内容
-            if in_details && trimmed.contains(':') {
-                let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
-                if parts.len() == 2 {
-                    script.details.insert(
-                        parts[0].trim().to_string(),
-                        parts[1].trim().to_string()
-                    );
-                }
-                continue;
-            }
-            
-            // 解析步骤
-            if current_section == Some("steps") {
+
+            // 只解析步骤部分的内容
+            if in_steps {
                 if let Some(step) = self.parse_step(trimmed, line_num + 1) {
                     script.steps.push(step);
                 }
             }
         }
-        
+
         Ok(script)
     }
     

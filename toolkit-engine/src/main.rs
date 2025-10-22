@@ -47,11 +47,6 @@ enum Commands {
         #[command(subcommand)]
         action: RecognizerCommands,
     },
-    /// ScriptParser - for .tks script highlight and render
-    Parser {
-        #[command(subcommand)]
-        action: ParserCommands,
-    },
     /// Runner - run .tks script in cli(not used in Toolkit Studio Desktop App)
     Run {
         #[command(subcommand)]
@@ -123,7 +118,6 @@ async fn main() -> tke::Result<()> {
         let is_json_output_command = matches!(
             cli.command,
             Commands::Fetcher { .. } |
-            Commands::Parser { .. } |
             Commands::Ocr { .. } |
             Commands::Controller { .. } |
             Commands::Recognizer { .. } |
@@ -155,9 +149,6 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Recognizer { action } => {
             recognizer::handle(action, project_path).await
-        }
-        Commands::Parser { action } => {
-            parser::handle(action).await
         }
         Commands::Run { action } => {
             runner::handle(action, project_path, cli.device).await
