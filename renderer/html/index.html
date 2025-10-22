@@ -266,7 +266,21 @@
     <script src="../js/testcase/editor/highlighting/error-highlighter.js"></script>
     <script src="../js/testcase/editor/highlighting/highlight-utils.js"></script>
     <script src="../js/testcase/editor/editor-highlighting.js"></script>
-    <!-- Editor - Core -->
+    <!-- Editor - Commands (加载顺序: 定义 → 工具 → 解析 → 操作) -->
+    <script src="../js/testcase/editor/commands/command-definitions.js"></script>
+    <script src="../js/testcase/editor/commands/command-utils.js"></script>
+    <script src="../js/testcase/editor/commands/command-parser.js"></script>
+    <script src="../js/testcase/editor/commands/command-operations.js"></script>
+    <!-- Editor - UI (加载顺序: 构建 → 菜单 → 拖拽) -->
+    <script src="../js/testcase/editor/ui/block-ui-builder.js"></script>
+    <script src="../js/testcase/editor/ui/block-ui-menus.js"></script>
+    <script src="../js/testcase/editor/ui/block-ui-drag.js"></script>
+    <!-- Editor - Input -->
+    <script src="../js/testcase/editor/input/block-input-handler.js"></script>
+    <script src="../js/testcase/editor/input/text-input-handler.js"></script>
+    <!-- Editor - Core (加载顺序: 模式切换 → 渲染器 → 主类) -->
+    <script src="../js/testcase/editor/core/editor-mode-switcher.js"></script>
+    <script src="../js/testcase/editor/core/editor-renderer.js"></script>
     <script src="../js/testcase/editor/editor-tab.js"></script>
     <!-- Editor - Manager (加载顺序: 核心 → 子模块 → 主模块) -->
     <script src="../js/testcase/editor/manager/editor-manager-core.js"></script>
