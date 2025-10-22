@@ -3,7 +3,6 @@
 pub mod controller;
 pub mod fetcher;
 pub mod recognizer;
-pub mod parser;
 pub mod runner;
 pub mod ocr;
 pub mod adb;
@@ -13,5 +12,4 @@ pub mod aapt;
 pub use controller::ControllerCommands;
 pub use fetcher::FetcherCommands;
 pub use recognizer::RecognizerCommands;
-pub use parser::ParserCommands;
 pub use runner::RunCommands;

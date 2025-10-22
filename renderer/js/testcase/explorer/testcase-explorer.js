@@ -340,9 +340,9 @@ async function openFile(filePath) {
             };
             
             window.AppGlobals.openTabs.push(tab);
-            window.EditorManager.createTab(tab);
+            await window.EditorManager.createTab(tab);
             window.EditorManager.selectTab(tabId);
-            
+
             window.rLog(`文件打开成功: ${fileName}, 内容长度: ${result.content.length}`);
             
             // 立即刷新定位器列表
@@ -354,8 +354,9 @@ async function openFile(filePath) {
             window.AppNotifications?.error(`Failed to open file: ${result.error}`);
         }
     } catch (error) {
-        window.rError('打开文件时发生错误:', error);
-        window.AppNotifications?.error(`Error opening file: ${error.message}`);
+        const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || '未知错误';
+        window.rError('打开文件时发生错误:', errorMsg, error);
+        window.AppNotifications?.error(`打开文件失败: ${errorMsg}`);
     }
 }
 

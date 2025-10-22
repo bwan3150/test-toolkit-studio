@@ -7,6 +7,11 @@ toolkit-engine/target/
 tester-ai/target/
 resources/
 
+# TKS Language Support (VSCode 扩展)
+tks-language-support/node_modules/
+tks-language-support/*.vsix
+tks-language-support/.vscode-test/
+
 # Python (opencv-matcher)
 opencv-matcher/.venv/
 opencv-matcher/build/
