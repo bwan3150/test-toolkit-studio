@@ -1,5 +1,5 @@
 // Test Toolkit Studio - 主进程
-const { app, BrowserWindow, ipcMain, Menu, Tray, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { exec, spawn } = require('child_process');
@@ -29,6 +29,9 @@ const { registerSystemHandlers } = require('./handlers/electron-core/system-hand
 // 项目管理模块
 const { registerProjectHandlers } = require('./handlers/project/project-handlers');
 
+// 属性管理模块 - 用户配置数据管理
+const { registerDeviceConfigHandlers } = require('./handlers/property-manage/device-config-handlers');
+
 // API 代理模块 - 与外部 API 服务交互
 const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
 const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
@@ -38,7 +41,6 @@ const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/
 
 // 全局变量
 let mainWindow;
-let tray = null;
 
 // 创建主窗口
 function createWindow() {
@@ -161,54 +163,6 @@ function cleanupProcesses() {
   }
 }
 
-// 创建系统托盘
-function createTray() {
-  const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
-  
-  // 检查图标文件是否存在
-  if (!fs.existsSync(iconPath)) {
-    console.log('托盘图标不存在，跳过托盘创建:', iconPath);
-    return;
-  }
-  
-  try {
-    tray = new Tray(iconPath);
-  
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '显示主窗口',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      }
-    },
-    {
-      label: '退出',
-      click: () => {
-        app.quit();
-      }
-    }
-  ]);
-  
-  tray.setToolTip('Test Toolkit Studio');
-  tray.setContextMenu(contextMenu);
-  
-  tray.on('click', () => {
-    if (mainWindow) {
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    }
-  });
-  } catch (error) {
-    console.error('创建托盘失败:', error);
-  }
-}
 
 // 注册所有IPC处理器
 function registerAllHandlers() {
@@ -266,6 +220,10 @@ function registerAllHandlers() {
     console.log('注册项目处理器...');
     registerProjectHandlers();
 
+    // 属性管理模块
+    console.log('注册设备配置处理器...');
+    registerDeviceConfigHandlers(app);
+
     // API 代理模块
     console.log('注册认证处理器...');
     registerAuthHandlers();
@@ -289,7 +247,6 @@ function registerAllHandlers() {
 // 初始化应用
 app.whenReady().then(() => {
   createWindow();
-  createTray();
 
   // 注册IPC处理器
   registerAllHandlers();
@@ -322,33 +279,6 @@ function registerOtherHandlers() {
     const reset = '\x1b[0m';
 
     console.log(`${color}[Renderer ${level.toUpperCase()}] ${timestamp}:${reset} ${message}`);
-  });
-
-  // 获取保存的设备列表
-  ipcMain.handle('get-saved-devices', async () => {
-    try {
-      const savedDevicesPath = path.join(app.getPath('userData'), 'saved-devices.json');
-      if (fs.existsSync(savedDevicesPath)) {
-        const data = fs.readFileSync(savedDevicesPath, 'utf8');
-        return { success: true, devices: JSON.parse(data) };
-      }
-      return { success: true, devices: [] };
-    } catch (error) {
-      console.error('获取保存的设备失败:', error);
-      return { success: false, devices: [], error: error.message };
-    }
-  });
-
-  // 保存设备列表
-  ipcMain.handle('save-devices', async (event, devices) => {
-    try {
-      const savedDevicesPath = path.join(app.getPath('userData'), 'saved-devices.json');
-      fs.writeFileSync(savedDevicesPath, JSON.stringify(devices, null, 2));
-      return { success: true };
-    } catch (error) {
-      console.error('保存设备失败:', error);
-      return { success: false, error: error.message };
-    }
   });
 
 
