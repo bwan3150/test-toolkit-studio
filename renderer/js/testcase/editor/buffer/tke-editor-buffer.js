@@ -77,25 +77,6 @@ class TKEEditorBuffer {
         return this.save();
     }
 
-    async validateScript() {
-        try {
-            const result = await this.ipcRenderer.invoke(
-                'tke-parser-validate',
-                null,
-                null,
-                this.filePath
-            );
-
-            if (!result.success) {
-                return { valid: false, error: result.error };
-            }
-
-            return { valid: true, output: result.output };
-        } catch (error) {
-            return { valid: false, error: error.message };
-        }
-    }
-
     on(eventType, callback) {
         const wrapped = (type, data) => {
             if (type === eventType) callback(data);

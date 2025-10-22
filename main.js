@@ -16,7 +16,6 @@ const { registerDeviceHandlers } = require('./handlers/tke-integration/device-ha
 const { registerControllerHandlers } = require('./handlers/tke-integration/controller-handlers');
 const { registerFetcherHandlers } = require('./handlers/tke-integration/fetcher-handlers');
 const { registerRecognizerHandlers } = require('./handlers/tke-integration/recognizer-handlers');
-const { registerParserHandlers } = require('./handlers/tke-integration/parser-handlers');
 const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-handlers');
 const { registerOcrHandlers } = require('./handlers/tke-integration/ocr-handlers');
 
@@ -286,9 +285,6 @@ function registerAllHandlers() {
 
     console.log('注册TKE Recognizer处理器...');
     registerRecognizerHandlers(app);
-
-    console.log('注册TKE Parser处理器...');
-    registerParserHandlers(app);
 
     console.log('注册TKE Runner处理器...');
     registerRunnerHandlers(app);
