@@ -3,7 +3,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::Write;
-use tracing::{warn, debug};
 use crate::{Result, TkeError};
 
 // 引入构建时生成的 ADB 二进制数据
@@ -118,19 +117,23 @@ impl AdbManager {
     }
 }
 
-impl Drop for AdbManager {
-    fn drop(&mut self) {
-        // 如果使用的是内置 ADB，在程序结束时清理临时文件
-        if self.is_bundled {
-            if let Some(temp_dir) = self.adb_path.parent() {
-                if temp_dir.file_name() == Some("tke_adb".as_ref()) {
-                    if let Err(e) = fs::remove_dir_all(temp_dir) {
-                        warn!("清理临时 ADB 文件失败: {}", e);
-                    } else {
-                        debug!("已清理临时 ADB 文件");
-                    }
-                }
-            }
-        }
-    }
-}
+// Drop 实现已移除
+// 原因：多个 TKE 进程可能并发运行，不应该在单个进程结束时删除共享的临时 ADB 文件
+// 临时文件会在系统重启时自动清理
+//
+// impl Drop for AdbManager {
+//     fn drop(&mut self) {
+//         // 如果使用的是内置 ADB，在程序结束时清理临时文件
+//         if self.is_bundled {
+//             if let Some(temp_dir) = self.adb_path.parent() {
+//                 if temp_dir.file_name() == Some("tke_adb".as_ref()) {
+//                     if let Err(e) = fs::remove_dir_all(temp_dir) {
+//                         warn!("清理临时 ADB 文件失败: {}", e);
+//                     } else {
+//                         debug!("已清理临时 ADB 文件");
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
