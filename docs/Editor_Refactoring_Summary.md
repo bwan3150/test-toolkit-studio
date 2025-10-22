@@ -328,6 +328,62 @@ node -c editor-tab.js  # ✅ 语法检查通过
 - ✅ `EditorTab` 类可以正常导出到全局
 - ✅ 文件打开功能恢复正常
 
+## 第二阶段重构 - 文件结构优化 (2025-10-22)
+
+### 目标
+- 删除不再使用的旧代码
+- 重新组织文件结构，提高可维护性
+- 为后续大文件拆分做准备
+
+### 执行的操作
+
+**1. 删除旧文件**:
+- ❌ 删除 `editor-buffer.js` (253行) - 未被使用
+- ❌ 删除 `script-model.js` (380行) - 已被 TKEEditorBuffer 替代
+- 从 `index.html` 移除相关引用
+
+**2. 创建新文件夹结构**:
+```
+editor/
+├── buffer/     # 缓冲区
+├── syntax/     # 语法相关
+├── utils/      # 工具函数
+├── core/       # 核心模块（待拆分）
+├── commands/   # 命令相关（待拆分）
+├── ui/         # UI 组件（待拆分）
+├── input/      # 输入处理（待拆分）
+├── highlighting/  # 高亮功能（待拆分）
+└── manager/    # 管理器（待拆分）
+```
+
+**3. 移动文件到新位置**:
+- `syntax/` - TKS 语法相关 (3个文件, 643行)
+- `utils/` - 工具函数 (4个文件, 419行)
+- `buffer/` - 缓冲区 (1个文件, 127行)
+
+**4. 更新 index.html 引用路径**:
+- 所有路径更新为新的文件夹结构
+- 添加清晰的分类注释
+
+### 成果
+
+**已完成**:
+- ✅ 删除了 633 行无用代码
+- ✅ 创建了清晰的 9 个功能文件夹
+- ✅ 重新组织了 8 个小文件
+- ✅ 代码结构更加清晰和模块化
+
+**待完成** (需要用户确认是否继续):
+- ⚠️ `editor-tab.js` (1939行) - 待拆分为 13 个模块
+- ⚠️ `editor-manager.js` (493行) - 待拆分为 4 个模块
+- ⚠️ `editor-highlighting.js` (439行) - 待拆分为 3 个模块
+
+**详细拆分方案**: 见 `Editor_Refactoring_Plan.md`
+
+### 相关文档
+- [Editor_Refactoring_Plan.md](./Editor_Refactoring_Plan.md) - 完整重构方案
+- [Editor_Refactoring_Phase1_Summary.md](./Editor_Refactoring_Phase1_Summary.md) - 第一阶段执行总结
+
 ## 测试建议
 
 1. **文本模式**:
