@@ -60,29 +60,22 @@ const TIMELINE_COLORS = {
 
         try {
             if (window.rInfo) {
-                window.rInfo('=== 开始加载Insight数据 ===');
-                window.rInfo('筛选器:', Object.keys(currentFilters).join(', ') || '无');
-                window.rInfo('API Base URL:', window.BugAnalyzerClient.client.baseURL);
+                const filterCount = Object.keys(currentFilters).length;
+                window.rInfo(`开始加载Insight数据 (筛选器: ${filterCount}个)`);
             }
-            
+
             // 获取当前日期
             const today = new Date().toISOString().split('T')[0];
-            
+
             // 1. 获取今日Priority统计（用于饼图）- 应用筛选器
-            if (window.rInfo) {
-                window.rInfo('请求Priority统计...');
-            }
             const priorityStats = await window.BugAnalyzerClient.getTodayPriorityStats(currentFilters);
-            if (window.rInfo) {
-                window.rInfo('Priority统计响应:', priorityStats);
-            }
             if (priorityStats && priorityStats.data) {
                 // 获取返回数据中的第一个日期的数据（API可能返回的不是今天）
                 const dates = Object.keys(priorityStats.data);
                 if (dates.length > 0) {
                     apiData.priorityStats = priorityStats.data[dates[0]];
                     if (window.rInfo) {
-                        window.rInfo(`数据已应用到图表 (${dates[0]}), total:`, apiData.priorityStats.total);
+                        window.rInfo(`Priority统计加载成功 (日期:${dates[0]}, 总数:${apiData.priorityStats.total})`);
                     }
                 } else {
                     if (window.rWarn) {
@@ -122,36 +115,29 @@ const TIMELINE_COLORS = {
                     window.rWarn('Priority统计API返回为空');
                 }
             }
-            
+
             // 2. 获取趋势数据（用于趋势图）- 应用筛选器
-            if (window.rInfo) {
-                window.rInfo('请求趋势数据, timeRange:', currentTimeRange, 'days');
-            }
             const trendData = await window.BugAnalyzerClient.getBugTrends(currentTimeRange, 'Priority', currentFilters);
-            if (window.rInfo) {
-                window.rInfo('趋势数据响应:', trendData);
-            }
             if (trendData && trendData.data) {
                 apiData.trendData = trendData.data;
+                if (window.rInfo) {
+                    const dateCount = Object.keys(trendData.data).length;
+                    window.rInfo(`趋势数据加载成功 (时间范围:${currentTimeRange}天, 数据点:${dateCount}个)`);
+                }
             }
 
             // 3. 获取问题模块统计（用于表格）
-            if (window.rInfo) {
-                window.rInfo('请求模块统计...');
-            }
             const moduleStats = await window.BugAnalyzerClient.getModuleStats();
-            if (window.rInfo) {
-                window.rInfo('模块统计响应:', moduleStats);
-            }
             if (moduleStats && moduleStats.data && moduleStats.data[today]) {
                 apiData.moduleStats = moduleStats.data[today];
+                if (window.rInfo) {
+                    const moduleCount = Object.keys(moduleStats.data[today].breakdown || {}).length;
+                    window.rInfo(`模块统计加载成功 (模块数:${moduleCount})`);
+                }
             }
 
             if (window.rInfo) {
-                window.rInfo('=== API数据加载完成 ===');
-                window.rInfo('apiData.priorityStats:', apiData.priorityStats);
-                window.rInfo('apiData.trendData keys:', apiData.trendData ? Object.keys(apiData.trendData).length : 0);
-                window.rInfo('apiData.moduleStats:', apiData.moduleStats);
+                window.rInfo('✓ Insight数据加载完成');
             }
         } catch (error) {
             if (window.rError) {
@@ -337,9 +323,6 @@ const TIMELINE_COLORS = {
     
     // Draw severity donut chart with hover effects
     function drawSeverityDonut(canvas) {
-        if (window.rInfo) {
-            window.rInfo('绘制饼图, total:', apiData.priorityStats?.total || 0);
-        }
         const ctx = canvas.getContext('2d');
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
@@ -391,12 +374,7 @@ const TIMELINE_COLORS = {
                 });
             }
         }
-        
-        if (window.rInfo) {
-            const summary = data.map(d => `${d.label}:${d.value}`).join(', ');
-            window.rInfo('饼图数据:', summary);
-        }
-        
+
         // 如果没有数据，显示空状态
         if (data.length === 0) {
             ctx.fillStyle = '#666';
@@ -846,9 +824,7 @@ const TIMELINE_COLORS = {
         // 获取所有日期并排序
         const dates = Object.keys(apiData.trendData).sort();
         timelineDates = dates; // 保存日期用于显示
-        
-        console.log('趋势图日期:', dates);
-        
+
         // 遍历每个日期的数据
         dates.forEach(date => {
             const dayData = apiData.trendData[date];
@@ -866,8 +842,7 @@ const TIMELINE_COLORS = {
                 data['Low'].push(0);
             }
         });
-        
-        console.log('处理后的趋势数据:', data);
+
         return data;
     }
     
@@ -981,10 +956,6 @@ const TIMELINE_COLORS = {
     
     // Refresh report data
     async function refreshReportData() {
-        if (window.rInfo) {
-            window.rInfo('开始刷新报告数据');
-        }
-        
         // Show loading animation
         const reportContent = document.querySelector('.report-content');
         if (reportContent) {
@@ -1000,11 +971,9 @@ const TIMELINE_COLORS = {
         // 重新绘制图表 - 先检查canvas是否存在
         const severityChart = document.getElementById('severityChart');
         const timelineChart = document.getElementById('timelineChart');
-        
+
+
         if (severityChart) {
-            if (window.rInfo) {
-                window.rInfo('重新绘制饼图');
-            }
             // 重新设置canvas尺寸
             severityChart.width = 180;
             severityChart.height = 180;
@@ -1343,10 +1312,6 @@ const TIMELINE_COLORS = {
     
     // 应用筛选器
     async function applyFilters() {
-        if (window.rInfo) {
-            window.rInfo('applyFilters 被调用');
-        }
-        
         // 收集所有筛选条件
         const fields = ['Priority', 'Status', 'Type', '问题模块'];
         
@@ -1359,17 +1324,15 @@ const TIMELINE_COLORS = {
                 const values = Array.from(checkboxes).map(cb => cb.value);
                 // API期望的格式是 { "field": { "in": [...] } }
                 currentFilters[field] = { in: values };
-                if (window.rInfo) {
-                    window.rInfo(`${field} 筛选值:`, values);
-                }
             }
         });
-        
+
         if (window.rInfo) {
-            window.rInfo('最终筛选条件(API格式):', JSON.stringify(currentFilters));
+            const filterCount = Object.keys(currentFilters).length;
+            const totalValues = Object.values(currentFilters).reduce((sum, f) => sum + (f.in ? f.in.length : 0), 0);
+            window.rInfo(`应用筛选器 (${filterCount}个字段, ${totalValues}个条件)`);
         }
-        
-        
+
         // 更新筛选器按钮状态
         updateFilterButtonStatus();
         

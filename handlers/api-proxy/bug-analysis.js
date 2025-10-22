@@ -31,10 +31,8 @@ function makeRequest(url, method = 'GET', body = null, headers = {}) {
                 }
             };
 
-            console.log(`[Bug Analysis API] ${method} ${url}`);
-            if (body) {
-                console.log('[Bug Analysis API] 请求体:', JSON.stringify(body).substring(0, 200));
-            }
+            // 只在主进程打印简洁日志
+            console.log(`[Bug Analysis API] ${method} ${url.split('?')[0]}`); // 去掉query参数避免过长
 
             const req = httpModule.request(requestOptions, (res) => {
                 let data = '';
@@ -44,12 +42,11 @@ function makeRequest(url, method = 'GET', body = null, headers = {}) {
                 });
 
                 res.on('end', () => {
-                    console.log(`[Bug Analysis API] 响应状态: ${res.statusCode}`);
-
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         try {
                             const jsonData = JSON.parse(data);
-                            console.log('[Bug Analysis API] 响应成功');
+                            // 只打印状态码，不打印完整响应
+                            console.log(`[Bug Analysis API] ${res.statusCode} OK`);
                             resolve(jsonData);
                         } catch (parseError) {
                             console.error('[Bug Analysis API] 解析JSON失败:', parseError);

@@ -7,31 +7,6 @@ const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
 
-
-// 获取内置Scrcpy路径的辅助函数
-function getBuiltInScrcpyPath(app) {
-  const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-  const scrcpyName = process.platform === 'win32' ? 'scrcpy.exe' : 'scrcpy';
-  
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, platform, 'scrcpy', scrcpyName);
-  } else {
-    return path.join(__dirname, '..', 'resources', platform, 'scrcpy', scrcpyName);
-  }
-}
-
-// 获取内置STB路径的辅助函数
-function getBuiltInStbPath(app) {
-  const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
-  const stbName = process.platform === 'win32' ? 'stb.exe' : 'stb';
-  
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, platform, 'stb', stbName);
-  } else {
-    return path.join(__dirname, '..', 'resources', platform, 'stb', stbName);
-  }
-}
-
 // 注册所有ADB相关的IPC处理器
 function registerAdbHandlers(app) {
   // 获取连接的设备列表
@@ -1357,8 +1332,6 @@ async function execTkeAdbCommand(app, deviceId, adbArgs) {
 
 module.exports = {
   registerAdbHandlers,
-  getBuiltInScrcpyPath,
-  getBuiltInStbPath,
   getTkePath,
   buildTkeAdbCommand,
   execTkeAdbCommand
