@@ -34,44 +34,44 @@ echo -e "${GREEN}=== 填写Release Notes ===${NC}\n"
 
 # 新增功能
 echo "## 新增功能" > "$TEMP_FILE"
-echo -e "${yellow}输入新增功能 (每行一条,空行结束):${nc}"
-while ifs= read -r line; do
+echo -e "${YELLOW}输入新增功能 (每行一条,空行结束):${NC}"
+while IFS= read -e -r line; do
     [ -z "$line" ] && break
-    echo "- $line" >> "$temp_file"
+    echo "- $line" >> "$TEMP_FILE"
 done
 
 # 改进优化
-echo "" >> "$temp_file"
-echo "## 改进优化" >> "$temp_file"
-echo -e "${yellow}输入改进优化 (每行一条,空行结束):${nc}"
-while ifs= read -r line; do
+echo "" >> "$TEMP_FILE"
+echo "## 改进优化" >> "$TEMP_FILE"
+echo -e "${YELLOW}输入改进优化 (每行一条,空行结束):${NC}"
+while IFS= read -e -r line; do
     [ -z "$line" ] && break
-    echo "- $line" >> "$temp_file"
+    echo "- $line" >> "$TEMP_FILE"
 done
 
 # 问题修复
-echo "" >> "$temp_file"
-echo "## 问题修复" >> "$temp_file"
-echo -e "${yellow}输入问题修复 (每行一条,空行结束):${nc}"
-while ifs= read -r line; do
+echo "" >> "$TEMP_FILE"
+echo "## 问题修复" >> "$TEMP_FILE"
+echo -e "${YELLOW}输入问题修复 (每行一条,空行结束):${NC}"
+while IFS= read -e -r line; do
     [ -z "$line" ] && break
-    echo "- $line" >> "$temp_file"
+    echo "- $line" >> "$TEMP_FILE"
 done
 
-echo "" >> "$temp_file"
+echo "" >> "$TEMP_FILE"
 
 # 预览
-echo -e "\n${green}=== release notes 预览 ===${nc}"
-cat "$temp_file"
+echo -e "\n${GREEN}=== release notes 预览 ===${NC}"
+cat "$TEMP_FILE"
 echo ""
 
 # 确认
-echo -e "${yellow}确认提交? (y/n):${nc}"
-read -r confirm
+echo -e "${YELLOW}确认提交? (y/n):${NC}"
+read -e -r confirm
 
 if [ "$confirm" != "y" ]; then
-    echo -e "${red}已取消${nc}"
-    rm "$tEMP_FILE"
+    echo -e "${RED}已取消${NC}"
+    rm "$TEMP_FILE"
     exit 0
 fi
 
