@@ -312,46 +312,21 @@ function createTreeItem(name, type, fullPath) {
 
 // 打开文件
 async function openFile(filePath) {
-    const { ipcRenderer, path } = getGlobals();
-    
     try {
         window.rLog(`点击打开文件: ${filePath}`);
-        
-        const result = await ipcRenderer.invoke('read-file', filePath);
-        if (result.success) {
-            const fileName = path.basename(filePath);
-            
-            // 检查是否已经打开
-            const existingTab = window.AppGlobals.openTabs.find(tab => tab.path === filePath);
-            if (existingTab) {
-                window.EditorManager.selectTab(existingTab.id);
-                window.rLog(`文件已打开，切换到标签页: ${fileName}`);
-                return;
-            }
-            
-            // 创建新标签
-            const tabId = `tab-${Date.now()}`;
-            const tab = {
-                id: tabId,
-                path: filePath,
-                filePath: filePath, // 兼容EditorManager的期望
-                name: fileName,
-                content: result.content
-            };
-            
-            window.AppGlobals.openTabs.push(tab);
-            await window.EditorManager.createTab(tab);
-            window.EditorManager.selectTab(tabId);
 
-            window.rLog(`文件打开成功: ${fileName}, 内容长度: ${result.content.length}`);
-            
+        // 使用新的 CodeJar 编辑器管理器
+        if (window.EditorManager) {
+            await window.EditorManager.openFile(filePath);
+            window.rLog(`文件打开成功: ${filePath}`);
+
             // 立即刷新定位器列表
             if (window.LocatorManagerModule && window.LocatorManagerModule.refreshLocatorList) {
                 window.LocatorManagerModule.refreshLocatorList();
             }
         } else {
-            window.rError(`打开文件失败: ${result.error}`);
-            window.AppNotifications?.error(`Failed to open file: ${result.error}`);
+            window.rError('❌ EditorManager 未加载');
+            window.AppNotifications?.error('编辑器管理器未加载');
         }
     } catch (error) {
         const errorMsg = error?.message || error?.toString() || JSON.stringify(error) || '未知错误';
