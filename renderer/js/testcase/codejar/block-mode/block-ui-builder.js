@@ -143,9 +143,6 @@ const BlockUIBuilder = {
 
         // 渲染完成后，处理可视化元素
         this.renderVisualElements();
-
-        // 为locator类型的输入框添加拖放支持
-        this.setupLocatorInputDragDrop();
     },
 
     /**

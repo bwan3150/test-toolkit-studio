@@ -19,7 +19,7 @@ Electron 桌面应用，用于自动化测试。项目禁止使用开发者模�
 
 ## 代码规范补充
 - **必须**：使用 `window.rLog()`, `window.rError()` 等，不用 `console.log()`
-- 编辑toolkit-engine后, 需要运行 ./toolkit-engine/build.sh 来重新构建, 不要使用cargo build
+- 编辑toolkit-engine后, 需要运行 ./toolkit-engine/build-mac.sh 来重新构建, 不要使用cargo build; ./tester-ah也是同理
 - 一定要注意代码单元化, 不要任何耦合, 如果需要则立刻拆分大文件为多个小文件, 并且分类放进不同文件夹
 - 注释用中文
 - 修改路径后记得更新所有引用

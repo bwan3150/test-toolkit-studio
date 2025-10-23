@@ -105,9 +105,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 2. 加载UI模块
         // notifications 已迁移到 utils/app-notifications.js,在 index.html 中静态加载
         await loadScript('../js/components/navigation.js');
-        // editor-tab.js 和 editor-manager.js 已经在 index.html 中加载
-        // 初始化编辑器管理器
-        window.initializeEditorManager();
+
+        // 加载CodeJar编辑器模块
+        await loadScript('../js/testcase/codejar/codejar.js'); // CodeJar 核心库
+        await loadScript('../js/testcase/codejar/tks-syntax-highlighter.js'); // TKS 语法高亮
+        await loadScript('../js/testcase/codejar/execution-highlighter.js'); // 执行高亮控制器
+
+        // 验证 ExecutionHighlighter 是否加载成功
+        window.rLog('ExecutionHighlighter 加载检查:', {
+            exists: !!window.ExecutionHighlighter,
+            type: typeof window.ExecutionHighlighter
+        });
+
+        await loadScript('../js/testcase/codejar/codejar-adapter.js'); // CodeJar 适配器
+
+        // 加载块模式编辑器依赖
+        await loadScript('../js/testcase/codejar/block-mode/command-definitions.js');
+        await loadScript('../js/testcase/codejar/block-mode/command-utils.js');
+        await loadScript('../js/testcase/codejar/block-mode/command-parser.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-builder.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-drag.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-menus.js');
+
+        // 加载块模式编辑器和双模式编辑器
+        await loadScript('../js/testcase/codejar/block-mode-editor.js');
+        await loadScript('../js/testcase/codejar/dual-mode-editor.js');
+
+        await loadScript('../js/testcase/codejar/codejar-manager.js'); // 编辑器管理器
+
+        // 初始化 CodeJar 编辑器管理器
+        if (window.EditorManager) {
+            window.EditorManager.init();
+        }
         
         // 2.5 加载组件
         if (window.ComponentLoader) {

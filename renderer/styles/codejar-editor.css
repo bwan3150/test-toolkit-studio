@@ -1,0 +1,166 @@
+/**
+ * CodeJar 编辑器样式
+ */
+
+/* 编辑器容器 */
+.codejar-editor {
+    width: 100%;
+    height: 100%;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 10px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    white-space: pre;
+    tab-size: 4;
+    position: relative;
+    z-index: 1;
+}
+
+/* 编辑器聚焦状态 */
+.codejar-editor:focus {
+    outline: 1px solid #007acc;
+    outline-offset: -1px;
+}
+
+/* Tab 页的容器 */
+.editor-wrapper {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+/* Tab 标签 */
+.tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #2d2d30;
+    color: #969696;
+    cursor: pointer;
+    border-right: 1px solid #1e1e1e;
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.tab:hover {
+    background: #3e3e42;
+}
+
+.tab.active {
+    background: #1e1e1e;
+    color: #fff;
+}
+
+.tab-icon {
+    margin-right: 6px;
+    font-size: 12px;
+}
+
+.tab-name {
+    font-size: 13px;
+}
+
+.tab-close {
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.1s;
+    font-size: 16px;
+    line-height: 1;
+}
+
+.tab:hover .tab-close {
+    opacity: 1;
+}
+
+.tab-close:hover {
+    color: #fff;
+}
+
+.tab-dirty {
+    color: #007acc;
+    margin-right: 6px;
+    font-size: 10px;
+}
+
+/* TKS 语法高亮 - 继承现有样式 */
+.tks-comment {
+    color: #6A9955;
+    font-style: italic;
+}
+
+.tks-section {
+    color: #4EC9B0;
+    font-weight: bold;
+}
+
+.tks-command {
+    color: #C586C0;
+    font-weight: 600;
+}
+
+.tks-image-locator {
+    color: #CE9178;
+}
+
+.tks-coordinate {
+    color: #B5CEA8;
+}
+
+.tks-locator {
+    color: #9CDCFE;
+}
+
+.tks-direction {
+    color: #DCDCAA;
+}
+
+.tks-assertion-state {
+    color: #569CD6;
+}
+
+.tks-operator {
+    color: #D4D4D4;
+}
+
+.tks-number {
+    color: #B5CEA8;
+}
+
+.tks-bracket {
+    color: #FFD700;
+}
+
+.tks-comma {
+    color: #D4D4D4;
+}
+
+/* 执行高亮标记 */
+.execution-highlight-marker {
+    position: absolute;
+    pointer-events: none;
+    transition: all 0.2s ease;
+}
+
+.execution-highlight-marker.executing {
+    background: rgba(255, 255, 0, 0.15);
+    border-left: 3px solid #ffcc00;
+    animation: pulse-executing 1.5s ease-in-out infinite;
+}
+
+.execution-highlight-marker.error {
+    background: rgba(255, 0, 0, 0.15);
+    border-left: 3px solid #ff0000;
+}
+
+@keyframes pulse-executing {
+    0%, 100% {
+        background: rgba(255, 255, 0, 0.15);
+    }
+    50% {
+        background: rgba(255, 255, 0, 0.25);
+    }
+}

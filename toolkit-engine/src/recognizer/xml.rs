@@ -98,13 +98,10 @@ fn find_element_by_locator(elements: &[UIElement], locator: &Locator) -> Result<
     }
 
     // 策略5: 类名和位置的模糊匹配
-    if let (Some(ref class_name), Some(ref bounds_vec)) = (&locator.class_name, &locator.bounds) {
-        if bounds_vec.len() == 4 {
-            let bounds = Bounds::new(bounds_vec[0], bounds_vec[1], bounds_vec[2], bounds_vec[3]);
-            if let Some(element) = find_by_class_and_position(elements, class_name, &bounds) {
-                debug!("通过类名和位置模糊匹配找到元素");
-                return Ok(element);
-            }
+    if let (Some(ref class_name), Some(ref bounds)) = (&locator.class_name, &locator.bounds) {
+        if let Some(element) = find_by_class_and_position(elements, class_name, bounds) {
+            debug!("通过类名和位置模糊匹配找到元素");
+            return Ok(element);
         }
     }
 

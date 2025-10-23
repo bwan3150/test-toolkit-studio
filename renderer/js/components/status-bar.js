@@ -12,17 +12,21 @@ class StatusBarManager {
 
     init() {
         this.currentProjectElement = document.getElementById('statusBarProjectPath');
-        
+        this.editorModeElement = document.getElementById('editorModeText');
+
         // 添加点击复制功能
         if (this.currentProjectElement) {
             this.currentProjectElement.parentElement.addEventListener('click', () => {
                 this.copyProjectPath();
             });
         }
-        
+
+        // 初始化编辑器模式显示（默认块模式，不显示）
+        this.updateEditorMode('block', 'idle');
+
         // 立即尝试更新项目路径
         this.updateProjectPath();
-        
+
         // 强制检查一次，延迟一秒确保项目已完全加载
         setTimeout(() => {
             const globals = getGlobals();
@@ -31,10 +35,10 @@ class StatusBarManager {
                 this.updateProjectPath(globals.currentProject);
             }
         }, 1000);
-        
+
         // 监听项目变化
         this.watchProjectChanges();
-        
+
         // console.log('StatusBar initialized, current project:', getGlobals()?.currentProject); // 已禁用以减少日志
     }
 
@@ -103,6 +107,41 @@ class StatusBarManager {
         this.updateProjectPath(projectPath);
     }
 
+    // 更新编辑器模式显示
+    updateEditorMode(mode = 'block', state = 'idle') {
+        if (!this.editorModeElement) return;
+
+        const statusBar = document.querySelector('.status-bar');
+        let displayText = '';
+        let className = 'editor-mode-text';
+
+        // 移除所有状态类
+        if (statusBar) {
+            statusBar.classList.remove('status-bar-text-mode', 'status-bar-running');
+        }
+
+        if (state === 'running') {
+            displayText = '运行中...';
+            className += ' running';
+            if (statusBar) {
+                statusBar.classList.add('status-bar-running');
+            }
+        } else if (mode === 'text') {
+            // 只在文本模式时显示
+            displayText = '文本模式';
+            className += ' text-mode';
+            if (statusBar) {
+                statusBar.classList.add('status-bar-text-mode');
+            }
+        } else {
+            // 块模式（默认），不显示
+            displayText = '';
+        }
+
+        this.editorModeElement.textContent = displayText;
+        this.editorModeElement.className = className;
+    }
+
     // 复制项目路径到剪贴板
     async copyProjectPath() {
         if (!this.currentProjectElement) return;
@@ -147,5 +186,6 @@ const statusBarManager = new StatusBarManager();
 // 导出模块
 window.StatusBarModule = {
     updateProjectPath: (path) => statusBarManager.setProjectPath(path),
+    updateEditorMode: (mode, state) => statusBarManager.updateEditorMode(mode, state),
     init: () => statusBarManager.init()
 };

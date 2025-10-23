@@ -164,7 +164,7 @@ pub struct Locator {
     #[serde(rename = "className", skip_serializing_if = "Option::is_none")]
     pub class_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub bounds: Option<Vec<i32>>,
+    pub bounds: Option<Bounds>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     #[serde(rename = "resourceId", skip_serializing_if = "Option::is_none")]
