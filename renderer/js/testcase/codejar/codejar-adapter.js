@@ -12,6 +12,8 @@ class CodeJarAdapter {
         this.isDirty = false;
         this.originalContent = '';
         this.eventHandlers = new Map();
+        this.highlighter = null; // 执行高亮器
+        this.editorDiv = null; // CodeJar 编辑器 div
 
         window.rLog(`📝 CodeJarAdapter 创建: ${filePath}`);
     }
@@ -26,12 +28,12 @@ class CodeJarAdapter {
         await this.loadFromFile();
 
         // 2. 创建编辑器容器
-        const editorDiv = document.createElement('div');
-        editorDiv.className = 'codejar-editor';
-        this.container.appendChild(editorDiv);
+        this.editorDiv = document.createElement('div');
+        this.editorDiv.className = 'codejar-editor';
+        this.container.appendChild(this.editorDiv);
 
         // 3. 初始化 CodeJar，使用 TKS 语法高亮
-        this.jar = window.CodeJar(editorDiv, this.highlight.bind(this), {
+        this.jar = window.CodeJar(this.editorDiv, this.highlight.bind(this), {
             tab: '    ', // 4个空格
             indentOn: /[:{\[]$/,
             spellcheck: false,
@@ -40,6 +42,24 @@ class CodeJarAdapter {
             addClosing: true,
             history: true
         });
+
+        // 4. 创建执行高亮器
+        window.rLog('检查 ExecutionHighlighter:', {
+            exists: !!window.ExecutionHighlighter,
+            type: typeof window.ExecutionHighlighter,
+            isConstructor: window.ExecutionHighlighter && typeof window.ExecutionHighlighter === 'function'
+        });
+
+        if (window.ExecutionHighlighter && typeof window.ExecutionHighlighter === 'function') {
+            try {
+                this.highlighter = new window.ExecutionHighlighter(this.editorDiv);
+                window.rLog('✅ ExecutionHighlighter 创建成功');
+            } catch (error) {
+                window.rError('❌ ExecutionHighlighter 创建失败:', error);
+            }
+        } else {
+            window.rError('❌ ExecutionHighlighter 未正确加载:', typeof window.ExecutionHighlighter);
+        }
 
         // 4. 设置初始内容
         this.jar.updateCode(this.originalContent);
@@ -140,6 +160,13 @@ class CodeJarAdapter {
     }
 
     /**
+     * 获取原始内容（用于脚本执行）
+     */
+    getRawContent() {
+        return this.getContent();
+    }
+
+    /**
      * 检查是否有未保存的修改
      */
     isDirtyState() {
@@ -150,9 +177,39 @@ class CodeJarAdapter {
      * 聚焦编辑器
      */
     focus() {
-        const editorDiv = this.container.querySelector('.codejar-editor');
-        if (editorDiv) {
-            editorDiv.focus();
+        if (this.editorDiv) {
+            this.editorDiv.focus();
+        }
+    }
+
+    /**
+     * 高亮正在执行的行
+     * @param {number} lineNumber - 行号（1-based）
+     */
+    highlightExecutingLine(lineNumber) {
+        if (this.highlighter) {
+            this.highlighter.highlightExecutingLine(lineNumber);
+        }
+    }
+
+    /**
+     * 高亮错误行
+     * @param {number} lineNumber - 行号（1-based）
+     */
+    highlightErrorLine(lineNumber) {
+        if (this.highlighter) {
+            this.highlighter.highlightErrorLine(lineNumber);
+        }
+    }
+
+    /**
+     * 设置测试运行状态
+     * @param {boolean} isRunning - 是否正在运行
+     * @param {boolean} clearHighlight - 是否清除高亮
+     */
+    setTestRunning(isRunning, clearHighlight) {
+        if (this.highlighter) {
+            this.highlighter.setTestRunning(isRunning, clearHighlight);
         }
     }
 
@@ -182,6 +239,11 @@ class CodeJarAdapter {
     destroy() {
         window.rLog('🗑️  销毁 CodeJar 编辑器');
 
+        if (this.highlighter) {
+            this.highlighter.destroy();
+            this.highlighter = null;
+        }
+
         if (this.jar) {
             this.jar.destroy();
             this.jar = null;
@@ -189,6 +251,7 @@ class CodeJarAdapter {
 
         this.container.innerHTML = '';
         this.eventHandlers.clear();
+        this.editorDiv = null;
     }
 }
 

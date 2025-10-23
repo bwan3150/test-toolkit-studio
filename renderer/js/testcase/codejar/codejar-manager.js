@@ -221,6 +221,13 @@ class CodeJarManager {
     }
 
     /**
+     * 获取活动的editor（script-runner 使用）
+     */
+    getActiveEditor() {
+        return this.getCurrentEditor();
+    }
+
+    /**
      * 获取当前内容
      */
     getCurrentContent() {

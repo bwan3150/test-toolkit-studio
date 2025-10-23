@@ -16,6 +16,8 @@
     box-sizing: border-box;
     white-space: pre;
     tab-size: 4;
+    position: relative;
+    z-index: 2;
 }
 
 /* 编辑器聚焦状态 */
@@ -134,4 +136,31 @@
 
 .tks-comma {
     color: #D4D4D4;
+}
+
+/* 执行高亮标记 */
+.execution-highlight-marker {
+    position: absolute;
+    pointer-events: none;
+    transition: all 0.2s ease;
+}
+
+.execution-highlight-marker.executing {
+    background: rgba(255, 255, 0, 0.15);
+    border-left: 3px solid #ffcc00;
+    animation: pulse-executing 1.5s ease-in-out infinite;
+}
+
+.execution-highlight-marker.error {
+    background: rgba(255, 0, 0, 0.15);
+    border-left: 3px solid #ff0000;
+}
+
+@keyframes pulse-executing {
+    0%, 100% {
+        background: rgba(255, 255, 0, 0.15);
+    }
+    50% {
+        background: rgba(255, 255, 0, 0.25);
+    }
 }

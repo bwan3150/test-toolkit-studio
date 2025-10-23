@@ -39,7 +39,7 @@ class ScriptRunner {
         }
 
         // 获取脚本内容
-        const scriptContent = editor.buffer?.getRawContent();
+        const scriptContent = editor.getRawContent();
         if (!scriptContent) {
             window.AppNotifications?.error('脚本内容为空');
             return;
