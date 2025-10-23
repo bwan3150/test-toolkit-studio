@@ -91,6 +91,10 @@ class ScriptRunner {
         // 输出脚本开始执行
         window.ExecutionOutput?.scriptStart();
 
+        // 锁定编辑器并更新状态栏
+        editor.lock?.();
+        window.StatusBarModule?.updateEditorMode('block', 'running');
+
         // 设置编辑器为运行状态
         editor.setTestRunning?.(true, false);
 
@@ -191,6 +195,10 @@ class ScriptRunner {
             }
 
         } finally {
+            // 解锁编辑器并恢复状态栏
+            editor.unlock?.();
+            window.StatusBarModule?.updateEditorMode('block', 'idle');
+
             // 重置运行状态
             this.isRunning = false;
             this.shouldStop = false;

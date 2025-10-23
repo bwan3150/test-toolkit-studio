@@ -183,6 +183,30 @@ class CodeJarAdapter {
     }
 
     /**
+     * 锁定编辑器（禁止编辑）
+     */
+    lock() {
+        if (this.editorDiv) {
+            this.editorDiv.contentEditable = 'false';
+            this.editorDiv.style.opacity = '0.6';
+            this.editorDiv.style.cursor = 'not-allowed';
+            window.rLog('🔒 编辑器已锁定');
+        }
+    }
+
+    /**
+     * 解锁编辑器（允许编辑）
+     */
+    unlock() {
+        if (this.editorDiv) {
+            this.editorDiv.contentEditable = 'true';
+            this.editorDiv.style.opacity = '1';
+            this.editorDiv.style.cursor = 'text';
+            window.rLog('🔓 编辑器已解锁');
+        }
+    }
+
+    /**
      * 高亮正在执行的行
      * @param {number} lineNumber - 行号（1-based）
      */
