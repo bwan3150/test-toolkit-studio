@@ -160,6 +160,16 @@ class CodeJarAdapter {
     }
 
     /**
+     * 更新内容（用于块编辑器同步修改）
+     */
+    updateContent(newContent) {
+        if (this.jar) {
+            this.jar.updateCode(newContent);
+            window.rLog('📝 CodeJar内容已更新');
+        }
+    }
+
+    /**
      * 获取原始内容（用于脚本执行）
      */
     getRawContent() {

@@ -7,11 +7,9 @@
 (window.rLog || console.log)('block-mode-editor.js 开始加载');
 
 class BlockModeEditor {
-    constructor(container, filePath) {
+    constructor(container, textEditor) {
         this.container = container;
-        this.filePath = filePath;
-        this.isDirty = false;
-        this.originalContent = '';
+        this.textEditor = textEditor; // CodeJarAdapter实例
         this.eventHandlers = new Map();
 
         // 编辑器状态
@@ -21,7 +19,7 @@ class BlockModeEditor {
         // DOM元素
         this.blocksContainer = null;
 
-        window.rLog(`BlockModeEditor 创建: ${filePath}`);
+        window.rLog(`BlockModeEditor 创建，基于textEditor`);
     }
 
     /**
@@ -30,8 +28,8 @@ class BlockModeEditor {
     async init() {
         window.rLog('初始化块模式编辑器...');
 
-        // 1. 从文件加载内容
-        await this.loadFromFile();
+        // 1. 从textEditor读取内容
+        this.loadFromTextEditor();
 
         // 2. 解析脚本
         this.parseScript();
@@ -49,26 +47,31 @@ class BlockModeEditor {
     }
 
     /**
-     * 从文件加载内容
+     * 从textEditor读取内容
      */
-    async loadFromFile() {
-        try {
-            const { fs } = window.AppGlobals;
-            const content = await fs.readFile(this.filePath, 'utf-8');
-            this.originalContent = content;
-            window.rLog(`文件加载成功: ${this.filePath}`);
-        } catch (error) {
-            window.rError('文件加载失败:', error);
-            this.originalContent = '';
-            throw error;
-        }
+    loadFromTextEditor() {
+        const content = this.textEditor.getContent();
+        window.rLog(`从textEditor读取内容，长度: ${content.length}`);
+        return content;
+    }
+
+    /**
+     * 刷新块编辑器(从textEditor重新读取)
+     */
+    async refresh() {
+        window.rLog('刷新块编辑器...');
+        this.loadFromTextEditor();
+        this.parseScript();
+        this.renderBlocks();
+        this.setupBlockModeListeners();
     }
 
     /**
      * 解析脚本
      */
     parseScript() {
-        const lines = this.originalContent.split('\n');
+        const content = this.loadFromTextEditor();
+        const lines = content.split('\n');
         this.commands = [];
         this.headerLines = [];
 
@@ -318,16 +321,13 @@ class BlockModeEditor {
     }
 
     /**
-     * 触发变化事件
+     * 触发变化事件 - 将块的修改同步到textEditor
      */
     triggerChange() {
-        const wasDirty = this.isDirty;
-        const currentContent = this.toString();
-        this.isDirty = (currentContent !== this.originalContent);
-
-        if (wasDirty !== this.isDirty) {
-            this.emit('dirty-changed', { isDirty: this.isDirty });
-        }
+        const newContent = this.toString();
+        // 直接更新textEditor的内容
+        this.textEditor.updateContent(newContent);
+        window.rLog('块编辑器修改已同步到textEditor');
     }
 
     /**
@@ -350,47 +350,6 @@ class BlockModeEditor {
         return lines.join('\n');
     }
 
-    /**
-     * 保存文件
-     */
-    async save() {
-        try {
-            window.rLog('保存文件...');
-            const { fs } = window.AppGlobals;
-            const content = this.toString();
-            await fs.writeFile(this.filePath, content, 'utf-8');
-
-            this.originalContent = content;
-            this.isDirty = false;
-            this.emit('dirty-changed', { isDirty: false });
-
-            window.rLog(`文件保存成功: ${this.filePath}`);
-        } catch (error) {
-            window.rError('保存文件失败:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * 获取内容
-     */
-    getContent() {
-        return this.toString();
-    }
-
-    /**
-     * 获取原始内容（用于脚本执行）
-     */
-    getRawContent() {
-        return this.toString();
-    }
-
-    /**
-     * 检查是否有未保存的修改
-     */
-    isDirtyState() {
-        return this.isDirty;
-    }
 
     /**
      * 聚焦编辑器

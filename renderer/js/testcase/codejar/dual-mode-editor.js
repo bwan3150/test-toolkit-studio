@@ -35,14 +35,18 @@ class DualModeEditor {
         // 创建容器
         this.createContainers();
 
-        // 初始化块编辑器（默认模式）
-        this.blockEditor = new window.BlockModeEditor(this.blockContainer, this.filePath);
-        await this.blockEditor.init();
+        // 始终先初始化文本编辑器(CodeJar)作为数据源
+        this.textEditor = new window.CodeJarAdapter(this.textContainer, this.filePath);
+        await this.textEditor.init();
 
-        // 转发事件
-        this.blockEditor.on('dirty-changed', (data) => {
+        // 转发文本编辑器的dirty事件
+        this.textEditor.on('dirty-changed', (data) => {
             this.emit('dirty-changed', data);
         });
+
+        // 初始化块编辑器作为可视化UI层(基于textEditor)
+        this.blockEditor = new window.BlockModeEditor(this.blockContainer, this.textEditor);
+        await this.blockEditor.init();
 
         // 默认显示块模式
         this.showBlockMode();
@@ -74,41 +78,16 @@ class DualModeEditor {
     async showTextMode() {
         this.currentMode = 'text';
 
-        // 如果文本编辑器未初始化，先初始化
-        if (!this.textEditor) {
-            window.rLog('初始化文本编辑器...');
-
-            // 保存块编辑器内容（确保最新）
-            if (this.blockEditor && this.blockEditor.isDirtyState()) {
-                await this.blockEditor.save();
-            }
-
-            this.textEditor = new window.CodeJarAdapter(this.textContainer, this.filePath);
-            await this.textEditor.init();
-
-            // 转发事件
-            this.textEditor.on('dirty-changed', (data) => {
-                this.emit('dirty-changed', data);
-            });
-        } else {
-            // 如果块模式有修改，需要重新加载文本编辑器
-            if (this.blockEditor && this.blockEditor.isDirtyState()) {
-                await this.blockEditor.save();
-
-                // 销毁并重新创建文本编辑器
-                this.textEditor.destroy();
-                this.textEditor = new window.CodeJarAdapter(this.textContainer, this.filePath);
-                await this.textEditor.init();
-
-                this.textEditor.on('dirty-changed', (data) => {
-                    this.emit('dirty-changed', data);
-                });
-            }
-        }
-
+        // 文本编辑器始终存在,只需要切换显示即可
         this.blockContainer.style.display = 'none';
         this.textContainer.style.display = 'block';
         window.StatusBarModule?.updateEditorMode('text', 'idle');
+
+        // 聚焦文本编辑器
+        if (this.textEditor) {
+            this.textEditor.focus();
+        }
+
         window.rLog('切换到文本模式');
     }
 
@@ -118,36 +97,9 @@ class DualModeEditor {
     async showBlockMode() {
         this.currentMode = 'block';
 
-        // 如果块编辑器未初始化，先初始化
-        if (!this.blockEditor) {
-            window.rLog('初始化块编辑器...');
-
-            // 保存文本编辑器内容（确保最新）
-            if (this.textEditor && this.textEditor.isDirtyState()) {
-                await this.textEditor.save();
-            }
-
-            this.blockEditor = new window.BlockModeEditor(this.blockContainer, this.filePath);
-            await this.blockEditor.init();
-
-            // 转发事件
-            this.blockEditor.on('dirty-changed', (data) => {
-                this.emit('dirty-changed', data);
-            });
-        } else {
-            // 如果文本模式有修改，需要重新加载块编辑器
-            if (this.textEditor && this.textEditor.isDirtyState()) {
-                await this.textEditor.save();
-
-                // 销毁并重新创建块编辑器
-                this.blockEditor.destroy();
-                this.blockEditor = new window.BlockModeEditor(this.blockContainer, this.filePath);
-                await this.blockEditor.init();
-
-                this.blockEditor.on('dirty-changed', (data) => {
-                    this.emit('dirty-changed', data);
-                });
-            }
+        // 块编辑器切换显示时,需要从textEditor重新解析内容
+        if (this.blockEditor) {
+            await this.blockEditor.refresh();
         }
 
         this.textContainer.style.display = 'none';
@@ -178,15 +130,9 @@ class DualModeEditor {
      * 保存文件
      */
     async save() {
-        const currentEditor = this.getCurrentEditor();
-        if (currentEditor) {
-            await currentEditor.save();
-
-            // 如果在块模式保存，需要使文本模式的编辑器重新加载
-            if (this.currentMode === 'block' && this.textEditor) {
-                window.rLog('块模式保存后，文本编辑器需要重新加载');
-                this.textEditor._needsReload = true;
-            }
+        // 始终通过textEditor保存
+        if (this.textEditor) {
+            await this.textEditor.save();
         }
     }
 
@@ -194,8 +140,8 @@ class DualModeEditor {
      * 获取内容
      */
     getContent() {
-        const currentEditor = this.getCurrentEditor();
-        return currentEditor?.getContent() || '';
+        // 始终从textEditor获取内容
+        return this.textEditor?.getContent() || '';
     }
 
     /**
@@ -209,8 +155,8 @@ class DualModeEditor {
      * 检查是否有未保存的修改
      */
     isDirtyState() {
-        const currentEditor = this.getCurrentEditor();
-        return currentEditor?.isDirtyState() || false;
+        // 始终检查textEditor的dirty状态
+        return this.textEditor?.isDirtyState() || false;
     }
 
     /**
