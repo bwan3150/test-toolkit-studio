@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 加载CodeJar编辑器模块
         await loadScript('../js/testcase/codejar/codejar.js'); // CodeJar 核心库
-        await loadScript('../js/testcase/editor/syntax/editor-syntax-highlighter.js'); // TKS 语法高亮
+        await loadScript('../js/testcase/codejar/tks-syntax-highlighter.js'); // TKS 语法高亮
         await loadScript('../js/testcase/codejar/execution-highlighter.js'); // 执行高亮控制器
 
         // 验证 ExecutionHighlighter 是否加载成功
