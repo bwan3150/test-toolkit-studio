@@ -27,6 +27,15 @@ function initializeKeyboardShortcuts() {
             e.preventDefault();
             window.EditorManager.switchToPreviousTab();
         }
+
+        // Ctrl/Cmd + / 切换编辑模式(块模式/文本模式)
+        if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+            e.preventDefault();
+            const editor = window.EditorManager.getCurrentEditor();
+            if (editor && editor.toggleMode) {
+                editor.toggleMode();
+            }
+        }
     });
 }
 

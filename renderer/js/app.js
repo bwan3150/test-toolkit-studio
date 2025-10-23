@@ -118,6 +118,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         await loadScript('../js/testcase/codejar/codejar-adapter.js'); // CodeJar 适配器
+
+        // 加载块模式编辑器依赖
+        await loadScript('../js/testcase/codejar/block-mode/command-definitions.js');
+        await loadScript('../js/testcase/codejar/block-mode/command-utils.js');
+        await loadScript('../js/testcase/codejar/block-mode/command-parser.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-builder.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-drag.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-menus.js');
+
+        // 加载块模式编辑器和双模式编辑器
+        await loadScript('../js/testcase/codejar/block-mode-editor.js');
+        await loadScript('../js/testcase/codejar/dual-mode-editor.js');
+
         await loadScript('../js/testcase/codejar/codejar-manager.js'); // 编辑器管理器
 
         // 初始化 CodeJar 编辑器管理器

@@ -64,8 +64,8 @@ class CodeJarManager {
         container.style.display = 'none';
         this.editorContainer.appendChild(container);
 
-        // 创建editor实例
-        const editor = new window.CodeJarAdapter(container, filePath);
+        // 创建editor实例（使用双模式编辑器）
+        const editor = new window.DualModeEditor(container, filePath);
         await editor.init();
 
         // 监听dirty状态

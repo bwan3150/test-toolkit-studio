@@ -1,0 +1,655 @@
+/* 编辑器标签样式 */
+
+/* 编辑器工作空间 */
+.editor-workspace {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+}
+
+.editor-tab-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.unified-editor {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+
+/* 内容容器 */
+.editor-content-container {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* 文本模式样式 */
+.text-editor-view {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    position: relative;
+    overflow: visible;
+}
+
+.text-editor-wrapper {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+.line-numbers {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    padding: 16px 8px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 21px;
+    text-align: right;
+    user-select: none;
+    border-right: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.line-number {
+    height: 21px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.text-content {
+    flex: 1;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 21px;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+    white-space: pre; /* 不自动换行，保持原始空白字符 */
+    overflow-wrap: normal; /* 不强制换行 */
+    overflow: auto; /* 允许水平和垂直滚动 */
+    caret-color: var(--accent-color);
+}
+
+.text-content:focus {
+    outline: none;
+}
+
+/* 编辑器内状态指示器 */
+.editor-status-indicator {
+    position: absolute !important;
+    top: 8px !important;
+    right: 12px !important;
+    padding: 4px 8px !important;
+    border-radius: 4px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: white !important;
+    z-index: 100 !important;
+    user-select: none !important;
+    pointer-events: none !important;
+    display: block !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+}
+
+.editor-status-indicator.text-mode {
+    background: #0078d4 !important;
+}
+
+.editor-status-indicator.running {
+    background: #ff8c00 !important;
+}
+
+/* 文本模式语法高亮 */
+.syntax-action {
+    color: #569cd6;
+    font-weight: 600;
+}
+
+.syntax-string {
+    color: #ce9178;
+}
+
+.syntax-param {
+    color: #4ec9b0;
+}
+
+/* 新TKS语法高亮 */
+.syntax-coordinate {
+    color: #d16969;
+    font-weight: 500;
+}
+
+.syntax-xml-element {
+    color: #9cdcfe;
+    font-weight: 500;
+}
+
+/* 行高亮样式 */
+.line-highlight {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+
+.line-highlight.executing {
+    background: rgba(255, 193, 7, 0.3);
+    border-left: 3px solid #ffc107;
+}
+
+.line-highlight.error {
+    background: rgba(220, 53, 69, 0.3);
+    border-left: 3px solid #dc3545;
+}
+
+/* 行号高亮样式 */
+.line-number.highlighted.executing {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+    font-weight: 700;
+}
+
+.line-number.highlighted.error {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+    font-weight: 700;
+}
+
+/* 块模式样式 */
+.block-editor-view {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.blocks-workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+}
+
+.blocks-container {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    min-height: 0;
+    position: relative; /* 为拖拽提示伪元素提供定位基准 */
+}
+
+/* 块插入区域 */
+.block-insert-area {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 8px 0;
+    position: relative;
+}
+
+.block-insert-area.final {
+    margin-top: 16px;
+}
+
+.block-insert-btn {
+    background: var(--bg-secondary);
+    border: 2px dashed var(--border-color);
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.block-insert-btn:hover {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+    transform: scale(1.1);
+}
+
+.block-insert-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+}
+
+/* 命令选择菜单 */
+.command-menu {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    min-width: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+/* 右键菜单样式 */
+.context-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 2000;
+    min-width: 150px;
+    padding: 4px 0;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.context-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.context-menu-item-icon {
+    margin-right: 8px;
+    font-size: 14px;
+    width: 16px;
+    text-align: center;
+}
+
+.command-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.command-menu-item:last-child {
+    border-bottom: none;
+}
+
+.command-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.menu-item-icon {
+    margin-right: 8px;
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
+.menu-item-label {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.block-icon {
+    margin-right: 8px;
+    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.block-icon svg,
+.menu-item-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    stroke: currentColor;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.empty-state svg {
+    margin-bottom: 16px;
+}
+
+.empty-state p {
+    margin: 4px 0;
+    font-size: 14px;
+}
+
+/* 传统块样式（如果需要） */
+.workspace-block {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+/* 命令块样式 - 保留原有颜色，挖孔放参数 */
+.workspace-block.command-block {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    position: relative;
+    cursor: grab;
+}
+
+.workspace-block.command-block:active {
+    cursor: grabbing;
+}
+
+.workspace-block.command-block.dragging {
+    opacity: 0.5;
+    transform: rotate(5deg);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+}
+
+/* 拖拽插入提示横杠 - 独立元素 */
+.drag-insert-indicator {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    height: 3px;
+    background: linear-gradient(90deg, #ffc107, #ffeb3b, #ffc107);
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
+    z-index: 999;
+    animation: drag-hint-glow 1s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+@keyframes drag-hint-glow {
+    0% {
+        opacity: 0.8;
+        transform: scaleX(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scaleX(1);
+    }
+}
+
+.workspace-block.command-block:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.command-content {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: 8px;
+    position: relative;
+    flex-wrap: wrap;
+}
+
+.block-icon {
+    font-size: 16px;
+    margin-right: 6px;
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+}
+
+.command-label {
+    font-size: 14px;
+    font-weight: 600;
+    margin-right: 6px;
+}
+
+/* 参数孔样式 */
+.param-hole {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #333333;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    min-width: 60px;
+    max-width: 120px;
+    margin: 0 4px;
+}
+
+.param-hole:focus {
+    outline: none;
+    background: white;
+    border-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+    color: #000000;
+}
+
+.param-hole::placeholder {
+    color: #666666;
+    font-style: italic;
+    font-size: 11px;
+}
+
+/* 可视化元素容器样式 */
+.param-hole-container {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 4px;
+    position: relative;
+}
+
+.param-hole-container.drag-over {
+    outline: 2px dashed rgba(0, 123, 255, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.param-hole.drag-over {
+    outline: 2px dashed rgba(0, 123, 255, 0.5);
+    outline-offset: 2px;
+}
+
+.hidden-input {
+    display: none !important;
+}
+
+.param-visual-element {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* 图片元素卡片样式 */
+.visual-image-card {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    gap: 4px;
+    position: relative;
+    max-width: 150px;
+}
+
+.visual-image-card img {
+    width: 24px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 2px;
+}
+
+.visual-image-card .image-fallback {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+}
+
+/* XML元素卡片样式 */
+.visual-xml-card {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    gap: 4px;
+    position: relative;
+}
+
+.visual-xml-card svg {
+    flex-shrink: 0;
+}
+
+/* 可视化元素名称 */
+.visual-name {
+    color: #333;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 移除按钮 */
+.visual-remove {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    color: #ff4444;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    margin-left: 4px;
+    padding: 0;
+    line-height: 1;
+}
+
+.visual-remove:hover {
+    background: rgba(255, 0, 0, 0.3);
+    transform: scale(1.1);
+}
+
+.workspace-block.command-block .block-delete {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    margin-left: 12px;
+}
+
+.workspace-block.command-block .block-delete:hover {
+    background: rgba(255, 80, 80, 0.9);
+    border-color: rgba(255, 80, 80, 0.9);
+    transform: scale(1.1);
+}
+
+
+/* 块高亮动画效果 */
+@keyframes pulse-executing {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.01);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.block-highlight-overlay {
+    border-radius: 10px;
+}
+
+.block-highlight-overlay.executing {
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+    0% {
+        box-shadow: 0 0 12px rgba(255, 193, 7, 0.4), inset 0 0 12px rgba(255, 193, 7, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(255, 193, 7, 0.6), inset 0 0 20px rgba(255, 193, 7, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 12px rgba(255, 193, 7, 0.4), inset 0 0 12px rgba(255, 193, 7, 0.1);
+    }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .workspace-block {
+        margin-bottom: 6px;
+    }
+    
+    .block-header {
+        padding: 10px 12px;
+    }
+    
+    .block-params {
+        padding: 8px 12px;
+    }
+    
+    .command-menu {
+        min-width: 180px;
+    }
+}
