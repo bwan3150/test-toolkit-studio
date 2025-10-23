@@ -186,8 +186,8 @@ class BlockModeEditor {
      */
     createUI() {
         this.container.innerHTML = `
-            <div class="unified-editor">
-                <div class="editor-content-container">
+            <div class="unified-editor" style="height: 100%;">
+                <div class="editor-content-container" style="height: 100%;">
                     <div class="blocks-container" id="blocksContainer">
                         <!-- 块将在这里渲染 -->
                     </div>
@@ -204,9 +204,15 @@ class BlockModeEditor {
     renderBlocks() {
         if (!this.blocksContainer) return;
 
+        // 如果没有命令，显示空状态页面
+        if (this.commands.length === 0) {
+            this.renderEmptyState();
+            return;
+        }
+
+        // 有命令，渲染正式编辑页面
         let blocksHtml = '';
 
-        // 渲染每个命令块
         this.commands.forEach((command, index) => {
             const definition = window.CommandUtils?.findCommandDefinition(command.type);
             const category = window.CommandUtils?.findCommandCategory(command.type);
@@ -260,25 +266,92 @@ class BlockModeEditor {
             </div>
         `;
 
-        // 设置HTML
-        if (this.commands.length === 0) {
-            this.blocksContainer.innerHTML = `
-                <div class="empty-state">
-                    <svg width="48" height="48" viewBox="0 0 48 48" opacity="0.3">
-                        <path fill="currentColor" d="M38 8H10c-2.21 0-4 1.79-4 4v24c0 2.21 1.79 4 4 4h28c2.21 0 4-1.79 4-4V12c0-2.21-1.79-4-4-4z"/>
-                    </svg>
-                    <p>点击下方 ⊕ 按钮添加一个脚本块</p>
-                </div>
-                ${finalInsertButton}
-            `;
-        } else {
-            this.blocksContainer.innerHTML = blocksHtml + finalInsertButton;
-        }
+        this.blocksContainer.innerHTML = blocksHtml + finalInsertButton;
 
         window.rLog(`渲染完成，命令数: ${this.commands.length}`);
-        window.rLog(`blocksContainer存在: ${!!this.blocksContainer}`);
-        window.rLog(`blocksContainer HTML长度: ${this.blocksContainer?.innerHTML.length}`);
-        window.rLog(`找到按钮: ${this.blocksContainer?.querySelectorAll('.block-insert-btn').length}`);
+    }
+
+    /**
+     * 渲染空状态页面 - 专门用于添加第一个命令块
+     */
+    renderEmptyState() {
+        this.blocksContainer.innerHTML = `
+            <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+                        display: flex; flex-direction: column; align-items: center; justify-content: center;
+                        padding: 40px; box-sizing: border-box;">
+                <div style="text-align: center; margin-bottom: 32px;">
+                    <svg width="64" height="64" viewBox="0 0 48 48" opacity="0.3" style="margin-bottom: 16px;">
+                        <path fill="currentColor" d="M38 8H10c-2.21 0-4 1.79-4 4v24c0 2.21 1.79 4 4 4h28c2.21 0 4-1.79 4-4V12c0-2.21-1.79-4-4-4z"/>
+                    </svg>
+                    <p style="font-size: 16px; color: var(--text-secondary); margin: 0;">点击下方 ⊕ 按钮添加脚本块</p>
+                </div>
+                <button class="block-insert-btn" id="addFirstBlockBtn" title="添加脚本块">
+                    <svg width="16" height="16" viewBox="0 0 16 16">
+                        <path fill="currentColor" d="M8 2v12m-6-6h12" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        // 绑定按钮点击事件
+        const btn = this.blocksContainer.querySelector('#addFirstBlockBtn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                this.showFirstCommandMenu();
+            });
+        }
+
+        window.rLog('渲染空状态页面');
+    }
+
+    /**
+     * 显示第一个命令选择菜单
+     */
+    showFirstCommandMenu() {
+        window.rLog('显示第一个命令选择菜单');
+
+        // 创建菜单
+        const menuItems = [];
+        Object.entries(window.BlockDefinitions || {}).forEach(([categoryKey, category]) => {
+            category.commands.forEach(cmd => {
+                menuItems.push(`
+                    <div class="command-menu-item" data-type="${cmd.type}">
+                        <span class="menu-item-icon">${category.icon}</span>
+                        <span class="menu-item-label">${cmd.label}</span>
+                    </div>
+                `);
+            });
+        });
+
+        const menuHtml = `
+            <div id="firstCommandMenu" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                    background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px;
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 2000; min-width: 250px; max-height: 400px; overflow-y: auto;">
+                ${menuItems.join('')}
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', menuHtml);
+        const menu = document.querySelector('#firstCommandMenu');
+
+        // 绑定菜单项点击
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.command-menu-item');
+            if (item) {
+                const commandType = item.dataset.type;
+                this.insertCommand(commandType, 0);
+                menu.remove();
+            }
+        });
+
+        // 点击外部关闭
+        setTimeout(() => {
+            document.addEventListener('click', (e) => {
+                if (!menu.contains(e.target)) {
+                    menu.remove();
+                }
+            }, { once: true });
+        }, 0);
     }
 
     /**

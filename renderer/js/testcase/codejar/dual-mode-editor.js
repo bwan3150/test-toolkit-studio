@@ -64,11 +64,13 @@ class DualModeEditor {
         this.textContainer = document.createElement('div');
         this.textContainer.className = 'editor-mode-container text-mode-container';
         this.textContainer.style.display = 'none';
+        this.textContainer.style.height = '100%';
         this.container.appendChild(this.textContainer);
 
         // 块编辑器容器
         this.blockContainer = document.createElement('div');
         this.blockContainer.className = 'editor-mode-container block-mode-container';
+        this.blockContainer.style.height = '100%';
         this.container.appendChild(this.blockContainer);
     }
 
