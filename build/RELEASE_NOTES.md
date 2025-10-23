@@ -1,12 +1,11 @@
 ## 新增功能
-- 新增: .tks language support语法解析npm包, 用于vscode和neovim等
-- 新增: 内置aapt模块版本监测展展示
+- 新增: 使用codejar作为文本编辑模式下的编辑器
 
 ## 改进优化
-- 改进: 重构renderer层的editor代码结构, 解耦合单元化设计
-- 改进: 简化.tks脚本执行日志
-- 移除: toolkit-engine内的parser模块, 部分必要功能转入runner模块
+- 移除: 旧编辑器代码和样式
+- 改进: 将旧的脚本块模式改造为基于codejar editor的编辑视图而非独立的编辑器
 
 ## 问题修复
-- 修复: 脚本编辑器内, 修改脚本内容后高亮没有渲染重构的问题
+- 修复: 统一Toolkit Engine和当前元素库中bounds字段格式统一, 防止出现格式匹配问题
+- 修复: 当tke被多线程调用时, 一个进程结束不再清理公用的临时文件夹
 
