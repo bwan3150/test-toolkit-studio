@@ -91,11 +91,15 @@ class ExecutionHighlighter {
      */
     createHighlightMarker(lineNumber, type) {
         // 移除旧的高亮标记
-        const oldMarkers = this.editorElement.parentElement.querySelectorAll('.execution-highlight-marker');
+        const oldMarkers = this.editorElement.querySelectorAll('.execution-highlight-marker');
         oldMarkers.forEach(marker => marker.remove());
 
-        // 获取编辑器的行高
+        // 获取编辑器的行高和padding
         const lineHeight = this.getLineHeight();
+        const style = window.getComputedStyle(this.editorElement);
+        const paddingTop = parseFloat(style.paddingTop) || 0;
+
+        window.rLog(`📍 创建高亮标记: 行号=${lineNumber}, 行高=${lineHeight}px, paddingTop=${paddingTop}px, 类型=${type}`);
 
         // 创建高亮标记元素
         const marker = document.createElement('div');
@@ -103,27 +107,23 @@ class ExecutionHighlighter {
         marker.style.position = 'absolute';
         marker.style.left = '0';
         marker.style.right = '0';
-        marker.style.top = `${(lineNumber - 1) * lineHeight}px`;
+        marker.style.top = `${paddingTop + (lineNumber - 1) * lineHeight}px`;
         marker.style.height = `${lineHeight}px`;
         marker.style.pointerEvents = 'none';
-        marker.style.zIndex = '1';
+        marker.style.zIndex = '-1'; // 在编辑器内容下方
 
         // 设置背景色
         if (type === 'executing') {
-            marker.style.background = 'rgba(255, 255, 0, 0.15)'; // 黄色半透明
+            marker.style.background = 'rgba(255, 255, 0, 0.3)'; // 黄色半透明
             marker.style.borderLeft = '3px solid #ffcc00';
         } else if (type === 'error') {
-            marker.style.background = 'rgba(255, 0, 0, 0.15)'; // 红色半透明
+            marker.style.background = 'rgba(255, 0, 0, 0.3)'; // 红色半透明
             marker.style.borderLeft = '3px solid #ff0000';
         }
 
-        // 确保父容器是 relative 定位
-        if (!this.editorElement.parentElement.style.position) {
-            this.editorElement.parentElement.style.position = 'relative';
-        }
-
-        // 插入到编辑器容器中
-        this.editorElement.parentElement.insertBefore(marker, this.editorElement);
+        // 直接插入到编辑器元素内部的开头
+        this.editorElement.insertBefore(marker, this.editorElement.firstChild);
+        window.rLog(`✅ 高亮标记已插入DOM，top=${marker.style.top}`, marker);
     }
 
     /**
@@ -160,8 +160,8 @@ class ExecutionHighlighter {
      */
     clearHighlight() {
         // 移除高亮标记
-        if (this.editorElement && this.editorElement.parentElement) {
-            const markers = this.editorElement.parentElement.querySelectorAll('.execution-highlight-marker');
+        if (this.editorElement) {
+            const markers = this.editorElement.querySelectorAll('.execution-highlight-marker');
             markers.forEach(marker => marker.remove());
         }
 
