@@ -147,6 +147,94 @@ const BlockUIDrag = {
             block: closestBlock,
             position: closestPosition
         };
+    },
+
+    /**
+     * 设置拖拽和排序功能
+     */
+    setupDragAndDrop() {
+        window.rLog('设置块拖拽排序功能...');
+
+        // 为所有块添加拖拽事件
+        const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block');
+        blocks.forEach(block => {
+            // dragstart - 开始拖拽
+            block.addEventListener('dragstart', (e) => {
+                const blockIndex = parseInt(block.dataset.index);
+                window.rLog(`开始拖拽块: ${blockIndex}`);
+
+                block.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', blockIndex.toString());
+            });
+
+            // dragend - 结束拖拽
+            block.addEventListener('dragend', (e) => {
+                block.classList.remove('dragging');
+                this.clearDragInsertIndicator();
+                window.rLog('拖拽结束');
+            });
+        });
+
+        // 移除旧的容器事件监听器(如果存在)
+        if (this._dragoverHandler) {
+            this.blocksContainer.removeEventListener('dragover', this._dragoverHandler);
+        }
+        if (this._dropHandler) {
+            this.blocksContainer.removeEventListener('drop', this._dropHandler);
+        }
+
+        // 容器的拖拽事件
+        this._dragoverHandler = (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+
+            const draggingBlock = this.blocksContainer.querySelector('.workspace-block.dragging');
+            if (!draggingBlock) return;
+
+            const draggingFromIndex = parseInt(draggingBlock.dataset.index);
+            const mouseY = e.clientY;
+
+            // 计算最近的插入位置
+            const { insertIndex, block, position } = this.calculateNearestInsertPosition(mouseY, draggingFromIndex);
+
+            // 显示插入提示
+            this.showDragInsertIndicator(block, position);
+        };
+
+        this._dropHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const draggingBlock = this.blocksContainer.querySelector('.workspace-block.dragging');
+            if (!draggingBlock) return;
+
+            const fromIndex = parseInt(draggingBlock.dataset.index);
+            const mouseY = e.clientY;
+
+            // 计算插入位置
+            const { insertIndex } = this.calculateNearestInsertPosition(mouseY, fromIndex);
+
+            window.rLog(`拖拽块从 ${fromIndex} 移动到 ${insertIndex}`);
+
+            // 移动命令
+            if (fromIndex !== insertIndex) {
+                const commands = this.getCommands();
+                const [movedCommand] = commands.splice(fromIndex, 1);
+                commands.splice(insertIndex, 0, movedCommand);
+
+                // 重新渲染
+                this.renderBlocks();
+                this.triggerChange();
+            }
+
+            this.clearDragInsertIndicator();
+        };
+
+        this.blocksContainer.addEventListener('dragover', this._dragoverHandler);
+        this.blocksContainer.addEventListener('drop', this._dropHandler);
+
+        window.rLog(`已为 ${blocks.length} 个块设置拖拽功能`);
     }
 };
 

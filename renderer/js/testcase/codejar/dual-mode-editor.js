@@ -105,7 +105,16 @@ class DualModeEditor {
         this.textContainer.style.display = 'none';
         this.blockContainer.style.display = 'block';
         window.StatusBarModule?.updateEditorMode('block', 'idle');
+
         window.rLog('切换到块模式');
+        window.rLog('blockContainer display:', this.blockContainer.style.display);
+        window.rLog('blockContainer 可见:', this.blockContainer.offsetHeight > 0);
+
+        // 检查子元素
+        const blocksContainer = this.blockContainer.querySelector('.blocks-container');
+        window.rLog('blocksContainer 找到:', !!blocksContainer);
+        window.rLog('blocksContainer display:', blocksContainer?.style.display);
+        window.rLog('blocksContainer innerHTML长度:', blocksContainer?.innerHTML.length);
     }
 
     /**

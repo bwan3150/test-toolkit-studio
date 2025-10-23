@@ -221,6 +221,73 @@ const BlockUIMenus = {
             // 恢复原来的 hideCommandMenu 方法
             this.hideCommandMenu = originalHideMenu;
         };
+    },
+
+    /**
+     * 设置菜单功能
+     */
+    setupMenus() {
+        window.rLog('设置块菜单功能...');
+
+        // 为所有插入按钮添加点击事件
+        const buttons = this.blocksContainer.querySelectorAll('.block-insert-btn');
+        window.rLog(`找到 ${buttons.length} 个插入按钮`);
+
+        buttons.forEach((btn, index) => {
+            const insertArea = btn.closest('.block-insert-area');
+            window.rLog(`按钮 ${index}:`, {
+                hasInsertArea: !!insertArea,
+                insertIndex: insertArea?.dataset.insertIndex
+            });
+
+            if (insertArea) {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const insertIndex = parseInt(insertArea.dataset.insertIndex);
+                    window.rLog(`点击插入按钮，位置: ${insertIndex}`);
+                    this.showCommandMenu(insertArea, insertIndex);
+                });
+            }
+        });
+
+        window.rLog('菜单功能设置完成');
+    },
+
+    /**
+     * 插入命令
+     * @param {string} commandType - 命令类型
+     * @param {number} insertIndex - 插入位置
+     */
+    insertCommand(commandType, insertIndex) {
+        window.rLog(`插入命令: ${commandType}, 位置: ${insertIndex}`);
+
+        // 查找命令定义
+        const definition = window.CommandUtils?.findCommandDefinition(commandType);
+        if (!definition) {
+            window.rError(`未找到命令定义: ${commandType}`);
+            return;
+        }
+
+        // 创建新命令
+        const newCommand = {
+            type: commandType,
+            params: {}
+        };
+
+        // 初始化参数为默认值
+        definition.params.forEach(param => {
+            newCommand.params[param.name] = param.default || '';
+        });
+
+        // 插入到commands数组
+        const commands = this.getCommands();
+        commands.splice(insertIndex, 0, newCommand);
+
+        // 重新渲染
+        this.renderBlocks();
+        this.triggerChange();
+
+        window.rLog(`命令已插入，当前命令数: ${commands.length}`);
     }
 };
 

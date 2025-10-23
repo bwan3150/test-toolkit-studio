@@ -204,25 +204,81 @@ class BlockModeEditor {
     renderBlocks() {
         if (!this.blocksContainer) return;
 
-        // 使用 BlockUIBuilder 渲染
-        if (window.BlockUIBuilder && window.BlockUIBuilder.renderBlocks) {
-            // 临时设置上下文
-            const originalContainer = window.BlockUIBuilder.blocksContainer;
-            const originalGetCommands = window.BlockUIBuilder.getCommands;
-            const originalRenderVisualElements = window.BlockUIBuilder.renderVisualElements;
+        let blocksHtml = '';
 
-            window.BlockUIBuilder.blocksContainer = this.blocksContainer;
-            window.BlockUIBuilder.getCommands = () => this.commands;
-            // 绑定 renderVisualElements 到 BlockUIBuilder
-            window.BlockUIBuilder.renderVisualElements = originalRenderVisualElements.bind(window.BlockUIBuilder);
+        // 渲染每个命令块
+        this.commands.forEach((command, index) => {
+            const definition = window.CommandUtils?.findCommandDefinition(command.type);
+            const category = window.CommandUtils?.findCommandCategory(command.type);
 
-            window.BlockUIBuilder.renderBlocks.call(window.BlockUIBuilder);
+            if (!definition || !category) return;
 
-            // 恢复
-            window.BlockUIBuilder.blocksContainer = originalContainer;
-            window.BlockUIBuilder.getCommands = originalGetCommands;
-            window.BlockUIBuilder.renderVisualElements = originalRenderVisualElements;
+            // 创建命令内容
+            let commandContent = `<span class="block-icon">${category.icon}</span><span class="command-label">${definition.label}</span>`;
+
+            // 添加参数输入框
+            definition.params.forEach(param => {
+                const value = command.params[param.name] || param.default || '';
+                const paramId = `param-${index}-${param.name}`;
+
+                if (param.type === 'select') {
+                    const optionsHtml = param.options.map(opt =>
+                        `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`
+                    ).join('');
+                    commandContent += `
+                        <select class="param-hole" id="${paramId}" data-param="${param.name}" data-command-index="${index}">
+                            ${optionsHtml}
+                        </select>
+                    `;
+                } else {
+                    commandContent += `
+                        <input class="param-hole" id="${paramId}" type="${param.type === 'number' ? 'number' : 'text'}"
+                               data-param="${param.name}" data-command-index="${index}"
+                               placeholder="${param.placeholder}" value="${value}">
+                    `;
+                }
+            });
+
+            // 生成块HTML
+            blocksHtml += `
+                <div class="workspace-block command-block" data-index="${index}" data-type="${command.type}" draggable="true"
+                     style="background: linear-gradient(135deg, ${category.color}ee, ${category.color}cc);">
+                    <div class="command-content">${commandContent}</div>
+                    <button class="block-delete" data-index="${index}" title="删除">×</button>
+                </div>
+            `;
+        });
+
+        // 插入按钮
+        const finalInsertButton = `
+            <div class="block-insert-area final" data-insert-index="${this.commands.length}">
+                <button class="block-insert-btn" title="添加命令块">
+                    <svg width="16" height="16" viewBox="0 0 16 16">
+                        <path fill="currentColor" d="M8 2v12m-6-6h12" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        // 设置HTML
+        if (this.commands.length === 0) {
+            this.blocksContainer.innerHTML = `
+                <div class="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 48 48" opacity="0.3">
+                        <path fill="currentColor" d="M38 8H10c-2.21 0-4 1.79-4 4v24c0 2.21 1.79 4 4 4h28c2.21 0 4-1.79 4-4V12c0-2.21-1.79-4-4-4z"/>
+                    </svg>
+                    <p>点击下方 ⊕ 按钮添加一个脚本块</p>
+                </div>
+                ${finalInsertButton}
+            `;
+        } else {
+            this.blocksContainer.innerHTML = blocksHtml + finalInsertButton;
         }
+
+        window.rLog(`渲染完成，命令数: ${this.commands.length}`);
+        window.rLog(`blocksContainer存在: ${!!this.blocksContainer}`);
+        window.rLog(`blocksContainer HTML长度: ${this.blocksContainer?.innerHTML.length}`);
+        window.rLog(`找到按钮: ${this.blocksContainer?.querySelectorAll('.block-insert-btn').length}`);
     }
 
     /**
@@ -252,53 +308,153 @@ class BlockModeEditor {
             });
         });
 
-        // 设置拖拽功能
-        if (window.BlockUIDrag && window.BlockUIDrag.setupDragAndDrop) {
-            const originalContainer = window.BlockUIDrag.blocksContainer;
-            const originalCommands = window.BlockUIDrag.getCommands;
-            const originalRender = window.BlockUIDrag.renderBlocks;
-            const originalTrigger = window.BlockUIDrag.triggerChange;
+        // 设置拖拽排序
+        this.setupDragAndDrop();
 
-            window.BlockUIDrag.blocksContainer = this.blocksContainer;
-            window.BlockUIDrag.getCommands = () => this.commands;
-            window.BlockUIDrag.renderBlocks = () => {
-                this.renderBlocks();
-                this.setupBlockModeListeners();
-            };
-            window.BlockUIDrag.triggerChange = () => this.triggerChange();
+        // 设置插入按钮菜单
+        this.setupInsertMenus();
+    }
 
-            window.BlockUIDrag.setupDragAndDrop.call(this);
+    /**
+     * 设置拖拽排序
+     */
+    setupDragAndDrop() {
+        const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block');
 
-            // 恢复
-            window.BlockUIDrag.blocksContainer = originalContainer;
-            window.BlockUIDrag.getCommands = originalCommands;
-            window.BlockUIDrag.renderBlocks = originalRender;
-            window.BlockUIDrag.triggerChange = originalTrigger;
-        }
+        blocks.forEach(block => {
+            block.addEventListener('dragstart', (e) => {
+                block.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
 
-        // 设置菜单功能（添加块）
-        if (window.BlockUIMenus && window.BlockUIMenus.setupMenus) {
-            const originalContainer = window.BlockUIMenus.blocksContainer;
-            const originalCommands = window.BlockUIMenus.getCommands;
-            const originalRender = window.BlockUIMenus.renderBlocks;
-            const originalTrigger = window.BlockUIMenus.triggerChange;
+            block.addEventListener('dragend', (e) => {
+                block.classList.remove('dragging');
+            });
+        });
 
-            window.BlockUIMenus.blocksContainer = this.blocksContainer;
-            window.BlockUIMenus.getCommands = () => this.commands;
-            window.BlockUIMenus.renderBlocks = () => {
-                this.renderBlocks();
-                this.setupBlockModeListeners();
-            };
-            window.BlockUIMenus.triggerChange = () => this.triggerChange();
+        // 容器拖拽事件
+        this.blocksContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const draggingBlock = this.blocksContainer.querySelector('.dragging');
+            if (!draggingBlock) return;
 
-            window.BlockUIMenus.setupMenus.call(this);
+            const afterElement = this.getDragAfterElement(e.clientY);
+            if (afterElement) {
+                this.blocksContainer.insertBefore(draggingBlock, afterElement);
+            } else {
+                this.blocksContainer.appendChild(draggingBlock);
+            }
+        });
 
-            // 恢复
-            window.BlockUIMenus.blocksContainer = originalContainer;
-            window.BlockUIMenus.getCommands = originalCommands;
-            window.BlockUIMenus.renderBlocks = originalRender;
-            window.BlockUIMenus.triggerChange = originalTrigger;
-        }
+        this.blocksContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            // 重新构建commands数组
+            const newCommands = [];
+            this.blocksContainer.querySelectorAll('.workspace-block.command-block').forEach(block => {
+                const index = parseInt(block.dataset.index);
+                if (this.commands[index]) {
+                    newCommands.push(this.commands[index]);
+                }
+            });
+            this.commands.splice(0, this.commands.length, ...newCommands);
+            this.renderBlocks();
+            this.setupBlockModeListeners();
+            this.triggerChange();
+        });
+    }
+
+    /**
+     * 获取拖拽后应该插入的位置
+     */
+    getDragAfterElement(y) {
+        const draggableElements = [...this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)')];
+
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    /**
+     * 设置插入按钮菜单
+     */
+    setupInsertMenus() {
+        this.blocksContainer.querySelectorAll('.block-insert-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const insertArea = btn.closest('.block-insert-area');
+                const insertIndex = parseInt(insertArea.dataset.insertIndex);
+                this.showCommandMenu(insertArea, insertIndex);
+            });
+        });
+    }
+
+    /**
+     * 显示命令菜单
+     */
+    showCommandMenu(insertArea, insertIndex) {
+        window.rLog(`显示命令菜单，插入位置: ${insertIndex}`);
+
+        // 创建菜单
+        const menuItems = [];
+        Object.entries(window.BlockDefinitions || {}).forEach(([categoryKey, category]) => {
+            category.commands.forEach(cmd => {
+                menuItems.push(`
+                    <div class="command-menu-item" data-type="${cmd.type}">
+                        <span class="menu-item-icon">${category.icon}</span>
+                        <span class="menu-item-label">${cmd.label}</span>
+                    </div>
+                `);
+            });
+        });
+
+        const menuHtml = `<div class="command-menu">${menuItems.join('')}</div>`;
+        insertArea.insertAdjacentHTML('beforeend', menuHtml);
+
+        const menu = insertArea.querySelector('.command-menu');
+
+        // 点击菜单项
+        menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.command-menu-item');
+            if (item) {
+                const commandType = item.dataset.type;
+                this.insertCommand(commandType, insertIndex);
+                menu.remove();
+            }
+        });
+
+        // 点击外部关闭
+        setTimeout(() => {
+            document.addEventListener('click', () => menu.remove(), { once: true });
+        }, 0);
+    }
+
+    /**
+     * 插入命令
+     */
+    insertCommand(commandType, insertIndex) {
+        const definition = window.CommandUtils?.findCommandDefinition(commandType);
+        if (!definition) return;
+
+        const newCommand = {
+            type: commandType,
+            params: {}
+        };
+
+        definition.params.forEach(param => {
+            newCommand.params[param.name] = param.default || '';
+        });
+
+        this.commands.splice(insertIndex, 0, newCommand);
+        this.renderBlocks();
+        this.setupBlockModeListeners();
+        this.triggerChange();
     }
 
     /**
@@ -336,16 +492,24 @@ class BlockModeEditor {
     toString() {
         const lines = [...this.headerLines]; // 复制头部内容
 
-        // 添加步骤
-        this.commands.forEach(command => {
-            const definition = window.CommandUtils?.findCommandDefinition(command.type);
-            if (definition) {
-                const tksCommand = definition.tksCommand || command.type;
-                const paramValues = definition.params.map(p => command.params[p.name] || '').filter(v => v);
-                const paramStr = paramValues.join(', ');
-                lines.push(`    ${tksCommand} [${paramStr}]`);
+        // 如果有命令但没有"步骤:"行,在末尾添加"步骤:"
+        if (this.commands.length > 0) {
+            const hasStepsLine = lines.some(line => line.trim() === '步骤:');
+            if (!hasStepsLine) {
+                lines.push('步骤:');
             }
-        });
+
+            // 添加命令
+            this.commands.forEach(command => {
+                const definition = window.CommandUtils?.findCommandDefinition(command.type);
+                if (definition) {
+                    const tksCommand = definition.tksCommand || command.type;
+                    const paramValues = definition.params.map(p => command.params[p.name] || '').filter(v => v);
+                    const paramStr = paramValues.join(', ');
+                    lines.push(`    ${tksCommand} [${paramStr}]`);
+                }
+            });
+        }
 
         return lines.join('\n');
     }
