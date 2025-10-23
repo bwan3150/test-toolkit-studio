@@ -9,6 +9,36 @@ class ScriptRunner {
     }
 
     /**
+     * 更新Run Test按钮状态
+     */
+    updateRunButton(isRunning) {
+        const runTestBtn = document.getElementById('runTestBtn');
+        if (!runTestBtn) return;
+
+        if (isRunning) {
+            // 变为Stop Test按钮
+            runTestBtn.innerHTML = `
+                <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path d="M6 6h12v12H6z" />
+                </svg>
+                Stop Test
+            `;
+            runTestBtn.classList.remove('btn-primary');
+            runTestBtn.classList.add('btn-danger');
+        } else {
+            // 恢复为Run Test按钮
+            runTestBtn.innerHTML = `
+                <svg class="btn-icon" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+                Run Test
+            `;
+            runTestBtn.classList.remove('btn-danger');
+            runTestBtn.classList.add('btn-primary');
+        }
+    }
+
+    /**
      * 运行当前编辑器中的脚本
      */
     async runCurrentScript() {
@@ -87,6 +117,9 @@ class ScriptRunner {
         this.shouldStop = false;
         this.currentLineIndex = 0;
         const startTime = Date.now();
+
+        // 更新按钮为Stop Test
+        this.updateRunButton(true);
 
         // 输出脚本开始执行
         window.ExecutionOutput?.scriptStart();
@@ -199,6 +232,9 @@ class ScriptRunner {
             editor.unlock?.();
             window.StatusBarModule?.updateEditorMode('block', 'idle');
 
+            // 恢复按钮为Run Test
+            this.updateRunButton(false);
+
             // 重置运行状态
             this.isRunning = false;
             this.shouldStop = false;
@@ -212,6 +248,17 @@ class ScriptRunner {
         if (this.isRunning) {
             window.rLog('请求停止脚本执行');
             this.shouldStop = true;
+
+            // 立即解锁编辑器并恢复状态栏
+            const editor = window.EditorManager?.getActiveEditor();
+            if (editor) {
+                editor.unlock?.();
+                editor.setTestRunning?.(false, false); // 保持高亮
+            }
+            window.StatusBarModule?.updateEditorMode('block', 'idle');
+
+            // 恢复按钮为Run Test
+            this.updateRunButton(false);
         }
     }
 

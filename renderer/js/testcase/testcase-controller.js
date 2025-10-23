@@ -20,9 +20,16 @@ function initializeTestcasePage() {
     // 绑定 Run Test 按钮
     if (runTestBtn) {
         runTestBtn.addEventListener('click', async () => {
-            window.rLog('Run Test 按钮点击');
             if (window.ScriptRunner) {
-                await window.ScriptRunner.runCurrentScript();
+                if (window.ScriptRunner.isRunning) {
+                    // 当前正在运行，点击停止
+                    window.rLog('Stop Test 按钮点击');
+                    window.ScriptRunner.stop();
+                } else {
+                    // 当前空闲，点击运行
+                    window.rLog('Run Test 按钮点击');
+                    await window.ScriptRunner.runCurrentScript();
+                }
             } else {
                 window.rError('ScriptRunner 模块未加载');
             }
