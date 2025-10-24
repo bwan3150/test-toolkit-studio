@@ -160,17 +160,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 加载拆分的 testcase 子模块
         await loadScript('../js/testcase/explorer/testcase-explorer.js');
         await loadScript('../js/testcase/explorer/context-menu-actions.js'); // 右键菜单操作
-        await loadScript('../js/testcase/screen/device-screen-manager.js');
+
+        // 加载设备屏幕管理器的子模块(必须在 device-screen-manager.js 之前加载)
+        await loadScript('../js/testcase/screen/device-manager/screen-state.js');
+        await loadScript('../js/testcase/screen/device-manager/screen-capture.js');
+        await loadScript('../js/testcase/screen/device-manager/ui-extractor.js');
+        await loadScript('../js/testcase/screen/device-manager/xml-overlay.js');
+        await loadScript('../js/testcase/screen/device-manager/overlay-renderer.js');
+        // 加载设备屏幕管理器主控制器
+        await loadScript('../js/testcase/screen/device-manager/device-screen-manager.js');
 
         // 加载屏幕模式管理器的子模块(必须在 screen-mode-manager.js 之前加载)
-        await loadScript('../js/testcase/screen/coordinate-converter.js');
-        await loadScript('../js/testcase/screen/mode-slider.js');
-        await loadScript('../js/testcase/screen/mode-switcher.js');
-        await loadScript('../js/testcase/screen/screenshot-selector.js');
-        await loadScript('../js/testcase/screen/coordinate-mode.js');
-
+        await loadScript('../js/testcase/screen/mode-manager/coordinate-converter.js');
+        await loadScript('../js/testcase/screen/mode-manager/mode-slider.js');
+        await loadScript('../js/testcase/screen/mode-manager/mode-switcher.js');
+        await loadScript('../js/testcase/screen/mode-manager/screenshot-selector.js');
+        await loadScript('../js/testcase/screen/mode-manager/coordinate-mode.js');
         // 加载屏幕模式管理器主控制器
-        await loadScript('../js/testcase/screen/screen-mode-manager.js');
+        await loadScript('../js/testcase/screen/mode-manager/screen-mode-manager.js');
 
         // 加载主控制器（依赖上面的子模块）
         await loadScript('../js/testcase/testcase-controller.js');
