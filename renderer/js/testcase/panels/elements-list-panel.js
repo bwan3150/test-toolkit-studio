@@ -11,11 +11,8 @@ const ElementsListPanel = {
         document.addEventListener('uiElementsUpdated', (event) => {
             this.updateElements(event.detail.elements);
 
-            // 确保底部面板展开并切换到UI元素Tab
-            if (window.BottomPanelManager) {
-                window.BottomPanelManager.expand();
-                window.BottomPanelManager.switchTab('elements-list');
-            }
+            // 不再自动切换tab,让用户保持在当前tab
+            // 只更新元素列表数据,不干扰用户的工作流程
         });
 
         // 初始渲染空状态

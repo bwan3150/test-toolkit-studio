@@ -93,28 +93,7 @@ async fn main() -> tke::Result<()> {
 
     // 对于 ADB/AAPT 直通命令，完全跳过日志初始化和项目信息输出
     let project_path = if !is_passthrough_command {
-        // 初始化日志
-        let level = if cli.verbose {
-            tracing::Level::DEBUG
-        } else {
-            tracing::Level::INFO
-        };
-
-        tracing_subscriber::registry()
-            .with(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| format!("{}", level).into()),
-            )
-            .with(tracing_subscriber::fmt::layer())
-            .init();
-
-        // 获取项目路径
-        let project_path = cli.project.unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        });
-
-        // 对于输出JSON的命令,完全静默,不输出任何日志
-        // 包括: Fetcher、Parser、OCR、Controller、Recognizer、Run
+        // 检查是否是JSON输出命令
         let is_json_output_command = matches!(
             cli.command,
             Commands::Fetcher { .. } |
@@ -123,6 +102,40 @@ async fn main() -> tke::Result<()> {
             Commands::Recognizer { .. } |
             Commands::Run { .. }
         );
+
+        // 初始化日志
+        let level = if cli.verbose {
+            tracing::Level::DEBUG
+        } else {
+            tracing::Level::INFO
+        };
+
+        // 对于JSON输出命令,将所有日志输出到stderr,保持stdout纯净
+        if is_json_output_command {
+            tracing_subscriber::registry()
+                .with(
+                    tracing_subscriber::EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| format!("{}", level).into()),
+                )
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .with_writer(std::io::stderr) // 输出到stderr
+                )
+                .init();
+        } else {
+            tracing_subscriber::registry()
+                .with(
+                    tracing_subscriber::EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| format!("{}", level).into()),
+                )
+                .with(tracing_subscriber::fmt::layer())
+                .init();
+        }
+
+        // 获取项目路径
+        let project_path = cli.project.unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        });
 
         if !is_json_output_command {
             info!("项目路径: {:?}", project_path);
