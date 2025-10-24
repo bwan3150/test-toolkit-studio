@@ -654,29 +654,75 @@
 }
 
 
-/* 块执行高亮样式 */
-.workspace-block.command-block.executing-block {
-    animation: pulse-executing 1.5s ease-in-out infinite;
-    box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
-    z-index: 10;
+/* 块执行高亮样式 - 使用左侧指示条而不是包围整个块 */
+.workspace-block.command-block.executing-block::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: linear-gradient(180deg, #ffc107 0%, #ff9800 100%);
+    border-radius: 8px 0 0 8px;
+    animation: pulse-indicator-executing 1.2s ease-in-out infinite;
+    z-index: 2;
 }
 
-@keyframes pulse-executing {
+.workspace-block.command-block.executing-block {
+    padding-left: 22px; /* 为指示条留出空间 */
+    box-shadow: 0 2px 12px rgba(255, 193, 7, 0.35);
+    z-index: 10;
+    position: relative;
+}
+
+@keyframes pulse-indicator-executing {
     0% {
-        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
+        opacity: 0.7;
+        width: 5px;
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.6);
     }
     50% {
-        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.8), 0 6px 16px rgba(255, 193, 7, 0.3);
+        opacity: 1;
+        width: 8px;
+        box-shadow: 0 0 20px rgba(255, 193, 7, 1);
     }
     100% {
-        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
+        opacity: 0.7;
+        width: 5px;
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.6);
     }
 }
 
-/* 块错误高亮样式 */
+/* 块错误高亮样式 - 使用左侧红色指示条 */
+.workspace-block.command-block.error-block::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: linear-gradient(180deg, #dc3545 0%, #c82333 100%);
+    border-radius: 8px 0 0 8px;
+    box-shadow: 0 0 12px rgba(220, 53, 69, 0.8);
+    z-index: 2;
+}
+
 .workspace-block.command-block.error-block {
-    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.6), 0 4px 12px rgba(220, 53, 69, 0.3);
+    padding-left: 22px; /* 为指示条留出空间 */
+    box-shadow: 0 2px 12px rgba(220, 53, 69, 0.4);
     z-index: 10;
+    position: relative;
+}
+
+/* 锁定状态 - 只让非高亮的块变暗 */
+.blocks-container.locked .workspace-block.command-block:not(.executing-block):not(.error-block) {
+    opacity: 0.5;
+}
+
+/* 锁定状态下,高亮的块保持完全可见 */
+.blocks-container.locked .workspace-block.command-block.executing-block,
+.blocks-container.locked .workspace-block.command-block.error-block {
+    opacity: 1;
 }
 
 /* 旧的高亮样式（保留兼容性）*/

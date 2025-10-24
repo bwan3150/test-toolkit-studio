@@ -832,7 +832,7 @@ class BlockModeEditor {
      */
     lock() {
         if (this.blocksContainer) {
-            this.blocksContainer.style.opacity = '0.6';
+            this.blocksContainer.classList.add('locked');
             this.blocksContainer.style.pointerEvents = 'none';
         }
         window.rLog('块编辑器已锁定');
@@ -843,7 +843,7 @@ class BlockModeEditor {
      */
     unlock() {
         if (this.blocksContainer) {
-            this.blocksContainer.style.opacity = '1';
+            this.blocksContainer.classList.remove('locked');
             this.blocksContainer.style.pointerEvents = 'auto';
         }
         window.rLog('块编辑器已解锁');
