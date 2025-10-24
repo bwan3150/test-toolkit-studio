@@ -133,7 +133,7 @@ const BlockUIBuilder = {
                     <svg width="48" height="48" viewBox="0 0 48 48" opacity="0.3">
                         <path fill="currentColor" d="M38 8H10c-2.21 0-4 1.79-4 4v24c0 2.21 1.79 4 4 4h28c2.21 0 4-1.79 4-4V12c0-2.21-1.79-4-4-4z"/>
                     </svg>
-                    <p>在左侧Explorer中点击脚本后开始编辑</p>
+                    <p>点击下方 ⊕ 按钮添加一个脚本块</p>
                 </div>
                 ${finalInsertButton}
             `;

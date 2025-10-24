@@ -23,6 +23,10 @@ class DualModeEditor {
         this.textContainer = null;
         this.blockContainer = null;
 
+        // 高亮状态追踪(用于模式切换时保持高亮)
+        this.currentHighlightedLine = null; // 当前高亮的行号(1-based)
+        this.currentHighlightType = null; // 'executing' 或 'error'
+
         window.rLog(`DualModeEditor 创建: ${filePath}`);
     }
 
@@ -64,11 +68,13 @@ class DualModeEditor {
         this.textContainer = document.createElement('div');
         this.textContainer.className = 'editor-mode-container text-mode-container';
         this.textContainer.style.display = 'none';
+        this.textContainer.style.height = '100%';
         this.container.appendChild(this.textContainer);
 
         // 块编辑器容器
         this.blockContainer = document.createElement('div');
         this.blockContainer.className = 'editor-mode-container block-mode-container';
+        this.blockContainer.style.height = '100%';
         this.container.appendChild(this.blockContainer);
     }
 
@@ -82,6 +88,16 @@ class DualModeEditor {
         this.blockContainer.style.display = 'none';
         this.textContainer.style.display = 'block';
         window.StatusBarModule?.updateEditorMode('text', 'idle');
+
+        // 恢复高亮状态
+        if (this.currentHighlightedLine !== null && this.textEditor) {
+            if (this.currentHighlightType === 'executing') {
+                this.textEditor.highlightExecutingLine(this.currentHighlightedLine);
+            } else if (this.currentHighlightType === 'error') {
+                this.textEditor.highlightErrorLine(this.currentHighlightedLine);
+            }
+            window.rLog(`文本模式恢复高亮: 行${this.currentHighlightedLine}, 类型${this.currentHighlightType}`);
+        }
 
         // 聚焦文本编辑器
         if (this.textEditor) {
@@ -105,7 +121,26 @@ class DualModeEditor {
         this.textContainer.style.display = 'none';
         this.blockContainer.style.display = 'block';
         window.StatusBarModule?.updateEditorMode('block', 'idle');
+
+        // 恢复高亮状态
+        if (this.currentHighlightedLine !== null && this.blockEditor) {
+            if (this.currentHighlightType === 'executing') {
+                this.blockEditor.highlightExecutingLine(this.currentHighlightedLine);
+            } else if (this.currentHighlightType === 'error') {
+                this.blockEditor.highlightErrorLine(this.currentHighlightedLine);
+            }
+            window.rLog(`块模式恢复高亮: 行${this.currentHighlightedLine}, 类型${this.currentHighlightType}`);
+        }
+
         window.rLog('切换到块模式');
+        window.rLog('blockContainer display:', this.blockContainer.style.display);
+        window.rLog('blockContainer 可见:', this.blockContainer.offsetHeight > 0);
+
+        // 检查子元素
+        const blocksContainer = this.blockContainer.querySelector('.blocks-container');
+        window.rLog('blocksContainer 找到:', !!blocksContainer);
+        window.rLog('blocksContainer display:', blocksContainer?.style.display);
+        window.rLog('blocksContainer innerHTML长度:', blocksContainer?.innerHTML.length);
     }
 
     /**
@@ -189,26 +224,45 @@ class DualModeEditor {
      * 高亮正在执行的行
      */
     highlightExecutingLine(lineNumber) {
+        // 保存高亮状态(用于模式切换时恢复)
+        this.currentHighlightedLine = lineNumber;
+        this.currentHighlightType = 'executing';
+
         const currentEditor = this.getCurrentEditor();
         if (currentEditor && currentEditor.highlightExecutingLine) {
             currentEditor.highlightExecutingLine(lineNumber);
         }
+
+        window.rLog(`DualModeEditor: 保存执行高亮状态 - 行${lineNumber}`);
     }
 
     /**
      * 高亮错误行
      */
     highlightErrorLine(lineNumber) {
+        // 保存高亮状态(用于模式切换时恢复)
+        this.currentHighlightedLine = lineNumber;
+        this.currentHighlightType = 'error';
+
         const currentEditor = this.getCurrentEditor();
         if (currentEditor && currentEditor.highlightErrorLine) {
             currentEditor.highlightErrorLine(lineNumber);
         }
+
+        window.rLog(`DualModeEditor: 保存错误高亮状态 - 行${lineNumber}`);
     }
 
     /**
      * 设置测试运行状态
      */
     setTestRunning(isRunning, clearHighlight) {
+        // 如果需要清除高亮,也要清除保存的状态
+        if (clearHighlight) {
+            this.currentHighlightedLine = null;
+            this.currentHighlightType = null;
+            window.rLog('DualModeEditor: 清除高亮状态');
+        }
+
         if (this.textEditor && this.textEditor.setTestRunning) {
             this.textEditor.setTestRunning(isRunning, clearHighlight);
         }

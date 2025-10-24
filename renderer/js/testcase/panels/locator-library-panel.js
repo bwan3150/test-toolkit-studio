@@ -353,9 +353,13 @@ const LocatorLibraryPanel = {
             if (type === 'image') {
                 // 图片元素：@{图片名称}
                 e.dataTransfer.setData('text/plain', `@{${name}}`);
+                // 设置专门的类型标识用于块编辑器识别
+                e.dataTransfer.setData('application/x-locator-image', name);
             } else {
                 // XML元素：{元素名称}
                 e.dataTransfer.setData('text/plain', `{${name}}`);
+                // 设置专门的类型标识用于块编辑器识别
+                e.dataTransfer.setData('application/x-locator-xml', name);
             }
 
             // 设置JSON格式数据供编辑器使用
@@ -367,6 +371,7 @@ const LocatorLibraryPanel = {
             }));
 
             card.style.opacity = '0.5';
+            window.rLog(`开始拖拽${type === 'image' ? '图片' : 'XML'}元素: ${name}`);
         });
 
         card.addEventListener('dragend', (e) => {

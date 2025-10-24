@@ -48,23 +48,68 @@
 }
 
 .line-numbers {
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    padding: 16px 8px;
-    font-family: var(--font-mono);
+    background: #2d2d30;
+    color: #858585;
+    padding: 10px 8px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
     font-size: 14px;
-    line-height: 21px;
+    line-height: 1.6;
     text-align: right;
     user-select: none;
-    border-right: 1px solid var(--border-color);
-    overflow: hidden;
+    border-right: 1px solid #1e1e1e;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 50px;
+    box-sizing: border-box;
 }
 
 .line-number {
-    height: 21px;
+    height: 22.4px; /* 14px * 1.6 = 22.4px */
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    position: relative;
+    padding-right: 4px;
+    transition: background 0.2s ease;
+}
+
+/* 可执行行的样式 */
+.line-number.executable {
+    cursor: pointer;
+}
+
+.line-number.executable:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 行号文本 */
+.line-number-text {
+    display: inline-block;
+    min-width: 20px;
+    text-align: right;
+    transition: opacity 0.2s ease;
+}
+
+/* 播放按钮 - 默认隐藏 */
+.line-play-button {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #4CAF50;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+/* hover时显示播放按钮,隐藏数字 */
+.line-number.executable:hover .line-number-text {
+    opacity: 0;
+}
+
+.line-number.executable:hover .line-play-button {
+    opacity: 1;
 }
 
 .text-content {
@@ -181,6 +226,73 @@
     display: flex;
     flex-direction: column;
     background: var(--bg-primary);
+}
+
+/* 块编辑器包裹器 */
+.block-editor-wrapper {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* 块号容器 */
+.block-numbers {
+    background: #2d2d30;
+    color: #858585;
+    padding: 16px 8px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    text-align: right;
+    user-select: none;
+    border-right: 1px solid #1e1e1e;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 50px;
+    box-sizing: border-box;
+}
+
+.block-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding-right: 4px;
+    transition: background 0.2s ease;
+    cursor: pointer;
+}
+
+.block-number:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 块号文本 */
+.block-number-text {
+    display: inline-block;
+    min-width: 20px;
+    text-align: right;
+    transition: opacity 0.2s ease;
+}
+
+/* 播放按钮 - 默认隐藏 */
+.block-play-button {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #4CAF50;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+/* hover时显示播放按钮,隐藏数字 */
+.block-number:hover .block-number-text {
+    opacity: 0;
+}
+
+.block-number:hover .block-play-button {
+    opacity: 1;
 }
 
 .blocks-container {
@@ -382,10 +494,9 @@
 }
 
 .workspace-block.command-block.dragging {
-    opacity: 0.5;
-    transform: rotate(5deg);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
+    opacity: 0.4;
+    transform: scale(0.95);
+    box-shadow: 0 0 0 2px var(--accent-color);
 }
 
 /* 拖拽插入提示横杠 - 独立元素 */
@@ -397,7 +508,7 @@
     background: linear-gradient(90deg, #ffc107, #ffeb3b, #ffc107);
     border-radius: 2px;
     box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
-    z-index: 999;
+    z-index: 1001;
     animation: drag-hint-glow 1s ease-in-out infinite alternate;
     pointer-events: none;
 }
@@ -467,6 +578,59 @@
     color: #666666;
     font-style: italic;
     font-size: 11px;
+}
+
+/* 可视化元素卡片样式 */
+.param-visual-card {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 3px 6px;
+    gap: 4px;
+    margin: 0 4px;
+    max-width: 150px;
+    transition: all 0.2s ease;
+}
+
+.param-visual-card.drag-over {
+    outline: 2px dashed rgba(0, 123, 255, 0.8);
+    outline-offset: 2px;
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.param-visual-card .visual-name {
+    color: #333;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.param-visual-card .visual-remove-btn {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    color: #ff4444;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.param-visual-card .visual-remove-btn:hover {
+    background: rgba(255, 0, 0, 0.3);
+    transform: scale(1.1);
 }
 
 /* 可视化元素容器样式 */
@@ -602,19 +766,78 @@
 }
 
 
-/* 块高亮动画效果 */
-@keyframes pulse-executing {
+/* 块执行高亮样式 - 使用左侧指示条而不是包围整个块 */
+.workspace-block.command-block.executing-block::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: linear-gradient(180deg, #ffc107 0%, #ff9800 100%);
+    border-radius: 8px 0 0 8px;
+    animation: pulse-indicator-executing 1.2s ease-in-out infinite;
+    z-index: 2;
+}
+
+.workspace-block.command-block.executing-block {
+    padding-left: 22px; /* 为指示条留出空间 */
+    box-shadow: 0 2px 12px rgba(255, 193, 7, 0.35);
+    z-index: 10;
+    position: relative;
+}
+
+@keyframes pulse-indicator-executing {
     0% {
-        transform: scale(1);
+        opacity: 0.7;
+        width: 5px;
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.6);
     }
     50% {
-        transform: scale(1.01);
+        opacity: 1;
+        width: 8px;
+        box-shadow: 0 0 20px rgba(255, 193, 7, 1);
     }
     100% {
-        transform: scale(1);
+        opacity: 0.7;
+        width: 5px;
+        box-shadow: 0 0 10px rgba(255, 193, 7, 0.6);
     }
 }
 
+/* 块错误高亮样式 - 使用左侧红色指示条 */
+.workspace-block.command-block.error-block::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: linear-gradient(180deg, #dc3545 0%, #c82333 100%);
+    border-radius: 8px 0 0 8px;
+    box-shadow: 0 0 12px rgba(220, 53, 69, 0.8);
+    z-index: 2;
+}
+
+.workspace-block.command-block.error-block {
+    padding-left: 22px; /* 为指示条留出空间 */
+    box-shadow: 0 2px 12px rgba(220, 53, 69, 0.4);
+    z-index: 10;
+    position: relative;
+}
+
+/* 锁定状态 - 只让非高亮的块变暗 */
+.blocks-container.locked .workspace-block.command-block:not(.executing-block):not(.error-block) {
+    opacity: 0.5;
+}
+
+/* 锁定状态下,高亮的块保持完全可见 */
+.blocks-container.locked .workspace-block.command-block.executing-block,
+.blocks-container.locked .workspace-block.command-block.error-block {
+    opacity: 1;
+}
+
+/* 旧的高亮样式（保留兼容性）*/
 .block-highlight-overlay {
     border-radius: 10px;
 }

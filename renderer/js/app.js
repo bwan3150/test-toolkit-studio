@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/testcase/codejar/codejar.js'); // CodeJar 核心库
         await loadScript('../js/testcase/codejar/tks-syntax-highlighter.js'); // TKS 语法高亮
         await loadScript('../js/testcase/codejar/execution-highlighter.js'); // 执行高亮控制器
+        await loadScript('../js/testcase/codejar/line-number-controller.js'); // 行号控制器
 
         // 验证 ExecutionHighlighter 是否加载成功
         window.rLog('ExecutionHighlighter 加载检查:', {
@@ -126,6 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/testcase/codejar/block-mode/block-ui-builder.js');
         await loadScript('../js/testcase/codejar/block-mode/block-ui-drag.js');
         await loadScript('../js/testcase/codejar/block-mode/block-ui-menus.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-number-controller.js');
 
         // 加载块模式编辑器和双模式编辑器
         await loadScript('../js/testcase/codejar/block-mode-editor.js');
