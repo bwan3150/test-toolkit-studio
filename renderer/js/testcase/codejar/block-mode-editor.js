@@ -113,8 +113,8 @@ class BlockModeEditor {
      * 解析单行命令
      */
     parseCommandLine(line) {
-        // 匹配命令模式: 命令 [参数1, 参数2, ...]
-        const match = line.match(/^(\S+)\s+\[(.+)\]$/);
+        // 匹配命令模式: 命令 [参数1, 参数2, ...] 或 命令 []
+        const match = line.match(/^(\S+)\s+\[(.*)\]$/);
         if (!match) {
             window.rError('无法解析命令行:', line);
             return null;
@@ -130,8 +130,8 @@ class BlockModeEditor {
             return null;
         }
 
-        // 解析参数
-        const paramValues = this.parseParams(paramsStr);
+        // 解析参数（允许空参数）
+        const paramValues = paramsStr ? this.parseParams(paramsStr) : [];
 
         // 构建命令对象
         const params = {};
@@ -280,9 +280,6 @@ class BlockModeEditor {
                         display: flex; flex-direction: column; align-items: center; justify-content: center;
                         padding: 40px; box-sizing: border-box;">
                 <div style="text-align: center; margin-bottom: 32px;">
-                    <svg width="64" height="64" viewBox="0 0 48 48" opacity="0.3" style="margin-bottom: 16px;">
-                        <path fill="currentColor" d="M38 8H10c-2.21 0-4 1.79-4 4v24c0 2.21 1.79 4 4 4h28c2.21 0 4-1.79 4-4V12c0-2.21-1.79-4-4-4z"/>
-                    </svg>
                     <p style="font-size: 16px; color: var(--text-secondary); margin: 0;">点击下方 ⊕ 按钮添加脚本块</p>
                 </div>
                 <button class="block-insert-btn" id="addFirstBlockBtn" title="添加脚本块">
