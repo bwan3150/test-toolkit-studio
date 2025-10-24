@@ -236,7 +236,52 @@ class BlockModeEditor {
                             ${optionsHtml}
                         </select>
                     `;
+                } else if (param.type === 'element') {
+                    // element 类型参数，检查是否已填入元素
+                    const imageMatch = value.match(/^@\{(.+)\}$/);
+                    const xmlMatch = value.match(/^\{(.+)\}$/);
+
+                    if (imageMatch || xmlMatch) {
+                        // 已填入元素，显示可视化卡片
+                        const elementName = imageMatch ? imageMatch[1] : xmlMatch[1];
+                        const isImage = !!imageMatch;
+
+                        if (isImage) {
+                            // 图片元素 - 显示图片预览
+                            commandContent += `
+                                <div class="param-visual-card" data-param="${param.name}" data-command-index="${index}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;">
+                                        <rect x="3" y="3" width="18" height="18" fill="#4a90e2" opacity="0.2" rx="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5" fill="#4a90e2"/>
+                                        <path d="M3 17l4-4 3 3 6-6 5 5v3H3v-1z" fill="#4a90e2"/>
+                                    </svg>
+                                    <span class="visual-name">${elementName}</span>
+                                    <button class="visual-remove-btn" data-param="${param.name}" data-command-index="${index}" title="移除">×</button>
+                                </div>
+                            `;
+                        } else {
+                            // XML元素 - 显示{}图标
+                            commandContent += `
+                                <div class="param-visual-card" data-param="${param.name}" data-command-index="${index}">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;">
+                                        <path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
+                                    </svg>
+                                    <span class="visual-name">${elementName}</span>
+                                    <button class="visual-remove-btn" data-param="${param.name}" data-command-index="${index}" title="移除">×</button>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        // 未填入元素，显示普通输入框
+                        commandContent += `
+                            <input class="param-hole" id="${paramId}" type="text"
+                                   data-param="${param.name}" data-command-index="${index}"
+                                   data-param-type="element"
+                                   placeholder="${param.placeholder}" value="${value}">
+                        `;
+                    }
                 } else {
+                    // 其他类型参数
                     commandContent += `
                         <input class="param-hole" id="${paramId}" type="${param.type === 'number' ? 'number' : 'text'}"
                                data-param="${param.name}" data-command-index="${index}"
@@ -378,6 +423,22 @@ class BlockModeEditor {
             });
         });
 
+        // 监听可视化元素移除按钮
+        this.blocksContainer.querySelectorAll('.visual-remove-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const commandIndex = parseInt(btn.dataset.commandIndex);
+                const paramName = btn.dataset.param;
+
+                if (this.commands[commandIndex]) {
+                    this.commands[commandIndex].params[paramName] = '';
+                    this.renderBlocks();
+                    this.setupBlockModeListeners();
+                    this.triggerChange();
+                }
+            });
+        });
+
         // 设置拖拽排序（脚本块之间）
         this.setupDragAndDrop();
 
@@ -424,14 +485,8 @@ class BlockModeEditor {
 
             const afterElement = this.getDragAfterElement(e.clientY);
 
-            if (afterElement) {
-                this.blocksContainer.insertBefore(draggingBlock, afterElement);
-            } else {
-                this.blocksContainer.appendChild(draggingBlock);
-            }
-
-            // 在移动后显示插入提示线（显示在被拖拽块上方）
-            this.showDragInsertIndicator(draggingBlock);
+            // 只显示插入提示线，不实际移动DOM（避免频繁重渲染导致抖动）
+            this.showDragInsertIndicatorAtTarget(afterElement);
         });
 
         this.blocksContainer.addEventListener('drop', (e) => {
@@ -446,18 +501,36 @@ class BlockModeEditor {
             e.stopPropagation();
             this.clearDragInsertIndicator();
 
-            // 重新构建commands数组
-            const newCommands = [];
-            this.blocksContainer.querySelectorAll('.workspace-block.command-block').forEach(block => {
-                const index = parseInt(block.dataset.index);
-                if (this.commands[index]) {
-                    newCommands.push(this.commands[index]);
-                }
-            });
-            this.commands.splice(0, this.commands.length, ...newCommands);
-            this.renderBlocks();
-            this.setupBlockModeListeners();
-            this.triggerChange();
+            const draggingBlock = this.blocksContainer.querySelector('.dragging');
+            if (!draggingBlock) return;
+
+            const fromIndex = parseInt(draggingBlock.dataset.index);
+            const afterElement = this.getDragAfterElement(e.clientY);
+
+            // 计算目标插入位置
+            let toIndex;
+            if (afterElement) {
+                toIndex = parseInt(afterElement.dataset.index);
+            } else {
+                toIndex = this.commands.length;
+            }
+
+            // 调整索引（如果从前往后拖，需要减1）
+            if (fromIndex < toIndex) {
+                toIndex--;
+            }
+
+            // 移动命令
+            if (fromIndex !== toIndex) {
+                const [movedCommand] = this.commands.splice(fromIndex, 1);
+                this.commands.splice(toIndex, 0, movedCommand);
+
+                this.renderBlocks();
+                this.setupBlockModeListeners();
+                this.triggerChange();
+
+                window.rLog(`脚本块从位置 ${fromIndex} 移动到 ${toIndex}`);
+            }
         });
     }
 
@@ -465,12 +538,12 @@ class BlockModeEditor {
      * 设置元素拖拽到参数孔（仅处理元素到参数的拖拽）
      */
     setupElementDrop() {
-        // 为所有 element 类型的参数孔设置拖拽接收
-        const elementHoles = this.blocksContainer.querySelectorAll('.param-hole[data-param-type="element"]');
+        // 为所有 element 类型的参数孔和可视化卡片设置拖拽接收
+        const elementTargets = this.blocksContainer.querySelectorAll('.param-hole[data-param-type="element"], .param-visual-card');
 
-        elementHoles.forEach(hole => {
+        elementTargets.forEach(target => {
             // dragover - 允许放置
-            hole.addEventListener('dragover', (e) => {
+            target.addEventListener('dragover', (e) => {
                 // 检查是否是元素拖拽（不是脚本块拖拽）
                 const types = e.dataTransfer.types;
                 if (types.includes('application/x-script-block')) {
@@ -482,18 +555,17 @@ class BlockModeEditor {
                 if (types.includes('application/x-locator-image') || types.includes('application/x-locator-xml')) {
                     e.preventDefault();
                     e.stopPropagation();
-                    hole.classList.add('drag-over');
-                    window.rLog('元素悬停在参数孔上');
+                    target.classList.add('drag-over');
                 }
             });
 
             // dragleave - 移除高亮
-            hole.addEventListener('dragleave', (e) => {
-                hole.classList.remove('drag-over');
+            target.addEventListener('dragleave', (e) => {
+                target.classList.remove('drag-over');
             });
 
             // drop - 接收元素
-            hole.addEventListener('drop', (e) => {
+            target.addEventListener('drop', (e) => {
                 // 检查是否是脚本块拖拽
                 const types = e.dataTransfer.types;
                 if (types.includes('application/x-script-block')) {
@@ -516,11 +588,11 @@ class BlockModeEditor {
                 if (elementData) {
                     e.preventDefault();
                     e.stopPropagation();
-                    hole.classList.remove('drag-over');
+                    target.classList.remove('drag-over');
 
                     // 更新参数值
-                    const commandIndex = parseInt(hole.dataset.commandIndex);
-                    const paramName = hole.dataset.param;
+                    const commandIndex = parseInt(target.dataset.commandIndex);
+                    const paramName = target.dataset.param;
 
                     if (this.commands[commandIndex]) {
                         // 格式：图片用 @{name}，XML元素用 {name}
@@ -540,34 +612,47 @@ class BlockModeEditor {
     }
 
     /**
-     * 显示拖拽插入提示线（在被拖拽块的上方）
+     * 显示拖拽插入提示线（根据目标位置）
      */
-    showDragInsertIndicator(draggingBlock) {
-        // 清除旧的提示线
-        this.clearDragInsertIndicator();
-
-        const indicator = document.createElement('div');
-        indicator.className = 'drag-insert-indicator';
-        indicator.id = 'drag-insert-indicator';
-
+    showDragInsertIndicatorAtTarget(afterElement) {
         const containerRect = this.blocksContainer.getBoundingClientRect();
-        const draggingRect = draggingBlock.getBoundingClientRect();
-
-        // 获取被拖拽块的上一个元素
-        const prevElement = draggingBlock.previousElementSibling;
         let top;
 
-        if (prevElement && prevElement.classList.contains('command-block') && !prevElement.classList.contains('dragging')) {
-            // 有上一个块，显示在两个块之间的中间位置
-            const prevRect = prevElement.getBoundingClientRect();
-            top = (prevRect.bottom + draggingRect.top) / 2 - containerRect.top;
+        if (afterElement) {
+            // 在afterElement上方显示
+            const rect = afterElement.getBoundingClientRect();
+            const prevElement = afterElement.previousElementSibling;
+
+            if (prevElement && prevElement.classList.contains('command-block') && !prevElement.classList.contains('dragging')) {
+                // 有上一个块（且不是正在拖拽的块），显示在中间
+                const prevRect = prevElement.getBoundingClientRect();
+                top = (prevRect.bottom + rect.top) / 2 - containerRect.top;
+            } else {
+                // 第一个位置
+                top = rect.top - containerRect.top - 4;
+            }
         } else {
-            // 第一个位置，显示在被拖拽块上方
-            top = draggingRect.top - containerRect.top - 4;
+            // 在最后显示
+            const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)');
+            if (blocks.length > 0) {
+                const lastBlock = blocks[blocks.length - 1];
+                const rect = lastBlock.getBoundingClientRect();
+                top = rect.bottom - containerRect.top + 4;
+            } else {
+                top = 8;
+            }
+        }
+
+        // 复用已存在的指示器，只更新位置（避免频繁创建/销毁DOM）
+        let indicator = this.blocksContainer.querySelector('#drag-insert-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'drag-insert-indicator';
+            indicator.id = 'drag-insert-indicator';
+            this.blocksContainer.appendChild(indicator);
         }
 
         indicator.style.top = `${top}px`;
-        this.blocksContainer.appendChild(indicator);
     }
 
     /**

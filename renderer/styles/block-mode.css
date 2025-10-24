@@ -468,6 +468,59 @@
     font-size: 11px;
 }
 
+/* 可视化元素卡片样式 */
+.param-visual-card {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 3px 6px;
+    gap: 4px;
+    margin: 0 4px;
+    max-width: 150px;
+    transition: all 0.2s ease;
+}
+
+.param-visual-card.drag-over {
+    outline: 2px dashed rgba(0, 123, 255, 0.8);
+    outline-offset: 2px;
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.param-visual-card .visual-name {
+    color: #333;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.param-visual-card .visual-remove-btn {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    color: #ff4444;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.param-visual-card .visual-remove-btn:hover {
+    background: rgba(255, 0, 0, 0.3);
+    transform: scale(1.1);
+}
+
 /* 可视化元素容器样式 */
 .param-hole-container {
     display: inline-flex;
