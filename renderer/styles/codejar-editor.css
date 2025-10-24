@@ -4,7 +4,7 @@
 
 /* 编辑器容器 */
 .codejar-editor {
-    width: 100%;
+    flex: 1;
     height: 100%;
     background: #1e1e1e;
     color: #d4d4d4;

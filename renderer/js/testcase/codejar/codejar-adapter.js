@@ -14,6 +14,7 @@ class CodeJarAdapter {
         this.eventHandlers = new Map();
         this.highlighter = null; // 执行高亮器
         this.editorDiv = null; // CodeJar 编辑器 div
+        this.lineNumberController = null; // 行号控制器
 
         window.rLog(`📝 CodeJarAdapter 创建: ${filePath}`);
     }
@@ -61,10 +62,25 @@ class CodeJarAdapter {
             window.rError('❌ ExecutionHighlighter 未正确加载:', typeof window.ExecutionHighlighter);
         }
 
-        // 4. 设置初始内容
+        // 5. 创建行号控制器
+        if (window.LineNumberController && typeof window.LineNumberController === 'function') {
+            try {
+                this.lineNumberController = new window.LineNumberController(
+                    this.editorDiv,
+                    this.handleLineExecute.bind(this)
+                );
+                window.rLog('✅ LineNumberController 创建成功');
+            } catch (error) {
+                window.rError('❌ LineNumberController 创建失败:', error);
+            }
+        } else {
+            window.rError('❌ LineNumberController 未正确加载');
+        }
+
+        // 6. 设置初始内容
         this.jar.updateCode(this.originalContent);
 
-        // 5. 监听内容变化
+        // 7. 监听内容变化
         this.jar.onUpdate(code => {
             this.onContentChange(code);
         });
@@ -248,6 +264,23 @@ class CodeJarAdapter {
     }
 
     /**
+     * 处理单行执行
+     * @param {number} lineNumber - 行号（1-based）
+     * @param {string} lineContent - 行内容
+     */
+    handleLineExecute(lineNumber, lineContent) {
+        window.rLog(`📍 CodeJarAdapter 收到单行执行请求: 行${lineNumber}`);
+
+        // 调用单行执行器
+        if (window.SingleLineRunner) {
+            window.SingleLineRunner.executeLine(lineNumber, lineContent);
+        } else {
+            window.rError('SingleLineRunner 未加载');
+            window.AppNotifications?.error('单行执行功能不可用');
+        }
+    }
+
+    /**
      * 事件监听
      */
     on(event, handler) {
@@ -272,6 +305,11 @@ class CodeJarAdapter {
      */
     destroy() {
         window.rLog('🗑️  销毁 CodeJar 编辑器');
+
+        if (this.lineNumberController) {
+            this.lineNumberController.destroy();
+            this.lineNumberController = null;
+        }
 
         if (this.highlighter) {
             this.highlighter.destroy();
