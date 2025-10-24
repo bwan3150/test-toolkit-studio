@@ -654,19 +654,32 @@
 }
 
 
-/* 块高亮动画效果 */
+/* 块执行高亮样式 */
+.workspace-block.command-block.executing-block {
+    animation: pulse-executing 1.5s ease-in-out infinite;
+    box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
 @keyframes pulse-executing {
     0% {
-        transform: scale(1);
+        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
     }
     50% {
-        transform: scale(1.01);
+        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.8), 0 6px 16px rgba(255, 193, 7, 0.3);
     }
     100% {
-        transform: scale(1);
+        box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
     }
 }
 
+/* 块错误高亮样式 */
+.workspace-block.command-block.error-block {
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.6), 0 4px 12px rgba(220, 53, 69, 0.3);
+    z-index: 10;
+}
+
+/* 旧的高亮样式（保留兼容性）*/
 .block-highlight-overlay {
     border-radius: 10px;
 }

@@ -15,6 +15,9 @@ class BlockModeEditor {
         // 编辑器状态
         this.commands = []; // 命令数组
         this.headerLines = []; // 文件头部内容（用例、脚本名、详情等）
+        this.isTestRunning = false; // 是否正在运行测试
+        this.currentHighlightedBlock = null; // 当前高亮的块索引（0-based）
+        this.highlightType = null; // 高亮类型：'executing' 或 'error'
 
         // DOM元素
         this.blocksContainer = null;
@@ -848,48 +851,128 @@ class BlockModeEditor {
 
     /**
      * 高亮正在执行的行
+     * @param {number} lineNumber - 行号（1-based，在完整脚本中的行号）
      */
     highlightExecutingLine(lineNumber) {
-        // 计算块索引（需要跳过头部行数）
-        const headerLineCount = this.headerLines.length;
-        const blockIndex = lineNumber - headerLineCount - 1;
+        window.rLog(`🔆 块模式高亮执行行: ${lineNumber}`);
 
-        if (blockIndex >= 0 && blockIndex < this.commands.length) {
-            const blockEl = this.blocksContainer.querySelector(`[data-index="${blockIndex}"]`);
-            if (blockEl) {
-                // 移除之前的高亮
-                this.blocksContainer.querySelectorAll('.executing-block').forEach(el => {
-                    el.classList.remove('executing-block');
-                });
-                blockEl.classList.add('executing-block');
-                blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+        // 计算块索引
+        const blockIndex = this.lineNumberToBlockIndex(lineNumber);
+
+        if (blockIndex === -1) {
+            window.rLog('行号不对应任何命令块');
+            return;
         }
+
+        // 保存当前高亮状态
+        this.currentHighlightedBlock = blockIndex;
+        this.highlightType = 'executing';
+
+        // 应用高亮
+        this.applyBlockHighlight(blockIndex, 'executing');
     }
 
     /**
      * 高亮错误行
+     * @param {number} lineNumber - 行号（1-based）
      */
     highlightErrorLine(lineNumber) {
-        const headerLineCount = this.headerLines.length;
-        const blockIndex = lineNumber - headerLineCount - 1;
+        window.rLog(`❌ 块模式高亮错误行: ${lineNumber}`);
+
+        const blockIndex = this.lineNumberToBlockIndex(lineNumber);
+
+        if (blockIndex === -1) {
+            window.rLog('行号不对应任何命令块');
+            return;
+        }
+
+        // 保存当前高亮状态
+        this.currentHighlightedBlock = blockIndex;
+        this.highlightType = 'error';
+
+        // 应用高亮
+        this.applyBlockHighlight(blockIndex, 'error');
+    }
+
+    /**
+     * 将行号转换为块索引
+     * @param {number} lineNumber - 行号（1-based）
+     * @returns {number} 块索引（0-based），如果不是命令行则返回-1
+     */
+    lineNumberToBlockIndex(lineNumber) {
+        // 找到"步骤:"所在的行号
+        let stepsLineNumber = -1;
+        for (let i = 0; i < this.headerLines.length; i++) {
+            if (this.headerLines[i].trim() === '步骤:') {
+                stepsLineNumber = i + 1; // 1-based
+                break;
+            }
+        }
+
+        if (stepsLineNumber === -1) {
+            window.rLog('未找到"步骤:"行');
+            return -1;
+        }
+
+        // 命令行从"步骤:"的下一行开始
+        const commandStartLine = stepsLineNumber + 1;
+        if (lineNumber < commandStartLine) {
+            return -1; // 在"步骤:"之前
+        }
+
+        const blockIndex = lineNumber - commandStartLine;
 
         if (blockIndex >= 0 && blockIndex < this.commands.length) {
-            const blockEl = this.blocksContainer.querySelector(`[data-index="${blockIndex}"]`);
-            if (blockEl) {
-                blockEl.classList.add('error-block');
-            }
+            return blockIndex;
+        }
+
+        return -1;
+    }
+
+    /**
+     * 应用块高亮
+     * @param {number} blockIndex - 块索引（0-based）
+     * @param {string} type - 高亮类型：'executing' 或 'error'
+     */
+    applyBlockHighlight(blockIndex, type) {
+        if (!this.blocksContainer) return;
+
+        // 移除之前的高亮
+        this.blocksContainer.querySelectorAll('.executing-block, .error-block').forEach(el => {
+            el.classList.remove('executing-block', 'error-block');
+        });
+
+        // 添加新高亮
+        const blockEl = this.blocksContainer.querySelector(`.command-block[data-index="${blockIndex}"]`);
+        if (blockEl) {
+            const className = type === 'executing' ? 'executing-block' : 'error-block';
+            blockEl.classList.add(className);
+
+            // 滚动到视图中心
+            blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            window.rLog(`✅ 块 ${blockIndex} 已高亮为 ${type}`);
+        } else {
+            window.rError(`未找到块元素: data-index="${blockIndex}"`);
         }
     }
 
     /**
      * 设置测试运行状态
+     * @param {boolean} isRunning - 是否正在运行
+     * @param {boolean} clearHighlight - 是否清除高亮
      */
     setTestRunning(isRunning, clearHighlight) {
+        window.rLog(`🎯 块模式设置测试运行状态: ${isRunning}, 清除高亮: ${clearHighlight}`);
+
+        this.isTestRunning = isRunning;
+
         if (clearHighlight && this.blocksContainer) {
             this.blocksContainer.querySelectorAll('.executing-block, .error-block').forEach(el => {
                 el.classList.remove('executing-block', 'error-block');
             });
+            this.currentHighlightedBlock = null;
+            this.highlightType = null;
         }
     }
 
