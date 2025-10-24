@@ -378,15 +378,18 @@ class BlockModeEditor {
             });
         });
 
-        // 设置拖拽排序
+        // 设置拖拽排序（脚本块之间）
         this.setupDragAndDrop();
+
+        // 设置元素拖拽到参数孔
+        this.setupElementDrop();
 
         // 设置插入按钮菜单
         this.setupInsertMenus();
     }
 
     /**
-     * 设置拖拽排序
+     * 设置拖拽排序（仅处理脚本块之间的拖拽）
      */
     setupDragAndDrop() {
         const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block');
@@ -395,6 +398,9 @@ class BlockModeEditor {
             block.addEventListener('dragstart', (e) => {
                 block.classList.add('dragging');
                 e.dataTransfer.effectAllowed = 'move';
+                // 设置专门的类型标识：脚本块拖拽
+                e.dataTransfer.setData('application/x-script-block', block.dataset.index);
+                window.rLog('开始拖拽脚本块:', block.dataset.index);
             });
 
             block.addEventListener('dragend', (e) => {
@@ -403,26 +409,41 @@ class BlockModeEditor {
             });
         });
 
-        // 容器拖拽事件
+        // 容器拖拽事件 - 只处理脚本块拖拽
         this.blocksContainer.addEventListener('dragover', (e) => {
+            // 检查是否是脚本块拖拽
+            const types = e.dataTransfer.types;
+            if (!types.includes('application/x-script-block')) {
+                // 不是脚本块拖拽，不处理（可能是元素拖拽）
+                return;
+            }
+
             e.preventDefault();
             const draggingBlock = this.blocksContainer.querySelector('.dragging');
             if (!draggingBlock) return;
 
             const afterElement = this.getDragAfterElement(e.clientY);
 
-            // 显示插入提示线
-            this.showDragInsertIndicator(afterElement);
-
             if (afterElement) {
                 this.blocksContainer.insertBefore(draggingBlock, afterElement);
             } else {
                 this.blocksContainer.appendChild(draggingBlock);
             }
+
+            // 在移动后显示插入提示线（显示在被拖拽块上方）
+            this.showDragInsertIndicator(draggingBlock);
         });
 
         this.blocksContainer.addEventListener('drop', (e) => {
+            // 检查是否是脚本块拖拽
+            const types = e.dataTransfer.types;
+            if (!types.includes('application/x-script-block')) {
+                // 不是脚本块拖拽，不处理
+                return;
+            }
+
             e.preventDefault();
+            e.stopPropagation();
             this.clearDragInsertIndicator();
 
             // 重新构建commands数组
@@ -441,9 +462,87 @@ class BlockModeEditor {
     }
 
     /**
-     * 显示拖拽插入提示线
+     * 设置元素拖拽到参数孔（仅处理元素到参数的拖拽）
      */
-    showDragInsertIndicator(afterElement) {
+    setupElementDrop() {
+        // 为所有 element 类型的参数孔设置拖拽接收
+        const elementHoles = this.blocksContainer.querySelectorAll('.param-hole[data-param-type="element"]');
+
+        elementHoles.forEach(hole => {
+            // dragover - 允许放置
+            hole.addEventListener('dragover', (e) => {
+                // 检查是否是元素拖拽（不是脚本块拖拽）
+                const types = e.dataTransfer.types;
+                if (types.includes('application/x-script-block')) {
+                    // 脚本块拖拽，不处理
+                    return;
+                }
+
+                // 检查是否是元素拖拽（图片或XML元素）
+                if (types.includes('application/x-locator-image') || types.includes('application/x-locator-xml')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    hole.classList.add('drag-over');
+                    window.rLog('元素悬停在参数孔上');
+                }
+            });
+
+            // dragleave - 移除高亮
+            hole.addEventListener('dragleave', (e) => {
+                hole.classList.remove('drag-over');
+            });
+
+            // drop - 接收元素
+            hole.addEventListener('drop', (e) => {
+                // 检查是否是脚本块拖拽
+                const types = e.dataTransfer.types;
+                if (types.includes('application/x-script-block')) {
+                    // 脚本块拖拽，不处理
+                    return;
+                }
+
+                // 检查是否是元素拖拽
+                let elementData = null;
+                let elementType = null;
+
+                if (types.includes('application/x-locator-image')) {
+                    elementData = e.dataTransfer.getData('application/x-locator-image');
+                    elementType = 'image';
+                } else if (types.includes('application/x-locator-xml')) {
+                    elementData = e.dataTransfer.getData('application/x-locator-xml');
+                    elementType = 'xml';
+                }
+
+                if (elementData) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    hole.classList.remove('drag-over');
+
+                    // 更新参数值
+                    const commandIndex = parseInt(hole.dataset.commandIndex);
+                    const paramName = hole.dataset.param;
+
+                    if (this.commands[commandIndex]) {
+                        // 格式：图片用 @{name}，XML元素用 {name}
+                        const value = elementType === 'image' ? `@{${elementData}}` : `{${elementData}}`;
+                        this.commands[commandIndex].params[paramName] = value;
+
+                        // 重新渲染并触发变化
+                        this.renderBlocks();
+                        this.setupBlockModeListeners();
+                        this.triggerChange();
+
+                        window.rLog(`元素已填入参数: ${value}`);
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * 显示拖拽插入提示线（在被拖拽块的上方）
+     */
+    showDragInsertIndicator(draggingBlock) {
         // 清除旧的提示线
         this.clearDragInsertIndicator();
 
@@ -452,31 +551,19 @@ class BlockModeEditor {
         indicator.id = 'drag-insert-indicator';
 
         const containerRect = this.blocksContainer.getBoundingClientRect();
+        const draggingRect = draggingBlock.getBoundingClientRect();
+
+        // 获取被拖拽块的上一个元素
+        const prevElement = draggingBlock.previousElementSibling;
         let top;
 
-        if (afterElement) {
-            // 在afterElement上方显示
-            const rect = afterElement.getBoundingClientRect();
-            // 获取上一个元素（如果存在）
-            const prevElement = afterElement.previousElementSibling;
-            if (prevElement && prevElement.classList.contains('command-block')) {
-                const prevRect = prevElement.getBoundingClientRect();
-                // 显示在两个块之间的中间位置
-                top = (prevRect.bottom + rect.top) / 2 - containerRect.top;
-            } else {
-                // 第一个位置，显示在块上方
-                top = rect.top - containerRect.top - 4;
-            }
+        if (prevElement && prevElement.classList.contains('command-block') && !prevElement.classList.contains('dragging')) {
+            // 有上一个块，显示在两个块之间的中间位置
+            const prevRect = prevElement.getBoundingClientRect();
+            top = (prevRect.bottom + draggingRect.top) / 2 - containerRect.top;
         } else {
-            // 在最后一个块下方显示
-            const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)');
-            if (blocks.length > 0) {
-                const lastBlock = blocks[blocks.length - 1];
-                const rect = lastBlock.getBoundingClientRect();
-                top = rect.bottom - containerRect.top + 4;
-            } else {
-                top = 8;
-            }
+            // 第一个位置，显示在被拖拽块上方
+            top = draggingRect.top - containerRect.top - 4;
         }
 
         indicator.style.top = `${top}px`;
