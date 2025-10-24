@@ -127,6 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/testcase/codejar/block-mode/block-ui-builder.js');
         await loadScript('../js/testcase/codejar/block-mode/block-ui-drag.js');
         await loadScript('../js/testcase/codejar/block-mode/block-ui-menus.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-number-controller.js');
 
         // 加载块模式编辑器和双模式编辑器
         await loadScript('../js/testcase/codejar/block-mode-editor.js');

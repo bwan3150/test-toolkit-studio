@@ -21,6 +21,7 @@ class BlockModeEditor {
 
         // DOM元素
         this.blocksContainer = null;
+        this.blockNumberController = null; // 块号控制器
 
         window.rLog(`BlockModeEditor 创建，基于textEditor`);
     }
@@ -45,6 +46,21 @@ class BlockModeEditor {
 
         // 5. 设置事件监听
         this.setupBlockModeListeners();
+
+        // 6. 初始化块号控制器
+        if (window.BlockNumberController && typeof window.BlockNumberController === 'function') {
+            try {
+                this.blockNumberController = new window.BlockNumberController(
+                    this.blocksContainer,
+                    this
+                );
+                window.rLog('✅ BlockNumberController 创建成功');
+            } catch (error) {
+                window.rError('❌ BlockNumberController 创建失败:', error);
+            }
+        } else {
+            window.rError('❌ BlockNumberController 未正确加载');
+        }
 
         window.rLog('块模式编辑器初始化完成');
     }
@@ -1001,6 +1017,12 @@ class BlockModeEditor {
      */
     destroy() {
         window.rLog('销毁块模式编辑器');
+
+        if (this.blockNumberController) {
+            this.blockNumberController.destroy();
+            this.blockNumberController = null;
+        }
+
         this.container.innerHTML = '';
         this.eventHandlers.clear();
     }

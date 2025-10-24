@@ -228,6 +228,73 @@
     background: var(--bg-primary);
 }
 
+/* 块编辑器包裹器 */
+.block-editor-wrapper {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* 块号容器 */
+.block-numbers {
+    background: #2d2d30;
+    color: #858585;
+    padding: 16px 8px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    text-align: right;
+    user-select: none;
+    border-right: 1px solid #1e1e1e;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 50px;
+    box-sizing: border-box;
+}
+
+.block-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding-right: 4px;
+    transition: background 0.2s ease;
+    cursor: pointer;
+}
+
+.block-number:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* 块号文本 */
+.block-number-text {
+    display: inline-block;
+    min-width: 20px;
+    text-align: right;
+    transition: opacity 0.2s ease;
+}
+
+/* 播放按钮 - 默认隐藏 */
+.block-play-button {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #4CAF50;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+/* hover时显示播放按钮,隐藏数字 */
+.block-number:hover .block-number-text {
+    opacity: 0;
+}
+
+.block-number:hover .block-play-button {
+    opacity: 1;
+}
+
 .blocks-container {
     flex: 1;
     padding: 16px;

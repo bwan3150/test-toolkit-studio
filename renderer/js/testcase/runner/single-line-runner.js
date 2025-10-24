@@ -51,7 +51,7 @@ class SingleLineRunner {
 
         try {
             // 输出开始执行
-            window.ExecutionOutput?.log('info', `🎯 执行第 ${lineNumber} 行: ${trimmed}`);
+            window.ExecutionOutput?.log('info', `执行第 ${lineNumber} 行: ${trimmed}`);
 
             // 高亮当前执行行
             if (editor && editor.highlightExecutingLine) {
@@ -73,11 +73,11 @@ class SingleLineRunner {
                 if (editor && editor.highlightErrorLine) {
                     editor.highlightErrorLine(lineNumber);
                 }
-                window.ExecutionOutput?.log('error', `❌ 执行失败: ${result.error || '未知错误'}`);
+                window.ExecutionOutput?.log('error', `执行失败: ${result.error || '未知错误'}`);
                 window.AppNotifications?.error('命令执行失败');
             } else {
                 // 执行成功
-                window.ExecutionOutput?.log('success', `✅ 执行成功 (耗时 ${duration}ms)`);
+                window.ExecutionOutput?.log('success', `执行成功 (耗时 ${duration}ms)`);
 
                 // 成功后清除高亮
                 setTimeout(() => {
@@ -102,7 +102,7 @@ class SingleLineRunner {
             if (editor && editor.highlightErrorLine) {
                 editor.highlightErrorLine(lineNumber);
             }
-            window.ExecutionOutput?.log('error', `❌ 执行异常: ${error.message}`);
+            window.ExecutionOutput?.log('error', `执行异常: ${error.message}`);
             window.AppNotifications?.error('命令执行异常');
         } finally {
             this.isExecuting = false;
