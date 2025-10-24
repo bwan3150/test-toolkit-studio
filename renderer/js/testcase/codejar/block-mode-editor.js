@@ -399,6 +399,7 @@ class BlockModeEditor {
 
             block.addEventListener('dragend', (e) => {
                 block.classList.remove('dragging');
+                this.clearDragInsertIndicator();
             });
         });
 
@@ -409,6 +410,10 @@ class BlockModeEditor {
             if (!draggingBlock) return;
 
             const afterElement = this.getDragAfterElement(e.clientY);
+
+            // 显示插入提示线
+            this.showDragInsertIndicator(afterElement);
+
             if (afterElement) {
                 this.blocksContainer.insertBefore(draggingBlock, afterElement);
             } else {
@@ -418,6 +423,8 @@ class BlockModeEditor {
 
         this.blocksContainer.addEventListener('drop', (e) => {
             e.preventDefault();
+            this.clearDragInsertIndicator();
+
             // 重新构建commands数组
             const newCommands = [];
             this.blocksContainer.querySelectorAll('.workspace-block.command-block').forEach(block => {
@@ -431,6 +438,59 @@ class BlockModeEditor {
             this.setupBlockModeListeners();
             this.triggerChange();
         });
+    }
+
+    /**
+     * 显示拖拽插入提示线
+     */
+    showDragInsertIndicator(afterElement) {
+        // 清除旧的提示线
+        this.clearDragInsertIndicator();
+
+        const indicator = document.createElement('div');
+        indicator.className = 'drag-insert-indicator';
+        indicator.id = 'drag-insert-indicator';
+
+        const containerRect = this.blocksContainer.getBoundingClientRect();
+        let top;
+
+        if (afterElement) {
+            // 在afterElement上方显示
+            const rect = afterElement.getBoundingClientRect();
+            // 获取上一个元素（如果存在）
+            const prevElement = afterElement.previousElementSibling;
+            if (prevElement && prevElement.classList.contains('command-block')) {
+                const prevRect = prevElement.getBoundingClientRect();
+                // 显示在两个块之间的中间位置
+                top = (prevRect.bottom + rect.top) / 2 - containerRect.top;
+            } else {
+                // 第一个位置，显示在块上方
+                top = rect.top - containerRect.top - 4;
+            }
+        } else {
+            // 在最后一个块下方显示
+            const blocks = this.blocksContainer.querySelectorAll('.workspace-block.command-block:not(.dragging)');
+            if (blocks.length > 0) {
+                const lastBlock = blocks[blocks.length - 1];
+                const rect = lastBlock.getBoundingClientRect();
+                top = rect.bottom - containerRect.top + 4;
+            } else {
+                top = 8;
+            }
+        }
+
+        indicator.style.top = `${top}px`;
+        this.blocksContainer.appendChild(indicator);
+    }
+
+    /**
+     * 清除拖拽插入提示线
+     */
+    clearDragInsertIndicator() {
+        const indicator = this.blocksContainer.querySelector('#drag-insert-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
     }
 
     /**

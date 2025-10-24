@@ -382,10 +382,9 @@
 }
 
 .workspace-block.command-block.dragging {
-    opacity: 0.5;
-    transform: rotate(5deg);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
+    opacity: 0.4;
+    transform: scale(0.95);
+    box-shadow: 0 0 0 2px var(--accent-color);
 }
 
 /* 拖拽插入提示横杠 - 独立元素 */
@@ -397,7 +396,7 @@
     background: linear-gradient(90deg, #ffc107, #ffeb3b, #ffc107);
     border-radius: 2px;
     box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
-    z-index: 999;
+    z-index: 1001;
     animation: drag-hint-glow 1s ease-in-out infinite alternate;
     pointer-events: none;
 }
