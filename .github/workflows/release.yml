@@ -579,7 +579,7 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传 Release Notes 到 S3
+      - name: 更新版本信息
         if: github.event_name == 'push'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -588,12 +588,67 @@ jobs:
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
 
+          # 1. 上传 Release Notes
           if [ -f "build/RELEASE_NOTES.md" ]; then
-            echo "上传 RELEASE_NOTES.md 到 S3..."
+            echo "📝 上传 RELEASE_NOTES.md 到 S3..."
             aws s3 cp build/RELEASE_NOTES.md s3://toolkit-studio-updates/release-notes/${VERSION}.md --content-type "text/markdown"
             echo "✅ Release notes 已上传: s3://toolkit-studio-updates/release-notes/${VERSION}.md"
+
+            # 2. 更新 Release Notes 索引
+            echo ""
+            echo "📋 更新 Release Notes 索引..."
+            INDEX_FILE="release-note-index.json"
+            S3_INDEX_PATH="s3://toolkit-studio-updates/release-notes/${INDEX_FILE}"
+
+            # 下载现有索引文件（如果存在）
+            if aws s3 cp "${S3_INDEX_PATH}" "${INDEX_FILE}" 2>/dev/null; then
+              echo "✓ 已下载现有索引文件"
+            else
+              echo "✓ 索引文件不存在，创建新索引"
+              echo '{"versions":[]}' > "${INDEX_FILE}"
+            fi
+
+            # 获取当前时间戳（ISO 8601 格式）
+            TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+            # 安装 jq（如果未安装）
+            if ! command -v jq &> /dev/null; then
+              echo "安装 jq..."
+              sudo apt-get update -qq && sudo apt-get install -y -qq jq
+            fi
+
+            # 检查版本是否已存在
+            EXISTING=$(jq --arg ver "$VERSION" '.versions[] | select(.version == $ver)' "${INDEX_FILE}")
+
+            if [ -z "$EXISTING" ]; then
+              echo "✓ 添加新版本: $VERSION"
+              # 添加新版本到数组开头（最新的在前面）
+              jq --arg ver "$VERSION" \
+                 --arg date "$TIMESTAMP" \
+                 --arg file "${VERSION}.md" \
+                 '.versions = [{version: $ver, date: $date, file: $file}] + .versions' \
+                 "${INDEX_FILE}" > "${INDEX_FILE}.tmp"
+            else
+              echo "✓ 更新现有版本: $VERSION"
+              # 更新现有版本的时间戳
+              jq --arg ver "$VERSION" \
+                 --arg date "$TIMESTAMP" \
+                 --arg file "${VERSION}.md" \
+                 '(.versions[] | select(.version == $ver)) |= {version: $ver, date: $date, file: $file}' \
+                 "${INDEX_FILE}" > "${INDEX_FILE}.tmp"
+            fi
+
+            mv "${INDEX_FILE}.tmp" "${INDEX_FILE}"
+
+            # 显示更新后的索引（只显示前3个版本）
+            echo "索引文件内容（最新3个版本）:"
+            jq '.versions | .[0:3]' "${INDEX_FILE}"
+
+            # 上传索引到 S3
+            aws s3 cp "${INDEX_FILE}" "${S3_INDEX_PATH}" --content-type "application/json"
+            echo "✅ 索引文件已上传: ${S3_INDEX_PATH}"
           else
-            echo "⚠️  未找到 build/RELEASE_NOTES.md，跳过上传"
+            echo "⚠️  未找到 build/RELEASE_NOTES.md，跳过上传和索引更新"
           fi
 
       - name: 更新 package.json 版本号
