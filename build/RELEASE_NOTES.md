@@ -1,14 +1,11 @@
 ## 新增功能
-- 新增: Release Notes展示与历史更新日志展示模态窗
-- 新增: 使用mark.js在线渲染markdown格式Release Note
-- 新增: Toolkit Studio展示页面更新日志页面
+- 新增: 全局模态窗管理器以及Testcase页面的项目路径检测提醒弹窗
+- 新增: 未连接设备或未进行首次屏幕信息获取时, 显示对应操作按钮
 
 ## 改进优化
-- 重构: DEVICE SCREEN组件结构化拆分, 以适应未来的功能调优
-- 改进: Toolkit Studio展示页面下载按钮能够自动分析用户系统类型以展示对应下载资源
-- 改进: Toolkit Studio展示页面改进导航栏并增加首页内平滑滑动跳转
-- 改进: CI/CD中新增Release Note索引文件的更新
+- 改进: 为DEVICE SCREEN的滑动选择条增加isTesting状态以及上锁解锁功能
+- 改进: 优化不同测试运行状态下, Run Test按钮, 编辑器和DEVICE SCREEN滑动选择条的解锁和上锁逻辑
 
 ## 问题修复
-- 修复: Toolkit Engine调用本地图像识别时STDOUT出现非json返回报错问题
+- 修复: 整体和单步运行脚本时, 会导致DEVICE SCREEN的模式选择状态混乱的问题
 
