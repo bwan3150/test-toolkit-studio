@@ -277,10 +277,12 @@
 
   /**
    * 更新版本指示器
+   * 最新版本显示为 n/n，最旧版本显示为 1/n
    */
   function updateVersionIndicator() {
     if (versionIndicator) {
-      versionIndicator.textContent = `${currentVersionIndex + 1} / ${versionsList.length}`;
+      const displayIndex = versionsList.length - currentVersionIndex;
+      versionIndicator.textContent = `${displayIndex} / ${versionsList.length}`;
     }
   }
 

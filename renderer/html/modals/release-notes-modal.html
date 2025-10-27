@@ -194,8 +194,8 @@
     to { transform: rotate(360deg); }
   }
 
-  /* 按钮图标样式 */
-  .btn-icon {
+  /* Release Notes Modal 内的按钮图标样式 */
+  #releaseNotesModal .btn-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -204,12 +204,12 @@
     transition: all 0.2s;
   }
 
-  .btn-icon:hover:not(:disabled) {
+  #releaseNotesModal .btn-icon:hover:not(:disabled) {
     background: var(--hover-bg);
     border-color: var(--primary-color);
   }
 
-  .btn-icon:disabled {
+  #releaseNotesModal .btn-icon:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }

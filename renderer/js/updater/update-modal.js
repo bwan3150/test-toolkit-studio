@@ -154,10 +154,16 @@
 
   /**
    * 格式化发布说明
+   * 使用 marked.js 渲染 Markdown，如果不可用则降级到简单替换
    */
   function formatReleaseNotes(notes) {
     if (typeof notes === 'string') {
-      // 简单的 Markdown 格式化
+      // 优先使用 marked.js 进行完整的 Markdown 渲染
+      if (typeof marked !== 'undefined') {
+        return marked.parse(notes);
+      }
+
+      // 降级：简单的 Markdown 格式化
       return notes
         .replace(/\n/g, '<br>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
