@@ -1,0 +1,216 @@
+<!-- Release Notes 查看弹窗 -->
+<div class="modal" id="releaseNotesModal" style="display: none;">
+  <div class="modal-content" style="max-width: 800px; max-height: 85vh;">
+    <div class="modal-header">
+      <h3>Release Notes</h3>
+      <button class="modal-close" id="closeReleaseNotesModal">&times;</button>
+    </div>
+    <div class="modal-body" style="max-height: calc(85vh - 180px); overflow-y: auto;">
+      <!-- 加载状态 -->
+      <div class="loading-container" id="releaseNotesLoading" style="text-align: center; padding: 40px;">
+        <div class="spinner"></div>
+        <p style="margin-top: 16px; color: var(--text-secondary);">Loading...</p>
+      </div>
+
+      <!-- 错误提示 -->
+      <div id="releaseNotesError" style="display: none; text-align: center; padding: 40px; color: var(--error-color);">
+        <p>Failed to load release notes</p>
+        <p style="font-size: 14px; margin-top: 8px; color: var(--text-secondary);" id="releaseNotesErrorMsg"></p>
+      </div>
+
+      <!-- Release Notes 内容 -->
+      <div id="releaseNotesContent" style="display: none;">
+        <!-- 版本信息头部 -->
+        <div class="release-header" style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <h4 style="margin: 0; font-size: 20px;">
+                <span style="color: var(--text-secondary);">Version</span>
+                <span id="currentReleaseVersion" style="color: var(--primary-color);">0.0.0</span>
+              </h4>
+              <p id="currentReleaseDate" style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-secondary);"></p>
+            </div>
+            <div id="currentVersionBadge" style="display: none; background: var(--primary-color); color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">
+              Current
+            </div>
+          </div>
+        </div>
+
+        <!-- Markdown 内容区域 -->
+        <div id="releaseMarkdownContent" class="markdown-body" style="padding: 0 4px;">
+          <!-- 动态渲染的 Markdown 内容 -->
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+      <!-- 版本导航 -->
+      <div class="version-navigation" style="display: flex; align-items: center; gap: 12px;">
+        <button class="btn btn-icon" id="prevVersionBtn" title="Previous Version" style="min-width: 36px; padding: 8px;">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+          </svg>
+        </button>
+        <span id="versionIndicator" style="font-size: 13px; color: var(--text-secondary); min-width: 80px; text-align: center;">
+          1 / 1
+        </span>
+        <button class="btn btn-icon" id="nextVersionBtn" title="Next Version" style="min-width: 36px; padding: 8px;">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path fill="currentColor" d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+          </svg>
+        </button>
+      </div>
+
+      <button class="btn btn-secondary" id="closeReleaseNotesBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Markdown 内容样式 */
+  .markdown-body {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-primary);
+  }
+
+  .markdown-body h1,
+  .markdown-body h2,
+  .markdown-body h3,
+  .markdown-body h4 {
+    margin-top: 24px;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .markdown-body h1 {
+    font-size: 24px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border-color);
+  }
+
+  .markdown-body h2 {
+    font-size: 20px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .markdown-body h3 {
+    font-size: 18px;
+  }
+
+  .markdown-body h4 {
+    font-size: 16px;
+  }
+
+  .markdown-body p {
+    margin-bottom: 16px;
+  }
+
+  .markdown-body ul,
+  .markdown-body ol {
+    margin-bottom: 16px;
+    padding-left: 24px;
+  }
+
+  .markdown-body li {
+    margin-bottom: 6px;
+  }
+
+  .markdown-body code {
+    background: var(--input-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--primary-color);
+  }
+
+  .markdown-body pre {
+    background: var(--input-bg);
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+  }
+
+  .markdown-body pre code {
+    background: none;
+    padding: 0;
+    color: var(--text-primary);
+  }
+
+  .markdown-body a {
+    color: var(--primary-color);
+    text-decoration: none;
+  }
+
+  .markdown-body a:hover {
+    text-decoration: underline;
+  }
+
+  .markdown-body blockquote {
+    border-left: 3px solid var(--primary-color);
+    padding-left: 16px;
+    margin: 16px 0;
+    color: var(--text-secondary);
+  }
+
+  .markdown-body img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .markdown-body table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+
+  .markdown-body th,
+  .markdown-body td {
+    border: 1px solid var(--border-color);
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  .markdown-body th {
+    background: var(--input-bg);
+    font-weight: 600;
+  }
+
+  /* 加载动画 */
+  .spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* 按钮图标样式 */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+  }
+
+  .btn-icon:hover:not(:disabled) {
+    background: var(--hover-bg);
+    border-color: var(--primary-color);
+  }
+
+  .btn-icon:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+</style>

@@ -82,6 +82,9 @@
     <!-- 更新弹窗 - 动态加载 -->
     <div id="updateModalContainer"></div>
 
+    <!-- Release Notes 弹窗 - 动态加载 -->
+    <div id="releaseNotesModalContainer"></div>
+
     <!-- 定义组件加载函数,但不立即执行 -->
     <script>
       // Electron 应用中使用 Node.js fs 模块同步加载 HTML 组件
@@ -117,6 +120,7 @@
           loadComponentIntoContainer("pages/settings.html", "settings-page-container");
           loadComponentIntoContainer("components/status-bar.html", "status-bar-container");
           loadComponentIntoContainer("modals/update-modal.html", "updateModalContainer");
+          loadComponentIntoContainer("modals/release-notes-modal.html", "releaseNotesModalContainer");
           console.log("✓ 所有 HTML 组件已同步加载完成");
         } catch (error) {
           console.error("❌ 组件加载失败:", error);
@@ -263,6 +267,9 @@
     <script src="../js/components/custom-titlebar.js"></script>
     <script src="../js/utils/component-loader.js"></script>
     <script src="../js/updater/update-modal.js"></script>
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="../js/updater/release-notes-modal.js"></script>
     <script src="../js/app.js"></script>
   </body>
 </html>
