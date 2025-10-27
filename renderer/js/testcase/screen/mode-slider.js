@@ -3,6 +3,7 @@
 
 const ModeSlider = {
   switchModeCallback: null, // 保存回调函数引用
+  isTestRunning: false, // 测试运行状态标志
 
   /**
    * 设置模式切换滑块
@@ -74,6 +75,8 @@ const ModeSlider = {
    * @param {boolean} isRunning - 是否正在运行测试
    */
   setTestRunning(isRunning) {
+    this.isTestRunning = isRunning; // 保存测试运行状态
+
     const modeOptions = document.querySelectorAll('.mode-option');
 
     modeOptions.forEach(option => {
@@ -110,6 +113,12 @@ const ModeSlider = {
    * 解锁滑块 - 允许所有模式切换
    */
   unlockSlider() {
+    // 如果测试正在运行，不解锁滑块
+    if (this.isTestRunning) {
+      window.rLog('⚠️ 测试正在运行，跳过滑块解锁');
+      return;
+    }
+
     const modeOptions = document.querySelectorAll('.mode-option');
 
     modeOptions.forEach(option => {

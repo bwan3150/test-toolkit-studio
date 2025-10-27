@@ -107,6 +107,11 @@ async function refreshDeviceScreen() {
         if (window.UIExtractor && window.UIExtractor.updateDeviceInfoAndGetUIStructure) {
             await window.UIExtractor.updateDeviceInfoAndGetUIStructure(result.xml);
         }
+
+        // 检查设备状态并更新滑块（截图成功后应该解锁滑块）
+        if (window.ScreenCoordinator && window.ScreenCoordinator.checkDeviceStatusAndPrompt) {
+            window.ScreenCoordinator.checkDeviceStatusAndPrompt();
+        }
     }
 }
 

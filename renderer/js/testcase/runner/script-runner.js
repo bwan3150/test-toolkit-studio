@@ -124,8 +124,9 @@ class ScriptRunner {
         // 输出脚本开始执行
         window.ExecutionOutput?.scriptStart();
 
-        // 锁定滑块到 normal 模式
+        // 设置测试运行状态并锁定滑块到 normal 模式
         if (window.ModeSlider) {
+            window.ModeSlider.setTestRunning(true);
             window.ModeSlider.lockSlider();
         }
 
@@ -233,8 +234,9 @@ class ScriptRunner {
             }
 
         } finally {
-            // 解锁滑块
+            // 清除测试运行状态并解锁滑块
             if (window.ModeSlider) {
+                window.ModeSlider.setTestRunning(false);
                 window.ModeSlider.unlockSlider();
             }
 
@@ -258,6 +260,11 @@ class ScriptRunner {
         if (this.isRunning) {
             window.rLog('请求停止脚本执行');
             this.shouldStop = true;
+
+            // 清除测试运行状态
+            if (window.ModeSlider) {
+                window.ModeSlider.setTestRunning(false);
+            }
 
             // 立即解锁编辑器并恢复状态栏
             const editor = window.EditorManager?.getActiveEditor();
