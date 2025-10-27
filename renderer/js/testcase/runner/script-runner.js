@@ -124,6 +124,11 @@ class ScriptRunner {
         // 输出脚本开始执行
         window.ExecutionOutput?.scriptStart();
 
+        // 锁定滑块到 normal 模式
+        if (window.ModeSlider) {
+            window.ModeSlider.lockSlider();
+        }
+
         // 锁定编辑器并更新状态栏
         editor.lock?.();
         window.StatusBarModule?.updateEditorMode('block', 'running');
@@ -228,6 +233,11 @@ class ScriptRunner {
             }
 
         } finally {
+            // 解锁滑块
+            if (window.ModeSlider) {
+                window.ModeSlider.unlockSlider();
+            }
+
             // 解锁编辑器并恢复状态栏
             editor.unlock?.();
             window.StatusBarModule?.updateEditorMode('block', 'idle');

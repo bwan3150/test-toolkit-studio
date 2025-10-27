@@ -2,11 +2,16 @@
 // 负责四种模式切换的UI交互(滑块动画和按钮状态)
 
 const ModeSlider = {
+  switchModeCallback: null, // 保存回调函数引用
+
   /**
    * 设置模式切换滑块
    * @param {Function} switchModeCallback - 切换模式的回调函数
    */
   setupModeButtons(switchModeCallback) {
+    // 保存回调函数引用，供后续使用
+    this.switchModeCallback = switchModeCallback;
+
     const modeOptions = document.querySelectorAll('.mode-option');
 
     modeOptions.forEach(option => {
@@ -78,6 +83,40 @@ const ModeSlider = {
         option.classList.remove('disabled');
       }
     });
+  },
+
+  /**
+   * 锁定滑块 - 先切换到 normal 模式，然后禁止切换到其他模式
+   */
+  lockSlider() {
+    // 1. 先切换到 normal 模式
+    if (this.switchModeCallback) {
+      this.switchModeCallback('normal');
+    }
+
+    // 2. 禁用其他模式的按钮
+    const modeOptions = document.querySelectorAll('.mode-option');
+    modeOptions.forEach(option => {
+      // 只锁定非 normal 模式
+      if (option.dataset.mode !== 'normal') {
+        option.classList.add('disabled');
+      }
+    });
+
+    window.rLog('🔒 滑块已锁定到 normal 模式');
+  },
+
+  /**
+   * 解锁滑块 - 允许所有模式切换
+   */
+  unlockSlider() {
+    const modeOptions = document.querySelectorAll('.mode-option');
+
+    modeOptions.forEach(option => {
+      option.classList.remove('disabled');
+    });
+
+    window.rLog('🔓 滑块已解锁，允许切换模式');
   }
 };
 

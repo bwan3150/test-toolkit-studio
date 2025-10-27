@@ -176,6 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 加载屏幕模式管理器 - UI 和协调器
         await loadScript('../js/testcase/screen/mode-slider.js');
+        await loadScript('../js/testcase/screen/screen-prompt.js');
         await loadScript('../js/testcase/screen/screen-coordinator.js');
 
         // 加载主控制器（依赖上面的子模块）

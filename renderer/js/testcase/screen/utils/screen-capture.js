@@ -43,15 +43,10 @@ async function refreshDeviceScreen() {
         window.rError('截图失败:', error);
         window.AppNotifications?.error(`截图失败: ${error}`);
 
-        // 隐藏截图,显示默认占位符
+        // 隐藏截图
         const img = document.getElementById('deviceScreenshot');
         if (img) {
             img.style.display = 'none';
-        }
-        const placeholder = document.querySelector('.screen-placeholder');
-        if (placeholder) {
-            placeholder.textContent = 'No device connected';
-            placeholder.style.display = 'block';
         }
         return;
     }
@@ -80,10 +75,6 @@ async function refreshDeviceScreen() {
         await new Promise((resolve) => {
             img.onload = () => {
                 img.style.display = 'block';
-                const placeholder = document.querySelector('.screen-placeholder');
-                if (placeholder) {
-                    placeholder.style.display = 'none';
-                }
                 window.rLog('截图显示成功');
 
                 // 给浏览器一点时间完成布局

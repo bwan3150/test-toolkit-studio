@@ -34,7 +34,8 @@ const ScreenCoordinator = {
       'XmlOverlayMode',
       'ScreenshotMode',
       'CoordinateMode',
-      'ModeSlider'
+      'ModeSlider',
+      'ScreenPrompt'
     ];
 
     for (const moduleName of requiredModules) {
@@ -57,8 +58,48 @@ const ScreenCoordinator = {
       this.switchTo(mode);
     });
 
+    // 检查设备状态并显示相应提示
+    this.checkDeviceStatusAndPrompt();
+
+    // 监听设备选择变化
+    const deviceSelect = document.getElementById('deviceSelect');
+    if (deviceSelect) {
+      deviceSelect.addEventListener('change', () => {
+        this.checkDeviceStatusAndPrompt();
+      });
+    }
+
     this.initialized = true;
     window.rLog('✅ ScreenCoordinator 初始化完成');
+  },
+
+  /**
+   * 检查设备状态并显示相应提示
+   */
+  async checkDeviceStatusAndPrompt() {
+    const deviceSelect = document.getElementById('deviceSelect');
+    const deviceImage = document.getElementById('deviceScreenshot');
+
+    // 情况1: 没有选择设备
+    if (!deviceSelect?.value) {
+      window.rLog('📱 未选择设备，显示连接设备提示');
+      window.ModeSlider.lockSlider();
+      window.ScreenPrompt.showConnectDevicePrompt();
+      return;
+    }
+
+    // 情况2: 已选择设备，但没有截图
+    if (!deviceImage || !deviceImage.complete || deviceImage.naturalWidth === 0 || deviceImage.style.display === 'none') {
+      window.rLog('📷 设备已连接但无屏幕数据，显示获取屏幕提示');
+      window.ModeSlider.lockSlider();
+      window.ScreenPrompt.showCaptureScreenPrompt();
+      return;
+    }
+
+    // 情况3: 已有截图，解锁滑块
+    window.rLog('✅ 设备已连接且有屏幕数据，解锁滑块');
+    window.ScreenPrompt.removePrompt();
+    window.ModeSlider.unlockSlider();
   },
 
   /**

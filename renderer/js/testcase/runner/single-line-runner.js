@@ -87,13 +87,22 @@ class SingleLineRunner {
                 }, 500);
             }
 
-            // 刷新设备截图
+            // 刷新设备截图和XML
             try {
-                if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                    await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                // 使用新架构刷新屏幕
+                if (window.ScreenCapture && window.ScreenCapture.refreshDeviceScreen) {
+                    await window.ScreenCapture.refreshDeviceScreen();
+
+                    // 如果当前在 XML overlay 模式，重新激活以刷新覆盖层
+                    if (window.ScreenCoordinator && window.ScreenCoordinator.getCurrentMode() === 'xml') {
+                        window.rLog('🔄 重新激活 XML Overlay 以保持同步');
+                        if (window.XmlOverlayMode && window.XmlOverlayMode.activate) {
+                            await window.XmlOverlayMode.activate();
+                        }
+                    }
                 }
             } catch (error) {
-                // 截图失败不影响执行结果
+                // 截图刷新失败不影响执行结果
                 window.rLog('截图刷新失败:', error);
             }
 
