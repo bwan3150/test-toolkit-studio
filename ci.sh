@@ -12,7 +12,7 @@ git tag -l
 echo ""
 
 # 输入新tag
-echo -e "${YELLOW}请输入新版本tag (例如: v0.5.8-beta):${NC}"
+echo -e "${YELLOW}新版本tag号:${NC}"
 read -r NEW_TAG
 
 if [ -z "$NEW_TAG" ]; then
@@ -34,7 +34,7 @@ echo -e "${GREEN}=== 填写Release Notes ===${NC}\n"
 
 # 新增功能
 echo "## 新增功能" > "$TEMP_FILE"
-echo -e "${YELLOW}输入新增功能 (每行一条,空行结束):${NC}"
+echo -e "${YELLOW}输入新增功能:${NC}"
 while IFS= read -e -r line; do
     [ -z "$line" ] && break
     echo "- $line" >> "$TEMP_FILE"
@@ -43,7 +43,7 @@ done
 # 改进优化
 echo "" >> "$TEMP_FILE"
 echo "## 改进优化" >> "$TEMP_FILE"
-echo -e "${YELLOW}输入改进优化 (每行一条,空行结束):${NC}"
+echo -e "${YELLOW}输入改进优化:${NC}"
 while IFS= read -e -r line; do
     [ -z "$line" ] && break
     echo "- $line" >> "$TEMP_FILE"
@@ -52,7 +52,7 @@ done
 # 问题修复
 echo "" >> "$TEMP_FILE"
 echo "## 问题修复" >> "$TEMP_FILE"
-echo -e "${YELLOW}输入问题修复 (每行一条,空行结束):${NC}"
+echo -e "${YELLOW}输入问题修复:${NC}"
 while IFS= read -e -r line; do
     [ -z "$line" ] && break
     echo "- $line" >> "$TEMP_FILE"
@@ -82,7 +82,7 @@ mv "$TEMP_FILE" "$RELEASE_FILE"
 echo -e "${GREEN}=== 执行Git操作 ===${NC}"
 
 git add "$RELEASE_FILE"
-git commit -m "Update: release note for version $NEW_TAG"
+git commit -m "Update: release note for $NEW_TAG by CI/CD trigger"
 git push
 
 if [ $? -ne 0 ]; then

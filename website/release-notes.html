@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>更新日志 - Toolkit Studio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            background: #0d0d0d;
+            color: #f0f0f0;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* 导航栏 */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(13, 13, 13, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 72px;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            height: 40px;
+            margin-right: 16px;
+        }
+
+        .logo-text {
+            font-size: 20px;
+            font-weight: 600;
+            color: #f0f0f0;
+            letter-spacing: -0.5px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: #999;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-link:hover {
+            color: #f0f0f0;
+        }
+
+        .nav-link.active {
+            color: #f0f0f0;
+        }
+
+        /* 主内容区域 */
+        .main-content {
+            padding: 120px 40px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .page-title {
+            font-size: 48px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            background: linear-gradient(180deg, #ffffff 0%, #999999 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .page-subtitle {
+            font-size: 18px;
+            color: #666;
+        }
+
+        /* 加载状态 */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 20px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #fe7600;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 版本列表 */
+        .release-list {
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        .release-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 32px;
+            transition: all 0.3s;
+        }
+
+        .release-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .release-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .release-version {
+            font-size: 24px;
+            font-weight: 600;
+            color: #f0f0f0;
+        }
+
+        .release-date {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .release-content {
+            color: #ccc;
+            line-height: 1.8;
+        }
+
+        /* Markdown 样式 */
+        .release-content h1,
+        .release-content h2,
+        .release-content h3 {
+            color: #f0f0f0;
+            margin-top: 24px;
+            margin-bottom: 12px;
+        }
+
+        .release-content h1 {
+            font-size: 28px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+        }
+
+        .release-content h2 {
+            font-size: 22px;
+        }
+
+        .release-content h3 {
+            font-size: 18px;
+        }
+
+        .release-content p {
+            margin-bottom: 16px;
+        }
+
+        .release-content ul,
+        .release-content ol {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+
+        .release-content li {
+            margin-bottom: 8px;
+        }
+
+        .release-content code {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+            color: #fe7600;
+        }
+
+        .release-content pre {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+
+        .release-content pre code {
+            background: none;
+            padding: 0;
+            color: #f0f0f0;
+        }
+
+        .release-content a {
+            color: #fe7600;
+            text-decoration: none;
+        }
+
+        .release-content a:hover {
+            text-decoration: underline;
+        }
+
+        .release-content blockquote {
+            border-left: 3px solid #fe7600;
+            padding-left: 16px;
+            margin: 16px 0;
+            color: #999;
+        }
+
+        /* 错误提示 */
+        .error-message {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* 底部 */
+        footer {
+            padding: 60px 40px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #666;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .page-title {
+                font-size: 36px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .release-item {
+                padding: 24px;
+            }
+
+            .release-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            .release-version {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav>
+        <div class="nav-container">
+            <div class="nav-left">
+                <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
+                <span class="logo-text">Toolkit</span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">首页</a>
+                <a href="index.html#core-features" class="nav-link">核心特性</a>
+                <a href="index.html#feature-showcase" class="nav-link">功能展示</a>
+                <a href="release-notes.html" class="nav-link active">更新日志</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <div class="page-header">
+            <h1 class="page-title">更新日志</h1>
+        </div>
+
+        <!-- 加载状态 -->
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>加载中...</p>
+        </div>
+
+        <!-- 错误提示 -->
+        <div id="error" class="error-message" style="display: none;">
+            <div class="error-icon">⚠️</div>
+            <p>加载更新日志失败，请稍后再试</p>
+        </div>
+
+        <!-- 版本列表 -->
+        <div id="releaseList" class="release-list" style="display: none;">
+            <!-- 动态生成 -->
+        </div>
+    </div>
+
+    <!-- 底部 -->
+    <footer>
+        <p>&copy; 2025 Toolkit Studio</p>
+    </footer>
+
+    <!-- Markdown 渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+
+    <script>
+        // S3 配置
+        const S3_BASE_URL = 'https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com';
+        const INDEX_URL = `${S3_BASE_URL}/release-notes/release-note-index.json`;
+
+        // 格式化日期
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}年${month}月${day}日`;
+        }
+
+        // 获取并显示所有版本的 Release Notes
+        async function loadReleaseNotes() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const releaseList = document.getElementById('releaseList');
+
+            try {
+                // 获取索引文件
+                const indexResponse = await fetch(INDEX_URL);
+                if (!indexResponse.ok) {
+                    throw new Error('Failed to fetch index');
+                }
+
+                const index = await indexResponse.json();
+                console.log('获取到版本索引:', index);
+
+                // 如果没有版本
+                if (!index.versions || index.versions.length === 0) {
+                    throw new Error('No versions found');
+                }
+
+                // 获取所有版本的 release notes
+                const releasePromises = index.versions.map(async (versionInfo) => {
+                    try {
+                        const noteUrl = `${S3_BASE_URL}/release-notes/${versionInfo.file}`;
+                        const response = await fetch(noteUrl);
+                        if (!response.ok) {
+                            console.warn(`Failed to fetch ${versionInfo.version}`);
+                            return null;
+                        }
+                        const markdown = await response.text();
+                        return {
+                            ...versionInfo,
+                            content: markdown
+                        };
+                    } catch (err) {
+                        console.error(`Error fetching ${versionInfo.version}:`, err);
+                        return null;
+                    }
+                });
+
+                const releases = await Promise.all(releasePromises);
+                const validReleases = releases.filter(r => r !== null);
+
+                if (validReleases.length === 0) {
+                    throw new Error('No release notes found');
+                }
+
+                // 渲染版本列表
+                releaseList.innerHTML = validReleases.map(release => {
+                    const html = marked.parse(release.content);
+                    return `
+                        <div class="release-item">
+                            <div class="release-header">
+                                <div class="release-version">v${release.version}</div>
+                                <div class="release-date">${formatDate(release.date)}</div>
+                            </div>
+                            <div class="release-content">
+                                ${html}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // 显示内容
+                loading.style.display = 'none';
+                releaseList.style.display = 'flex';
+
+            } catch (err) {
+                console.error('加载 Release Notes 失败:', err);
+                loading.style.display = 'none';
+                error.style.display = 'block';
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', loadReleaseNotes);
+    </script>
+</body>
+</html>

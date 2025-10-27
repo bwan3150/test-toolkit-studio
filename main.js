@@ -35,6 +35,7 @@ const { registerDeviceConfigHandlers } = require('./handlers/property-manage/dev
 // API 代理模块 - 与外部 API 服务交互
 const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
 const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
+const { registerReleaseNotesHandlers } = require('./handlers/api-proxy/release-notes-handler');
 
 // 自动更新模块
 const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/auto-updater');
@@ -230,6 +231,9 @@ function registerAllHandlers() {
 
     console.log('注册Bug Analysis API代理处理器...');
     registerBugAnalysisProxyHandlers();
+
+    console.log('注册Release Notes处理器...');
+    registerReleaseNotesHandlers();
 
     // 自动更新模块
     console.log('注册自动更新处理器...');

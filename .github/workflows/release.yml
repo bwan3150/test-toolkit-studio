@@ -579,7 +579,7 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 上传 Release Notes 到 S3
+      - name: 更新版本信息
         if: github.event_name == 'push'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -588,35 +588,119 @@ jobs:
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
 
+          # 1. 上传 Release Notes
           if [ -f "build/RELEASE_NOTES.md" ]; then
-            echo "上传 RELEASE_NOTES.md 到 S3..."
+            echo "📝 上传 RELEASE_NOTES.md 到 S3..."
             aws s3 cp build/RELEASE_NOTES.md s3://toolkit-studio-updates/release-notes/${VERSION}.md --content-type "text/markdown"
             echo "✅ Release notes 已上传: s3://toolkit-studio-updates/release-notes/${VERSION}.md"
+
+            # 2. 更新 Release Notes 索引
+            echo ""
+            echo "📋 更新 Release Notes 索引..."
+            INDEX_FILE="release-note-index.json"
+            S3_INDEX_PATH="s3://toolkit-studio-updates/release-notes/${INDEX_FILE}"
+
+            # 下载现有索引文件（如果存在）
+            if aws s3 cp "${S3_INDEX_PATH}" "${INDEX_FILE}" 2>/dev/null; then
+              echo "✓ 已下载现有索引文件"
+            else
+              echo "✓ 索引文件不存在，创建新索引"
+              echo '{"versions":[]}' > "${INDEX_FILE}"
+            fi
+
+            # 获取当前时间戳（ISO 8601 格式）
+            TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+            # 安装 jq（如果未安装）
+            if ! command -v jq &> /dev/null; then
+              echo "安装 jq..."
+              sudo apt-get update -qq && sudo apt-get install -y -qq jq
+            fi
+
+            # 检查版本是否已存在
+            EXISTING=$(jq --arg ver "$VERSION" '.versions[] | select(.version == $ver)' "${INDEX_FILE}")
+
+            if [ -z "$EXISTING" ]; then
+              echo "✓ 添加新版本: $VERSION"
+              # 添加新版本到数组开头（最新的在前面）
+              jq --arg ver "$VERSION" \
+                 --arg date "$TIMESTAMP" \
+                 --arg file "${VERSION}.md" \
+                 '.versions = [{version: $ver, date: $date, file: $file}] + .versions' \
+                 "${INDEX_FILE}" > "${INDEX_FILE}.tmp"
+            else
+              echo "✓ 更新现有版本: $VERSION"
+              # 更新现有版本的时间戳
+              jq --arg ver "$VERSION" \
+                 --arg date "$TIMESTAMP" \
+                 --arg file "${VERSION}.md" \
+                 '(.versions[] | select(.version == $ver)) |= {version: $ver, date: $date, file: $file}' \
+                 "${INDEX_FILE}" > "${INDEX_FILE}.tmp"
+            fi
+
+            mv "${INDEX_FILE}.tmp" "${INDEX_FILE}"
+
+            # 显示更新后的索引（只显示前3个版本）
+            echo "索引文件内容（最新3个版本）:"
+            jq '.versions | .[0:3]' "${INDEX_FILE}"
+
+            # 保存到 build 目录（供后续提交到 git）
+            mkdir -p build
+            cp "${INDEX_FILE}" "build/${INDEX_FILE}"
+            echo "✓ 索引文件已保存到 build/${INDEX_FILE}"
+
+            # 上传索引到 S3
+            aws s3 cp "${INDEX_FILE}" "${S3_INDEX_PATH}" --content-type "application/json"
+            echo "✅ 索引文件已上传: ${S3_INDEX_PATH}"
           else
-            echo "⚠️  未找到 build/RELEASE_NOTES.md，跳过上传"
+            echo "⚠️  未找到 build/RELEASE_NOTES.md，跳过上传和索引更新"
           fi
 
-      - name: 更新 package.json 版本号
+      - name: Bot提交版本信息
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
 
           # 读取当前 package.json 中的版本
           CURRENT_VERSION=$(grep '"version"' package.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
 
+          # 检查是否有文件需要提交
+          HAS_CHANGES=false
+
+          # 检查 package.json 是否需要更新
           if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
             echo "更新 package.json: $CURRENT_VERSION → $VERSION"
             sed -i -E "s/\"version\": *\"[^\"]+\"/\"version\": \"$VERSION\"/" package.json
+            HAS_CHANGES=true
+          else
+            echo "✓ package.json 版本已是最新: $VERSION"
+          fi
 
+          # 检查 release-note-index.json 是否存在（从前面步骤生成）
+          if [ -f "build/release-note-index.json" ]; then
+            echo "✓ 发现更新的 release-note-index.json"
+            HAS_CHANGES=true
+          fi
+
+          # 如果有任何更改，提交到 git
+          if [ "$HAS_CHANGES" = true ]; then
             # 配置 git
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            # 提交更改并推送到 main 分支
-            git add package.json
-            git commit -m "Update: version tag $VERSION by GitHub Action"
-            git push
+            # 添加文件到 git
+            git add package.json build/release-note-index.json 2>/dev/null || true
 
-            echo "✅ package.json 已更新并提交到 main 分支"
+            # 检查是否真的有变更
+            if git diff --staged --quiet; then
+              echo "✓ 没有实际变更需要提交"
+            else
+              # 提交更改并推送到 main 分支
+              git commit -m "Update: version $VERSION and release notes index by GitHub Action"
+              git push
+
+              echo "✅ 版本信息已更新并提交到 main 分支"
+              git show --stat HEAD
+            fi
           else
-            echo "✅ package.json 版本已是最新 ($VERSION)，无需更新"
+            echo "✅ 所有版本信息已是最新，无需更新"
           fi

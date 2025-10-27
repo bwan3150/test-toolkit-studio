@@ -37,7 +37,13 @@
             padding: 0 40px;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             height: 72px;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
         }
 
         .logo {
@@ -50,6 +56,28 @@
             font-weight: 600;
             color: #f0f0f0;
             letter-spacing: -0.5px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: #999;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-link:hover {
+            color: #f0f0f0;
+        }
+
+        .nav-link.active {
+            color: #f0f0f0;
         }
 
         /* 主要内容区域 */
@@ -96,14 +124,21 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 16px;
+            gap: 12px;
             margin: 0 auto 80px;
-            max-width: 500px;
+            max-width: 600px;
         }
 
-        .download-buttons {
-            display: flex;
-            gap: 16px;
+        .download-title {
+            font-size: 13px;
+            color: #999;
+            font-weight: 400;
+            margin-bottom: 4px;
+        }
+
+        .download-container {
+            position: relative;
+            display: inline-flex;
         }
 
         .beta-warning {
@@ -114,17 +149,18 @@
             max-width: 400px;
         }
 
-        .download-btn {
+        .main-download-btn {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 12px 24px;
+            justify-content: center;
+            padding: 12px 32px;
             background: rgba(255, 255, 255, 0.08);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
+            border-right: none;
+            border-radius: 12px 0 0 12px;
             color: #f0f0f0;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
             transition: all 0.3s;
             cursor: pointer;
@@ -132,50 +168,164 @@
             overflow: hidden;
         }
 
-        .download-btn:hover {
+        .download-container:hover .main-download-btn {
             background: rgba(255, 255, 255, 0.12);
             border-color: rgba(255, 255, 255, 0.3);
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
         }
 
-        .download-btn svg {
+        .main-download-btn .platform-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .main-download-btn .download-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.2;
+            color: #f0f0f0;
+        }
+
+        .main-download-btn .download-label svg {
             width: 20px;
             height: 20px;
             fill: currentColor;
+            flex-shrink: 0;
         }
 
-        .download-btn .version {
+        .main-download-btn .platform-details {
             font-size: 11px;
+            opacity: 0.65;
+            line-height: 1.2;
             color: #999;
-            display: block;
-            margin-top: 2px;
+            text-align: center;
         }
 
-        .download-btn .platform-info {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .download-btn .platform-info > span:first-child {
-            font-size: 14px;
-        }
-
-        .download-btn.loading {
+        .main-download-btn.loading {
             pointer-events: none;
-            opacity: 0.6;
+            opacity: 0.7;
         }
 
-        .download-btn.loading::after {
+        .main-download-btn.loading::after {
             content: '';
             position: absolute;
             top: 0;
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
             animation: loading 1.5s infinite;
+        }
+
+        .dropdown-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0 12px 12px 0;
+            color: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .download-container:hover .dropdown-toggle {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.3);
+            border-left-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .dropdown-toggle svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+            transition: transform 0.3s;
+        }
+
+        .dropdown-toggle.open svg {
+            transform: rotate(180deg);
+        }
+
+        .download-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            background: rgba(20, 20, 20, 0.98);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s;
+            z-index: 1000;
+            min-width: 280px;
+        }
+
+        .download-dropdown.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: #f0f0f0;
+            text-decoration: none;
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .dropdown-item.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .dropdown-item svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+
+        .dropdown-item .item-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dropdown-item .item-name {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .dropdown-item .item-details {
+            font-size: 12px;
+            color: #999;
+            margin-top: 2px;
         }
 
         @keyframes loading {
@@ -328,21 +478,24 @@
             }
 
             .nav-links {
-                display: none;
+                gap: 16px;
+            }
+
+            .nav-link {
+                font-size: 13px;
             }
 
             .download-section {
                 padding: 0 20px;
             }
 
-            .download-buttons {
-                flex-direction: column;
+            .download-container {
                 width: 100%;
             }
 
-            .download-btn {
-                width: 100%;
-                justify-content: center;
+            .main-download-btn {
+                flex: 1;
+                min-width: 0;
             }
 
             .beta-warning {
@@ -355,8 +508,16 @@
     <!-- 导航栏 -->
     <nav>
         <div class="nav-container">
-            <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
-            <span class="logo-text">Toolkit</span>
+            <div class="nav-left">
+                <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
+                <span class="logo-text">Toolkit</span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link active">首页</a>
+                <a href="#core-features" class="nav-link">核心特性</a>
+                <a href="#feature-showcase" class="nav-link">功能展示</a>
+                <a href="release-notes.html" class="nav-link">更新日志</a>
+            </div>
         </div>
     </nav>
 
@@ -371,26 +532,26 @@
 
         <!-- 下载按钮 -->
         <div class="download-section">
-            <div class="download-buttons">
-                <a href="#" class="download-btn loading" id="macDownloadBtn">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                    </svg>
+            <div class="download-container">
+                <a href="#" class="main-download-btn loading" id="mainDownloadBtn">
                     <div class="platform-info">
-                        <span>macOS</span>
-                        <span class="version" id="macVersion">加载中...</span>
+                        <span class="download-label">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" id="mainIcon">
+                                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                            </svg>
+                            下载 Toolkit Studio
+                        </span>
+                        <span class="platform-details" id="mainPlatformDetails">macOS Apple Silicon · 加载中...</span>
                     </div>
                 </a>
-
-                <a href="#" class="download-btn loading" id="winDownloadBtn">
+                <button class="dropdown-toggle" id="dropdownToggle">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                        <path d="M7 10l5 5 5-5z"/>
                     </svg>
-                    <div class="platform-info">
-                        <span>Windows</span>
-                        <span class="version" id="winVersion">加载中...</span>
-                    </div>
-                </a>
+                </button>
+                <div class="download-dropdown" id="downloadDropdown">
+                    <!-- 动态生成下拉选项 -->
+                </div>
             </div>
 
             <p class="beta-warning">
@@ -400,7 +561,7 @@
     </section>
 
     <!-- 核心功能 -->
-    <section class="core-features">
+    <section class="core-features" id="core-features">
         <div class="core-feature-card">
             <div class="core-feature-icon icon-project">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -459,7 +620,7 @@
     </section>
 
     <!-- 功能展示 -->
-    <section class="feature-section">
+    <section class="feature-section" id="feature-showcase">
         <div class="feature-item">
             <h2 class="feature-title">海量测试用例，一键导入</h2>
             <img src="create_proj.gif" alt="创建项目" class="feature-media">
@@ -519,11 +680,40 @@
     <script>
         // S3 配置
         const S3_BASE_URL = 'https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/app';
-
-        // 使用 beta 频道（因为还没有正式版）
         const CHANNEL = 'beta'; // 可以改为 'latest' 使用正式版
 
-        // 从 S3 获取 beta-mac.yml 或 latest-mac.yml 解析版本和下载链接
+        // 平台图标 SVG
+        const PLATFORM_ICONS = {
+            macIntel: '<path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>',
+            macArm: '<path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>',
+            windows: '<path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>',
+            linux: '<path d="M20.581 19.049c-.55-.446-.336-1.431-.907-1.917.553-3.365-.997-6.331-2.845-8.232-1.551-1.595-1.051-3.147-1.051-4.49 0-2.146-.881-4.41-3.55-4.41-2.853 0-3.635 2.38-3.663 3.738-.068 3.262.659 4.11-1.25 6.484-2.246 2.793-2.577 5.579-2.07 7.057-.237.276-.557.582-1.155.835-1.652.72-.441 1.925-.898 2.78-.13.243-.192.497-.192.74 0 .75.596 1.399 1.679 1.302 1.461-.13 2.809.905 3.681.905.77 0 1.402-.438 1.696-1.041 1.377-.339 3.077-.296 4.453.059.247.691.917 1.141 1.662 1.141 1.631 0 1.945-1.849 3.816-2.475.674-.225 1.013-.879 1.013-1.488 0-.39-.139-.761-.419-.988zM13.409 14.191c-.926 0-1.678-.761-1.678-1.699 0-.938.752-1.699 1.678-1.699.926 0 1.678.761 1.678 1.699 0 .938-.752 1.699-1.678 1.699zm-4.018 0c-.926 0-1.678-.761-1.678-1.699 0-.938.752-1.699 1.678-1.699.926 0 1.678.761 1.678 1.699 0 .938-.752 1.699-1.678 1.699z"/>'
+        };
+
+        // 检测用户操作系统和架构
+        function detectPlatform() {
+            const userAgent = navigator.userAgent.toLowerCase();
+
+            // 检测 macOS - 默认显示 Apple Silicon
+            if (userAgent.includes('mac')) {
+                return 'mac-arm64';
+            }
+
+            // 检测 Windows
+            if (userAgent.includes('win')) {
+                return 'win-x64';
+            }
+
+            // 检测 Linux
+            if (userAgent.includes('linux')) {
+                return 'linux';
+            }
+
+            // 默认返回 macOS ARM (最新架构)
+            return 'mac-arm64';
+        }
+
+        // 从 S3 获取 macOS 版本信息
         async function fetchMacVersion() {
             try {
                 const ymlFile = CHANNEL === 'beta' ? 'beta-mac.yml' : 'latest-mac.yml';
@@ -531,30 +721,25 @@
                 if (!response.ok) throw new Error(`Failed to fetch ${ymlFile}`);
 
                 const text = await response.text();
-                console.log(`${ymlFile}:`, text);
-
-                // 解析版本号
                 const versionMatch = text.match(/version:\s*([^\s]+)/);
                 if (!versionMatch) throw new Error('Failed to parse version');
                 const version = versionMatch[1];
 
-                // 优先查找 DMG 文件（arm64优先）
+                // 查找 DMG 文件
                 let filename = null;
-                const dmgArm64Match = text.match(/url:\s*([^\n]*\.dmg)/);
-                if (dmgArm64Match) {
-                    filename = dmgArm64Match[1].trim();
+                const dmgMatch = text.match(/url:\s*([^\n]*\.dmg)/);
+                if (dmgMatch) {
+                    filename = dmgMatch[1].trim();
                 } else {
-                    // 如果没有DMG，退回到path字段
                     const pathMatch = text.match(/path:\s*(.+)/);
-                    if (pathMatch) {
-                        filename = pathMatch[1].trim();
-                    }
+                    if (pathMatch) filename = pathMatch[1].trim();
                 }
 
                 if (filename) {
                     const downloadUrl = `${S3_BASE_URL}/${filename}`;
-                    console.log('macOS 文件名:', filename);
-                    return { version, downloadUrl };
+                    // 判断是 ARM 还是 Intel 版本
+                    const isArm = filename.includes('arm64') || filename.includes('aarch64');
+                    return { version, downloadUrl, arch: isArm ? 'arm64' : 'intel' };
                 }
 
                 throw new Error('Failed to parse download path');
@@ -564,7 +749,7 @@
             }
         }
 
-        // 从 S3 获取 beta.yml 或 latest.yml 解析版本和下载链接
+        // 从 S3 获取 Windows 版本信息
         async function fetchWinVersion() {
             try {
                 const ymlFile = CHANNEL === 'beta' ? 'beta.yml' : 'latest.yml';
@@ -572,19 +757,13 @@
                 if (!response.ok) throw new Error(`Failed to fetch ${ymlFile}`);
 
                 const text = await response.text();
-                console.log(`${ymlFile}:`, text);
-
-                // 解析 YAML 内容（简单解析）
                 const versionMatch = text.match(/version:\s*([^\s]+)/);
                 const pathMatch = text.match(/path:\s*(.+)/);
 
                 if (versionMatch && pathMatch) {
                     const version = versionMatch[1];
                     const filename = pathMatch[1];
-
-                    // 构建下载 URL
                     const downloadUrl = `${S3_BASE_URL}/${filename}`;
-
                     return { version, downloadUrl };
                 }
 
@@ -595,44 +774,172 @@
             }
         }
 
+        // 平台数据存储
+        let platformData = {
+            'mac-arm64': null,
+            'mac-intel': null,
+            'win-x64': null,
+            'linux': null
+        };
+
         // 初始化下载按钮
         async function initializeDownloadButtons() {
-            const macBtn = document.getElementById('macDownloadBtn');
-            const winBtn = document.getElementById('winDownloadBtn');
-            const macVersionEl = document.getElementById('macVersion');
-            const winVersionEl = document.getElementById('winVersion');
-
-            // 获取 macOS 版本
+            // 获取版本信息
             const macInfo = await fetchMacVersion();
+            const winInfo = await fetchWinVersion();
+
+            // 存储平台数据
             if (macInfo) {
-                macVersionEl.textContent = `v${macInfo.version}`;
-                macBtn.href = macInfo.downloadUrl;
-                macBtn.classList.remove('loading');
-                console.log('macOS 下载链接:', macInfo.downloadUrl);
-            } else {
-                macVersionEl.textContent = '暂不可用';
-                macBtn.classList.remove('loading');
-                macBtn.style.opacity = '0.5';
-                macBtn.style.pointerEvents = 'none';
+                if (macInfo.arch === 'arm64') {
+                    platformData['mac-arm64'] = macInfo;
+                    platformData['mac-intel'] = macInfo; // 通用版本
+                } else {
+                    platformData['mac-intel'] = macInfo;
+                }
+            }
+            if (winInfo) {
+                platformData['win-x64'] = winInfo;
             }
 
-            // 获取 Windows 版本
-            const winInfo = await fetchWinVersion();
-            if (winInfo) {
-                winVersionEl.textContent = `v${winInfo.version}`;
-                winBtn.href = winInfo.downloadUrl;
-                winBtn.classList.remove('loading');
-                console.log('Windows 下载链接:', winInfo.downloadUrl);
+            // 检测用户平台
+            const detectedPlatform = detectPlatform();
+            console.log('检测到的平台:', detectedPlatform);
+
+            // 设置主下载按钮
+            updateMainButton(detectedPlatform);
+
+            // 生成下拉菜单
+            generateDropdown(detectedPlatform);
+
+            // 绑定下拉菜单事件
+            setupDropdownEvents();
+        }
+
+        // 更新主下载按钮
+        function updateMainButton(platformKey) {
+            const mainBtn = document.getElementById('mainDownloadBtn');
+            const mainIcon = document.getElementById('mainIcon');
+            const mainDetails = document.getElementById('mainPlatformDetails');
+
+            const platformInfo = getPlatformInfo(platformKey);
+            const data = platformData[platformKey];
+
+            // 更新图标
+            mainIcon.innerHTML = PLATFORM_ICONS[platformInfo.iconKey];
+
+            if (data) {
+                // 格式: "macOS Apple Silicon · v0.5.0"
+                mainDetails.textContent = `${platformInfo.name} ${platformInfo.subtitle} · v${data.version}`;
+                mainBtn.href = data.downloadUrl;
+                mainBtn.classList.remove('loading');
             } else {
-                winVersionEl.textContent = '暂不可用';
-                winBtn.classList.remove('loading');
-                winBtn.style.opacity = '0.5';
-                winBtn.style.pointerEvents = 'none';
+                mainDetails.textContent = `${platformInfo.name} ${platformInfo.subtitle} · 暂不可用`;
+                mainBtn.href = '#';
+                mainBtn.classList.remove('loading');
+                if (!data) {
+                    mainBtn.style.opacity = '0.6';
+                    mainBtn.style.pointerEvents = 'none';
+                }
             }
+        }
+
+        // 获取平台信息
+        function getPlatformInfo(platformKey) {
+            const infos = {
+                'mac-arm64': { name: 'macOS', subtitle: 'Apple Silicon', iconKey: 'macArm' },
+                'mac-intel': { name: 'macOS', subtitle: 'Intel', iconKey: 'macIntel' },
+                'win-x64': { name: 'Windows', subtitle: 'x64', iconKey: 'windows' },
+                'linux': { name: 'Linux', subtitle: 'x64', iconKey: 'linux' }
+            };
+            return infos[platformKey] || infos['mac-arm64'];
+        }
+
+        // 生成下拉菜单
+        function generateDropdown(currentPlatform) {
+            const dropdown = document.getElementById('downloadDropdown');
+            const platforms = [
+                { key: 'mac-arm64', name: 'macOS', details: 'Apple Silicon', iconKey: 'macArm' },
+                { key: 'mac-intel', name: 'macOS', details: 'Intel', iconKey: 'macIntel' },
+                { key: 'win-x64', name: 'Windows', details: 'x64', iconKey: 'windows' },
+                { key: 'linux', name: 'Linux', details: 'x64', iconKey: 'linux' }
+            ];
+
+            // 过滤掉当前平台，只显示其他平台
+            const otherPlatforms = platforms.filter(platform => platform.key !== currentPlatform);
+
+            dropdown.innerHTML = otherPlatforms.map(platform => {
+                const data = platformData[platform.key];
+                const disabled = !data ? 'disabled' : '';
+
+                return `
+                    <a href="${data ? data.downloadUrl : '#'}"
+                       class="dropdown-item ${disabled}"
+                       data-platform="${platform.key}">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            ${PLATFORM_ICONS[platform.iconKey]}
+                        </svg>
+                        <div class="item-info">
+                            <span class="item-name">${platform.name} ${platform.details}</span>
+                            <span class="item-details">${data ? 'v' + data.version : '暂不可用'}</span>
+                        </div>
+                    </a>
+                `;
+            }).join('');
+        }
+
+        // 设置下拉菜单事件
+        function setupDropdownEvents() {
+            const toggle = document.getElementById('dropdownToggle');
+            const dropdown = document.getElementById('downloadDropdown');
+
+            // 切换下拉菜单
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.classList.toggle('open');
+                toggle.classList.toggle('open');
+            });
+
+            // 点击外部关闭
+            document.addEventListener('click', () => {
+                dropdown.classList.remove('open');
+                toggle.classList.remove('open');
+            });
+
+            // 阻止下拉菜单内部点击事件冒泡
+            dropdown.addEventListener('click', (e) => {
+                if (e.target.classList.contains('dropdown-item') && !e.target.classList.contains('disabled')) {
+                    dropdown.classList.remove('open');
+                    toggle.classList.remove('open');
+                }
+            });
         }
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', initializeDownloadButtons);
+
+        // 平滑滚动到锚点
+        document.addEventListener('DOMContentLoaded', () => {
+            // 处理导航栏锚点链接的点击
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    const href = this.getAttribute('href');
+                    if (href === '#') return;
+
+                    e.preventDefault();
+                    const target = document.querySelector(href);
+
+                    if (target) {
+                        // 计算目标位置(考虑导航栏高度 72px)
+                        const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - 90;
+
+                        window.scrollTo({
+                            top: targetPosition,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>
