@@ -514,6 +514,8 @@
             </div>
             <div class="nav-links">
                 <a href="index.html" class="nav-link active">首页</a>
+                <a href="#core-features" class="nav-link">核心特性</a>
+                <a href="#feature-showcase" class="nav-link">功能展示</a>
                 <a href="release-notes.html" class="nav-link">更新日志</a>
             </div>
         </div>
@@ -559,7 +561,7 @@
     </section>
 
     <!-- 核心功能 -->
-    <section class="core-features">
+    <section class="core-features" id="core-features">
         <div class="core-feature-card">
             <div class="core-feature-icon icon-project">
                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -618,7 +620,7 @@
     </section>
 
     <!-- 功能展示 -->
-    <section class="feature-section">
+    <section class="feature-section" id="feature-showcase">
         <div class="feature-item">
             <h2 class="feature-title">海量测试用例，一键导入</h2>
             <img src="create_proj.gif" alt="创建项目" class="feature-media">
@@ -914,6 +916,30 @@
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', initializeDownloadButtons);
+
+        // 平滑滚动到锚点
+        document.addEventListener('DOMContentLoaded', () => {
+            // 处理导航栏锚点链接的点击
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    const href = this.getAttribute('href');
+                    if (href === '#') return;
+
+                    e.preventDefault();
+                    const target = document.querySelector(href);
+
+                    if (target) {
+                        // 计算目标位置(考虑导航栏高度 72px)
+                        const targetPosition = target.getBoundingClientRect().top + window.pageYOffset - 90;
+
+                        window.scrollTo({
+                            top: targetPosition,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+        });
     </script>
 </body>
 </html>
