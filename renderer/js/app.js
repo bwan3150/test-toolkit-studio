@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 2. 加载UI模块
         // notifications 已迁移到 utils/app-notifications.js,在 index.html 中静态加载
-        await loadScript('../js/components/navigation.js');
+        await loadScript('../js/utils/page-navigator.js'); // 页面导航工具
 
         // 加载CodeJar编辑器模块
         await loadScript('../js/testcase/codejar/codejar.js'); // CodeJar 核心库
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 检查模块是否正确加载
         // console.log('检查模块加载状态...'); // 已禁用以减少日志
         const requiredModules = [
-            'NavigationModule', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
+            'PageNavigator', 'EditorManager', 'ResizablePanelsModule', 'StatusBarModule',
             'ProjectManagerModule', 'TestcaseController', 'DeviceManagerModule',
             'LogManagerModule', 'TestReportModule', 'SettingsModule', 'KeyboardShortcutsModule', 'IpcHandlersModule',
             'AppNotifications', 'AppGlobals', 'ContextMenuActions'
@@ -221,12 +221,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 初始化UI组件
         try {
-            window.NavigationModule.initializeNavigation();
+            // PageNavigator 自动初始化，不需要手动调用
             // console.log('✓ 导航模块已初始化'); // 已禁用以减少日志
-            
+
             // EditorManager已在HTML加载时初始化
             // console.log('✓ 编辑器模块已初始化'); // 已禁用以减少日志
-            
+
             window.ResizablePanelsModule.initializeResizablePanels();
             // console.log('✓ 面板模块已初始化'); // 已禁用以减少日志
         } catch (error) {
@@ -327,7 +327,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.StatusBarModule.init();
             // console.log('✓ 状态栏已初始化'); // 已禁用以减少日志
         }
-        
+
+        // 所有模块加载完成后，初始化页面导航器
+        if (window.PageNavigator) {
+            window.PageNavigator.initialize();
+            // 日志已在 initialize 函数内部输出
+        }
+
         // console.log('✅ Test Toolkit Studio 已就绪'); // 完全禁用所有日志
         
         // 显示应用加载成功的通知
