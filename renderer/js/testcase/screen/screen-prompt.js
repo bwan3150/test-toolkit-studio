@@ -74,6 +74,42 @@ const ScreenPrompt = {
   },
 
   /**
+   * 将提示按钮设置为 loading 状态
+   */
+  setButtonLoading() {
+    const btn = document.getElementById('captureScreenPromptBtn');
+    if (btn) {
+      btn.disabled = true;
+      btn.style.border = 'none';
+      btn.style.background = 'transparent';
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; animation: spin 1s linear infinite;">
+          <path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+        </svg>
+        获取中...
+      `;
+    }
+  },
+
+  /**
+   * 恢复提示按钮到原始状态
+   */
+  resetButton() {
+    const btn = document.getElementById('captureScreenPromptBtn');
+    if (btn) {
+      btn.disabled = false;
+      btn.style.border = '';
+      btn.style.background = '';
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px;">
+          <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+        点击获取屏幕信息
+      `;
+    }
+  },
+
+  /**
    * 移除已存在的提示
    */
   _removeExistingPrompt() {
@@ -101,18 +137,7 @@ const ScreenPrompt = {
     }
 
     // 显示加载状态
-    const btn = document.getElementById('captureScreenPromptBtn');
-    if (btn) {
-      btn.disabled = true;
-      btn.style.border = 'none';
-      btn.style.background = 'transparent';
-      btn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px; animation: spin 1s linear infinite;">
-          <path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
-        </svg>
-        获取中...
-      `;
-    }
+    this.setButtonLoading();
 
     try {
       // 调用 tke-controller-capture 获取截图和 XML
@@ -167,17 +192,7 @@ const ScreenPrompt = {
       window.AppNotifications?.error(`获取失败: ${error.message}`);
 
       // 恢复按钮
-      if (btn) {
-        btn.disabled = false;
-        btn.style.border = '';
-        btn.style.background = '';
-        btn.innerHTML = `
-          <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px;">
-            <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-          </svg>
-          点击获取屏幕信息
-        `;
-      }
+      this.resetButton();
     }
   }
 };

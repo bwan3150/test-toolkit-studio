@@ -154,8 +154,8 @@ class ScriptRunner {
 
                 // 在执行命令前刷新设备截图
                 try {
-                    if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                        await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                    if (window.ScreenCapture && window.ScreenCapture.refreshDeviceScreen) {
+                        await window.ScreenCapture.refreshDeviceScreen();
                     }
                 } catch (error) {
                     // 截图失败不影响脚本执行
@@ -206,8 +206,8 @@ class ScriptRunner {
             if (!this.shouldStop && this.currentLineIndex === commandLines.length - 1) {
                 // 最后一步执行完后,刷新设备截图显示最终状态
                 try {
-                    if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                        await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                    if (window.ScreenCapture && window.ScreenCapture.refreshDeviceScreen) {
+                        await window.ScreenCapture.refreshDeviceScreen();
                     }
                 } catch (error) {
                     // 截图失败不影响成功提示

@@ -22,6 +22,11 @@ async function refreshDeviceScreen() {
         return;
     }
 
+    // 如果存在提示按钮，将其改为 loading 状态
+    if (window.ScreenPrompt && window.ScreenPrompt.setButtonLoading) {
+        window.ScreenPrompt.setButtonLoading();
+    }
+
     // 如果XML overlay已启用,先移除overlay UI(但保持状态)
     const wasXmlOverlayEnabled = window.ScreenState.xmlOverlayEnabled;
     if (wasXmlOverlayEnabled) {
@@ -48,6 +53,11 @@ async function refreshDeviceScreen() {
         if (img) {
             img.style.display = 'none';
         }
+
+        // 恢复按钮状态（如果存在）
+        if (window.ScreenPrompt && window.ScreenPrompt.resetButton) {
+            window.ScreenPrompt.resetButton();
+        }
         return;
     }
 
@@ -58,6 +68,11 @@ async function refreshDeviceScreen() {
     } catch (e) {
         window.rError('解析TKE输出失败:', e);
         window.AppNotifications?.error('解析截图结果失败');
+
+        // 恢复按钮状态（如果存在）
+        if (window.ScreenPrompt && window.ScreenPrompt.resetButton) {
+            window.ScreenPrompt.resetButton();
+        }
         return;
     }
 
@@ -76,6 +91,11 @@ async function refreshDeviceScreen() {
             img.onload = () => {
                 img.style.display = 'block';
                 window.rLog('截图显示成功');
+
+                // 移除提示按钮（如果存在）
+                if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
+                    window.ScreenPrompt.removePrompt();
+                }
 
                 // 给浏览器一点时间完成布局
                 setTimeout(resolve, 50);
