@@ -152,6 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/settings/settings.js');
         await loadScript('../js/components/resizable-panels.js');
         await loadScript('../js/components/status-bar.js');
+        await loadScript('../js/components/modal-manager.js');
         // console.log('✓ UI模块已加载'); // 已禁用以减少日志
         
         // 3. 加载业务功能模块

@@ -168,11 +168,29 @@
         break;
 
       case 'testcase':
-        // 确保底部面板正确初始化和显示
-        if (window.TestcaseController && window.TestcaseController.initializeBottomPanelDisplay) {
-          setTimeout(() => {
-            window.TestcaseController.initializeBottomPanelDisplay();
-          }, 100);
+        // 检查是否已打开项目
+        if (!window.AppGlobals || !window.AppGlobals.currentProject) {
+          if (window.rLog) {
+            window.rLog('⚠️ testcase 页面需要项目，显示提示');
+          }
+          if (window.ModalManager) {
+            window.ModalManager.showAlert({
+              title: '',
+              message: '请先打开一个项目',
+              confirmText: '确定',
+              blockPage: true,
+              onConfirm: () => {
+                navigateTo('project');
+              }
+            });
+          }
+        } else {
+          // 确保底部面板正确初始化和显示
+          if (window.TestcaseController && window.TestcaseController.initializeBottomPanelDisplay) {
+            setTimeout(() => {
+              window.TestcaseController.initializeBottomPanelDisplay();
+            }, 100);
+          }
         }
         break;
     }

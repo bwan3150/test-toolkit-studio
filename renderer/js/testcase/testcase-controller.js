@@ -14,7 +14,7 @@ function initializeTestcasePage() {
     const toggleXmlBtn = document.getElementById('toggleXmlBtn');
     const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
     const deviceSelect = document.getElementById('deviceSelect');
-    
+
     window.rLog('初始化测试用例页面');
 
     // 绑定 Run Test 按钮
