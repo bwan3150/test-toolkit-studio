@@ -41,8 +41,14 @@ function initializeTestcasePage() {
     // 绑定 XML 覆盖层切换按钮
     if (toggleXmlBtn) {
         toggleXmlBtn.addEventListener('click', () => {
-            if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.toggleXmlOverlay) {
-                window.DeviceScreenManagerModule.toggleXmlOverlay();
+            // 切换到 XML 模式
+            if (window.ScreenCoordinator) {
+                const currentMode = window.ScreenCoordinator.getCurrentMode();
+                if (currentMode === 'xml') {
+                    window.ScreenCoordinator.switchTo('normal');
+                } else {
+                    window.ScreenCoordinator.switchTo('xml');
+                }
             }
         });
     }
@@ -50,17 +56,17 @@ function initializeTestcasePage() {
     // 绑定刷新设备屏幕按钮
     if (refreshDeviceBtn) {
         refreshDeviceBtn.addEventListener('click', () => {
-            if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                window.DeviceScreenManagerModule.refreshDeviceScreen();
+            if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
+                window.ScreenCoordinator.refreshDeviceScreen();
             }
         });
     }
     
-    // 初始化屏幕模式管理器
+    // 初始化屏幕协调器
     setTimeout(() => {
-        window.rLog('延迟初始化 ScreenModeManager');
-        if (window.ScreenModeManagerModule && window.ScreenModeManagerModule.initializeScreenModeManager) {
-            window.ScreenModeManagerModule.initializeScreenModeManager();
+        window.rLog('延迟初始化 ScreenCoordinator');
+        if (window.initializeScreenCoordinator) {
+            window.initializeScreenCoordinator();
         }
     }, 100);
     
@@ -314,52 +320,57 @@ window.TestcaseController = {
         }
     },
 
-    // 设备屏幕相关功能 - 委托给 DeviceScreenManagerModule
+    // 设备屏幕相关功能 - 委托给 ScreenCoordinator
     refreshDeviceScreen: async () => {
-        if (window.DeviceScreenManagerModule) {
-            return await window.DeviceScreenManagerModule.refreshDeviceScreen();
+        if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
+            return await window.ScreenCoordinator.refreshDeviceScreen();
         }
     },
 
     toggleXmlOverlay: () => {
-        if (window.DeviceScreenManagerModule) {
-            return window.DeviceScreenManagerModule.toggleXmlOverlay();
+        if (window.ScreenCoordinator) {
+            const currentMode = window.ScreenCoordinator.getCurrentMode();
+            if (currentMode === 'xml') {
+                window.ScreenCoordinator.switchTo('normal');
+            } else {
+                window.ScreenCoordinator.switchTo('xml');
+            }
         }
     },
 
     enableXmlOverlay: async (deviceId) => {
-        if (window.DeviceScreenManagerModule) {
-            return await window.DeviceScreenManagerModule.enableXmlOverlay(deviceId);
+        if (window.ScreenCoordinator) {
+            return await window.ScreenCoordinator.switchTo('xml');
         }
     },
 
     displayUIElementList: (elements) => {
-        if (window.DeviceScreenManagerModule) {
-            return window.DeviceScreenManagerModule.displayUIElementList(elements);
+        if (window.UIExtractor && window.UIExtractor.displayUIElementList) {
+            return window.UIExtractor.displayUIElementList(elements);
         }
     },
 
     // 屏幕模式管理器代理（用于兼容性）
     ScreenModeManager: {
         setTestRunning: (running) => {
-            if (window.ScreenModeManagerModule && window.ScreenModeManagerModule.ScreenModeManager) {
-                window.ScreenModeManagerModule.ScreenModeManager.setTestRunning(running);
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.setTestRunning(running);
             }
         },
         updateZoomControlsVisibility: () => {
-            if (window.ScreenModeManagerModule && window.ScreenModeManagerModule.ScreenModeManager) {
-                window.ScreenModeManagerModule.ScreenModeManager.updateZoomControlsVisibility();
+            if (window.ScreenCoordinator && window.ScreenCoordinator._updateZoomControlsVisibility) {
+                window.ScreenCoordinator._updateZoomControlsVisibility();
             }
         },
         // 代理其他可能用到的方法
         init: () => {
-            if (window.ScreenModeManagerModule && window.ScreenModeManagerModule.ScreenModeManager) {
-                window.ScreenModeManagerModule.ScreenModeManager.init();
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.init();
             }
         },
         setMode: (mode) => {
-            if (window.ScreenModeManagerModule && window.ScreenModeManagerModule.ScreenModeManager) {
-                window.ScreenModeManagerModule.ScreenModeManager.setMode(mode);
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.switchTo(mode);
             }
         }
     }
