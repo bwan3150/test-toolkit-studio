@@ -610,7 +610,7 @@ async function navigateToTestcase(record, index) {
         }
         
         // 导航到testcase页面
-        document.querySelector('[data-page="testcase"]').click();
+        window.PageNavigator.navigateTo('testcase');
         
         // 重新加载文件树
         await window.TestcaseController.loadFileTree();
@@ -768,7 +768,7 @@ async function createTestCase(record, index) {
         await refreshTestCaseTable();
         
         // 导航到testcase页面
-        document.querySelector('[data-page="testcase"]').click();
+        window.PageNavigator.navigateTo('testcase');
         
         // 重新加载文件树
         await window.TestcaseController.loadFileTree();

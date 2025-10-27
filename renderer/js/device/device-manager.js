@@ -744,7 +744,22 @@ async function refreshDeviceList() {
         // 如果设备仍然可用则恢复选择
         if (savedSelection && Array.from(deviceSelect.options).some(opt => opt.value === savedSelection)) {
             deviceSelect.value = savedSelection;
+            // 通知 ScreenCoordinator 检查设备状态
+            setTimeout(() => {
+                if (window.ScreenCoordinator && window.ScreenCoordinator.checkDeviceStatusAndPrompt) {
+                    window.ScreenCoordinator.checkDeviceStatusAndPrompt();
+                }
+            }, 200);
         }
+    }
+
+    // 如果没有选中任何设备，也通知 ScreenCoordinator 显示提示
+    if (!deviceSelect.value) {
+        setTimeout(() => {
+            if (window.ScreenCoordinator && window.ScreenCoordinator.checkDeviceStatusAndPrompt) {
+                window.ScreenCoordinator.checkDeviceStatusAndPrompt();
+            }
+        }, 200);
     }
 }
 

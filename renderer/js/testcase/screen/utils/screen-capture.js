@@ -22,6 +22,11 @@ async function refreshDeviceScreen() {
         return;
     }
 
+    // 如果存在提示按钮，将其改为 loading 状态
+    if (window.ScreenPrompt && window.ScreenPrompt.setButtonLoading) {
+        window.ScreenPrompt.setButtonLoading();
+    }
+
     // 如果XML overlay已启用,先移除overlay UI(但保持状态)
     const wasXmlOverlayEnabled = window.ScreenState.xmlOverlayEnabled;
     if (wasXmlOverlayEnabled) {
@@ -43,15 +48,15 @@ async function refreshDeviceScreen() {
         window.rError('截图失败:', error);
         window.AppNotifications?.error(`截图失败: ${error}`);
 
-        // 隐藏截图,显示默认占位符
+        // 隐藏截图
         const img = document.getElementById('deviceScreenshot');
         if (img) {
             img.style.display = 'none';
         }
-        const placeholder = document.querySelector('.screen-placeholder');
-        if (placeholder) {
-            placeholder.textContent = 'No device connected';
-            placeholder.style.display = 'block';
+
+        // 恢复按钮状态（如果存在）
+        if (window.ScreenPrompt && window.ScreenPrompt.resetButton) {
+            window.ScreenPrompt.resetButton();
         }
         return;
     }
@@ -63,6 +68,11 @@ async function refreshDeviceScreen() {
     } catch (e) {
         window.rError('解析TKE输出失败:', e);
         window.AppNotifications?.error('解析截图结果失败');
+
+        // 恢复按钮状态（如果存在）
+        if (window.ScreenPrompt && window.ScreenPrompt.resetButton) {
+            window.ScreenPrompt.resetButton();
+        }
         return;
     }
 
@@ -80,11 +90,12 @@ async function refreshDeviceScreen() {
         await new Promise((resolve) => {
             img.onload = () => {
                 img.style.display = 'block';
-                const placeholder = document.querySelector('.screen-placeholder');
-                if (placeholder) {
-                    placeholder.style.display = 'none';
-                }
                 window.rLog('截图显示成功');
+
+                // 移除提示按钮（如果存在）
+                if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
+                    window.ScreenPrompt.removePrompt();
+                }
 
                 // 给浏览器一点时间完成布局
                 setTimeout(resolve, 50);
@@ -95,6 +106,11 @@ async function refreshDeviceScreen() {
         // 更新设备信息并获取UI结构(传入xml路径)
         if (window.UIExtractor && window.UIExtractor.updateDeviceInfoAndGetUIStructure) {
             await window.UIExtractor.updateDeviceInfoAndGetUIStructure(result.xml);
+        }
+
+        // 检查设备状态并更新滑块（截图成功后应该解锁滑块）
+        if (window.ScreenCoordinator && window.ScreenCoordinator.checkDeviceStatusAndPrompt) {
+            window.ScreenCoordinator.checkDeviceStatusAndPrompt();
         }
     }
 }

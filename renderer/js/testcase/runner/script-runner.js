@@ -124,6 +124,12 @@ class ScriptRunner {
         // 输出脚本开始执行
         window.ExecutionOutput?.scriptStart();
 
+        // 设置测试运行状态并锁定滑块到 normal 模式
+        if (window.ModeSlider) {
+            window.ModeSlider.setTestRunning(true);
+            window.ModeSlider.lockSlider();
+        }
+
         // 锁定编辑器并更新状态栏
         editor.lock?.();
         window.StatusBarModule?.updateEditorMode('block', 'running');
@@ -149,8 +155,8 @@ class ScriptRunner {
 
                 // 在执行命令前刷新设备截图
                 try {
-                    if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                        await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                    if (window.ScreenCapture && window.ScreenCapture.refreshDeviceScreen) {
+                        await window.ScreenCapture.refreshDeviceScreen();
                     }
                 } catch (error) {
                     // 截图失败不影响脚本执行
@@ -201,8 +207,8 @@ class ScriptRunner {
             if (!this.shouldStop && this.currentLineIndex === commandLines.length - 1) {
                 // 最后一步执行完后,刷新设备截图显示最终状态
                 try {
-                    if (window.DeviceScreenManagerModule && window.DeviceScreenManagerModule.refreshDeviceScreen) {
-                        await window.DeviceScreenManagerModule.refreshDeviceScreen();
+                    if (window.ScreenCapture && window.ScreenCapture.refreshDeviceScreen) {
+                        await window.ScreenCapture.refreshDeviceScreen();
                     }
                 } catch (error) {
                     // 截图失败不影响成功提示
@@ -228,6 +234,12 @@ class ScriptRunner {
             }
 
         } finally {
+            // 清除测试运行状态并解锁滑块
+            if (window.ModeSlider) {
+                window.ModeSlider.setTestRunning(false);
+                window.ModeSlider.unlockSlider();
+            }
+
             // 解锁编辑器并恢复状态栏
             editor.unlock?.();
             window.StatusBarModule?.updateEditorMode('block', 'idle');
@@ -248,6 +260,11 @@ class ScriptRunner {
         if (this.isRunning) {
             window.rLog('请求停止脚本执行');
             this.shouldStop = true;
+
+            // 清除测试运行状态
+            if (window.ModeSlider) {
+                window.ModeSlider.setTestRunning(false);
+            }
 
             // 立即解锁编辑器并恢复状态栏
             const editor = window.EditorManager?.getActiveEditor();
