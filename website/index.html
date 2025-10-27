@@ -37,7 +37,13 @@
             padding: 0 40px;
             display: flex;
             align-items: center;
+            justify-content: space-between;
             height: 72px;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
         }
 
         .logo {
@@ -50,6 +56,28 @@
             font-weight: 600;
             color: #f0f0f0;
             letter-spacing: -0.5px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: #999;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-link:hover {
+            color: #f0f0f0;
+        }
+
+        .nav-link.active {
+            color: #f0f0f0;
         }
 
         /* 主要内容区域 */
@@ -450,7 +478,11 @@
             }
 
             .nav-links {
-                display: none;
+                gap: 16px;
+            }
+
+            .nav-link {
+                font-size: 13px;
             }
 
             .download-section {
@@ -476,8 +508,14 @@
     <!-- 导航栏 -->
     <nav>
         <div class="nav-container">
-            <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
-            <span class="logo-text">Toolkit</span>
+            <div class="nav-left">
+                <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
+                <span class="logo-text">Toolkit</span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link active">首页</a>
+                <a href="release-notes.html" class="nav-link">更新日志</a>
+            </div>
         </div>
     </nav>
 
