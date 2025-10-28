@@ -267,14 +267,22 @@ class BlockModeEditor {
                         const isImage = !!imageMatch;
 
                         if (isImage) {
-                            // 图片元素 - 显示图片预览
+                            // 图片元素 - 显示图片预览，失败时显示图标
+                            const { path: PathModule } = window.AppGlobals;
+                            const projectPath = window.AppGlobals.currentProject;
+                            const imagePath = projectPath ? PathModule.join(projectPath, 'locator/img', `${elementName}.png`) : '';
+
                             commandContent += `
-                                <div class="param-visual-card" data-param="${param.name}" data-command-index="${index}">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;">
-                                        <rect x="3" y="3" width="18" height="18" fill="#4a90e2" opacity="0.2" rx="2"/>
-                                        <circle cx="8.5" cy="8.5" r="1.5" fill="#4a90e2"/>
-                                        <path d="M3 17l4-4 3 3 6-6 5 5v3H3v-1z" fill="#4a90e2"/>
-                                    </svg>
+                                <div class="param-visual-card param-image-card" data-param="${param.name}" data-command-index="${index}">
+                                    <div class="visual-image-preview">
+                                        <img src="${imagePath}" alt="${elementName}"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" style="display: none; flex-shrink: 0;">
+                                            <rect x="3" y="3" width="18" height="18" fill="#4a90e2" opacity="0.2" rx="2"/>
+                                            <circle cx="8.5" cy="8.5" r="1.5" fill="#4a90e2"/>
+                                            <path d="M3 17l4-4 3 3 6-6 5 5v3H3v-1z" fill="#4a90e2"/>
+                                        </svg>
+                                    </div>
                                     <span class="visual-name">${elementName}</span>
                                     <button class="visual-remove-btn" data-param="${param.name}" data-command-index="${index}" title="移除">×</button>
                                 </div>

@@ -34,7 +34,7 @@ const BlockUIStrategyMenu = {
             {
                 value: 'text',
                 label: 'Text',
-                icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#2196f3" d="M9.6 14L12 7.7L14.4 14M11 5L5.5 19h2.25l1.12-3h6.25l1.12 3h2.25L13 5h-2Z"/></svg>',
+                icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#00897b" d="M9.6 14L12 7.7L14.4 14M11 5L5.5 19h2.25l1.12-3h6.25l1.12 3h2.25L13 5h-2Z"/></svg>',
                 description: '仅匹配文本内容'
             },
             {
@@ -208,7 +208,7 @@ const BlockUIStrategyMenu = {
         const icons = {
             '': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/></svg>`,
             'resourceId': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#4caf50" d="M5.5 7A1.5 1.5 0 0 0 4 8.5v7A1.5 1.5 0 0 0 5.5 17h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 12.5 7h-7m0 1.5h7v7h-7v-7M15 11v2h2v4h2v-4h2v-2h-6Z"/></svg>`,
-            'text': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#2196f3" d="M9.6 14L12 7.7L14.4 14M11 5L5.5 19h2.25l1.12-3h6.25l1.12 3h2.25L13 5h-2Z"/></svg>`,
+            'text': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#00897b" d="M9.6 14L12 7.7L14.4 14M11 5L5.5 19h2.25l1.12-3h6.25l1.12 3h2.25L13 5h-2Z"/></svg>`,
             'className': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#9c27b0" d="M10 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>`,
             'xpath': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#ff9800" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8h5Z"/></svg>`
         };
