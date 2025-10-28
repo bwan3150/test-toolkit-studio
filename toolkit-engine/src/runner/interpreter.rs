@@ -207,12 +207,12 @@ impl ScriptInterpreter {
                     tokio::time::sleep(tokio::time::Duration::from_millis(*num as u64)).await;
                 }
             }
-            TksParam::XmlElement(element_name) | TksParam::ImageElement(element_name) => {
-                debug!("等待元素出现: {}", element_name);
+            TksParam::XmlElement { name, strategy } => {
+                debug!("等待XML元素出现: {}, 策略: {:?}", name, strategy);
                 // 等待元素出现，最多等待30秒
                 let timeout = tokio::time::Duration::from_secs(30);
                 let start = tokio::time::Instant::now();
-                
+
                 while start.elapsed() < timeout {
                     // 刷新UI状态
                     if let Err(e) = self.controller.capture_ui_state(&self.project_path).await {
@@ -220,31 +220,46 @@ impl ScriptInterpreter {
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                         continue;
                     }
-                    
+
                     // 尝试查找元素
-                    let result = match &params[0] {
-                        TksParam::XmlElement(name) => {
-                            debug!("查找XML元素: {}", name);
-                            self.recognizer.find_xml_element(name)
-                        }
-                        TksParam::ImageElement(name) => {
-                            debug!("查找图像元素: {}", name);
-                            self.recognizer.find_image_element(name)
-                        }
-                        _ => unreachable!(),
-                    };
-                    
-                    if result.is_ok() {
-                        info!("找到元素: {}", element_name);
+                    if self.recognizer.find_xml_element(name, strategy.as_deref()).is_ok() {
+                        info!("找到XML元素: {}", name);
                         return Ok(()); // 找到元素，结束等待
                     } else {
-                        debug!("未找到元素: {}, 错误: {}", element_name, result.unwrap_err());
+                        debug!("未找到XML元素: {}", name);
                     }
-                    
+
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
-                
-                return Err(TkeError::ScriptExecuteError(format!("等待元素超时: {}", element_name)));
+
+                return Err(TkeError::ScriptExecuteError(format!("等待XML元素超时: {}", name)));
+            }
+            TksParam::ImageElement(name) => {
+                debug!("等待图像元素出现: {}", name);
+                // 等待元素出现，最多等待30秒
+                let timeout = tokio::time::Duration::from_secs(30);
+                let start = tokio::time::Instant::now();
+
+                while start.elapsed() < timeout {
+                    // 刷新UI状态
+                    if let Err(e) = self.controller.capture_ui_state(&self.project_path).await {
+                        debug!("刷新UI状态失败: {}", e);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+
+                    // 尝试查找元素
+                    if self.recognizer.find_image_element(name).is_ok() {
+                        info!("找到图像元素: {}", name);
+                        return Ok(()); // 找到元素，结束等待
+                    } else {
+                        debug!("未找到图像元素: {}", name);
+                    }
+
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+
+                return Err(TkeError::ScriptExecuteError(format!("等待图像元素超时: {}", name)));
             }
             TksParam::Text(text) => {
                 // 支持文本参数的等待，与JS版本保持一致
@@ -271,31 +286,31 @@ impl ScriptInterpreter {
         
         // 刷新UI状态
         self.controller.capture_ui_state(&self.project_path).await?;
-        
+
         let element_exists = match &params[0] {
-            TksParam::XmlElement(name) => {
-                self.recognizer.find_xml_element(name).is_ok()
+            TksParam::XmlElement { name, strategy } => {
+                self.recognizer.find_xml_element(name, strategy.as_deref()).is_ok()
             }
             TksParam::ImageElement(name) => {
                 self.recognizer.find_image_element(name).is_ok()
             }
             _ => return Err(TkeError::InvalidArgument("断言目标必须是元素".to_string())),
         };
-        
+
         let expected = match &params[1] {
             TksParam::Boolean(b) => *b,
             TksParam::Text(t) => t == "存在",
             _ => return Err(TkeError::InvalidArgument("断言条件无效".to_string())),
         };
-        
+
         if element_exists != expected {
             let element_name = match &params[0] {
-                TksParam::XmlElement(name) | TksParam::ImageElement(name) => name,
+                TksParam::XmlElement { name, .. } | TksParam::ImageElement(name) => name,
                 _ => "未知元素",
             };
-            
+
             return Err(TkeError::ScriptExecuteError(
-                format!("断言失败: 元素 '{}' {}，但期望{}", 
+                format!("断言失败: 元素 '{}' {}，但期望{}",
                        element_name,
                        if element_exists { "存在" } else { "不存在" },
                        if expected { "存在" } else { "不存在" })
@@ -312,15 +327,15 @@ impl ScriptInterpreter {
                 debug!("使用坐标: ({}, {})", point.x, point.y);
                 Ok(*point)
             }
-            TksParam::XmlElement(name) => {
-                debug!("查找XML元素: {}", name);
+            TksParam::XmlElement { name, strategy } => {
+                debug!("查找XML元素: {}, 策略: {:?}", name, strategy);
                 // 刷新UI状态
                 if let Err(e) = self.controller.capture_ui_state(&self.project_path).await {
                     error!("刷新UI状态失败: {}", e);
                     return Err(e);
                 }
-                
-                match self.recognizer.find_xml_element(name) {
+
+                match self.recognizer.find_xml_element(name, strategy.as_deref()) {
                     Ok(point) => {
                         info!("找到XML元素 '{}' 位置: ({}, {})", name, point.x, point.y);
                         Ok(point)

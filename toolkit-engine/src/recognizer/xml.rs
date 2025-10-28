@@ -1,15 +1,19 @@
 // XML元素查找模块 - 根据Locator定义查找UI元素
 
-use crate::{Result, TkeError, Point, UIElement, Locator, Bounds, Fetcher};
+use crate::{Result, TkeError, Point, UIElement, Locator, Fetcher};
 use std::path::PathBuf;
 use std::collections::HashMap;
 use tracing::debug;
 
 /// 根据XML locator查找元素
+///
+/// # 参数
+/// - `strategy_override`: 脚本中指定的策略（如 {元素名}#resourceId），优先于 locator 定义中的 matchStrategy
 pub fn find_by_locator(
     project_path: &PathBuf,
     locators: &HashMap<String, Locator>,
-    locator_name: &str
+    locator_name: &str,
+    strategy_override: Option<&str>  // 脚本语法指定的策略
 ) -> Result<Point> {
     // 获取当前UI树
     let ui_tree_path = project_path.join("workarea").join("current_ui_tree.xml");
@@ -25,198 +29,184 @@ pub fn find_by_locator(
         .ok_or_else(|| TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name)))?;
 
     // 查找匹配的元素
-    let element = find_element_by_locator(&elements, locator)?;
+    let element = find_element_by_locator(&elements, locator, strategy_override)?;
 
     Ok(element.center())
 }
 
 /// 根据locator定义查找元素
-fn find_element_by_locator(elements: &[UIElement], locator: &Locator) -> Result<UIElement> {
-    debug!("开始查找元素，locator: {:?}", locator);
-    debug!("当前有{}个UI元素可供匹配", elements.len());
+///
+/// # 新的查找逻辑 (2024重构)
+/// 1. 如果脚本指定了策略（如 {元素名}#resourceId），则**只使用该策略，严格匹配**
+/// 2. 如果脚本没有指定策略（仅 {元素名}），则使用**全精确匹配**（所有 locator 字段都必须匹配）
+/// 3. 移除了原有的瀑布式匹配逻辑，避免找错元素
+fn find_element_by_locator(
+    elements: &[UIElement],
+    locator: &Locator,
+    strategy_override: Option<&str>
+) -> Result<UIElement> {
+    debug!("🔍 开始查找元素");
+    debug!("  - Locator 定义: {:?}", locator);
+    debug!("  - 脚本指定策略: {:?}", strategy_override);
+    debug!("  - 当前有 {} 个UI元素可供匹配", elements.len());
 
-    // 策略1: 根据matchStrategy优先匹配
-    if let Some(ref strategy) = locator.match_strategy {
-        debug!("使用匹配策略: {}", strategy);
-        match strategy.as_str() {
-            "resourceId" => {
-                if let Some(ref resource_id) = locator.resource_id {
-                    if let Some(element) = find_by_resource_id(elements, resource_id) {
-                        debug!("通过resource_id匹配找到元素");
-                        return Ok(element);
-                    }
-                }
-            }
-            "className" => {
-                if let Some(ref class_name) = locator.class_name {
-                    if let Some(element) = find_by_class_name(elements, class_name) {
-                        debug!("通过class_name匹配找到元素");
-                        return Ok(element);
-                    }
-                }
-            }
-            "text" => {
-                if let Some(ref text) = locator.text {
-                    if let Some(element) = find_by_text(elements, text) {
-                        debug!("通过text匹配找到元素");
-                        return Ok(element);
-                    }
-                }
-            }
-            "xpath" => {
-                if let Some(ref xpath) = locator.xpath {
-                    if let Some(element) = find_by_xpath(elements, xpath) {
-                        debug!("通过xpath匹配找到元素");
-                        return Ok(element);
-                    }
-                }
-            }
-            _ => debug!("未知的匹配策略: {}", strategy),
-        }
+    // 🔥 情况1: 脚本指定了策略（如 {登录按钮}#resourceId），只使用该策略
+    if let Some(strategy) = strategy_override {
+        debug!("✅ 使用脚本指定的策略: {}", strategy);
+        return find_by_single_strategy(elements, locator, strategy);
     }
 
-    // 策略2: 精确匹配
-    if let Some(element) = find_by_exact_match(elements, locator) {
-        debug!("通过精确匹配找到元素");
-        return Ok(element);
-    }
-
-    // 策略3: resource_id匹配
-    if let Some(ref resource_id) = locator.resource_id {
-        if let Some(element) = find_by_resource_id(elements, resource_id) {
-            debug!("通过resource_id匹配找到元素");
-            return Ok(element);
-        }
-    }
-
-    // 策略4: text匹配
-    if let Some(ref text) = locator.text {
-        if let Some(element) = find_by_text(elements, text) {
-            debug!("通过text匹配找到元素");
-            return Ok(element);
-        }
-    }
-
-    // 策略5: 类名和位置的模糊匹配
-    if let (Some(ref class_name), Some(ref bounds)) = (&locator.class_name, &locator.bounds) {
-        if let Some(element) = find_by_class_and_position(elements, class_name, bounds) {
-            debug!("通过类名和位置模糊匹配找到元素");
-            return Ok(element);
-        }
-    }
-
-    // 策略6: 仅基于类名的匹配
-    if let Some(ref class_name) = locator.class_name {
-        if let Some(element) = find_by_class_name(elements, class_name) {
-            debug!("通过类名匹配找到元素");
-            return Ok(element);
-        }
-    }
-
-    // 策略7: xpath匹配
-    if let Some(ref xpath) = locator.xpath {
-        if let Some(element) = find_by_xpath(elements, xpath) {
-            debug!("通过xpath匹配找到元素");
-            return Ok(element);
-        }
-    }
-
-    debug!("所有匹配策略都未找到元素");
-    Err(TkeError::ElementNotFound("所有匹配策略都未找到元素".to_string()))
+    // 🔥 情况2: 脚本没有指定策略（仅 {登录按钮}），使用全精确匹配
+    debug!("✅ 使用全精确匹配模式（所有字段必须匹配）");
+    find_by_exact_match_strict(elements, locator)
 }
 
-// 精确匹配
-fn find_by_exact_match(elements: &[UIElement], locator: &Locator) -> Option<UIElement> {
-    elements.iter().find(|e| {
-        (locator.text.is_none() || e.text == locator.text) &&
-        (locator.resource_id.is_none() || e.resource_id == locator.resource_id) &&
+/// 🔥 使用单一策略查找（严格匹配，不使用 contains）
+fn find_by_single_strategy(
+    elements: &[UIElement],
+    locator: &Locator,
+    strategy: &str
+) -> Result<UIElement> {
+    debug!("  - 使用单一策略: {}", strategy);
+
+    let result = match strategy {
+        "resourceId" => {
+            if let Some(ref resource_id) = locator.resource_id {
+                find_by_resource_id_strict(elements, resource_id)
+            } else {
+                return Err(TkeError::ElementNotFound(
+                    format!("策略 'resourceId' 要求 locator 定义中必须有 resourceId 字段")
+                ));
+            }
+        }
+        "text" => {
+            if let Some(ref text) = locator.text {
+                find_by_text_strict(elements, text)
+            } else {
+                return Err(TkeError::ElementNotFound(
+                    format!("策略 'text' 要求 locator 定义中必须有 text 字段")
+                ));
+            }
+        }
+        "className" => {
+            if let Some(ref class_name) = locator.class_name {
+                find_by_class_name_strict(elements, class_name)
+            } else {
+                return Err(TkeError::ElementNotFound(
+                    format!("策略 'className' 要求 locator 定义中必须有 className 字段")
+                ));
+            }
+        }
+        "xpath" => {
+            if let Some(ref xpath) = locator.xpath {
+                find_by_xpath_strict(elements, xpath)
+            } else {
+                return Err(TkeError::ElementNotFound(
+                    format!("策略 'xpath' 要求 locator 定义中必须有 xpath 字段")
+                ));
+            }
+        }
+        _ => {
+            return Err(TkeError::ElementNotFound(
+                format!("未知的查找策略: {}", strategy)
+            ));
+        }
+    };
+
+    result.ok_or_else(|| {
+        TkeError::ElementNotFound(format!("使用 {} 策略未找到匹配元素", strategy))
+    })
+}
+
+/// 🔥 全精确匹配（所有 locator 字段都必须完全匹配）
+fn find_by_exact_match_strict(elements: &[UIElement], locator: &Locator) -> Result<UIElement> {
+    let matches: Vec<&UIElement> = elements.iter().filter(|e| {
+        // 所有非空字段都必须精确匹配
+        (locator.text.is_none() || e.text.as_ref() == locator.text.as_ref()) &&
+        (locator.resource_id.is_none() || e.resource_id.as_ref() == locator.resource_id.as_ref()) &&
         (locator.class_name.is_none() || Some(&e.class_name) == locator.class_name.as_ref()) &&
-        (locator.xpath.is_none() || e.xpath == locator.xpath)
-    }).cloned()
-}
+        (locator.xpath.is_none() || e.xpath.as_ref() == locator.xpath.as_ref()) &&
+        (locator.clickable.is_none() || Some(e.clickable) == locator.clickable) &&
+        (locator.focusable.is_none() || Some(e.focusable) == locator.focusable) &&
+        (locator.scrollable.is_none() || Some(e.scrollable) == locator.scrollable) &&
+        (locator.enabled.is_none() || Some(e.enabled) == locator.enabled)
+    }).collect();
 
-// resource_id匹配
-fn find_by_resource_id(elements: &[UIElement], resource_id: &str) -> Option<UIElement> {
-    elements.iter().find(|e| {
-        if let Some(ref id) = e.resource_id {
-            id == resource_id || id.contains(resource_id) || resource_id.contains(id)
-        } else {
-            false
-        }
-    }).cloned()
-}
-
-// xpath匹配
-fn find_by_xpath(elements: &[UIElement], xpath: &str) -> Option<UIElement> {
-    elements.iter().find(|e| {
-        if let Some(ref e_xpath) = e.xpath {
-            e_xpath == xpath
-        } else {
-            false
-        }
-    }).cloned()
-}
-
-// text匹配
-fn find_by_text(elements: &[UIElement], text: &str) -> Option<UIElement> {
-    elements.iter().find(|e| {
-        if let Some(ref t) = e.text {
-            t == text || t.contains(text) || text.contains(t)
-        } else {
-            false
-        }
-    }).cloned()
-}
-
-// 类名匹配
-fn find_by_class_name(elements: &[UIElement], class_name: &str) -> Option<UIElement> {
-    // 先尝试完全匹配
-    if let Some(element) = elements.iter().find(|e| e.class_name == class_name) {
-        return Some(element.clone());
+    if matches.is_empty() {
+        return Err(TkeError::ElementNotFound(
+            "全精确匹配未找到元素（locator 定义的所有字段都必须完全匹配）".to_string()
+        ));
     }
 
-    // 再尝试包含匹配
-    elements.iter().find(|e| {
-        e.class_name.contains(class_name) || class_name.contains(&e.class_name)
-    }).cloned()
+    // 🔥 如果找到多个匹配，警告并返回第一个
+    if matches.len() > 1 {
+        debug!("⚠️ 警告: 找到 {} 个匹配元素，将使用第一个", matches.len());
+        for (idx, element) in matches.iter().enumerate() {
+            debug!("  [{}/{}] text={:?}, resource_id={:?}, class={}, bounds={:?}",
+                   idx + 1, matches.len(),
+                   element.text, element.resource_id, element.class_name, element.bounds);
+        }
+    } else {
+        debug!("✅ 找到唯一匹配元素: text={:?}, resource_id={:?}",
+               matches[0].text, matches[0].resource_id);
+    }
+
+    Ok(matches[0].clone())
 }
 
-// 类名和位置的模糊匹配
-fn find_by_class_and_position(elements: &[UIElement], class_name: &str, original_bounds: &Bounds) -> Option<UIElement> {
-    let original_center = original_bounds.center();
-    let tolerance = 100; // 像素容差
+// ========== 严格匹配函数（不使用 contains 模糊匹配）==========
 
-    // 查找同类型的元素
-    let same_class_elements: Vec<&UIElement> = elements.iter()
-        .filter(|e| e.class_name == class_name ||
-                   e.class_name.contains(class_name) ||
-                   class_name.contains(&e.class_name))
-        .collect();
+fn find_by_resource_id_strict(elements: &[UIElement], resource_id: &str) -> Option<UIElement> {
+    let matches: Vec<&UIElement> = elements.iter().filter(|e| {
+        e.resource_id.as_ref() == Some(&resource_id.to_string())
+    }).collect();
 
-    if same_class_elements.is_empty() {
+    if matches.is_empty() {
         return None;
     }
 
-    // 如果只有一个同类型元素，直接返回
-    if same_class_elements.len() == 1 {
-        return Some(same_class_elements[0].clone());
+    if matches.len() > 1 {
+        debug!("⚠️ resourceId='{}' 找到 {} 个匹配，使用第一个", resource_id, matches.len());
     }
 
-    // 多个同类型元素时，选择位置最接近的
-    let mut best_match: Option<UIElement> = None;
-    let mut min_distance = f64::MAX;
-
-    for element in same_class_elements {
-        let center = element.center();
-        let distance = ((center.x - original_center.x).pow(2) +
-                      (center.y - original_center.y).pow(2)) as f64;
-        let distance = distance.sqrt();
-
-        if distance < min_distance && distance <= tolerance as f64 {
-            min_distance = distance;
-            best_match = Some(element.clone());
-        }
-    }
-
-    best_match
+    Some(matches[0].clone())
 }
+
+fn find_by_xpath_strict(elements: &[UIElement], xpath: &str) -> Option<UIElement> {
+    elements.iter().find(|e| {
+        e.xpath.as_ref() == Some(&xpath.to_string())
+    }).cloned()
+}
+
+fn find_by_text_strict(elements: &[UIElement], text: &str) -> Option<UIElement> {
+    let matches: Vec<&UIElement> = elements.iter().filter(|e| {
+        e.text.as_ref() == Some(&text.to_string())
+    }).collect();
+
+    if matches.is_empty() {
+        return None;
+    }
+
+    if matches.len() > 1 {
+        debug!("⚠️ text='{}' 找到 {} 个匹配，使用第一个", text, matches.len());
+    }
+
+    Some(matches[0].clone())
+}
+
+fn find_by_class_name_strict(elements: &[UIElement], class_name: &str) -> Option<UIElement> {
+    let matches: Vec<&UIElement> = elements.iter().filter(|e| {
+        &e.class_name == class_name
+    }).collect();
+
+    if matches.is_empty() {
+        return None;
+    }
+
+    if matches.len() > 1 {
+        debug!("⚠️ className='{}' 找到 {} 个匹配，使用第一个", class_name, matches.len());
+    }
+
+    Some(matches[0].clone())
+}
+

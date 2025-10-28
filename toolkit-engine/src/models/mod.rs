@@ -261,7 +261,13 @@ pub enum TksParam {
     Number(i32),            // 数字
     Duration(u32),          // 持续时间(毫秒)
     Coordinate(Point),      // 坐标 {x,y}
-    XmlElement(String),     // XML元素 {元素名}
+    /// XML元素
+    /// - 基础格式: {元素名} - 全精确匹配
+    /// - 指定策略: {元素名}#resourceId, {元素名}#text, {元素名}#className, {元素名}#xpath
+    XmlElement {
+        name: String,
+        strategy: Option<String>,  // 可选的查找策略：resourceId, text, className, xpath
+    },
     ImageElement(String),   // 图像元素 @{图片名}
     Direction(String),      // 方向 up/down/left/right
     Boolean(bool),          // 布尔值
