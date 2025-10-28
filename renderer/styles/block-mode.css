@@ -431,6 +431,20 @@
     background: rgba(0, 123, 255, 0.15);
 }
 
+.strategy-menu-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: transparent;
+}
+
+.strategy-menu-item.disabled:hover {
+    background: transparent;
+}
+
+.strategy-menu-item.disabled .strategy-icon svg path {
+    fill: #888888 !important;
+}
+
 .strategy-icon {
     width: 20px;
     height: 20px;

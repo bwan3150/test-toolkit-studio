@@ -259,16 +259,17 @@ const BlockUIMenus = {
      * @param {number} y - Y坐标
      * @param {number} commandIndex - 命令索引
      * @param {string} paramName - 参数名
+     * @param {string} elementName - 元素名称
      * @param {string} currentStrategy - 当前策略
      */
-    showStrategyMenu(x, y, commandIndex, paramName, currentStrategy) {
+    showStrategyMenu(x, y, commandIndex, paramName, elementName, currentStrategy) {
         if (!window.BlockUIStrategyMenu) {
             window.rError('BlockUIStrategyMenu 模块未加载');
             return;
         }
 
         // 调用策略菜单模块显示菜单
-        window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, currentStrategy,
+        window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, elementName, currentStrategy,
             (cmdIndex, param, strategy) => {
                 // 策略选择后的回调
                 this.applyStrategy(cmdIndex, param, strategy);

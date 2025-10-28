@@ -489,16 +489,21 @@ class BlockModeEditor {
                 const paramName = card.dataset.param;
                 const currentStrategy = card.dataset.strategy || '';
 
+                // 获取元素名称
+                const command = this.getCommands()[commandIndex];
+                const paramValue = command?.params[paramName] || '';
+                const elementName = paramValue.match(/^\{(.+?)\}/)?.[1] || '';
+
                 // 计算菜单位置（在卡片下方）
                 const rect = card.getBoundingClientRect();
                 const x = rect.left;
                 const y = rect.bottom + 4;
 
-                window.rLog(`点击 XML 卡片，命令: ${commandIndex}, 参数: ${paramName}, 策略: ${currentStrategy}`);
+                window.rLog(`点击 XML 卡片，命令: ${commandIndex}, 参数: ${paramName}, 元素: ${elementName}, 策略: ${currentStrategy}`);
 
                 // 使用策略菜单模块显示菜单
                 if (window.BlockUIStrategyMenu && typeof window.BlockUIStrategyMenu.show === 'function') {
-                    window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, currentStrategy,
+                    window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, elementName, currentStrategy,
                         (cmdIndex, param, strategy) => {
                             // 策略选择后的回调
                             this.applyStrategy(cmdIndex, param, strategy);
@@ -692,15 +697,20 @@ class BlockModeEditor {
                                 });
 
                                 if (targetCard) {
+                                    // 获取元素名称
+                                    const command = this.getCommands()[commandIndex];
+                                    const paramValue = command?.params[paramName] || '';
+                                    const elementName = paramValue.match(/^\{(.+?)\}/)?.[1] || '';
+
                                     const rect = targetCard.getBoundingClientRect();
                                     const x = rect.left;
                                     const y = rect.bottom + 4;
 
-                                    window.rLog(`自动显示策略菜单，命令: ${commandIndex}, 参数: ${paramName}`);
+                                    window.rLog(`自动显示策略菜单，命令: ${commandIndex}, 参数: ${paramName}, 元素: ${elementName}`);
 
                                     // 使用策略菜单模块显示菜单（当前策略为空，表示默认）
                                     if (window.BlockUIStrategyMenu && typeof window.BlockUIStrategyMenu.show === 'function') {
-                                        window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, '',
+                                        window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, elementName, '',
                                             (cmdIndex, param, strategy) => {
                                                 // 策略选择后的回调
                                                 this.applyStrategy(cmdIndex, param, strategy);
