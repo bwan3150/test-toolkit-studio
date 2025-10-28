@@ -14,6 +14,7 @@
 
 .bottom-panel.collapsed {
     height: 36px !important;
+    min-height: 36px !important;
 }
 
 .bottom-panel.collapsed .bottom-panel-content {
