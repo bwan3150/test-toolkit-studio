@@ -160,15 +160,17 @@ pub struct Locator {
     #[serde(rename = "type")]
     pub locator_type: LocatorType,
     
-    // XML定位器字段 - 使用element.json的字段名
-    #[serde(rename = "className", skip_serializing_if = "Option::is_none")]
+    // XML定位器字段 - 使用element.json的字段名（snake_case）
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub class_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Bounds>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    #[serde(rename = "resourceId", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_desc: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clickable: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -197,7 +199,7 @@ pub struct Locator {
     pub width: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<i32>,
-    #[serde(rename = "matchStrategy", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub match_strategy: Option<String>,
     
     // 图像定位器字段
@@ -261,7 +263,13 @@ pub enum TksParam {
     Number(i32),            // 数字
     Duration(u32),          // 持续时间(毫秒)
     Coordinate(Point),      // 坐标 {x,y}
-    XmlElement(String),     // XML元素 {元素名}
+    /// XML元素
+    /// - 基础格式: {元素名} - 全精确匹配
+    /// - 指定策略: {元素名}&resourceId, {元素名}&text, {元素名}&className, {元素名}&xpath
+    XmlElement {
+        name: String,
+        strategy: Option<String>,  // 可选的查找策略：resourceId, text, className, xpath
+    },
     ImageElement(String),   // 图像元素 @{图片名}
     Direction(String),      // 方向 up/down/left/right
     Boolean(bool),          // 布尔值

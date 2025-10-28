@@ -220,6 +220,9 @@ Tab 6 of 6) [clickable, focusable]
 
 ## tke recognizer(基于项目内的./locator/element.json里记录的元素来实现)
 
+> **重要变更**：从 v0.5.12-beta 开始，XML 元素查找默认使用**全精确匹配**，不再使用模糊匹配和瀑布式查找。
+> 脚本中可使用 `{元素名}&策略` 语法指定查找策略：`&resourceId`, `&text`, `&className`, `&xpath`
+
 ### 查找元素
 
 ```bash

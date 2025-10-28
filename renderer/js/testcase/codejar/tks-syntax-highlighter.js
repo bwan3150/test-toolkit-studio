@@ -14,6 +14,7 @@ const TKSSyntaxHighlighter = {
     IMAGE_LOCATOR: 'image-locator',
     COORDINATE: 'coordinate',
     LOCATOR: 'locator',
+    LOCATOR_STRATEGY: 'locator-strategy',  // 新增：定位器策略 (#resourceId, #text 等)
     DIRECTION: 'direction',
     ASSERTION_STATE: 'assertion-state',
     OPERATOR: 'operator',
@@ -112,6 +113,14 @@ const TKSSyntaxHighlighter = {
           }
 
           remaining = remaining.substring(endIndex + 1);
+
+          // 🔥 检查是否紧跟着策略标记 &resourceId, &text, &className, &contentDesc, &xpath
+          const strategyMatch = remaining.match(/^&(resourceId|text|className|contentDesc|xpath)(?=\s|,|\]|$)/);
+          if (strategyMatch) {
+            tokens.push({ type: this.TOKEN_TYPES.LOCATOR_STRATEGY, value: strategyMatch[0] });
+            remaining = remaining.substring(strategyMatch[0].length);
+          }
+
           matched = true;
           continue;
         }
@@ -226,6 +235,9 @@ const TKSSyntaxHighlighter = {
           break;
         case this.TOKEN_TYPES.LOCATOR:
           html += `<span class="tks-locator">${escapedValue}</span>`;
+          break;
+        case this.TOKEN_TYPES.LOCATOR_STRATEGY:
+          html += `<span class="tks-locator-strategy">${escapedValue}</span>`;
           break;
         case this.TOKEN_TYPES.DIRECTION:
           html += `<span class="tks-direction">${escapedValue}</span>`;

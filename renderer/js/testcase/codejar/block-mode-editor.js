@@ -258,33 +258,50 @@ class BlockModeEditor {
                 } else if (param.type === 'element') {
                     // element 类型参数，检查是否已填入元素
                     const imageMatch = value.match(/^@\{(.+)\}$/);
-                    const xmlMatch = value.match(/^\{(.+)\}$/);
+                    const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|contentDesc|xpath))?$/);
 
-                    if (imageMatch || xmlMatch) {
+                    // 检查是否是坐标格式 {数字, 数字}
+                    const isCoordinate = /^\{\s*\d+\s*,\s*\d+\s*\}$/.test(value);
+
+                    if ((imageMatch || xmlMatch) && !isCoordinate) {
                         // 已填入元素，显示可视化卡片
                         const elementName = imageMatch ? imageMatch[1] : xmlMatch[1];
+                        const strategy = xmlMatch ? xmlMatch[2] : null; // 提取策略
                         const isImage = !!imageMatch;
 
                         if (isImage) {
-                            // 图片元素 - 显示图片预览
+                            // 图片元素 - 显示图片预览，失败时显示图标
+                            const { path: PathModule } = window.AppGlobals;
+                            const projectPath = window.AppGlobals.currentProject;
+                            const imagePath = projectPath ? PathModule.join(projectPath, 'locator/img', `${elementName}.png`) : '';
+
                             commandContent += `
-                                <div class="param-visual-card" data-param="${param.name}" data-command-index="${index}">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;">
-                                        <rect x="3" y="3" width="18" height="18" fill="#4a90e2" opacity="0.2" rx="2"/>
-                                        <circle cx="8.5" cy="8.5" r="1.5" fill="#4a90e2"/>
-                                        <path d="M3 17l4-4 3 3 6-6 5 5v3H3v-1z" fill="#4a90e2"/>
-                                    </svg>
+                                <div class="param-visual-card param-image-card" data-param="${param.name}" data-command-index="${index}">
+                                    <div class="visual-image-preview">
+                                        <img src="${imagePath}" alt="${elementName}"
+                                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" style="display: none; flex-shrink: 0;">
+                                            <rect x="3" y="3" width="18" height="18" fill="#4a90e2" opacity="0.2" rx="2"/>
+                                            <circle cx="8.5" cy="8.5" r="1.5" fill="#4a90e2"/>
+                                            <path d="M3 17l4-4 3 3 6-6 5 5v3H3v-1z" fill="#4a90e2"/>
+                                        </svg>
+                                    </div>
                                     <span class="visual-name">${elementName}</span>
                                     <button class="visual-remove-btn" data-param="${param.name}" data-command-index="${index}" title="移除">×</button>
                                 </div>
                             `;
                         } else {
-                            // XML元素 - 显示{}图标
+                            // XML元素 - 根据策略显示不同图标
+                            const iconHtml = window.BlockUIStrategyMenu
+                                ? window.BlockUIStrategyMenu.getStrategyIcon(strategy || '', 16)
+                                : `<svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;"><path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/></svg>`;
+
                             commandContent += `
-                                <div class="param-visual-card" data-param="${param.name}" data-command-index="${index}">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;">
-                                        <path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
-                                    </svg>
+                                <div class="param-visual-card visual-xml-card"
+                                     data-param="${param.name}"
+                                     data-command-index="${index}"
+                                     data-strategy="${strategy || ''}">
+                                    ${iconHtml}
                                     <span class="visual-name">${elementName}</span>
                                     <button class="visual-remove-btn" data-param="${param.name}" data-command-index="${index}" title="移除">×</button>
                                 </div>
@@ -458,6 +475,44 @@ class BlockModeEditor {
             });
         });
 
+        // 为 XML 卡片添加点击事件以显示策略菜单
+        this.blocksContainer.querySelectorAll('.visual-xml-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // 如果点击的是移除按钮，不处理
+                if (e.target.closest('.visual-remove-btn')) {
+                    return;
+                }
+
+                e.stopPropagation();
+
+                const commandIndex = parseInt(card.dataset.commandIndex);
+                const paramName = card.dataset.param;
+                const currentStrategy = card.dataset.strategy || '';
+
+                // 获取元素名称
+                const command = this.getCommands()[commandIndex];
+                const paramValue = command?.params[paramName] || '';
+                const elementName = paramValue.match(/^\{(.+?)\}/)?.[1] || '';
+
+                // 计算菜单位置（在卡片下方）
+                const rect = card.getBoundingClientRect();
+                const x = rect.left;
+                const y = rect.bottom + 4;
+
+                window.rLog(`点击 XML 卡片，命令: ${commandIndex}, 参数: ${paramName}, 元素: ${elementName}, 策略: ${currentStrategy}`);
+
+                // 使用策略菜单模块显示菜单
+                if (window.BlockUIStrategyMenu && typeof window.BlockUIStrategyMenu.show === 'function') {
+                    window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, elementName, currentStrategy,
+                        (cmdIndex, param, strategy) => {
+                            // 策略选择后的回调
+                            this.applyStrategy(cmdIndex, param, strategy);
+                        }
+                    );
+                }
+            });
+        });
+
         // 设置拖拽排序（脚本块之间）
         this.setupDragAndDrop();
 
@@ -624,6 +679,49 @@ class BlockModeEditor {
                         this.triggerChange();
 
                         window.rLog(`元素已填入参数: ${value}`);
+
+                        // 如果是 XML 元素，自动弹出策略选择菜单
+                        if (elementType === 'xml') {
+                            // 使用 setTimeout 确保渲染完成后再查找元素
+                            setTimeout(() => {
+                                // 查找刚刚填入的可视化卡片
+                                const visualCards = this.blocksContainer.querySelectorAll('.visual-xml-card');
+                                let targetCard = null;
+
+                                // 找到对应命令和参数的卡片
+                                visualCards.forEach(card => {
+                                    if (parseInt(card.dataset.commandIndex) === commandIndex &&
+                                        card.dataset.param === paramName) {
+                                        targetCard = card;
+                                    }
+                                });
+
+                                if (targetCard) {
+                                    // 获取元素名称
+                                    const command = this.getCommands()[commandIndex];
+                                    const paramValue = command?.params[paramName] || '';
+                                    const elementName = paramValue.match(/^\{(.+?)\}/)?.[1] || '';
+
+                                    const rect = targetCard.getBoundingClientRect();
+                                    const x = rect.left;
+                                    const y = rect.bottom + 4;
+
+                                    window.rLog(`自动显示策略菜单，命令: ${commandIndex}, 参数: ${paramName}, 元素: ${elementName}`);
+
+                                    // 使用策略菜单模块显示菜单（当前策略为空，表示默认）
+                                    if (window.BlockUIStrategyMenu && typeof window.BlockUIStrategyMenu.show === 'function') {
+                                        window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, elementName, '',
+                                            (cmdIndex, param, strategy) => {
+                                                // 策略选择后的回调
+                                                this.applyStrategy(cmdIndex, param, strategy);
+                                            }
+                                        );
+                                    }
+                                } else {
+                                    window.rError(`未找到目标卡片: commandIndex=${commandIndex}, paramName=${paramName}`);
+                                }
+                            }, 150);
+                        }
                     }
                 }
             });
@@ -788,6 +886,47 @@ class BlockModeEditor {
             this.setupBlockModeListeners();
             this.triggerChange();
         }
+    }
+
+    /**
+     * 应用策略到元素
+     * @param {number} commandIndex - 命令索引
+     * @param {string} paramName - 参数名
+     * @param {string} strategy - 策略（空字符串表示无策略）
+     */
+    applyStrategy(commandIndex, paramName, strategy) {
+        window.rLog(`应用策略: ${strategy || '默认'}, 命令: ${commandIndex}, 参数: ${paramName}`);
+
+        const command = this.commands[commandIndex];
+        if (!command) {
+            window.rError(`未找到命令: ${commandIndex}`);
+            return;
+        }
+
+        const currentValue = command.params[paramName];
+        if (!currentValue) {
+            window.rError(`参数值为空: ${paramName}`);
+            return;
+        }
+
+        // 使用策略菜单模块的工具函数应用策略
+        if (!window.BlockUIStrategyMenu) {
+            window.rError('BlockUIStrategyMenu 模块未加载');
+            return;
+        }
+
+        const newValue = window.BlockUIStrategyMenu.applyStrategyToValue(currentValue, strategy);
+        if (!newValue) {
+            return;
+        }
+
+        window.rLog(`更新参数值: ${currentValue} -> ${newValue}`);
+        command.params[paramName] = newValue;
+
+        // 重新渲染
+        this.renderBlocks();
+        this.setupBlockModeListeners();
+        this.triggerChange();
     }
 
     /**

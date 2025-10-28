@@ -374,6 +374,102 @@
     padding: 4px 0;
 }
 
+/* 策略选择菜单样式 */
+.strategy-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    z-index: 2500;
+    min-width: 220px;
+    overflow: hidden;
+    animation: menuFadeIn 0.15s ease-out;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.strategy-menu-header {
+    padding: 10px 14px;
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.strategy-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    position: relative;
+    gap: 10px;
+}
+
+.strategy-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.strategy-menu-item.active {
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.strategy-menu-item.active:hover {
+    background: rgba(0, 123, 255, 0.15);
+}
+
+.strategy-menu-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: transparent;
+}
+
+.strategy-menu-item.disabled:hover {
+    background: transparent;
+}
+
+.strategy-menu-item.disabled .strategy-icon svg path {
+    fill: #888888 !important;
+}
+
+.strategy-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.strategy-icon svg {
+    display: block;
+}
+
+.strategy-label {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.strategy-check {
+    flex-shrink: 0;
+    display: block;
+}
+
 .context-menu-item {
     display: flex;
     align-items: center;
@@ -592,6 +688,12 @@
     margin: 0 4px;
     max-width: 150px;
     transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.param-visual-card:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .param-visual-card.drag-over {
@@ -608,6 +710,31 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* 图片预览容器 */
+.visual-image-preview {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 2px;
+    flex-shrink: 0;
+    background: rgba(74, 144, 226, 0.1);
+}
+
+.visual-image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.visual-image-preview svg {
+    display: none;
+    flex-shrink: 0;
 }
 
 .param-visual-card .visual-remove-btn {
@@ -701,6 +828,13 @@
     padding: 2px 6px;
     gap: 4px;
     position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.visual-xml-card:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .visual-xml-card svg {

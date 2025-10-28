@@ -32,7 +32,7 @@
       navSelector: '[data-page="log"]'
     },
     'report': {
-      id: 'insightsPage',
+      id: 'reportPage',
       label: 'Insights',
       navSelector: '[data-page="report"]'
     },

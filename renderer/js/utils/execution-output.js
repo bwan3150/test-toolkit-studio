@@ -22,13 +22,9 @@ const ExecutionOutput = {
 
     /**
      * 输出脚本执行失败信息
-     * @param {string} error - 错误信息
      */
-    scriptFailed(error) {
+    scriptFailed() {
         this.log('error', `脚本执行失败`);
-        if (error) {
-            this.log('error', `错误: ${error}`);
-        }
     },
 
     /**

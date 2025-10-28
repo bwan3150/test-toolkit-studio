@@ -34,7 +34,8 @@ pub async fn handle(action: RecognizerCommands, project_path: PathBuf) -> Result
 
     match action {
         RecognizerCommands::FindXml { locator_name } => {
-            let point = recognizer.find_xml_element(&locator_name)
+            // CLI 调用时不指定策略，使用 locator 定义中的默认行为（全精确匹配）
+            let point = recognizer.find_xml_element(&locator_name, None)
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
             JsonOutput::success(serde_json::json!({

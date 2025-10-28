@@ -254,6 +254,68 @@ const BlockUIMenus = {
     },
 
     /**
+     * 显示策略选择菜单（调用独立模块）
+     * @param {number} x - X坐标
+     * @param {number} y - Y坐标
+     * @param {number} commandIndex - 命令索引
+     * @param {string} paramName - 参数名
+     * @param {string} elementName - 元素名称
+     * @param {string} currentStrategy - 当前策略
+     */
+    showStrategyMenu(x, y, commandIndex, paramName, elementName, currentStrategy) {
+        if (!window.BlockUIStrategyMenu) {
+            window.rError('BlockUIStrategyMenu 模块未加载');
+            return;
+        }
+
+        // 调用策略菜单模块显示菜单
+        window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, elementName, currentStrategy,
+            (cmdIndex, param, strategy) => {
+                // 策略选择后的回调
+                this.applyStrategy(cmdIndex, param, strategy);
+            }
+        );
+    },
+
+    /**
+     * 应用策略到元素
+     * @param {number} commandIndex - 命令索引
+     * @param {string} paramName - 参数名
+     * @param {string} strategy - 策略（空字符串表示无策略）
+     */
+    applyStrategy(commandIndex, paramName, strategy) {
+        window.rLog(`应用策略: ${strategy || '默认'}, 命令: ${commandIndex}, 参数: ${paramName}`);
+
+        const commands = this.getCommands();
+        const command = commands[commandIndex];
+
+        if (!command) {
+            window.rError(`未找到命令: ${commandIndex}`);
+            return;
+        }
+
+        const currentValue = command.params[paramName];
+        if (!currentValue) {
+            window.rError(`参数值为空: ${paramName}`);
+            return;
+        }
+
+        // 使用策略菜单模块的工具函数应用策略
+        const newValue = window.BlockUIStrategyMenu.applyStrategyToValue(currentValue, strategy);
+        if (!newValue) {
+            return;
+        }
+
+        window.rLog(`更新参数值: ${currentValue} -> ${newValue}`);
+        command.params[paramName] = newValue;
+
+        // 重新渲染
+        this.renderBlocks();
+        this.setupBlockModeListeners();
+        this.triggerChange();
+    },
+
+    /**
      * 插入命令
      * @param {string} commandType - 命令类型
      * @param {number} insertIndex - 插入位置

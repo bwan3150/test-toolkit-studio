@@ -211,23 +211,52 @@ impl ScriptParser {
             }
         }
         
-        // 解析坐标 {x,y}
-        if param.starts_with('{') && param.ends_with('}') && !param.contains('@') {
-            let inner = &param[1..param.len()-1];
-            
-            // 检查是否为坐标格式
-            if inner.contains(',') {
-                let parts: Vec<&str> = inner.split(',').collect();
-                if parts.len() == 2 {
-                    if let (Ok(x), Ok(y)) = (parts[0].trim().parse::<i32>(), 
-                                             parts[1].trim().parse::<i32>()) {
-                        return TksParam::Coordinate(Point::new(x, y));
+        // 解析坐标 {x,y} 或 XML元素引用 {元素名} 或 {元素名}&策略
+        if param.starts_with('{') && !param.contains('@') {
+            // 找到右大括号的位置
+            if let Some(close_brace_pos) = param.find('}') {
+                let inner = &param[1..close_brace_pos];
+                let after_brace = &param[close_brace_pos+1..];
+
+                // 检查是否为坐标格式（包含逗号且不包含&）
+                if inner.contains(',') && !after_brace.contains('&') {
+                    let parts: Vec<&str> = inner.split(',').collect();
+                    if parts.len() == 2 {
+                        if let (Ok(x), Ok(y)) = (parts[0].trim().parse::<i32>(),
+                                                 parts[1].trim().parse::<i32>()) {
+                            return TksParam::Coordinate(Point::new(x, y));
+                        }
                     }
                 }
+
+                // 否则为XML元素引用，解析可选的策略
+                // 格式1: {元素名} - 全精确匹配
+                // 格式2: {元素名}&resourceId - 使用 resourceId 策略
+                // 格式3: {元素名}&text - 使用 text 策略
+                // 格式4: {元素名}&className - 使用 className 策略
+                // 格式5: {元素名}&contentDesc - 使用 contentDesc 策略
+                // 格式6: {元素名}&xpath - 使用 xpath 策略
+                let (name, strategy) = if after_brace.starts_with('&') {
+                    let element_name = inner.trim().to_string();
+                    let strategy_name = after_brace[1..].trim().to_string();
+
+                    // 验证策略名称
+                    match strategy_name.as_str() {
+                        "resourceId" | "text" | "className" | "contentDesc" | "xpath" => {
+                            (element_name, Some(strategy_name))
+                        }
+                        _ => {
+                            // 无效的策略名称，忽略策略
+                            (inner.to_string(), None)
+                        }
+                    }
+                } else {
+                    // 没有指定策略
+                    (inner.to_string(), None)
+                };
+
+                return TksParam::XmlElement { name, strategy };
             }
-            
-            // 否则为XML元素引用
-            return TksParam::XmlElement(inner.to_string());
         }
         
         // 解析图像引用 @{图片名称}
