@@ -11,11 +11,13 @@ const LocatorLibraryPanel = {
         this.loadLocators();
         
         // 绑定搜索功能
-        const searchInput = document.querySelector('#locatorLibPane .search-input');
+        const searchInput = document.getElementById('locatorSearchInput');
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
                 this.filterLocators(e.target.value);
             });
+        } else {
+            window.rWarn('搜索输入框未找到: #locatorSearchInput');
         }
         
         // 监听项目变更事件
@@ -533,15 +535,17 @@ const LocatorLibraryPanel = {
             this.renderLocators();
             return;
         }
-        
+
         const searchLower = searchText.toLowerCase();
         const filtered = Object.entries(this.locators).filter(([name, locator]) => {
             return name.toLowerCase().includes(searchLower) ||
+                   (locator.note && locator.note.toLowerCase().includes(searchLower)) ||
                    (locator.text && locator.text.toLowerCase().includes(searchLower)) ||
-                   ((locator.content_desc || locator.contentDesc) && (locator.content_desc || locator.contentDesc).toLowerCase().includes(searchLower)) ||
-                   ((locator.class_name || locator.className) && (locator.class_name || locator.className).toLowerCase().includes(searchLower));
+                   (locator.content_desc && locator.content_desc.toLowerCase().includes(searchLower)) ||
+                   (locator.class_name && locator.class_name.toLowerCase().includes(searchLower));
         });
-        
+
+        window.rLog(`🔍 搜索 "${searchText}": 找到 ${filtered.length}/${Object.keys(this.locators).length} 个匹配项`);
         this.renderLocators(filtered);
     },
     

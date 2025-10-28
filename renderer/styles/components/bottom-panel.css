@@ -429,12 +429,14 @@
     overflow-x: hidden;
 }
 
-/* 有卡片时才显示padding和gap */
+/* 有卡片时才显示padding和gap - 使用grid布局支持多列 */
 .locator-lib-content.with-cards {
     padding: 12px;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 8px;
+    align-content: start;
+    grid-auto-rows: min-content;
 }
 
 .locator-card {
@@ -446,6 +448,8 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: grab;
+    width: 100%;
+    max-width: 400px;
 }
 
 .locator-card:hover {
