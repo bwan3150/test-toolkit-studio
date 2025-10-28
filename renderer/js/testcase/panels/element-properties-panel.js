@@ -29,7 +29,7 @@ const ElementPropertiesPanel = {
         const toolbarHTML = `
             <div class="properties-toolbar">
                     <div class="toolbar-left">
-                        <span class="element-id">[${element.index}] ${(element.class_name || element.className) ? (element.class_name || element.className).split('.').pop() : 'Element'}</span>
+                        <span class="element-id">[${element.index}] ${element.class_name ? element.class_name.split('.').pop() : 'Element'}</span>
                     </div>
                     <div class="toolbar-right">
                         <button class="tool-btn" onclick="window.LocatorLibraryPanel.saveElementToLocator(${element.index})" title="保存到元素库">
@@ -59,16 +59,16 @@ const ElementPropertiesPanel = {
                         </tr>
                         <tr>
                             <td class="prop-key">className</td>
-                            <td class="prop-value"><code>${(element.class_name || element.className) || 'N/A'}</code></td>
+                            <td class="prop-value"><code>${element.class_name || 'N/A'}</code></td>
                         </tr>
                         <tr>
                             <td class="prop-key">package</td>
                             <td class="prop-value"><code>${element.package || 'N/A'}</code></td>
                         </tr>
-                        ${(element.resource_id || element.resourceId) ? `
+                        ${element.resource_id ? `
                         <tr>
                             <td class="prop-key">resourceId</td>
-                            <td class="prop-value"><code>${element.resource_id || element.resourceId}</code></td>
+                            <td class="prop-value"><code>${element.resource_id}</code></td>
                         </tr>` : ''}
 
                         <tr class="prop-category">
@@ -87,7 +87,7 @@ const ElementPropertiesPanel = {
                             <td class="prop-value"><code>${element.width || 0} × ${element.height || 0}</code></td>
                         </tr>
 
-                        ${element.text || (element.content_desc || element.contentDesc) || element.hint ? `
+                        ${element.text || element.content_desc || element.hint ? `
                         <tr class="prop-category">
                             <td colspan="2">Text Content</td>
                         </tr>
@@ -96,10 +96,10 @@ const ElementPropertiesPanel = {
                             <td class="prop-key">text</td>
                             <td class="prop-value">"${this.escapeHtml(element.text)}"</td>
                         </tr>` : ''}
-                        ${(element.content_desc || element.contentDesc) ? `
+                        ${element.content_desc ? `
                         <tr>
                             <td class="prop-key">contentDesc</td>
-                            <td class="prop-value">"${this.escapeHtml(element.content_desc || element.contentDesc)}"</td>
+                            <td class="prop-value">"${this.escapeHtml(element.content_desc)}"</td>
                         </tr>` : ''}
                         ${element.hint ? `
                         <tr>
@@ -172,10 +172,10 @@ const ElementPropertiesPanel = {
             'N/A';
 
         const info = `元素 [${element.index}]
-类型: ${(element.class_name || element.className) || 'Unknown'}
+类型: ${element.class_name || 'Unknown'}
 位置: ${boundsStr}
 文本: ${element.text || 'N/A'}
-描述: ${(element.content_desc || element.contentDesc) || 'N/A'}
+描述: ${element.content_desc || 'N/A'}
 可点击: ${element.clickable ? '是' : '否'}`;
         
         try {

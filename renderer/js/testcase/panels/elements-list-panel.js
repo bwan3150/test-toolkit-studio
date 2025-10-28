@@ -101,14 +101,14 @@ const ElementsListPanel = {
                             <td class="col-type">
                                 <div class="type-cell">
                                     <span class="type-icon">${this.getTypeIcon(el)}</span>
-                                    <span class="type-name">${el.className ? el.className.split('.').pop() : 'Unknown'}</span>
+                                    <span class="type-name">${el.class_name ? el.class_name.split('.').pop() : 'Unknown'}</span>
                                 </div>
                             </td>
                             <td class="col-content">
                                 <div class="content-cell">
                                     ${el.text ? `<div class="content-text" title="${this.escapeHtml(el.text)}">${this.escapeHtml(this.truncate(el.text, 30))}</div>` : ''}
-                                    ${(el.content_desc || el.contentDesc) ? `<div class="content-desc" title="${this.escapeHtml(el.content_desc || el.contentDesc)}">desc: ${this.escapeHtml(this.truncate(el.content_desc || el.contentDesc, 20))}</div>` : ''}
-                                    ${!el.text && !(el.content_desc || el.contentDesc) ? '<span class="text-muted">—</span>' : ''}
+                                    ${el.content_desc ? `<div class="content-desc" title="${this.escapeHtml(el.content_desc)}">desc: ${this.escapeHtml(this.truncate(el.content_desc, 20))}</div>` : ''}
+                                    ${!el.text && !el.content_desc ? '<span class="text-muted">—</span>' : ''}
                                 </div>
                             </td>
                             <td class="col-bounds">
@@ -138,7 +138,7 @@ const ElementsListPanel = {
 
     // 获取类型图标 - JetBrains风格SVG图标
     getTypeIcon(element) {
-        const className = element.className?.toLowerCase() || '';
+        const className = element.class_name?.toLowerCase() || '';
         if (className.includes('button')) {
             return '<svg class="type-icon-svg" viewBox="0 0 16 16"><rect x="2" y="5" width="12" height="6" rx="2" fill="currentColor"/></svg>';
         }
@@ -198,9 +198,9 @@ const ElementsListPanel = {
         const searchLower = searchText.toLowerCase();
         const filtered = this.currentElements.filter(el => {
             return (el.text && el.text.toLowerCase().includes(searchLower)) ||
-                   ((el.content_desc || el.contentDesc) && (el.content_desc || el.contentDesc).toLowerCase().includes(searchLower)) ||
-                   (el.className && el.className.toLowerCase().includes(searchLower)) ||
-                   (el.resourceId && el.resourceId.toLowerCase().includes(searchLower)) ||
+                   (el.content_desc && el.content_desc.toLowerCase().includes(searchLower)) ||
+                   (el.class_name && el.class_name.toLowerCase().includes(searchLower)) ||
+                   (el.resource_id && el.resource_id.toLowerCase().includes(searchLower)) ||
                    (el.hint && el.hint.toLowerCase().includes(searchLower));
         });
         

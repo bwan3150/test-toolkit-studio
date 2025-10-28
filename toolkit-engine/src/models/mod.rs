@@ -160,16 +160,16 @@ pub struct Locator {
     #[serde(rename = "type")]
     pub locator_type: LocatorType,
     
-    // XML定位器字段 - 使用element.json的字段名
-    #[serde(rename = "className", skip_serializing_if = "Option::is_none")]
+    // XML定位器字段 - 使用element.json的字段名（snake_case）
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub class_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Bounds>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    #[serde(rename = "resourceId", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_id: Option<String>,
-    #[serde(rename = "contentDesc", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub content_desc: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clickable: Option<bool>,
@@ -199,7 +199,7 @@ pub struct Locator {
     pub width: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<i32>,
-    #[serde(rename = "matchStrategy", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub match_strategy: Option<String>,
     
     // 图像定位器字段
