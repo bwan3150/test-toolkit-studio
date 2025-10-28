@@ -136,9 +136,18 @@
             },
             {
               "name": "string.unquoted.locator-name.tks",
-              "match": "[^,}]+"
+              "match": "[^,}&]+"
             }
           ]
+        },
+        {
+          "name": "keyword.operator.locator-strategy.tks",
+          "match": "(?<=\\})&(resourceId|text|className|xpath)\\b",
+          "captures": {
+            "0": {
+              "name": "entity.name.function.strategy.tks"
+            }
+          }
         }
       ]
     },

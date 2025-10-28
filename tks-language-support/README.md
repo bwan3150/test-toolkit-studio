@@ -82,6 +82,7 @@ const darkTheme = TKSSyntax.themes.dark;
 
 - **坐标**: `{200, 400}`
 - **XML 元素**: `{相机按钮}`
+- **XML 元素（指定策略）**: `{相机按钮}&resourceId`, `{确定按钮}&text`, `{提交按钮}&className`, `{特殊元素}&xpath`
 - **图片**: `@{加号图标}`
 
 ### 示例代码
@@ -96,7 +97,9 @@ const darkTheme = TKSSyntax.themes.dark;
 点击 [{相机按钮}]
 点击 [@{加号图标}]
 
-输入 [{搜索框}, 测试文本]
+# v0.5.12-beta 新增：策略定位器
+点击 [{登录按钮}&resourceId]
+输入 [{用户名输入框}&text, admin]
 
 断言 [{相机按钮}, 存在]
 

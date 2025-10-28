@@ -37,6 +37,7 @@ const rules = {
     section: /^\s*(步骤)\s*:/,
     imageLocator: /@\{[^}]+\}/,
     locator: /\{[^}]+\}/,
+    locatorStrategy: /(?<=\})&(resourceId|text|className|xpath)\b/,  // v0.5.12-beta 新增
     coordinate: /\{\s*\d+\s*,\s*\d+\s*\}/,
     parameter: /\[[^\]]*\]/,
     operator: /==/,
@@ -53,6 +54,7 @@ const themes = {
     section: '#c586c0',
     command: '#569cd6',
     locator: '#ce9178',
+    locatorStrategy: '#f0a070',  // v0.5.12-beta 新增：策略标记颜色
     imageLocator: '#4ec9b0',
     coordinate: '#b5cea8',
     direction: '#4fc1ff',
@@ -69,6 +71,7 @@ const themes = {
     section: '#af00db',
     command: '#0000ff',
     locator: '#a31515',
+    locatorStrategy: '#d2691e',  // v0.5.12-beta 新增：策略标记颜色
     imageLocator: '#267f99',
     coordinate: '#098658',
     direction: '#0070c1',
