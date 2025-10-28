@@ -42,7 +42,10 @@ const BlockUIBuilder = {
                     } else {
                         // 检查参数类型是否为element，以支持可视化渲染
                         if (param.type === 'element') {
-                            if (value && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|xpath))?$/))) {
+                            // 检查是否是坐标格式 {数字, 数字}
+                            const isCoordinate = value && /^\{\s*\d+\s*,\s*\d+\s*\}$/.test(value);
+
+                            if (value && !isCoordinate && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|xpath))?$/))) {
                                 // 检查值是否为图片引用格式 @{name} 或 XML元素引用格式 {name}&strategy
                                 const imageMatch = value.match(/^@\{(.+)\}$/);
                                 const xmlMatch = value.match(/^\{(.+)\}$/);

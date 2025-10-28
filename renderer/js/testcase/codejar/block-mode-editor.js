@@ -260,7 +260,10 @@ class BlockModeEditor {
                     const imageMatch = value.match(/^@\{(.+)\}$/);
                     const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|xpath))?$/);
 
-                    if (imageMatch || xmlMatch) {
+                    // 检查是否是坐标格式 {数字, 数字}
+                    const isCoordinate = /^\{\s*\d+\s*,\s*\d+\s*\}$/.test(value);
+
+                    if ((imageMatch || xmlMatch) && !isCoordinate) {
                         // 已填入元素，显示可视化卡片
                         const elementName = imageMatch ? imageMatch[1] : xmlMatch[1];
                         const strategy = xmlMatch ? xmlMatch[2] : null; // 提取策略
