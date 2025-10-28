@@ -75,11 +75,12 @@ pub async fn handle(action: RunCommands, project_path: PathBuf, device_id: Optio
             // 输出 JSON 格式的单步执行结果
             match result {
                 Ok(step_result) => {
+                    // 检查 step_result.success 字段来判断实际执行结果
                     JsonOutput::print(serde_json::json!({
-                        "success": true,
+                        "success": step_result.success,
                         "command": line,
                         "duration_ms": step_result.duration_ms,
-                        "error": null
+                        "error": step_result.error
                     }));
                 }
                 Err(e) => {

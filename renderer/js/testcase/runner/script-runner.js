@@ -116,6 +116,7 @@ class ScriptRunner {
         this.isRunning = true;
         this.shouldStop = false;
         this.currentLineIndex = 0;
+        let hasFailedStep = false; // 跟踪是否有失败的步骤
         const startTime = Date.now();
 
         // 更新按钮为Stop Test
@@ -179,6 +180,7 @@ class ScriptRunner {
 
                     if (!result.success) {
                         // 执行失败
+                        hasFailedStep = true;
                         editor.highlightErrorLine?.(originalLineNumber);
                         window.ExecutionOutput?.stepFailed(stepIndex, result.error || '未知错误');
                         window.AppNotifications?.error('执行失败');
@@ -194,6 +196,7 @@ class ScriptRunner {
                     await this.sleep(300);
 
                 } catch (error) {
+                    hasFailedStep = true;
                     editor.highlightErrorLine?.(originalLineNumber);
                     window.ExecutionOutput?.stepFailed(stepIndex, error.message);
                     window.AppNotifications?.error('执行异常');
@@ -203,9 +206,9 @@ class ScriptRunner {
                 }
             }
 
-            // 检查是否全部成功
-            if (!this.shouldStop && this.currentLineIndex === commandLines.length - 1) {
-                // 最后一步执行完后,刷新设备截图显示最终状态
+            // 检查执行结果
+            if (!this.shouldStop && !hasFailedStep) {
+                // 全部步骤执行成功,刷新设备截图显示最终状态
                 try {
                     if (window.ScreenCapture && window.ScreenCapture.refreshDeviceScreen) {
                         await window.ScreenCapture.refreshDeviceScreen();
@@ -226,10 +229,10 @@ class ScriptRunner {
                 if (this.shouldStop) {
                     window.ExecutionOutput?.warn(`脚本执行已中止 (耗时 ${(totalDuration / 1000).toFixed(2)}s)`);
                 } else {
-                    window.ExecutionOutput?.scriptFailed('执行过程中出现错误');
+                    window.ExecutionOutput?.scriptFailed();
                 }
 
-                // 失败或中止时保持高亮
+                // 失败或中止时保持高亮（不清除错误行的红色高亮）
                 editor.setTestRunning?.(false, false);
             }
 
