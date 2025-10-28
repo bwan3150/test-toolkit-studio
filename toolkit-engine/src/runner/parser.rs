@@ -234,14 +234,15 @@ impl ScriptParser {
                 // 格式2: {元素名}&resourceId - 使用 resourceId 策略
                 // 格式3: {元素名}&text - 使用 text 策略
                 // 格式4: {元素名}&className - 使用 className 策略
-                // 格式5: {元素名}&xpath - 使用 xpath 策略
+                // 格式5: {元素名}&contentDesc - 使用 contentDesc 策略
+                // 格式6: {元素名}&xpath - 使用 xpath 策略
                 let (name, strategy) = if after_brace.starts_with('&') {
                     let element_name = inner.trim().to_string();
                     let strategy_name = after_brace[1..].trim().to_string();
 
                     // 验证策略名称
                     match strategy_name.as_str() {
-                        "resourceId" | "text" | "className" | "xpath" => {
+                        "resourceId" | "text" | "className" | "contentDesc" | "xpath" => {
                             (element_name, Some(strategy_name))
                         }
                         _ => {

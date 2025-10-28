@@ -53,6 +53,13 @@ const BlockUIStrategyMenu = {
                 field: 'class_name'
             },
             {
+                value: 'contentDesc',
+                label: 'Content Desc',
+                icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#2196f3" d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>',
+                description: '仅匹配 content description',
+                field: 'content_desc'
+            },
+            {
                 value: 'xpath',
                 label: 'XPath',
                 icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#ff9800" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8h5Z"/></svg>',
@@ -227,7 +234,7 @@ const BlockUIStrategyMenu = {
     extractStrategy(value) {
         if (!value) return '';
 
-        const match = value.match(/^\{.+?\}&(resourceId|text|className|xpath)$/);
+        const match = value.match(/^\{.+?\}&(resourceId|text|className|contentDesc|xpath)$/);
         return match ? match[1] : '';
     },
 
@@ -243,6 +250,7 @@ const BlockUIStrategyMenu = {
             'resourceId': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#4caf50" d="M5.5 7A1.5 1.5 0 0 0 4 8.5v7A1.5 1.5 0 0 0 5.5 17h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 12.5 7h-7m0 1.5h7v7h-7v-7M15 11v2h2v4h2v-4h2v-2h-6Z"/></svg>`,
             'text': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#00897b" d="M9.6 14L12 7.7L14.4 14M11 5L5.5 19h2.25l1.12-3h6.25l1.12 3h2.25L13 5h-2Z"/></svg>`,
             'className': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#9c27b0" d="M10 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>`,
+            'contentDesc': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#2196f3" d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>`,
             'xpath': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#ff9800" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8h5Z"/></svg>`
         };
         return icons[strategy] || icons[''];

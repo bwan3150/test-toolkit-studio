@@ -97,6 +97,15 @@ fn find_by_single_strategy(
                 ));
             }
         }
+        "contentDesc" => {
+            if let Some(ref content_desc) = locator.content_desc {
+                find_by_content_desc_strict(elements, content_desc.as_str())
+            } else {
+                return Err(TkeError::ElementNotFound(
+                    format!("策略 'contentDesc' 要求 locator 定义中必须有 content_desc 字段")
+                ));
+            }
+        }
         "xpath" => {
             if let Some(ref xpath) = locator.xpath {
                 find_by_xpath_strict(elements, xpath)
@@ -205,6 +214,22 @@ fn find_by_class_name_strict(elements: &[UIElement], class_name: &str) -> Option
 
     if matches.len() > 1 {
         debug!("⚠️ className='{}' 找到 {} 个匹配，使用第一个", class_name, matches.len());
+    }
+
+    Some(matches[0].clone())
+}
+
+fn find_by_content_desc_strict(elements: &[UIElement], content_desc: &str) -> Option<UIElement> {
+    let matches: Vec<&UIElement> = elements.iter().filter(|e| {
+        e.content_desc.as_ref() == Some(&content_desc.to_string())
+    }).collect();
+
+    if matches.is_empty() {
+        return None;
+    }
+
+    if matches.len() > 1 {
+        debug!("⚠️ contentDesc='{}' 找到 {} 个匹配，使用第一个", content_desc, matches.len());
     }
 
     Some(matches[0].clone())
