@@ -126,6 +126,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/testcase/codejar/block-mode/command-parser.js');
         await loadScript('../js/testcase/codejar/block-mode/block-ui-builder.js');
         await loadScript('../js/testcase/codejar/block-mode/block-ui-drag.js');
+        await loadScript('../js/testcase/codejar/block-mode/block-ui-strategy-menu.js'); // 策略选择菜单模块
         await loadScript('../js/testcase/codejar/block-mode/block-ui-menus.js');
         await loadScript('../js/testcase/codejar/block-mode/block-number-controller.js');
 

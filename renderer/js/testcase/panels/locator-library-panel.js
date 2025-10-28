@@ -398,12 +398,6 @@ const LocatorLibraryPanel = {
         `;
         
         menu.innerHTML = `
-            <div class="context-menu-item" data-action="use">
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                    <path fill="currentColor" d="M14,10H2V12H14V10M14,6H2V8H14V6M2,16H10V14H2V16M21.5,11.5L23,13L16,20L11.5,15.5L13,14L16,17L21.5,11.5Z"/>
-                </svg>
-                使用
-            </div>
             <div class="context-menu-item" data-action="rename">
                 <svg viewBox="0 0 24 24" width="16" height="16">
                     <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
@@ -421,9 +415,7 @@ const LocatorLibraryPanel = {
         // 添加点击事件
         menu.addEventListener('click', async (e) => {
             const action = e.target.closest('.context-menu-item')?.dataset.action;
-            if (action === 'use') {
-                this.useLocator(name);
-            } else if (action === 'rename') {
+            if (action === 'rename') {
                 await this.renameLocator(name);
             } else if (action === 'delete') {
                 await this.deleteLocator(name);

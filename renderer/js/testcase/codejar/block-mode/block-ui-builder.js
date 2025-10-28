@@ -42,8 +42,8 @@ const BlockUIBuilder = {
                     } else {
                         // 检查参数类型是否为element，以支持可视化渲染
                         if (param.type === 'element') {
-                            if (value && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+)\}$/))) {
-                                // 检查值是否为图片引用格式 @{name} 或 XML元素引用格式 {name}
+                            if (value && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|xpath))?$/))) {
+                                // 检查值是否为图片引用格式 @{name} 或 XML元素引用格式 {name}&strategy
                                 const imageMatch = value.match(/^@\{(.+)\}$/);
                                 const xmlMatch = value.match(/^\{(.+)\}$/);
 
@@ -160,7 +160,7 @@ const BlockUIBuilder = {
                 const value = command.params[paramName];
 
                 const imageMatch = value.match(/^@\{(.+)\}$/);
-                const xmlMatch = value.match(/^\{(.+)\}$/);
+                const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|xpath))?$/);
 
                 if (imageMatch) {
                     // 渲染图片元素
@@ -185,11 +185,16 @@ const BlockUIBuilder = {
                 } else if (xmlMatch) {
                     // 渲染XML元素卡片
                     const elementName = xmlMatch[1];
+                    const strategy = xmlMatch[2]; // 可能是 undefined
+
+                    // 根据策略获取对应的图标
+                    const iconHtml = window.BlockUIStrategyMenu
+                        ? window.BlockUIStrategyMenu.getStrategyIcon(strategy || '', 20)
+                        : `<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/></svg>`;
+
                     element.innerHTML = `
-                        <div class="visual-xml-card">
-                            <svg width="20" height="20" viewBox="0 0 24 24">
-                                <path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/>
-                            </svg>
+                        <div class="visual-xml-card" data-strategy="${strategy || ''}">
+                            ${iconHtml}
                             <span class="visual-name">${elementName}</span>
                             <button class="visual-remove" data-command-index="${commandIndex}" data-param="${paramName}">×</button>
                         </div>
@@ -212,6 +217,44 @@ const BlockUIBuilder = {
                     this.renderBlocks();
                     this.setupBlockModeListeners();
                     this.triggerChange();
+                }
+            });
+        });
+
+        // 为 XML 卡片添加点击事件以显示策略菜单
+        this.blocksContainer.querySelectorAll('.visual-xml-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // 如果点击的是移除按钮，不处理
+                if (e.target.closest('.visual-remove')) {
+                    return;
+                }
+
+                e.stopPropagation();
+
+                const visualElement = card.closest('.param-visual-element');
+                if (!visualElement) return;
+
+                const commandIndex = parseInt(visualElement.dataset.commandIndex);
+                const paramName = visualElement.dataset.param;
+                const currentStrategy = card.dataset.strategy || '';
+
+                // 计算菜单位置（在卡片下方）
+                const rect = card.getBoundingClientRect();
+                const x = rect.left;
+                const y = rect.bottom + 4;
+
+                window.rLog(`点击 XML 卡片，命令: ${commandIndex}, 参数: ${paramName}, 策略: ${currentStrategy}`);
+
+                // 使用策略菜单模块显示菜单
+                if (window.BlockUIStrategyMenu && typeof window.BlockUIStrategyMenu.show === 'function') {
+                    window.BlockUIStrategyMenu.show(x, y, commandIndex, paramName, currentStrategy,
+                        (cmdIndex, param, strategy) => {
+                            // 策略选择后的回调 - 通过 BlockUIMenus 应用策略
+                            if (window.BlockUIMenus && typeof window.BlockUIMenus.applyStrategy === 'function') {
+                                window.BlockUIMenus.applyStrategy(cmdIndex, param, strategy);
+                            }
+                        }
+                    );
                 }
             });
         });
