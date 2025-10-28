@@ -107,8 +107,8 @@ const ElementsListPanel = {
                             <td class="col-content">
                                 <div class="content-cell">
                                     ${el.text ? `<div class="content-text" title="${this.escapeHtml(el.text)}">${this.escapeHtml(this.truncate(el.text, 30))}</div>` : ''}
-                                    ${el.contentDesc ? `<div class="content-desc" title="${this.escapeHtml(el.contentDesc)}">desc: ${this.escapeHtml(this.truncate(el.contentDesc, 20))}</div>` : ''}
-                                    ${!el.text && !el.contentDesc ? '<span class="text-muted">—</span>' : ''}
+                                    ${(el.content_desc || el.contentDesc) ? `<div class="content-desc" title="${this.escapeHtml(el.content_desc || el.contentDesc)}">desc: ${this.escapeHtml(this.truncate(el.content_desc || el.contentDesc, 20))}</div>` : ''}
+                                    ${!el.text && !(el.content_desc || el.contentDesc) ? '<span class="text-muted">—</span>' : ''}
                                 </div>
                             </td>
                             <td class="col-bounds">
@@ -198,7 +198,7 @@ const ElementsListPanel = {
         const searchLower = searchText.toLowerCase();
         const filtered = this.currentElements.filter(el => {
             return (el.text && el.text.toLowerCase().includes(searchLower)) ||
-                   (el.contentDesc && el.contentDesc.toLowerCase().includes(searchLower)) ||
+                   ((el.content_desc || el.contentDesc) && (el.content_desc || el.contentDesc).toLowerCase().includes(searchLower)) ||
                    (el.className && el.className.toLowerCase().includes(searchLower)) ||
                    (el.resourceId && el.resourceId.toLowerCase().includes(searchLower)) ||
                    (el.hint && el.hint.toLowerCase().includes(searchLower));

@@ -110,10 +110,10 @@ const LocatorLibraryPanel = {
             locator_type: 'XML',  // 兼容toolkit-engine
             name: name,
             note: note || '',  // 添加备注字段
-            class_name: element.className || '',  // 使用下划线格式兼容toolkit-engine
+            class_name: element.class_name || element.className || '',  // 优先使用下划线格式
             text: element.text || null,
-            content_desc: element.contentDesc || null,  // 使用下划线格式
-            resource_id: element.resourceId || null,
+            content_desc: element.content_desc || element.contentDesc || null,  // 优先使用下划线格式
+            resource_id: element.resource_id || element.resourceId || null,  // 优先使用下划线格式
             bounds: element.bounds || [],
             clickable: element.clickable || false,
             enabled: element.enabled || false,

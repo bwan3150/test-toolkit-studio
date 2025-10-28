@@ -212,7 +212,7 @@ const BlockUIStrategyMenu = {
         }
 
         // 解析当前值，提取元素名（去掉旧的策略后缀）
-        const xmlMatch = currentValue.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|xpath))?$/);
+        const xmlMatch = currentValue.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|contentDesc|xpath))?$/);
         if (!xmlMatch) {
             window.rError(`无效的元素格式: ${currentValue}`);
             return null;

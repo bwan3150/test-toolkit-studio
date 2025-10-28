@@ -45,7 +45,7 @@ const BlockUIBuilder = {
                             // 检查是否是坐标格式 {数字, 数字}
                             const isCoordinate = value && /^\{\s*\d+\s*,\s*\d+\s*\}$/.test(value);
 
-                            if (value && !isCoordinate && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|xpath))?$/))) {
+                            if (value && !isCoordinate && (value.match(/^@\{(.+)\}$/) || value.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|contentDesc|xpath))?$/))) {
                                 // 检查值是否为图片引用格式 @{name} 或 XML元素引用格式 {name}&strategy
                                 const imageMatch = value.match(/^@\{(.+)\}$/);
                                 const xmlMatch = value.match(/^\{(.+)\}$/);
@@ -163,7 +163,7 @@ const BlockUIBuilder = {
                 const value = command.params[paramName];
 
                 const imageMatch = value.match(/^@\{(.+)\}$/);
-                const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|xpath))?$/);
+                const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|contentDesc|xpath))?$/);
 
                 if (imageMatch) {
                     // 渲染图片元素

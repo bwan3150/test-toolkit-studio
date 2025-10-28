@@ -258,7 +258,7 @@ class BlockModeEditor {
                 } else if (param.type === 'element') {
                     // element 类型参数，检查是否已填入元素
                     const imageMatch = value.match(/^@\{(.+)\}$/);
-                    const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|xpath))?$/);
+                    const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|contentDesc|xpath))?$/);
 
                     // 检查是否是坐标格式 {数字, 数字}
                     const isCoordinate = /^\{\s*\d+\s*,\s*\d+\s*\}$/.test(value);

@@ -114,8 +114,8 @@ const TKSSyntaxHighlighter = {
 
           remaining = remaining.substring(endIndex + 1);
 
-          // 🔥 检查是否紧跟着策略标记 &resourceId, &text, &className, &xpath
-          const strategyMatch = remaining.match(/^&(resourceId|text|className|xpath)(?=\s|,|\]|$)/);
+          // 🔥 检查是否紧跟着策略标记 &resourceId, &text, &className, &contentDesc, &xpath
+          const strategyMatch = remaining.match(/^&(resourceId|text|className|contentDesc|xpath)(?=\s|,|\]|$)/);
           if (strategyMatch) {
             tokens.push({ type: this.TOKEN_TYPES.LOCATOR_STRATEGY, value: strategyMatch[0] });
             remaining = remaining.substring(strategyMatch[0].length);
