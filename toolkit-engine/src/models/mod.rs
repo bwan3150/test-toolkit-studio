@@ -263,7 +263,7 @@ pub enum TksParam {
     Coordinate(Point),      // 坐标 {x,y}
     /// XML元素
     /// - 基础格式: {元素名} - 全精确匹配
-    /// - 指定策略: {元素名}#resourceId, {元素名}#text, {元素名}#className, {元素名}#xpath
+    /// - 指定策略: {元素名}&resourceId, {元素名}&text, {元素名}&className, {元素名}&xpath
     XmlElement {
         name: String,
         strategy: Option<String>,  // 可选的查找策略：resourceId, text, className, xpath

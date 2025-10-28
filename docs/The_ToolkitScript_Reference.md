@@ -26,13 +26,13 @@
 
 #### 指定查找策略（可选）
 
-默认使用全精确匹配。可以通过 `#策略名` 指定只用某个策略查找：
+默认使用全精确匹配。可以通过 `&策略名` 指定只用某个策略查找：
 
 ```tks
-{相机按钮}#resourceId    # 只用 resourceId 精确匹配
-{确定按钮}#text          # 只用 text 精确匹配
-{提交按钮}#className     # 只用 className 精确匹配
-{特殊元素}#xpath         # 只用 xpath 精确匹配
+{相机按钮}&resourceId    # 只用 resourceId 精确匹配
+{确定按钮}&text          # 只用 text 精确匹配
+{提交按钮}&className     # 只用 className 精确匹配
+{特殊元素}&xpath         # 只用 xpath 精确匹配
 ```
 
 > **注意**：所有策略均为严格精确匹配，不再使用模糊匹配

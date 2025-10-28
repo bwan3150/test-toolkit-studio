@@ -8,7 +8,7 @@ use tracing::debug;
 /// 根据XML locator查找元素
 ///
 /// # 参数
-/// - `strategy_override`: 脚本中指定的策略（如 {元素名}#resourceId），优先于 locator 定义中的 matchStrategy
+/// - `strategy_override`: 脚本中指定的策略（如 {元素名}&resourceId），优先于 locator 定义中的 matchStrategy
 pub fn find_by_locator(
     project_path: &PathBuf,
     locators: &HashMap<String, Locator>,
@@ -37,7 +37,7 @@ pub fn find_by_locator(
 /// 根据locator定义查找元素
 ///
 /// # 新的查找逻辑 (2024重构)
-/// 1. 如果脚本指定了策略（如 {元素名}#resourceId），则**只使用该策略，严格匹配**
+/// 1. 如果脚本指定了策略（如 {元素名}&resourceId），则**只使用该策略，严格匹配**
 /// 2. 如果脚本没有指定策略（仅 {元素名}），则使用**全精确匹配**（所有 locator 字段都必须匹配）
 /// 3. 移除了原有的瀑布式匹配逻辑，避免找错元素
 fn find_element_by_locator(

@@ -60,7 +60,7 @@ impl Recognizer {
     ///
     /// # 参数
     /// - `locator_name`: 元素名称（locator/element.json 中定义的 key）
-    /// - `strategy`: 可选的查找策略覆盖（从脚本语法 {元素名}#策略 中提取）
+    /// - `strategy`: 可选的查找策略覆盖（从脚本语法 {元素名}&策略 中提取）
     pub fn find_xml_element(&self, locator_name: &str, strategy: Option<&str>) -> Result<Point> {
         xml::find_by_locator(&self.project_path, &self.locators, locator_name, strategy)
     }
