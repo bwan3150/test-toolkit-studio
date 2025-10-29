@@ -72,6 +72,12 @@ pub struct UIElement {
     pub xpath: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub z_index: Option<usize>,  // 用于前端渲染的z-index,基于元素面积计算
+    #[serde(skip)]
+    pub parent_index: Option<usize>,  // 父元素的index
+    #[serde(skip)]
+    pub depth: usize,  // 层级深度（从0开始）
+    #[serde(skip)]
+    pub sibling_index: usize,  // 在同一父元素下，相同class的第几个（从1开始）
 }
 
 impl UIElement {
