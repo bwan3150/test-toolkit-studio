@@ -63,38 +63,112 @@ impl Fetcher {
         self.fetch_elements_from_xml(&xml_content)
     }
     
-    // 从XML字符串中提取所有UI元素
+    // 从XML字符串中提取所有UI元素 - 递归解析版本
     pub fn fetch_elements_from_xml(&self, xml_content: &str) -> Result<Vec<UIElement>> {
+        use quick_xml::events::Event;
+        use quick_xml::Reader;
+
         let mut reader = Reader::from_str(xml_content);
         reader.config_mut().trim_text(true);
-        
-        let mut elements = Vec::new();
+
+        let mut all_elements = Vec::new();
         let mut buf = Vec::new();
-        
+
+        // 递归解析节点树
+        self.parse_nodes_recursive(&mut reader, &mut buf, &mut all_elements, None, 0)?;
+
+        // 计算同类索引（sibling_index）
+        self.calculate_sibling_indices(&mut all_elements);
+
+        // 生成 xpath
+        self.generate_xpaths(&mut all_elements);
+
+        // 计算并设置z_index
+        self.calculate_z_index(&mut all_elements);
+
+        Ok(all_elements)
+    }
+
+    // 递归解析节点
+    fn parse_nodes_recursive(
+        &self,
+        reader: &mut Reader<&[u8]>,
+        buf: &mut Vec<u8>,
+        all_elements: &mut Vec<UIElement>,
+        parent_index: Option<usize>,
+        depth: usize,
+    ) -> Result<()> {
         loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
+            match reader.read_event_into(buf) {
+                Ok(Event::Start(ref e)) => {
                     if e.name().as_ref() == b"node" {
-                        if let Some(element) = self.parse_node(&e, elements.len()) {
-                            // 使用JavaScript版本的筛选逻辑：更宽松的条件
-                            if self.should_include_element_js_style(&element) {
-                                elements.push(element);
+                        if let Some(element) = self.parse_node_attributes(e, all_elements.len(), parent_index, depth) {
+                            let should_include = self.should_include_element_js_style(&element);
+
+                            if should_include {
+                                let current_index = all_elements.len();
+                                all_elements.push(element);
+                                // 递归解析子节点，使用这个元素作为父节点
+                                self.parse_nodes_recursive(reader, buf, all_elements, Some(current_index), depth + 1)?;
+                            } else {
+                                // 不包含此元素，但仍然递归解析子节点（子节点可能满足条件）
+                                // 子节点的父节点仍然是当前的 parent_index
+                                self.parse_nodes_recursive(reader, buf, all_elements, parent_index, depth)?;
                             }
                         }
+                    }
+                }
+                Ok(Event::Empty(ref e)) => {
+                    if e.name().as_ref() == b"node" {
+                        let current_index = all_elements.len();
+
+                        if let Some(element) = self.parse_node_attributes(e, current_index, parent_index, depth) {
+                            if self.should_include_element_js_style(&element) {
+                                all_elements.push(element);
+                            }
+                        }
+                    }
+                }
+                Ok(Event::End(ref e)) => {
+                    if e.name().as_ref() == b"node" {
+                        // 当前节点结束，返回上一层
+                        break;
                     }
                 }
                 Ok(Event::Eof) => break,
                 Err(e) => return Err(TkeError::XmlError(format!("解析XML失败: {}", e))),
                 _ => {}
             }
-            
+
             buf.clear();
         }
 
-        // 计算并设置z_index: 按面积排序,面积越小z_index越大
-        self.calculate_z_index(&mut elements);
+        Ok(())
+    }
 
-        Ok(elements)
+    // 跳过不需要的元素及其子节点
+    fn skip_element(&self, reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<()> {
+        let mut depth = 1;
+
+        loop {
+            match reader.read_event_into(buf) {
+                Ok(Event::Start(ref e)) if e.name().as_ref() == b"node" => {
+                    depth += 1;
+                }
+                Ok(Event::End(ref e)) if e.name().as_ref() == b"node" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Err(e) => return Err(TkeError::XmlError(format!("跳过元素失败: {}", e))),
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        Ok(())
     }
 
     // 计算元素的z_index,基于面积排序(面积越小,z_index越大)
@@ -118,8 +192,14 @@ impl Fetcher {
         }
     }
     
-    // 解析单个节点
-    fn parse_node(&self, e: &quick_xml::events::BytesStart, index: usize) -> Option<UIElement> {
+    // 解析单个节点的属性
+    fn parse_node_attributes(
+        &self,
+        e: &quick_xml::events::BytesStart,
+        index: usize,
+        parent_index: Option<usize>,
+        depth: usize,
+    ) -> Option<UIElement> {
         let mut class_name = String::new();
         let mut bounds = Bounds::new(0, 0, 0, 0);
         let mut text = None;
@@ -134,7 +214,7 @@ impl Fetcher {
         let mut scrollable = false;
         let mut selected = false;
         let mut enabled = true;
-        
+
         // 解析所有属性
         for attr_result in e.attributes() {
             if let Ok(attr) = attr_result {
@@ -142,7 +222,7 @@ impl Fetcher {
                 let value = attr.unescape_value()
                     .unwrap_or_default()
                     .to_string();
-                
+
                 match key.as_ref() {
                     "class" => class_name = value,
                     "bounds" => bounds = self.parse_bounds(&value),
@@ -162,7 +242,7 @@ impl Fetcher {
                 }
             }
         }
-        
+
         Some(UIElement {
             index,
             class_name,
@@ -179,8 +259,11 @@ impl Fetcher {
             scrollable,
             selected,
             enabled,
-            xpath: Some(format!("//node[{}]", index)),
+            xpath: None,  // 稍后生成
             z_index: None,  // 稍后计算
+            parent_index,
+            depth,
+            sibling_index: 0,  // 稍后计算
         })
     }
     
@@ -445,7 +528,7 @@ impl Fetcher {
         // 简化版本：根据元素位置和大小估算深度
         let area = (element.bounds.x2 - element.bounds.x1) * (element.bounds.y2 - element.bounds.y1);
         let screen_area = (self.screen_width * self.screen_height) as i32;
-        
+
         if area >= screen_area / 2 {
             0  // 大元素，可能是容器
         } else if area >= screen_area / 10 {
@@ -453,5 +536,87 @@ impl Fetcher {
         } else {
             2  // 小元素，可能是子控件
         }
+    }
+
+    // 计算同类索引（sibling_index）
+    // 在同一父元素下，相同class的第几个（从1开始）
+    fn calculate_sibling_indices(&self, elements: &mut [UIElement]) {
+        use std::collections::HashMap;
+
+        // 按父元素分组，记录每个类名的计数
+        // key: (parent_index, class_name), value: count
+        let mut class_counters: HashMap<(Option<usize>, String), usize> = HashMap::new();
+
+        for element in elements.iter_mut() {
+            let key = (element.parent_index, element.class_name.clone());
+            let count = class_counters.entry(key).or_insert(0);
+            *count += 1;
+            element.sibling_index = *count;
+        }
+    }
+
+    // 生成语义化的 xpath（类似 Appium）
+    fn generate_xpaths(&self, elements: &mut [UIElement]) {
+        // 克隆元素数据以供查询使用
+        let elements_ref: Vec<UIElement> = elements.to_vec();
+
+        for i in 0..elements.len() {
+            let xpath = self.generate_single_xpath(&elements_ref, i);
+            elements[i].xpath = Some(xpath);
+        }
+    }
+
+    // 生成单个元素的 xpath
+    fn generate_single_xpath(&self, elements: &[UIElement], index: usize) -> String {
+        let element = &elements[index];
+
+        // 策略1: 如果有 resource-id，优先使用
+        if let Some(ref resource_id) = element.resource_id {
+            return format!("//{}[@resource-id=\"{}\"]", element.class_name, resource_id);
+        }
+
+        // 策略2: 如果有 content-desc，使用它
+        if let Some(ref content_desc) = element.content_desc {
+            if !content_desc.trim().is_empty() {
+                return format!("//{}[@content-desc=\"{}\"]", element.class_name, content_desc);
+            }
+        }
+
+        // 策略3: 如果有 text，使用它
+        if let Some(ref text) = element.text {
+            if !text.trim().is_empty() {
+                return format!("//{}[@text=\"{}\"]", element.class_name, text);
+            }
+        }
+
+        // 策略4: 构建基于父元素的路径
+        if let Some(parent_idx) = element.parent_index {
+            if parent_idx < elements.len() {
+                let parent = &elements[parent_idx];
+
+                // 如果父元素有唯一标识
+                if let Some(ref parent_resource_id) = parent.resource_id {
+                    return format!(
+                        "//{}[@resource-id=\"{}\"]/{}[{}]",
+                        parent.class_name, parent_resource_id, element.class_name, element.sibling_index
+                    );
+                }
+
+                if let Some(ref parent_content_desc) = parent.content_desc {
+                    if !parent_content_desc.trim().is_empty() {
+                        return format!(
+                            "//{}[@content-desc=\"{}\"]/{}[{}]",
+                            parent.class_name, parent_content_desc, element.class_name, element.sibling_index
+                        );
+                    }
+                }
+
+                // 父元素没有唯一标识，使用简单路径
+                return format!("{}/{}[{}]", parent.class_name, element.class_name, element.sibling_index);
+            }
+        }
+
+        // 策略5: 最后使用 className + instance 索引
+        format!("//{}[{}]", element.class_name, element.sibling_index)
     }
 }

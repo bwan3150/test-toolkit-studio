@@ -80,6 +80,38 @@
             color: #f0f0f0;
         }
 
+        /* 汉堡菜单按钮 */
+        .hamburger {
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            z-index: 1001;
+        }
+
+        .hamburger span {
+            width: 24px;
+            height: 2px;
+            background: #f0f0f0;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .hamburger.active span:nth-child(1) {
+            transform: translateY(7px) rotate(45deg);
+        }
+
+        .hamburger.active span:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger.active span:nth-child(3) {
+            transform: translateY(-7px) rotate(-45deg);
+        }
+
         /* 主内容区域 */
         .main-content {
             padding: 120px 40px 80px;
@@ -275,8 +307,48 @@
                 font-size: 36px;
             }
 
+            .nav-container {
+                padding: 0 20px;
+            }
+
+            /* 显示汉堡菜单 */
+            .hamburger {
+                display: flex;
+            }
+
+            /* 移动端导航链接样式 */
             .nav-links {
-                display: none;
+                position: fixed;
+                top: 72px;
+                left: 0;
+                right: 0;
+                background: rgba(13, 13, 13, 0.98);
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                flex-direction: column;
+                gap: 0;
+                padding: 0;
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.3s ease, padding 0.3s ease;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+
+            .nav-links.active {
+                max-height: 300px;
+                padding: 20px 0;
+            }
+
+            .nav-link {
+                padding: 16px 32px;
+                font-size: 16px;
+                width: 100%;
+                text-align: left;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .nav-link:last-child {
+                border-bottom: none;
             }
 
             .release-item {
@@ -303,7 +375,12 @@
                 <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
                 <span class="logo-text">Toolkit</span>
             </div>
-            <div class="nav-links">
+            <button class="hamburger" id="hamburger" aria-label="菜单">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <div class="nav-links" id="navLinks">
                 <a href="index.html" class="nav-link">首页</a>
                 <a href="index.html#core-features" class="nav-link">核心特性</a>
                 <a href="index.html#feature-showcase" class="nav-link">功能展示</a>
@@ -435,6 +512,35 @@
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', loadReleaseNotes);
+
+        // 汉堡菜单功能
+        document.addEventListener('DOMContentLoaded', () => {
+            const hamburger = document.getElementById('hamburger');
+            const navLinks = document.getElementById('navLinks');
+
+            // 切换菜单
+            hamburger.addEventListener('click', () => {
+                hamburger.classList.toggle('active');
+                navLinks.classList.toggle('active');
+            });
+
+            // 点击导航链接后关闭菜单
+            const links = navLinks.querySelectorAll('.nav-link');
+            links.forEach(link => {
+                link.addEventListener('click', () => {
+                    hamburger.classList.remove('active');
+                    navLinks.classList.remove('active');
+                });
+            });
+
+            // 点击页面其他区域关闭菜单
+            document.addEventListener('click', (e) => {
+                if (!hamburger.contains(e.target) && !navLinks.contains(e.target)) {
+                    hamburger.classList.remove('active');
+                    navLinks.classList.remove('active');
+                }
+            });
+        });
     </script>
 </body>
 </html>
