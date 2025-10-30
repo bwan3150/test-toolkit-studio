@@ -13,7 +13,7 @@ import app.TestToolkit.TKE.AutoServer.device.ConfigurationException;
 import app.TestToolkit.TKE.AutoServer.device.DesktopConnection;
 import app.TestToolkit.TKE.AutoServer.device.Device;
 import app.TestToolkit.TKE.AutoServer.device.NewDisplay;
-import app.TestToolkit.TKE.AutoServer.device.ScreenshotCapture;
+import app.TestToolkit.TKE.AutoServer.device.ScreenshotServer;
 import app.TestToolkit.TKE.AutoServer.device.Streamer;
 import app.TestToolkit.TKE.AutoServer.opengl.OpenGLRunner;
 import app.TestToolkit.TKE.AutoServer.util.Ln;
@@ -211,26 +211,12 @@ public final class Server {
     }
 
     /**
-     * 截图（输出 PNG 二进制数据到 stdout）
+     * 启动持续运行的截图服务器
      */
-    private static void takeScreenshot() {
-        // 保存原始的 stdout，避免被 disableSystemStreams() 重定向
-        java.io.PrintStream originalOut = System.out;
-
-        // 禁用标准输出流，避免日志混入截图数据
-        Ln.disableSystemStreams();
-
-        byte[] pngData = ScreenshotCapture.captureScreenAsPng();
-        if (pngData != null) {
-            try {
-                originalOut.write(pngData);
-                originalOut.flush();
-            } catch (Exception e) {
-                System.exit(1);
-            }
-        } else {
-            System.exit(1);
-        }
+    private static void startScreenshotServer() {
+        Ln.i("Starting screenshot server...");
+        ScreenshotServer server = new ScreenshotServer();
+        server.start();
     }
 
     public static void main(String... args) {
@@ -253,9 +239,9 @@ public final class Server {
             Ln.e("Exception on thread " + t, e);
         });
 
-        // 检查是否是截图命令
-        if (args.length > 0 && "screenshot".equals(args[0])) {
-            takeScreenshot();
+        // 检查是否是截图服务器命令
+        if (args.length > 0 && "screenshot-server".equals(args[0])) {
+            startScreenshotServer();
             return;
         }
 
