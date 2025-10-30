@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 ./gradlew assembleRelease
 
 # 提取 classes.dex 并打包成 jar
-echo "📦 Packaging tke-autoserver.jar..."
+echo "📦 Packaging tke-autoserver..."
 
 APK_FILE="build/outputs/apk/release/autoserver-android-release-unsigned.apk"
 OUTPUT_JAR="build/tke-autoserver"

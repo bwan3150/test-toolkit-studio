@@ -1,15 +1,16 @@
 package app.TestToolkit.TKE.AutoServer.wrappers;
 
+import app.TestToolkit.TKE.AutoServer.FakeContext;
+
 import android.annotation.SuppressLint;
+import android.content.Context;
+import android.hardware.camera2.CameraManager;
 import android.os.IBinder;
 import android.os.IInterface;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
-/**
- * 系统服务管理器
- * 通过反射访问 Android 隐藏的系统服务
- */
 @SuppressLint("PrivateApi,DiscouragedPrivateApi")
 public final class ServiceManager {
 
@@ -17,32 +18,95 @@ public final class ServiceManager {
 
     static {
         try {
-            GET_SERVICE_METHOD = Class.forName("android.os.ServiceManager")
-                .getDeclaredMethod("getService", String.class);
+            GET_SERVICE_METHOD = Class.forName("android.os.ServiceManager").getDeclaredMethod("getService", String.class);
         } catch (Exception e) {
             throw new AssertionError(e);
         }
     }
 
+    private static WindowManager windowManager;
+    private static DisplayManager displayManager;
+    private static InputManager inputManager;
+    private static PowerManager powerManager;
+    private static StatusBarManager statusBarManager;
+    private static ClipboardManager clipboardManager;
+    private static ActivityManager activityManager;
+    private static CameraManager cameraManager;
+
     private ServiceManager() {
-        // not instantiable
+        /* not instantiable */
     }
 
-    /**
-     * 获取系统服务
-     *
-     * @param service 服务名称（如 "window"）
-     * @param type 服务接口类型（如 "android.view.IWindowManager"）
-     * @return 服务接口实例
-     */
-    public static IInterface getService(String service, String type) {
+    static IInterface getService(String service, String type) {
         try {
             IBinder binder = (IBinder) GET_SERVICE_METHOD.invoke(null, service);
-            Method asInterfaceMethod = Class.forName(type + "$Stub")
-                .getMethod("asInterface", IBinder.class);
+            Method asInterfaceMethod = Class.forName(type + "$Stub").getMethod("asInterface", IBinder.class);
             return (IInterface) asInterfaceMethod.invoke(null, binder);
         } catch (Exception e) {
             throw new AssertionError(e);
         }
+    }
+
+    public static WindowManager getWindowManager() {
+        if (windowManager == null) {
+            windowManager = WindowManager.create();
+        }
+        return windowManager;
+    }
+
+    // The DisplayManager may be used from both the Controller thread and the video (main) thread
+    public static synchronized DisplayManager getDisplayManager() {
+        if (displayManager == null) {
+            displayManager = DisplayManager.create();
+        }
+        return displayManager;
+    }
+
+    public static InputManager getInputManager() {
+        if (inputManager == null) {
+            inputManager = InputManager.create();
+        }
+        return inputManager;
+    }
+
+    public static PowerManager getPowerManager() {
+        if (powerManager == null) {
+            powerManager = PowerManager.create();
+        }
+        return powerManager;
+    }
+
+    public static StatusBarManager getStatusBarManager() {
+        if (statusBarManager == null) {
+            statusBarManager = StatusBarManager.create();
+        }
+        return statusBarManager;
+    }
+
+    public static ClipboardManager getClipboardManager() {
+        if (clipboardManager == null) {
+            // May be null, some devices have no clipboard manager
+            clipboardManager = ClipboardManager.create();
+        }
+        return clipboardManager;
+    }
+
+    public static ActivityManager getActivityManager() {
+        if (activityManager == null) {
+            activityManager = ActivityManager.create();
+        }
+        return activityManager;
+    }
+
+    public static CameraManager getCameraManager() {
+        if (cameraManager == null) {
+            try {
+                Constructor<CameraManager> ctor = CameraManager.class.getDeclaredConstructor(Context.class);
+                cameraManager = ctor.newInstance(FakeContext.get());
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
+        }
+        return cameraManager;
     }
 }
