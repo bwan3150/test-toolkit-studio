@@ -14,6 +14,7 @@ const { registerLogcatHandlers } = require('./handlers/tke-integration/logcat-ha
 const { registerIosHandlers, cleanupIosProcesses } = require('./handlers/tke-integration/ios-handlers');
 const { registerDeviceHandlers } = require('./handlers/tke-integration/device-handlers');
 const { registerControllerHandlers } = require('./handlers/tke-integration/controller-handlers');
+const { registerServerHandlers } = require('./handlers/tke-integration/server-handlers');
 const { registerFetcherHandlers } = require('./handlers/tke-integration/fetcher-handlers');
 const { registerRecognizerHandlers } = require('./handlers/tke-integration/recognizer-handlers');
 const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-handlers');
@@ -204,6 +205,9 @@ function registerAllHandlers() {
 
     console.log('注册TKE Controller处理器...');
     registerControllerHandlers(app);
+
+    console.log('注册TKE Server处理器...');
+    registerServerHandlers(app);
 
     console.log('注册TKE Fetcher处理器...');
     registerFetcherHandlers(app);

@@ -108,6 +108,66 @@ function registerControllerHandlers(app) {
     }
   });
 
+  // 只截图 - tke controller capture screenshot
+  ipcMain.handle('tke-controller-capture-screenshot', async (event, deviceId, projectPath) => {
+    try {
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      if (!projectPath || !path.isAbsolute(projectPath)) {
+        return { success: false, error: '请提供有效的项目路径（绝对路径）' };
+      }
+
+      // 确保workarea目录存在
+      const workareaPath = path.join(projectPath, 'workarea');
+      if (!fs.existsSync(workareaPath)) {
+        fs.mkdirSync(workareaPath, { recursive: true });
+      }
+
+      const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture', 'screenshot'];
+      const output = await execTkeCommand(app, args);
+
+      return {
+        success: true,
+        output: output // 返回原始 JSON 字符串
+      };
+    } catch (error) {
+      console.error('TKE controller capture screenshot失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 只获取UI树 - tke controller capture xml
+  ipcMain.handle('tke-controller-capture-xml', async (event, deviceId, projectPath) => {
+    try {
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      if (!projectPath || !path.isAbsolute(projectPath)) {
+        return { success: false, error: '请提供有效的项目路径（绝对路径）' };
+      }
+
+      // 确保workarea目录存在
+      const workareaPath = path.join(projectPath, 'workarea');
+      if (!fs.existsSync(workareaPath)) {
+        fs.mkdirSync(workareaPath, { recursive: true });
+      }
+
+      const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture', 'xml'];
+      const output = await execTkeCommand(app, args);
+
+      return {
+        success: true,
+        output: output // 返回原始 JSON 字符串
+      };
+    } catch (error) {
+      console.error('TKE controller capture xml失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 点击操作 - tke controller tap <x> <y>
   ipcMain.handle('tke-controller-tap', async (event, deviceId, x, y) => {
     try {
