@@ -9,7 +9,9 @@ use tracing::debug;
 
 pub struct Fetcher {
     // 有意义的属性集合
+    #[allow(dead_code)]
     meaningful_attributes: HashSet<String>,
+    #[allow(dead_code)]
     meaningful_bool_attributes: HashSet<String>,
     // 需要过滤的系统UI元素
     filtered_resource_ids: Vec<String>,
@@ -65,7 +67,6 @@ impl Fetcher {
     
     // 从XML字符串中提取所有UI元素 - 递归解析版本
     pub fn fetch_elements_from_xml(&self, xml_content: &str) -> Result<Vec<UIElement>> {
-        use quick_xml::events::Event;
         use quick_xml::Reader;
 
         let mut reader = Reader::from_str(xml_content);
@@ -147,6 +148,7 @@ impl Fetcher {
     }
 
     // 跳过不需要的元素及其子节点
+    #[allow(dead_code)]
     fn skip_element(&self, reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<()> {
         let mut depth = 1;
 
@@ -321,6 +323,7 @@ impl Fetcher {
     }
     
     // 判断是否应该包含该元素（原版方法，保留作备用）
+    #[allow(dead_code)]
     fn should_include_element(&self, element: &UIElement) -> bool {
         // 检查是否是需要过滤的系统UI
         if let Some(ref resource_id) = element.resource_id {

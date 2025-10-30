@@ -69,9 +69,11 @@ pub enum ControllerCommands {
 
 /// 处理 Controller 相关命令
 pub async fn handle(action: ControllerCommands, device_id: Option<String>, project_path: std::path::PathBuf) -> Result<()> {
-    let controller = Controller::new(device_id)?;
+    // 将所有操作包装在闭包中，统一捕获错误并输出 JSON
+    let result: Result<()> = (|| async {
+        let controller = Controller::new(device_id)?;
 
-    match action {
+        match action {
         ControllerCommands::Devices => {
             let devices = controller.get_devices()?;
             JsonOutput::print(serde_json::json!({
@@ -177,7 +179,20 @@ pub async fn handle(action: ControllerCommands, device_id: Option<String>, proje
                 "success": true
             }));
         }
-    }
+        }
 
-    Ok(())
+        Ok(())
+    })().await;
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // 将错误也输出为 JSON，然后正常返回（避免额外的错误输出）
+            JsonOutput::print(serde_json::json!({
+                "success": false,
+                "error": format!("{}", e)
+            }));
+            Ok(())
+        }
+    }
 }

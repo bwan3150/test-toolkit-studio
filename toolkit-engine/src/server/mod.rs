@@ -128,7 +128,6 @@ impl AutoServer {
 
     /// 设置端口转发
     fn setup_port_forward(&self) -> Result<()> {
-        let port_str = self.port.to_string();
         let forward_spec = format!("tcp:{}", self.port);
         self.run_adb_command(&["forward", &forward_spec, &forward_spec])?;
         Ok(())

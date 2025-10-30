@@ -6,6 +6,7 @@ use tracing::{debug, info, error};
 
 pub struct ScriptInterpreter {
     project_path: PathBuf,
+    #[allow(dead_code)]
     device_id: Option<String>,
     controller: Controller,
     recognizer: Recognizer,
