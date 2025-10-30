@@ -144,8 +144,9 @@ impl AutoServer {
         // 设置端口转发
         self.setup_port_forward()?;
 
-        // 使用 nohup 在后台启动 screenshot-server，让进程独立运行
-        let cmd_str = "nohup sh -c 'CLASSPATH=/data/local/tmp/tke-autoserver app_process / app.TestToolkit.TKE.AutoServer.Server screenshot-server > /dev/null 2>&1' &";
+        // 使用 sh -c '命令 &' && sleep 的方式启动后台进程
+        // 这样 shell 会在后台启动进程后立即退出，而后台进程继续运行
+        let cmd_str = "sh -c 'CLASSPATH=/data/local/tmp/tke-autoserver app_process / app.TestToolkit.TKE.AutoServer.Server screenshot-server >/dev/null 2>&1 &' && sleep 0.1";
 
         self.run_adb_command(&[
             "shell",
@@ -160,12 +161,14 @@ impl AutoServer {
 
     /// 停止 autoserver
     pub fn stop(&self) -> Result<()> {
-        // 使用 pkill 杀死进程（已验证可用）
+        // 使用 pkill -9 强制杀死所有相关进程（包括父进程和子进程）
+        // 注意：进程名为 app_process，需要通过命令行参数 screenshot-server 来匹配
         let _ = self.run_adb_command(&[
             "shell",
             "pkill",
+            "-9",
             "-f",
-            "tke-autoserver"
+            "screenshot-server"
         ]);
 
         // 移除端口转发
@@ -182,11 +185,12 @@ impl AutoServer {
     /// 检查 screenshot-server 是否在运行
     pub fn is_running(&self) -> bool {
         // 通过 pgrep 检查进程是否存在
+        // 注意：进程名为 app_process，需要通过命令行参数 screenshot-server 来匹配
         let output = self.run_adb_command_output(&[
             "shell",
             "pgrep",
             "-f",
-            "tke-autoserver"
+            "screenshot-server"
         ]);
 
         // 如果命令成功且有输出，说明进程存在
