@@ -35,7 +35,7 @@ echo ">>> [5/6] Building AI Tester (Rust)..."
 
 # 6. 构建手机端流传输和控制服务器 
 echo ""
-echo ">>> [6/6] Building Android Automation Server jar (Kotlin)..."
+echo ">>> [6/6] Building Android Automation Server jar (Java)..."
 ./autoserver-android/build_without_gradle.sh
 
 # 6. 构建 Electron 应用（macOS）
