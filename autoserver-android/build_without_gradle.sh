@@ -1,28 +1,50 @@
 #!/usr/bin/env bash
 #
-# This script generates the scrcpy binary "manually" (without gradle).
+# 构建 Toolkit Engine AutoServer 并复制到资源目录
 #
 # Adapt Android platform and build tools versions (via ANDROID_PLATFORM and
 # ANDROID_BUILD_TOOLS environment variables).
 #
 # Then execute:
 #
-#     BUILD_DIR=my_build_dir ./build_without_gradle.sh
+#     ./build_without_gradle.sh
 
 set -e
 
+# 获取脚本所在目录（autoserver-android目录）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+echo "==============================="
+
+# 读取版本号：package.json → VERSION
+PACKAGE_JSON="$SCRIPT_DIR/../package.json"
+if [ ! -f "$PACKAGE_JSON" ]; then
+    echo "Error: package.json not found at $PACKAGE_JSON"
+    exit 1
+fi
+
+PKG_VERSION=$(grep '"version"' "$PACKAGE_JSON" | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+if [ -z "$PKG_VERSION" ]; then
+    echo "Error: cannot extract version from $PACKAGE_JSON"
+    exit 1
+fi
+
+echo "Build version: $PKG_VERSION"
+
 SCRCPY_DEBUG=false
-SCRCPY_VERSION_NAME=0.1.0
+SCRCPY_VERSION_NAME="$PKG_VERSION"
 
 PLATFORM=${ANDROID_PLATFORM:-35}
 BUILD_TOOLS=${ANDROID_BUILD_TOOLS:-35.0.0}
 PLATFORM_TOOLS="$ANDROID_HOME/platforms/android-$PLATFORM"
 BUILD_TOOLS_DIR="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
 
-BUILD_DIR="$(realpath ${BUILD_DIR:-build_manual})"
+BUILD_DIR="$SCRIPT_DIR/build"
+mkdir -p "$BUILD_DIR"
 CLASSES_DIR="$BUILD_DIR/classes"
 GEN_DIR="$BUILD_DIR/gen"
-SERVER_DIR=$(dirname "$0")
+SERVER_DIR="$SCRIPT_DIR"
 SERVER_BINARY=tke-autoserver
 ANDROID_JAR="$PLATFORM_TOOLS/android.jar"
 ANDROID_AIDL="$PLATFORM_TOOLS/framework.aidl"
@@ -113,3 +135,52 @@ fi
 rm -rf "$GEN_DIR" "$CLASSES_DIR"
 
 echo "Server generated in $BUILD_DIR/$SERVER_BINARY"
+
+# 检测平台
+OS=$(uname)
+case "$OS" in
+    Darwin)
+        PLATFORM_NAME="darwin"
+        ;;
+    Linux)
+        PLATFORM_NAME="linux"
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        PLATFORM_NAME="win32"
+        ;;
+    *)
+        echo "Unsupported OS: $OS"
+        exit 1
+        ;;
+esac
+
+echo "OS: $PLATFORM_NAME"
+
+# 源文件路径
+SOURCE_BINARY="$BUILD_DIR/$SERVER_BINARY"
+
+# 目标目录和文件路径
+TARGET_DIR="$SCRIPT_DIR/../resources/$PLATFORM_NAME/toolkit-engine"
+TARGET_BINARY="$TARGET_DIR/$SERVER_BINARY"
+
+# 检查源文件是否存在
+if [ ! -f "$SOURCE_BINARY" ]; then
+    echo "Error: build fault, cannot find: $SOURCE_BINARY"
+    exit 1
+fi
+
+# 创建目标目录
+mkdir -p "$TARGET_DIR"
+
+# 复制二进制文件
+cp "$SOURCE_BINARY" "$TARGET_BINARY"
+
+echo "Build successfully"
+echo "Cp to: $TARGET_BINARY"
+echo "Size: $(du -h "$TARGET_BINARY" | cut -f1)"
+
+echo ""
+echo "==============================="
+echo "TKE AutoServer Build Finished"
+echo "==============================="
+echo ""

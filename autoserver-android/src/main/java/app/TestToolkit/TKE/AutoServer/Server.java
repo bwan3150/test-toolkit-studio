@@ -1,5 +1,6 @@
 package app.TestToolkit.TKE.AutoServer;
 
+import app.TestToolkit.TKE.AutoServer.BuildConfig;
 import app.TestToolkit.TKE.AutoServer.audio.AudioCapture;
 import app.TestToolkit.TKE.AutoServer.audio.AudioCodec;
 import app.TestToolkit.TKE.AutoServer.audio.AudioDirectCapture;
@@ -238,6 +239,12 @@ public final class Server {
         Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
             Ln.e("Exception on thread " + t, e);
         });
+
+        // 检查是否是 version 命令
+        if (args.length > 0 && ("version".equals(args[0]) || "--version".equals(args[0]) || "-v".equals(args[0]))) {
+            System.out.println("Toolkit Engine AutoServer v" + BuildConfig.VERSION_NAME);
+            return;
+        }
 
         // 检查是否是截图服务器命令
         if (args.length > 0 && "screenshot-server".equals(args[0])) {
