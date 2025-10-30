@@ -19,41 +19,60 @@ pub enum ServerCommands {
 
 /// 处理 Server 相关命令
 pub async fn handle(action: ServerCommands, device_id: Option<String>) -> Result<()> {
-    match action {
-        ServerCommands::Start { port } => {
-            let server = if let Some(port) = port {
-                AutoServer::new(device_id)?.with_port(port)
-            } else {
-                AutoServer::new(device_id)?
-            };
+    // 将所有操作包装在一个闭包中，统一捕获错误并输出 JSON
+    let result = (|| -> Result<serde_json::Value> {
+        match action {
+            ServerCommands::Start { port } => {
+                let server = if let Some(port) = port {
+                    AutoServer::new(device_id.clone())?.with_port(port)
+                } else {
+                    AutoServer::new(device_id.clone())?
+                };
 
-            server.start()?;
+                server.start()?;
 
-            JsonOutput::print(serde_json::json!({
-                "success": true,
-                "status": "started",
-                "port": server.port()
-            }));
+                Ok(serde_json::json!({
+                    "success": true,
+                    "status": "started",
+                    "port": server.port()
+                }))
+            }
+            ServerCommands::Stop => {
+                let server = AutoServer::new(device_id.clone())?;
+                server.stop()?;
+
+                Ok(serde_json::json!({
+                    "success": true,
+                    "status": "stopped"
+                }))
+            }
+            ServerCommands::Status => {
+                let server = AutoServer::new(device_id.clone())?;
+                let is_running = server.is_running();
+
+                Ok(serde_json::json!({
+                    "running": is_running,
+                    "port": server.port()
+                }))
+            }
         }
-        ServerCommands::Stop => {
-            let server = AutoServer::new(device_id)?;
-            server.stop()?;
+    })();
 
-            JsonOutput::print(serde_json::json!({
-                "success": true,
-                "status": "stopped"
-            }));
+    match result {
+        Ok(json) => {
+            JsonOutput::print(json);
         }
-        ServerCommands::Status => {
-            let server = AutoServer::new(device_id)?;
-            let is_running = server.is_running();
-
+        Err(e) => {
+            // 将错误也输出为 JSON，然后正常返回（避免额外的错误输出）
             JsonOutput::print(serde_json::json!({
-                "running": is_running,
-                "port": server.port()
+                "success": false,
+                "error": format!("{}", e)
             }));
+            // 注意：这里返回 Ok 是为了保持纯 JSON 输出
+            // 如果需要错误退出码，可以改为 return Err(e)
         }
     }
 
     Ok(())
+
 }
