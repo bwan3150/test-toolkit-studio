@@ -1,0 +1,43 @@
+// Toolkit Engine AutoServer
+// 基于 scrcpy 架构
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.1'
+    }
+}
+
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'app.TestToolkit.TKE.AutoServer'
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "app.TestToolkit.TKE.AutoServer"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}

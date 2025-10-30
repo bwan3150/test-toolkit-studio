@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 这是一个只包含服务端代码的 APP，不需要 Activity -->
+</manifest>

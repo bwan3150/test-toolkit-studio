@@ -71,3 +71,14 @@ local/
 
 # Electron
 electron-builder.yml
+
+# Android / Gradle (autoserver-android)
+autoserver-android/build/
+autoserver-android/.gradle/
+autoserver-android/local.properties
+autoserver-android/*.apk
+autoserver-android/*.dex
+autoserver-android/*.class
+autoserver-android/.cxx/
+autoserver-android/captures/
+autoserver-android/.externalNativeBuild/
