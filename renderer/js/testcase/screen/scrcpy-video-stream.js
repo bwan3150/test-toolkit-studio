@@ -167,18 +167,24 @@ const ScrcpyVideoStream = {
     this.streamIframe.id = 'scrcpyStreamFrame';
     this.streamIframe.src = `${this.serverUrl}/#!${params.toString()}`;
 
-    // 设置样式
+    // 设置样式 - 填充整个容器
     this.streamIframe.style.width = '100%';
     this.streamIframe.style.height = '100%';
     this.streamIframe.style.border = 'none';
     this.streamIframe.style.display = 'block';
-    this.streamIframe.style.position = 'absolute';
-    this.streamIframe.style.top = '0';
-    this.streamIframe.style.left = '0';
+    this.streamIframe.style.backgroundColor = '#000';
+    this.streamIframe.style.flex = '1';  // 使用 flex 布局填充父容器
 
     // 添加加载完成事件
     this.streamIframe.onload = () => {
       window.rLog('视频流 iframe 加载完成');
+
+      // 尝试注入样式到 iframe 内部（跨域可能失败）
+      try {
+        this.injectIframeStyles();
+      } catch (e) {
+        window.rLog('无法注入 iframe 样式（跨域限制）:', e.message);
+      }
     };
 
     // 添加错误处理
@@ -189,7 +195,104 @@ const ScrcpyVideoStream = {
     // 添加到容器
     this.streamContainer.appendChild(this.streamIframe);
 
+    // 给容器添加 class 标记，表示正在显示视频流
+    this.streamContainer.classList.add('has-video-stream');
+
+    // 添加全局样式来隐藏控制按钮
+    this.addGlobalStyles();
+
     window.rLog('视频流 iframe 已创建');
+  },
+
+  /**
+   * 添加全局样式来优化视频流显示
+   */
+  addGlobalStyles() {
+    // 检查是否已经添加过样式
+    if (document.getElementById('scrcpy-stream-styles')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'scrcpy-stream-styles';
+    style.textContent = `
+      /* 优化 iframe 容器 */
+      #scrcpyStreamFrame {
+        background: #000 !important;
+        min-width: 100% !important;
+        min-height: 100% !important;
+      }
+
+      /* 确保容器是黑色背景，并移除 padding */
+      #screenContent {
+        background-color: #000 !important;
+        padding: 0 !important;
+      }
+
+      /* 当有视频流时，隐藏截图 */
+      #screenContent.has-video-stream #deviceScreenshot {
+        display: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  },
+
+  /**
+   * 尝试注入样式到 iframe 内部
+   * 注意：由于同源策略，这只在同域名时有效
+   */
+  injectIframeStyles() {
+    if (!this.streamIframe) return;
+
+    const iframeDoc = this.streamIframe.contentDocument || this.streamIframe.contentWindow.document;
+    if (!iframeDoc) {
+      window.rLog('无法访问 iframe document');
+      return;
+    }
+
+    // 创建样式元素
+    const style = iframeDoc.createElement('style');
+    style.textContent = `
+      /* 隐藏所有控制按钮和工具栏 */
+      .control-buttons-list,
+      .action-button,
+      .stream-controls,
+      .toolbox,
+      .more-box,
+      [class*="control"],
+      [class*="button"] {
+        display: none !important;
+      }
+
+      /* 确保视频填充整个区域 */
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: #000 !important;
+      }
+
+      /* 视频容器样式 */
+      .screen {
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        background: #000 !important;
+      }
+
+      /* canvas 或 video 元素 */
+      canvas, video {
+        max-width: 100% !important;
+        max-height: 100% !important;
+        object-fit: contain !important;
+        background: #000 !important;
+      }
+    `;
+
+    iframeDoc.head.appendChild(style);
+    window.rLog('✅ iframe 样式注入成功');
   },
 
   /**
@@ -209,6 +312,11 @@ const ScrcpyVideoStream = {
       if (this.streamIframe) {
         this.streamIframe.remove();
         this.streamIframe = null;
+      }
+
+      // 移除容器的 class 标记
+      if (this.streamContainer) {
+        this.streamContainer.classList.remove('has-video-stream');
       }
 
       // 恢复显示截图元素
