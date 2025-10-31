@@ -7,6 +7,9 @@ const fs = require('fs');
 const { getTkePath } = require('./adb-handlers');
 const { extractJsonFromOutput } = require('./tke-utils');
 
+// 保存视频流服务器进程引用
+let videoStreamProcess = null;
+
 // 通用的 TKE 命令执行函数
 async function execTkeCommand(app, args) {
   const tkePath = getTkePath(app);

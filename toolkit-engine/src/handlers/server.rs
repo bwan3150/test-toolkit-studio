@@ -15,6 +15,15 @@ pub enum ServerCommands {
     Stop,
     /// 检查 autoserver 状态
     Status,
+    /// 启动视频流服务器（H264 转 MJPEG 推流）
+    VideoStream {
+        /// HTTP 服务器端口（可选，默认 8766）
+        #[arg(short = 'p', long)]
+        http_port: Option<u16>,
+        /// 视频流端口（可选，默认 27183）
+        #[arg(short = 'v', long)]
+        video_port: Option<u16>,
+    },
 }
 
 /// 处理 Server 相关命令
@@ -53,6 +62,20 @@ pub async fn handle(action: ServerCommands, device_id: Option<String>) -> Result
                 Ok(serde_json::json!({
                     "running": is_running,
                     "port": server.port()
+                }))
+            }
+            ServerCommands::VideoStream { http_port, video_port } => {
+                let http_port = http_port.unwrap_or(8766);
+                let video_port = video_port.unwrap_or(27183);
+
+                // 启动视频流服务器（阻塞）
+                tke::start_video_stream_server(http_port, video_port)?;
+
+                Ok(serde_json::json!({
+                    "success": true,
+                    "status": "running",
+                    "http_port": http_port,
+                    "video_port": video_port
                 }))
             }
         }

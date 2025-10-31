@@ -241,3 +241,7 @@ impl AutoServer {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 }
+
+// 视频流服务器模块
+mod video_stream;
+pub use video_stream::{VideoStreamServer, start_video_stream_server};

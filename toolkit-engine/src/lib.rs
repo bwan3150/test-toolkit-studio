@@ -23,7 +23,7 @@ pub use controller::Controller;
 pub use fetcher::Fetcher;
 pub use recognizer::Recognizer;
 pub use runner::{Runner, ScriptParser, ScriptInterpreter};
-pub use server::AutoServer;
+pub use server::{AutoServer, VideoStreamServer, start_video_stream_server};
 
 // 导出 OCR 功能
 pub use ocr::{ocr, OcrResult, OcrText};
