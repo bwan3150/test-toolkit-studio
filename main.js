@@ -41,6 +41,9 @@ const { registerReleaseNotesHandlers } = require('./handlers/api-proxy/release-n
 // 自动更新模块
 const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/auto-updater');
 
+// ws-scrcpy 模块
+const { registerScrcpyHandlers, cleanupScrcpyServer } = require('./handlers/ws-scrcpy/scrcpy-server-handler');
+
 // 全局变量
 let mainWindow;
 
@@ -156,12 +159,19 @@ function createWindow() {
 }
 
 // 清理子进程
-function cleanupProcesses() {
+async function cleanupProcesses() {
   // 清理 iOS 相关进程
   try {
     cleanupIosProcesses();
   } catch (e) {
     console.error('清理iOS进程失败:', e);
+  }
+
+  // 清理 ws-scrcpy 服务器进程
+  try {
+    await cleanupScrcpyServer();
+  } catch (e) {
+    console.error('清理ws-scrcpy进程失败:', e);
   }
 }
 
@@ -242,6 +252,10 @@ function registerAllHandlers() {
     // 自动更新模块
     console.log('注册自动更新处理器...');
     registerUpdateHandlers();
+
+    // ws-scrcpy 模块
+    console.log('注册ws-scrcpy处理器...');
+    registerScrcpyHandlers(app);
 
     // 注册其他IPC处理器（scrcpy, STB, screenshot等）
     registerOtherHandlers();

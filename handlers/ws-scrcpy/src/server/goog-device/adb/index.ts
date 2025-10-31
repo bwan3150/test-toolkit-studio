@@ -11,7 +11,8 @@ interface Options {
 export class AdbExtended extends Adb {
     static createClient(options: Options = {}): ExtendedClient {
         const opts: ClientOptions = {
-            bin: options.bin,
+            // 优先使用传入的 bin 路径，其次使用环境变量 ADB_PATH（由 tke adb 设置）
+            bin: options.bin || process.env.ADB_PATH,
             host: options.host || process.env.ADB_HOST || '127.0.0.1',
             port: options.port || 0,
         };

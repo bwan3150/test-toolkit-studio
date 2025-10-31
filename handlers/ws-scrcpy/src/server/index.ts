@@ -1,4 +1,4 @@
-import '../../LICENSE';
+// import '../../LICENSE'; // 已移除 LICENSE 文件引用
 import * as readline from 'readline';
 import { Config } from './Config';
 import { HttpServer } from './services/HttpServer';
