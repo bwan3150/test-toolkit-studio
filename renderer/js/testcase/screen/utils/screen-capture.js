@@ -22,6 +22,51 @@ async function refreshDeviceScreen() {
         return;
     }
 
+    // ========== 关键修改：检查当前模式 ==========
+    // 如果当前是 normal 模式，启动视频流而不是截图
+    window.rLog('🔍 检查当前模式...', {
+        hasScreenCoordinator: !!window.ScreenCoordinator,
+        hasGetCurrentMode: !!(window.ScreenCoordinator && window.ScreenCoordinator.getCurrentMode)
+    });
+
+    if (window.ScreenCoordinator && window.ScreenCoordinator.getCurrentMode) {
+        const currentMode = window.ScreenCoordinator.getCurrentMode();
+        window.rLog('🔍 当前模式:', currentMode);
+
+        if (currentMode === 'normal') {
+            window.rLog('📹 当前是 normal 模式，启动视频流而不是截图');
+
+            // 移除提示
+            if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
+                window.ScreenPrompt.removePrompt();
+            }
+
+            // 启动视频流
+            if (window.ScrcpyVideoStream) {
+                const deviceId = deviceSelect.value;
+                window.rLog('🚀 启动视频流，设备:', deviceId);
+
+                const success = await window.ScrcpyVideoStream.activate(deviceId);
+
+                if (success) {
+                    window.rLog('✅ 视频流已成功激活');
+
+                    // 解锁滑块
+                    if (window.ModeSlider && window.ModeSlider.unlockSlider) {
+                        window.ModeSlider.unlockSlider();
+                    }
+                } else {
+                    window.rError('❌ 视频流激活失败');
+                }
+            } else {
+                window.rError('❌ ScrcpyVideoStream 模块未加载');
+            }
+
+            return; // 结束函数，不执行后面的截图逻辑
+        }
+    }
+    // ========== 关键修改结束 ==========
+
     // 如果存在提示按钮，将其改为 loading 状态
     if (window.ScreenPrompt && window.ScreenPrompt.setButtonLoading) {
         window.ScreenPrompt.setButtonLoading();

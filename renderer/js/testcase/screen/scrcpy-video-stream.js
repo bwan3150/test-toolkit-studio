@@ -40,10 +40,20 @@ const ScrcpyVideoStream = {
     try {
       window.rLog('启动 ws-scrcpy 服务器...');
 
+      // 检查 IPC 是否可用
+      const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+      if (!ipcRenderer) {
+        throw new Error('ipcRenderer 不可用');
+      }
+
+      window.rLog('调用 IPC: scrcpy:start-server, 端口:', this.serverPort);
+
       // 调用主进程启动服务器
-      const result = await window.electron.ipcRenderer.invoke('scrcpy:start-server', {
+      const result = await ipcRenderer.invoke('scrcpy:start-server', {
         port: this.serverPort
       });
+
+      window.rLog('IPC 返回结果:', result);
 
       if (result.success) {
         window.rLog('✅ ws-scrcpy 服务器启动成功');
@@ -67,7 +77,12 @@ const ScrcpyVideoStream = {
     try {
       window.rLog('停止 ws-scrcpy 服务器...');
 
-      const result = await window.electron.ipcRenderer.invoke('scrcpy:stop-server');
+      const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+      if (!ipcRenderer) {
+        throw new Error('ipcRenderer 不可用');
+      }
+
+      const result = await ipcRenderer.invoke('scrcpy:stop-server');
 
       if (result.success) {
         window.rLog('✅ ws-scrcpy 服务器已停止');

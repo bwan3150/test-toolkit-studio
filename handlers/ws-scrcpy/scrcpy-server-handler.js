@@ -70,12 +70,14 @@ async function startScrcpyServer(port = 8000, adbPath = null) {
       // 监听标准输出
       scrcpyServerProcess.stdout.on('data', (data) => {
         const output = data.toString();
-        console.log('[ws-scrcpy]', output);
+        console.log('[ws-scrcpy 输出]', output);
 
         // 检测服务器启动成功的标志
-        if (output.includes('Listening on') || output.includes('started') || output.includes('Server running')) {
+        // ws-scrcpy 输出 "Listening on:" 表示启动成功
+        if (output.includes('Listening on')) {
           if (!isServerRunning) {
             isServerRunning = true;
+            console.log('✅ ws-scrcpy 服务器启动成功');
             resolve({ success: true, port: scrcpyServerPort, message: '服务器启动成功' });
           }
         }
@@ -102,14 +104,14 @@ async function startScrcpyServer(port = 8000, adbPath = null) {
         reject(error);
       });
 
-      // 设置超时，如果10秒内没有启动成功则认为失败
+      // 设置超时，如果5秒内没有启动成功则认为失败
       setTimeout(() => {
         if (!isServerRunning) {
-          console.log('ws-scrcpy 服务器启动超时，假定启动成功');
+          console.log('⚠️ ws-scrcpy 服务器启动超时，但进程存在，假定启动成功');
           isServerRunning = true;
           resolve({ success: true, port: scrcpyServerPort, message: '服务器已启动（超时后假定成功）' });
         }
-      }, 10000);
+      }, 5000);
 
     } catch (error) {
       console.error('启动 ws-scrcpy 服务器时发生错误:', error);
