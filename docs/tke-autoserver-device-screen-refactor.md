@@ -12,6 +12,16 @@
 
 ### 滑块
 
+当没有选择或连接设备时, 还是显示那个"请连接并选择设备"的按钮
+
+然后, 比如等 `tke server status` running状态为true的时候才解锁, 否则需要一直归于normal模式, 并且显示那个"点击获取屏幕信息"的按钮
+
+点击 "点击获取屏幕信息" 的按钮后, 应该`tke server start`, 并且开始normal模式的视频流投影, 同时给滑块解锁, 允许切换到其他模式
+
+如果与设备上的这个AutoServer的视频流服务器断开了, 就要立刻回到normal模式然后锁定滑块并显示"点击获取屏幕信息" 的按钮
+
+其他比如模式切换时用什么获取信息, 详见下面几个模式中的描述
+
 
 
 ### Normal模式
@@ -22,17 +32,34 @@ Normal模式从原来的纯截图模式, 彻底改为使用实时视频流投影
 
 需要在`tke server start`后, 能够获取手机的实时视频流, 并展示在DEVICE SCREEN位置, 要求可以根据边缘的拖动动态改变手机视频流的显示大小, 不能是独立窗口, 需要在./renderer/html/pages/testcase.html中嵌入显示
 
-
+刷新按钮只是用来跑一下  `tke server status`确认状态, 不需要进行啥刷新
 
 ### XML Overlay模式
+
+如果从normal模式进入这个模式后, 下面不再展示normal视频流, 而是调用 `tke controller capture` , 进行一翻加载后, 还是类似原来的那个, current_screeshot.png显示截图, 上面覆盖经过分析和可视化的xml, 和原来一样
+
+如果从screenshot模式或coodinate模式进入此模式, 则直接展示当前的current_screeshot.png截图然后用`tke controller capture xml`获取xml并可视化渲染
+
+后续刷新则使用`tke controller capture`更新current_screenshot.png和current_ui_tree.xml
 
 
 
 ### Screenshot模式(截取图片元素模式)
 
+如果从xml或coodinate进入此模式, 则直接展示当前的current_screeshot.png截图就好, 如果是从Normal模式进入, 则使用`tke controller capture screenshot`进行截图, 然后显示current_screenshot.png; 裁切并保存到元素库的逻辑和原来一样
+
+后续刷新则使用`tke controller capture screenshot`更新current_screenshot.png就好
+
 
 
 ### Coordinate模式(从图片中点击以获取坐标的模式)
 
+如果从xml或coodinate进入此模式, 则直接展示当前的current_screeshot.png截图就好, 如果是从Normal模式进入, 则使用`tke controller capture screenshot`进行截图, 然后显示current_screenshot.png; 点击获取坐标到剪切板的逻辑和原来一样
+
+后续刷新则使用`tke controller capture screenshot`更新current_screenshot.png就好
 
 
+
+### 刷新按钮
+
+已经在上面各个模式提及了
