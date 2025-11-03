@@ -62,7 +62,6 @@ class WebCodecsDecoder {
 
     if (startCodeCount > 1) {
       // 包含多个 NAL 单元，需要拆分
-      window.rLog(`📦 数据包含 ${startCodeCount} 个 NAL 单元，进行拆分`);
       const nalus = H264Parser.splitNALUs(data);
       for (const nalu of nalus) {
         this.decodeNALU(nalu);
@@ -85,8 +84,6 @@ class WebCodecsDecoder {
 
     const H264Parser = window.ScrcpyH264Parser;
     const naluType = H264Parser.getNaluType(data);
-
-    window.rLog(`📊 NAL 单元类型: ${naluType}, 数据长度: ${data.length}`);
 
     // 处理 SPS
     if (naluType === H264Parser.NALU_TYPE_SPS) {
@@ -188,11 +185,15 @@ class WebCodecsDecoder {
       if (this.videoWidth !== frame.displayWidth || this.videoHeight !== frame.displayHeight) {
         this.videoWidth = frame.displayWidth;
         this.videoHeight = frame.displayHeight;
-        window.rLog(`更新视频尺寸: ${this.videoWidth}x${this.videoHeight}`);
+        window.rLog(`🖼️  更新视频尺寸: ${this.videoWidth}x${this.videoHeight}`);
 
-        // 调整 Canvas 尺寸
+        // 调整 Canvas 尺寸 (内部渲染尺寸)
         this.canvas.width = this.videoWidth;
         this.canvas.height = this.videoHeight;
+
+        // 显示 Canvas 的 CSS 尺寸（用于调试）
+        const rect = this.canvas.getBoundingClientRect();
+        window.rLog(`📐 Canvas CSS 尺寸: ${rect.width.toFixed(0)}x${rect.height.toFixed(0)}`);
       }
     }
 

@@ -199,21 +199,15 @@ const ScrcpyVideoStream = {
     this.videoCanvas.id = 'scrcpyVideoCanvas';
     this.videoCanvas.className = 'scrcpy-video-canvas';
 
-    // 创建调整大小的控制点
-    const resizeHandles = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'];
-    resizeHandles.forEach(pos => {
-      const handle = document.createElement('div');
-      handle.className = `resize-handle resize-handle-${pos}`;
-      handle.dataset.position = pos;
-      this.videoWrapper.appendChild(handle);
-    });
+    // 不创建调整大小的控制点，让视频流自适应容器
+    // 就像截图模式一样，根据容器大小自动调整
 
     this.videoWrapper.appendChild(this.videoCanvas);
     this.streamContainer.appendChild(this.videoWrapper);
     this.streamContainer.classList.add('has-video-stream');
 
     this.addGlobalStyles();
-    this.setupResizeHandlers();
+    // 不设置 resize handlers，使用自适应布局
     this.setupTouchHandlers();
 
     window.rLog('Canvas 已创建');
@@ -228,6 +222,12 @@ const ScrcpyVideoStream = {
     const style = document.createElement('style');
     style.id = 'scrcpy-stream-styles';
     style.textContent = `
+      /* 视频流模式：移除 screen-content 的 padding */
+      .screen-content.has-video-stream {
+        padding: 0 !important;
+      }
+
+      /* 视频包装容器：填满整个父容器 */
       .scrcpy-video-wrapper {
         width: 100%;
         height: 100%;
@@ -236,64 +236,21 @@ const ScrcpyVideoStream = {
         justify-content: center;
         background: #000;
         position: relative;
-        overflow: hidden;
       }
+
+      /* Canvas：自适应容器，保持宽高比 */
       .scrcpy-video-canvas {
-        max-width: 100%;
-        max-height: 100%;
+        width: 100% !important;
+        height: 100% !important;
         object-fit: contain;
         background: #000;
         cursor: pointer;
+        display: block;
       }
-      .resize-handle {
-        position: absolute;
-        background: rgba(78, 201, 176, 0.3);
-        border: 1px solid rgba(78, 201, 176, 0.6);
-        transition: all 0.2s ease;
-        opacity: 0;
-        z-index: 10;
-        pointer-events: auto;
-      }
-      .scrcpy-video-wrapper:hover .resize-handle {
-        opacity: 1;
-      }
-      .resize-handle:hover {
-        background: rgba(78, 201, 176, 0.6);
-      }
-      .resize-handle-nw, .resize-handle-ne, .resize-handle-sw, .resize-handle-se {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-      }
-      .resize-handle-nw { top: -6px; left: -6px; cursor: nw-resize; }
-      .resize-handle-ne { top: -6px; right: -6px; cursor: ne-resize; }
-      .resize-handle-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
-      .resize-handle-se { bottom: -6px; right: -6px; cursor: se-resize; }
-      .resize-handle-n, .resize-handle-s {
-        width: 80px;
-        height: 6px;
-        left: 50%;
-        transform: translateX(-50%);
-      }
-      .resize-handle-e, .resize-handle-w {
-        width: 6px;
-        height: 80px;
-        top: 50%;
-        transform: translateY(-50%);
-      }
-      .resize-handle-n { top: -3px; cursor: n-resize; }
-      .resize-handle-s { bottom: -3px; cursor: s-resize; }
-      .resize-handle-e { right: -3px; cursor: e-resize; }
-      .resize-handle-w { left: -3px; cursor: w-resize; }
-      #screenContent {
-        background-color: #000 !important;
-        padding: 0 !important;
-      }
-      #screenContent.has-video-stream #deviceScreenshot {
+
+      /* 隐藏截图，因为现在显示视频流 */
+      .screen-content.has-video-stream #deviceScreenshot {
         display: none !important;
-      }
-      .scrcpy-video-wrapper.resizing .scrcpy-video-canvas {
-        pointer-events: none;
       }
     `;
     document.head.appendChild(style);
@@ -345,21 +302,6 @@ const ScrcpyVideoStream = {
 
       const data = new Uint8Array(event.data);
 
-      // 添加详细日志：显示收到的数据大小和前几个字节
-      if (data.length <= 100) {
-        // 如果数据很小，显示完整内容
-        const hex = Array.from(data.slice(0, Math.min(32, data.length)))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join(' ');
-        window.rLog(`📦 收到数据: ${data.length} 字节, 前${Math.min(32, data.length)}字节: ${hex}`);
-      } else {
-        // 如果数据很大，只显示前16字节
-        const hex = Array.from(data.slice(0, 16))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join(' ');
-        window.rLog(`📦 收到数据: ${data.length} 字节, 前16字节: ${hex}`);
-      }
-
       // 检查是否是初始信息 (magic bytes: 'scrcpy_initial')
       const MAGIC_BYTES = new Uint8Array([115, 99, 114, 99, 112, 121, 95, 105, 110, 105, 116, 105, 97, 108]);
       if (data.length >= MAGIC_BYTES.length) {
@@ -400,7 +342,6 @@ const ScrcpyVideoStream = {
       }
 
       // 否则当作视频帧数据处理
-      window.rLog('🎬 尝试解码视频帧...');
       this.decoder.decode(data);
     };
 
