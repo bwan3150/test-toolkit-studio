@@ -26,9 +26,12 @@ function getScrcpyDistPath() {
  * @returns {Promise<Object>}
  */
 async function startScrcpyServer(port = 8000, adbPath = null) {
-  if (isServerRunning && scrcpyServerProcess) {
-    console.log('ws-scrcpy 服务器已经在运行');
-    return { success: true, port: scrcpyServerPort, message: '服务器已经在运行' };
+  // 如果服务器正在运行，先停止它
+  if (scrcpyServerProcess || isServerRunning) {
+    console.log('ws-scrcpy 服务器正在运行，先停止...');
+    await stopScrcpyServer();
+    // 等待一小段时间确保端口释放
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   return new Promise((resolve, reject) => {
@@ -127,32 +130,41 @@ async function startScrcpyServer(port = 8000, adbPath = null) {
 async function stopScrcpyServer() {
   if (!scrcpyServerProcess) {
     console.log('ws-scrcpy 服务器未运行');
+    isServerRunning = false;
     return { success: true, message: '服务器未运行' };
   }
 
   return new Promise((resolve) => {
     console.log('停止 ws-scrcpy 服务器');
+    let resolved = false;
 
-    scrcpyServerProcess.once('exit', () => {
-      console.log('ws-scrcpy 服务器已停止');
-      scrcpyServerProcess = null;
-      isServerRunning = false;
-      resolve({ success: true, message: '服务器已停止' });
-    });
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        console.log('ws-scrcpy 服务器已停止');
+        scrcpyServerProcess = null;
+        isServerRunning = false;
+        resolve({ success: true, message: '服务器已停止' });
+      }
+    };
+
+    scrcpyServerProcess.once('exit', cleanup);
 
     // 尝试优雅关闭
     scrcpyServerProcess.kill('SIGTERM');
 
-    // 5秒后强制关闭
+    // 2秒后强制关闭（减少等待时间）
     setTimeout(() => {
-      if (scrcpyServerProcess) {
+      if (scrcpyServerProcess && !resolved) {
         console.log('强制关闭 ws-scrcpy 服务器');
         scrcpyServerProcess.kill('SIGKILL');
-        scrcpyServerProcess = null;
-        isServerRunning = false;
-        resolve({ success: true, message: '服务器已强制关闭' });
       }
-    }, 5000);
+    }, 2000);
+
+    // 3秒后无论如何都清理（防止卡住）
+    setTimeout(() => {
+      cleanup();
+    }, 3000);
   });
 }
 

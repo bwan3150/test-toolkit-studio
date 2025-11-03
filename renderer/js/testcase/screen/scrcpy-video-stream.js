@@ -637,7 +637,7 @@ const ScrcpyVideoStream = {
     try {
       window.rLog('停用视频流');
 
-      this.cleanup();
+      await this.cleanup();
 
       this.isActive = false;
       this.currentDeviceId = null;
@@ -654,7 +654,7 @@ const ScrcpyVideoStream = {
   /**
    * 清理资源
    */
-  cleanup() {
+  async cleanup() {
     // 停止解码器
     if (this.decoder) {
       this.decoder.stop();
@@ -663,8 +663,23 @@ const ScrcpyVideoStream = {
 
     // 断开 WebSocket
     if (this.streamReceiver) {
-      this.streamReceiver.disconnect();
+      if (this.streamReceiver.readyState === WebSocket.OPEN ||
+          this.streamReceiver.readyState === WebSocket.CONNECTING) {
+        this.streamReceiver.close();
+      }
       this.streamReceiver = null;
+    }
+
+    // 停止 ws-scrcpy 服务器
+    try {
+      const { ipcRenderer } = window.AppGlobals || {};
+      if (ipcRenderer) {
+        await ipcRenderer.invoke('scrcpy:stop-server');
+        this.isServerRunning = false; // 重置服务器运行状态
+        window.rLog('✅ ws-scrcpy 服务器已停止');
+      }
+    } catch (error) {
+      window.rError('停止 ws-scrcpy 服务器失败:', error);
     }
 
     // 移除 DOM 元素
@@ -679,10 +694,9 @@ const ScrcpyVideoStream = {
       this.streamContainer.classList.remove('has-video-stream');
     }
 
-    // 恢复显示截图
-    const deviceScreenshot = document.getElementById('deviceScreenshot');
-    if (deviceScreenshot) {
-      deviceScreenshot.style.display = 'block';
+    // 显示"点击获取屏幕信息"提示
+    if (window.ScreenPrompt) {
+      window.ScreenPrompt.showCaptureScreenPrompt();
     }
   },
 

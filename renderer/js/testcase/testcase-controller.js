@@ -13,6 +13,7 @@ function initializeTestcasePage() {
     const clearConsoleBtn = document.getElementById('clearConsoleBtn');
     const toggleXmlBtn = document.getElementById('toggleXmlBtn');
     const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
+    const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
     const deviceSelect = document.getElementById('deviceSelect');
 
     window.rLog('初始化测试用例页面');
@@ -58,6 +59,51 @@ function initializeTestcasePage() {
         refreshDeviceBtn.addEventListener('click', () => {
             if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
                 window.ScreenCoordinator.refreshDeviceScreen();
+            }
+        });
+    }
+
+    // 绑定视频流控制按钮
+    if (toggleVideoStreamBtn) {
+        toggleVideoStreamBtn.addEventListener('click', async () => {
+            const currentState = toggleVideoStreamBtn.getAttribute('data-state');
+
+            if (currentState === 'stopped') {
+                // 开始视频流
+                const deviceId = deviceSelect?.value;
+                if (!deviceId) {
+                    window.rError('请先选择设备');
+                    window.AppNotifications?.deviceRequired();
+                    return;
+                }
+
+                if (window.ScrcpyVideoStream) {
+                    toggleVideoStreamBtn.disabled = true; // 禁用按钮防止重复点击
+
+                    const success = await window.ScrcpyVideoStream.activate(deviceId);
+
+                    if (success) {
+                        toggleVideoStreamBtn.setAttribute('data-state', 'streaming');
+                        // 移除"点击获取屏幕信息"按钮
+                        if (window.ScreenPrompt) {
+                            window.ScreenPrompt.removePrompt();
+                        }
+                    }
+
+                    toggleVideoStreamBtn.disabled = false;
+                } else {
+                    window.rError('视频流模块未加载');
+                }
+            } else {
+                // 停止视频流
+                if (window.ScrcpyVideoStream) {
+                    toggleVideoStreamBtn.disabled = true; // 禁用按钮防止重复点击
+
+                    await window.ScrcpyVideoStream.deactivate();
+                    toggleVideoStreamBtn.setAttribute('data-state', 'stopped');
+
+                    toggleVideoStreamBtn.disabled = false;
+                }
             }
         });
     }

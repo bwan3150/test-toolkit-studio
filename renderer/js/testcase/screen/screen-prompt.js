@@ -158,6 +158,12 @@ const ScreenPrompt = {
           if (success) {
             window.rLog('✅ 视频流已成功激活');
 
+            // 更新视频流按钮状态
+            const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
+            if (toggleVideoStreamBtn) {
+              toggleVideoStreamBtn.setAttribute('data-state', 'streaming');
+            }
+
             // 解锁滑块
             if (window.ModeSlider && window.ModeSlider.unlockSlider) {
               window.ModeSlider.unlockSlider();
