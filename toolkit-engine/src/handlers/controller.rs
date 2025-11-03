@@ -2,25 +2,13 @@
 
 use tke::{Result, Controller, JsonOutput};
 
-/// Capture 子命令
-#[derive(clap::Subcommand)]
-pub enum CaptureTarget {
-    /// 仅获取截图
-    Screenshot,
-    /// 仅获取 UI 树 XML
-    Xml,
-}
-
 /// Controller 命令枚举
 #[derive(clap::Subcommand)]
 pub enum ControllerCommands {
     /// 获取连接的设备列表
     Devices,
     /// 获取设备截图和XML并保存到项目workarea
-    Capture {
-        #[command(subcommand)]
-        target: Option<CaptureTarget>,
-    },
+    Capture,
     /// 点击坐标
     Tap {
         /// X坐标
@@ -69,58 +57,27 @@ pub enum ControllerCommands {
 
 /// 处理 Controller 相关命令
 pub async fn handle(action: ControllerCommands, device_id: Option<String>, project_path: std::path::PathBuf) -> Result<()> {
-    // 将所有操作包装在闭包中，统一捕获错误并输出 JSON
-    let result: Result<()> = (|| async {
-        let controller = Controller::new(device_id)?;
+    let controller = Controller::new(device_id)?;
 
-        match action {
+    match action {
         ControllerCommands::Devices => {
             let devices = controller.get_devices()?;
             JsonOutput::print(serde_json::json!({
                 "devices": devices
             }));
         }
-        ControllerCommands::Capture { target } => {
-            let workarea = project_path.join("workarea");
+        ControllerCommands::Capture => {
+            // 使用传入的 project_path 参数而不是 current_dir()
+            controller.capture_ui_state(&project_path).await?;
 
-            // 确保 workarea 目录存在
-            std::fs::create_dir_all(&workarea)?;
+            let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
+            let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
 
-            match target {
-                None => {
-                    // 默认：获取截图和 XML
-                    controller.capture_ui_state(&project_path).await?;
-
-                    let screenshot_path = workarea.join("current_screenshot.png");
-                    let xml_path = workarea.join("current_ui_tree.xml");
-
-                    JsonOutput::print(serde_json::json!({
-                        "success": true,
-                        "screenshot": screenshot_path.to_string_lossy(),
-                        "xml": xml_path.to_string_lossy()
-                    }));
-                }
-                Some(CaptureTarget::Screenshot) => {
-                    // 仅获取截图
-                    let screenshot_path = workarea.join("current_screenshot.png");
-                    controller.capture_screenshot_only(&screenshot_path).await?;
-
-                    JsonOutput::print(serde_json::json!({
-                        "success": true,
-                        "screenshot": screenshot_path.to_string_lossy()
-                    }));
-                }
-                Some(CaptureTarget::Xml) => {
-                    // 仅获取 XML
-                    let xml_path = workarea.join("current_ui_tree.xml");
-                    controller.capture_xml_only(&xml_path).await?;
-
-                    JsonOutput::print(serde_json::json!({
-                        "success": true,
-                        "xml": xml_path.to_string_lossy()
-                    }));
-                }
-            }
+            JsonOutput::print(serde_json::json!({
+                "success": true,
+                "screenshot": screenshot_path.to_string_lossy(),
+                "xml": xml_path.to_string_lossy()
+            }));
         }
         ControllerCommands::Tap { x, y } => {
             controller.tap(x, y)?;
@@ -179,20 +136,7 @@ pub async fn handle(action: ControllerCommands, device_id: Option<String>, proje
                 "success": true
             }));
         }
-        }
-
-        Ok(())
-    })().await;
-
-    match result {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            // 将错误也输出为 JSON，然后正常返回（避免额外的错误输出）
-            JsonOutput::print(serde_json::json!({
-                "success": false,
-                "error": format!("{}", e)
-            }));
-            Ok(())
-        }
     }
+
+    Ok(())
 }

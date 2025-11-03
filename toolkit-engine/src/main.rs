@@ -37,11 +37,6 @@ enum Commands {
         #[command(subcommand)]
         action: ControllerCommands,
     },
-    /// Server - manage tke-autoserver on device
-    Server {
-        #[command(subcommand)]
-        action: ServerCommands,
-    },
     /// LocatorFetcher - fetch useful element from XML
     Fetcher {
         #[command(subcommand)]
@@ -104,7 +99,6 @@ async fn main() -> tke::Result<()> {
             Commands::Fetcher { .. } |
             Commands::Ocr { .. } |
             Commands::Controller { .. } |
-            Commands::Server { .. } |
             Commands::Recognizer { .. } |
             Commands::Run { .. }
         );
@@ -162,9 +156,6 @@ async fn main() -> tke::Result<()> {
     match cli.command {
         Commands::Controller { action } => {
             controller::handle(action, cli.device, project_path).await
-        }
-        Commands::Server { action } => {
-            server::handle(action, cli.device).await
         }
         Commands::Fetcher { action } => {
             fetcher::handle(action, project_path).await

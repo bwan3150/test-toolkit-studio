@@ -19,7 +19,6 @@ pub struct Runner {
     project_path: PathBuf,
     device_id: Option<String>,
     pub parser: ScriptParser,  // 为 Toolkit Studio 开放访问
-    #[allow(dead_code)]
     interpreter: Option<ScriptInterpreter>,
     is_running: bool,
     should_stop: bool,

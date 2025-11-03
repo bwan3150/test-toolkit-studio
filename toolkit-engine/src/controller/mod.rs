@@ -4,12 +4,9 @@ use crate::{Result, TkeError, DeviceInfo, AdbManager};
 use std::path::PathBuf;
 use std::process::Command;
 
-const DEFAULT_PORT: u16 = 8765;
-
 pub struct Controller {
     device_id: Option<String>,
     adb_manager: AdbManager,
-    port: u16,  // autoserver 端口
 }
 
 impl Controller {
@@ -23,21 +20,9 @@ impl Controller {
         Ok(Self {
             device_id,
             adb_manager,
-            port: DEFAULT_PORT,
         })
     }
-
-    /// 设置 autoserver 端口（可选，默认 8765）
-    pub fn with_port(mut self, port: u16) -> Self {
-        self.port = port;
-        self
-    }
-
-    /// 获取当前使用的端口
-    pub fn port(&self) -> u16 {
-        self.port
-    }
-
+    
     // 设置目标设备
     pub fn set_device(&mut self, device_id: Option<String>) {
         self.device_id = device_id;
@@ -70,50 +55,36 @@ impl Controller {
     // 指令1: 获取设备截图和XML并保存到项目目录
     pub async fn capture_ui_state(&self, project_path: &PathBuf) -> Result<()> {
         let workarea = project_path.join("workarea");
-
+        
         // 确保workarea目录存在
         std::fs::create_dir_all(&workarea)
             .map_err(|e| TkeError::IoError(e))?;
-
+        
         // 获取截图
         self.capture_screenshot(&workarea.join("current_screenshot.png")).await?;
-
+        
         // 获取UI树
         self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
 
         Ok(())
     }
-
-    // 仅获取截图
-    pub async fn capture_screenshot_only(&self, output_path: &PathBuf) -> Result<()> {
-        self.capture_screenshot(output_path).await
-    }
-
-    // 仅获取 UI 树 XML
-    pub async fn capture_xml_only(&self, output_path: &PathBuf) -> Result<()> {
-        self.capture_ui_tree(output_path).await
-    }
     
-    // 获取截图（通过 autoserver）
+    // 获取截图
     async fn capture_screenshot(&self, output_path: &PathBuf) -> Result<()> {
-        use std::net::TcpStream;
-        use std::io::Read;
-
-        // 连接到 autoserver (通过 adb forward 的端口)
-        let addr = format!("127.0.0.1:{}", self.port);
-        let mut stream = TcpStream::connect(&addr)
-            .map_err(|e| TkeError::AdbError(
-                format!("无法连接到 autoserver ({}): {}. 请先启动屏幕投影", addr, e)
-            ))?;
-
-        // 读取 PNG 数据
-        let mut png_data = Vec::new();
-        stream.read_to_end(&mut png_data)
-            .map_err(|e| TkeError::IoError(e))?;
-
-        // 保存到文件
-        std::fs::write(output_path, png_data)
-            .map_err(|e| TkeError::IoError(e))?;
+        let temp_path = "/sdcard/screenshot.png";
+        
+        // 在设备上截图
+        self.run_adb_command(&["shell", "screencap", "-p", temp_path])?;
+        
+        // 拉取截图到本地
+        self.run_adb_command(&[
+            "pull",
+            temp_path,
+            output_path.to_str().ok_or_else(|| TkeError::InvalidArgument("无效的输出路径".to_string()))?
+        ])?;
+        
+        // 删除设备上的临时文件
+        self.run_adb_command(&["shell", "rm", temp_path])?;
 
         Ok(())
     }
