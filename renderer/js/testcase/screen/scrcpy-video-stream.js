@@ -510,7 +510,7 @@ const ScrcpyVideoStream = {
    * 处理触摸事件
    */
   handleTouch(action, event) {
-    if (!this.decoder) return;
+    if (!this.decoder || !this.streamReceiver) return;
 
     const rect = this.videoCanvas.getBoundingClientRect();
     const videoSize = this.decoder.getVideoSize();
@@ -528,14 +528,37 @@ const ScrcpyVideoStream = {
     const deviceX = Math.round((canvasX / rect.width) * videoSize.width);
     const deviceY = Math.round((canvasY / rect.height) * videoSize.height);
 
-    window.rLog(`触摸 ${action}: Canvas(${canvasX.toFixed(0)}, ${canvasY.toFixed(0)}) -> 设备(${deviceX}, ${deviceY})`);
+    // 动作映射
+    const ControlMessage = window.ScrcpyControlMessage;
+    let touchAction;
+    switch (action) {
+      case 'down':
+        touchAction = ControlMessage.ACTION_DOWN;
+        break;
+      case 'up':
+        touchAction = ControlMessage.ACTION_UP;
+        break;
+      case 'move':
+        touchAction = ControlMessage.ACTION_MOVE;
+        break;
+      default:
+        return;
+    }
 
-    // TODO: 发送真正的触摸控制消息
-    // const ControlMessage = window.ScrcpyControlMessage;
-    // const touchMsg = ControlMessage.createTouchEvent(action, deviceX, deviceY);
-    // if (touchMsg && this.streamReceiver) {
-    //   this.streamReceiver.sendMessage(touchMsg);
-    // }
+    // 创建并发送触摸消息
+    const touchMsg = ControlMessage.createTouchEvent(
+      touchAction,
+      0, // pointerId (通常为 0)
+      deviceX,
+      deviceY,
+      videoSize.width,
+      videoSize.height
+    );
+
+    if (this.streamReceiver && this.streamReceiver.readyState === WebSocket.OPEN) {
+      this.streamReceiver.send(touchMsg);
+      window.rLog(`触摸 ${action}: 设备(${deviceX}, ${deviceY})`);
+    }
   },
 
   /**
