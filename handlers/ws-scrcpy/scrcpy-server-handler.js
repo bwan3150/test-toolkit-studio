@@ -2,7 +2,7 @@
 // 负责启动和管理 ws-scrcpy 服务，并与 tke adb 集成
 const { ipcMain } = require('electron');
 const path = require('path');
-const { spawn, exec } = require('child_process');
+const { spawn, fork, exec } = require('child_process');
 const { promisify } = require('util');
 const execPromise = promisify(exec);
 
@@ -15,8 +15,16 @@ let isServerRunning = false;
  * 获取 ws-scrcpy 的构建目录路径
  */
 function getScrcpyDistPath() {
-  // ws-scrcpy 编译后的目录
-  return path.join(__dirname, 'dist');
+  const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+
+  if (isDev) {
+    // 开发环境：使用 __dirname
+    return path.join(__dirname, 'dist');
+  } else {
+    // 生产环境：使用 process.resourcesPath/public/ws-scrcpy
+    // 打包后结构: Toolkit Studio.app/Contents/Resources/public/ws-scrcpy
+    return path.join(process.resourcesPath, 'public', 'ws-scrcpy');
+  }
 }
 
 /**
@@ -61,8 +69,23 @@ async function startScrcpyServer(port = 8000, adbPath = null) {
 
       console.log(`启动 ws-scrcpy 服务器，端口: ${port}`);
 
-      // 启动服务器进程
-      scrcpyServerProcess = spawn('node', [serverScript], {
+      // 获取打包的 Node.js 可执行文件路径
+      // 开发和生产环境都使用同一个 node
+      const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+      let nodeExecutable;
+
+      if (isDev) {
+        // 开发环境：使用项目内的 node
+        nodeExecutable = path.join(__dirname, '..', '..', 'resources', 'public', 'nodejs', 'node');
+      } else {
+        // 生产环境：使用打包的 node
+        nodeExecutable = path.join(process.resourcesPath, 'public', 'nodejs', 'node');
+      }
+
+      console.log('使用 Node 可执行文件:', nodeExecutable);
+
+      // 使用 spawn 启动服务器
+      scrcpyServerProcess = spawn(nodeExecutable, [serverScript], {
         cwd: distPath,
         env: env,
         stdio: ['ignore', 'pipe', 'pipe']

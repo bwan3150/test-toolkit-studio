@@ -5,7 +5,11 @@ dist/
 out/
 toolkit-engine/target/
 tester-ai/target/
-resources/
+resources/darwin/
+resources/win32/
+resources/linux/
+resources/public/nodejs/
+resources/public/ws-scrcpy/node_modules/
 
 # TKS Language Support (VSCode 扩展)
 tks-language-support/node_modules/
