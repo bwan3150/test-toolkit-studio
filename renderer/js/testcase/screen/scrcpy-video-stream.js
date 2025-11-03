@@ -360,12 +360,12 @@ const ScrcpyVideoStream = {
 
     // 创建视频设置 (默认参数)
     // 关键发现：bounds 不能为 null，必须设置一个合理的值！
-    // 参考浏览器版本：bounds 设置为 480x480
+    // 使用较大的通用 bounds，适配各种设备（手机、平板等）
     const settings = new VideoSettings({
-      bitrate: 524288,    // 512 kbps
-      maxFps: 24,         // 24 fps
+      bitrate: 2097152,   // 2 Mbps (更高比特率以支持更清晰画面)
+      maxFps: 30,         // 30 fps
       iFrameInterval: 5,  // 5秒
-      bounds: { width: 480, height: 480 },  // 限制最大分辨率 (关键!)
+      bounds: { width: 1920, height: 1920 },  // 最大边长 1920，适配各种设备
       sendFrameMeta: false,
       lockedVideoOrientation: -1,
       displayId: 0
