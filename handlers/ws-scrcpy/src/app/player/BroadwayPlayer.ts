@@ -34,24 +34,31 @@ export class BroadwayPlayer extends BaseCanvasBasedPlayer {
     }
 
     protected initCanvas(width: number, height: number): void {
+        console.log('[BroadwayPlayer] 🎨 初始化 Canvas, 尺寸:', width, 'x', height);
         super.initCanvas(width, height);
         if (BaseCanvasBasedPlayer.hasWebGLSupport()) {
+            console.log('[BroadwayPlayer] ✅ 使用 WebGL Canvas');
             this.canvas = new YUVWebGLCanvas(this.tag, new Size(width, height));
         } else {
+            console.log('[BroadwayPlayer] ⚠️  使用 2D Canvas (无 WebGL 支持)');
             this.canvas = new YUVCanvas(this.tag, new Size(width, height));
         }
         if (!this.avc) {
+            console.log('[BroadwayPlayer] 🚀 创建 Broadway 解码器');
             this.avc = new Avc();
         }
         this.avc.onPictureDecoded = (buffer: Uint8Array, width: number, height: number) => {
+            console.log('[BroadwayPlayer] 🖼️  解码完成一帧:', width, 'x', height);
             this.onFrameDecoded(width, height, buffer);
         };
     }
 
     protected decode(data: Uint8Array): void {
         if (!this.avc) {
+            console.log('[BroadwayPlayer] ⚠️  解码器未初始化');
             return;
         }
+        console.log('[BroadwayPlayer] 🎬 解码视频数据:', data.length, '字节');
         this.avc.decode(data);
     }
 

@@ -131,28 +131,35 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
 
     protected onSocketMessage(event: MessageEvent): void {
         if (event.data instanceof ArrayBuffer) {
+            console.log('[StreamReceiver] 📦 收到 WebSocket 消息:', event.data.byteLength, '字节');
+
             // works only because MAGIC_BYTES_INITIAL and MAGIC_BYTES_MESSAGE have same length
             if (event.data.byteLength > MAGIC_BYTES_INITIAL.length) {
                 const magicBytes = new Uint8Array(event.data, 0, MAGIC_BYTES_INITIAL.length);
                 if (StreamReceiver.EqualArrays(magicBytes, MAGIC_BYTES_INITIAL)) {
+                    console.log('[StreamReceiver] 📩 检测到 scrcpy_initial 消息');
                     this.handleInitialInfo(event.data);
                     return;
                 }
                 if (StreamReceiver.EqualArrays(magicBytes, DeviceMessage.MAGIC_BYTES_MESSAGE)) {
+                    console.log('[StreamReceiver] 📨 检测到设备消息');
                     const message = DeviceMessage.fromBuffer(event.data);
                     this.emit('deviceMessage', message);
                     return;
                 }
             }
 
+            console.log('[StreamReceiver] 🎬 发送视频数据到解码器');
             this.emit('video', new Uint8Array(event.data));
         }
     }
 
     protected onSocketOpen(): void {
+        console.log('[StreamReceiver] ✅ WebSocket 已连接');
         this.emit('connected', void 0);
         let e = this.events.shift();
         while (e) {
+            console.log('[StreamReceiver] 📤 发送缓存的控制消息:', e.type);
             this.sendEvent(e);
             e = this.events.shift();
         }
@@ -160,8 +167,15 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
 
     public sendEvent(event: ControlMessage): void {
         if (this.ws && this.ws.readyState === this.ws.OPEN) {
-            this.ws.send(event.toBuffer());
+            const buffer = event.toBuffer();
+            const hex = Array.from(buffer.slice(0, Math.min(64, buffer.length)))
+                .map((b: number) => b.toString(16).padStart(2, '0'))
+                .join(' ');
+            console.log('[StreamReceiver] 📤 发送控制消息, type:', event.type, ', buffer length:', buffer.length);
+            console.log('[StreamReceiver]    前' + Math.min(64, buffer.length) + '字节:', hex);
+            this.ws.send(buffer);
         } else {
+            console.log('[StreamReceiver] ⏳ WebSocket 未就绪, 缓存控制消息:', event.type);
             this.events.push(event);
         }
     }

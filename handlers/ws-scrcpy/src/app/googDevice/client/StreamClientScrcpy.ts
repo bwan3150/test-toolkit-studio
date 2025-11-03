@@ -187,18 +187,24 @@ export class StreamClientScrcpy
     };
 
     public onDisplayInfo = (infoArray: DisplayCombinedInfo[]): void => {
+        console.log('[StreamClientScrcpy] 📺 收到 DisplayInfo 事件, 显示器数量:', infoArray.length);
         if (!this.player) {
+            console.log('[StreamClientScrcpy] ⚠️  player 未初始化, 跳过');
             return;
         }
         let currentSettings = this.player.getVideoSettings();
         const displayId = currentSettings.displayId;
+        console.log('[StreamClientScrcpy] 🔍 查找 displayId:', displayId);
         const info = infoArray.find((value) => {
             return value.displayInfo.displayId === displayId;
         });
         if (!info) {
+            console.log('[StreamClientScrcpy] ⚠️  未找到匹配的 displayInfo');
             return;
         }
+        console.log('[StreamClientScrcpy] ✅ 找到匹配的 displayInfo:', info);
         if (this.player.getState() === BasePlayer.STATE.PAUSED) {
+            console.log('[StreamClientScrcpy] ▶️  播放器从暂停状态恢复');
             this.player.play();
         }
         const { videoSettings, screenInfo } = info;
@@ -213,7 +219,9 @@ export class StreamClientScrcpy
                 this.player.setVideoSettings(currentSettings, this.fitToScreen, false);
             }
         }
+        console.log('[StreamClientScrcpy] 检查视频设置: videoSettings=', videoSettings, ', screenInfo=', screenInfo);
         if (!videoSettings || !screenInfo) {
+            console.log('[StreamClientScrcpy] 🚀 首次连接或无现有设置, 发送视频设置命令');
             this.joinedStream = true;
             this.sendMessage(CommandControlMessage.createSetVideoSettingsCommand(currentSettings));
             return;
@@ -243,8 +251,11 @@ export class StreamClientScrcpy
             }
         }
         if (!min.equals(videoSettings) || !this.joinedStream) {
+            console.log('[StreamClientScrcpy] 🚀 发送视频设置命令, joinedStream=', this.joinedStream, ', 设置:', min);
             this.joinedStream = true;
             this.sendMessage(CommandControlMessage.createSetVideoSettingsCommand(min));
+        } else {
+            console.log('[StreamClientScrcpy] ✅ 视频设置未变化且已加入流, 无需发送命令');
         }
     };
 

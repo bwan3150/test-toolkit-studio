@@ -1,59 +1,109 @@
-// ws-scrcpy 视频流管理器
-// 负责在 normal 模式下显示实时视频流并支持触摸交互
+// ws-scrcpy 原生视频流管理器 - 模块化重构版本
+// 不使用 iframe, 直接使用 Canvas + WebCodecs 进行原生渲染
+
+// 🔍 立即执行的日志 - 确认脚本正在执行
+window.rLog('🚀 [scrcpy-video-stream.js] 脚本开始执行');
 
 const ScrcpyVideoStream = {
-  // 状态
+  // === 状态 ===
   isActive: false,
   isServerRunning: false,
   currentDeviceId: null,
 
-  // DOM 元素
+  // === DOM 元素 ===
   streamContainer: null,
-  streamIframe: null,
+  videoCanvas: null,
+  videoWrapper: null,
 
-  // 配置
+  // === 核心组件 ===
+  streamReceiver: null,  // WebSocket 流接收器
+  decoder: null,          // WebCodecs 解码器
+
+  // === 配置 ===
   serverPort: 8000,
   serverUrl: 'http://localhost:8000',
 
+  // === 尺寸调整 ===
+  isResizing: false,
+  resizeStartX: 0,
+  resizeStartY: 0,
+  resizeStartWidth: 0,
+  resizeStartHeight: 0,
+  currentResizeHandle: null,
+  videoAspectRatio: 9 / 16, // 默认手机比例
+
   /**
-   * 初始化视频流管理器
+   * 初始化
    */
   init() {
-    window.rLog('初始化 ScrcpyVideoStream');
-
-    // 获取 screen content 容器
+    // 获取容器
     this.streamContainer = document.getElementById('screenContent');
-
     if (!this.streamContainer) {
-      window.rError('找不到 screenContent 容器');
-      return;
+      window.rLog('⏳ screenContent 容器暂时不可用, 将在 activate() 时重试');
+      // 不阻止初始化继续,在 activate() 时会重试
+    } else {
+      window.rLog('✅ ScrcpyVideoStream 初始化完成 (模块化原生渲染)');
     }
 
-    window.rLog('✅ ScrcpyVideoStream 初始化完成');
+    // 动态加载所有模块 (异步)
+    this.modulesLoadedPromise = this.loadModules();
+  },
+
+  /**
+   * 动态加载所有 JS 模块
+   * @returns {Promise} 所有模块加载完成的 Promise
+   */
+  loadModules() {
+    const basePath = '../js/testcase/screen/scrcpy';
+    const modules = [
+      `${basePath}/protocol/VideoSettings.js`,
+      `${basePath}/protocol/ControlMessage.js`,
+      `${basePath}/decoder/H264Parser.js`,
+      `${basePath}/decoder/WebCodecsDecoder.js`,
+      `${basePath}/protocol/StreamReceiver.js`
+    ];
+
+    window.rLog(`开始加载 ${modules.length} 个模块...`);
+
+    const loadPromises = modules.map(src => {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => {
+          window.rLog(`✅ 已加载: ${src}`);
+          resolve(src);
+        };
+        script.onerror = (error) => {
+          window.rError(`❌ 加载失败: ${src}`, error);
+          reject(new Error(`加载模块失败: ${src}`));
+        };
+        document.head.appendChild(script);
+      });
+    });
+
+    return Promise.all(loadPromises).then(() => {
+      window.rLog(`✅ 所有 ${modules.length} 个 Scrcpy 模块已加载完成`);
+    }).catch(error => {
+      window.rError('❌ 模块加载失败:', error);
+      throw error;
+    });
   },
 
   /**
    * 启动 ws-scrcpy 服务器
-   * @returns {Promise<boolean>}
    */
   async startServer() {
     try {
       window.rLog('启动 ws-scrcpy 服务器...');
 
-      // 检查 IPC 是否可用
       const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
       if (!ipcRenderer) {
         throw new Error('ipcRenderer 不可用');
       }
 
-      window.rLog('调用 IPC: scrcpy:start-server, 端口:', this.serverPort);
-
-      // 调用主进程启动服务器
       const result = await ipcRenderer.invoke('scrcpy:start-server', {
         port: this.serverPort
       });
-
-      window.rLog('IPC 返回结果:', result);
 
       if (result.success) {
         window.rLog('✅ ws-scrcpy 服务器启动成功');
@@ -70,48 +120,32 @@ const ScrcpyVideoStream = {
   },
 
   /**
-   * 停止 ws-scrcpy 服务器
-   * @returns {Promise<boolean>}
-   */
-  async stopServer() {
-    try {
-      window.rLog('停止 ws-scrcpy 服务器...');
-
-      const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
-      if (!ipcRenderer) {
-        throw new Error('ipcRenderer 不可用');
-      }
-
-      const result = await ipcRenderer.invoke('scrcpy:stop-server');
-
-      if (result.success) {
-        window.rLog('✅ ws-scrcpy 服务器已停止');
-        this.isServerRunning = false;
-        return true;
-      } else {
-        window.rError('❌ ws-scrcpy 服务器停止失败:', result.error);
-        return false;
-      }
-    } catch (error) {
-      window.rError('停止 ws-scrcpy 服务器时发生错误:', error);
-      return false;
-    }
-  },
-
-  /**
-   * 激活视频流显示
-   * @param {string} deviceId - 设备 ID
-   * @returns {Promise<boolean>}
+   * 激活视频流
    */
   async activate(deviceId) {
     if (this.isActive && this.currentDeviceId === deviceId) {
-      window.rLog('视频流已经激活，设备:', deviceId);
+      window.rLog('视频流已激活, 设备:', deviceId);
       return true;
     }
 
     try {
-      window.rLog('激活视频流，设备:', deviceId);
+      window.rLog('🚀 激活视频流, 设备:', deviceId);
       this.currentDeviceId = deviceId;
+
+      // 确保容器可用
+      if (!this.streamContainer) {
+        this.streamContainer = document.getElementById('screenContent');
+        if (!this.streamContainer) {
+          throw new Error('找不到 screenContent 容器');
+        }
+      }
+
+      // 等待所有模块加载完成
+      if (this.modulesLoadedPromise) {
+        window.rLog('⏳ 等待 Scrcpy 模块加载...');
+        await this.modulesLoadedPromise;
+        window.rLog('✅ Scrcpy 模块已加载');
+      }
 
       // 确保服务器已启动
       if (!this.isServerRunning) {
@@ -120,7 +154,6 @@ const ScrcpyVideoStream = {
           window.rError('无法启动服务器');
           return false;
         }
-
         // 等待服务器完全启动
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -131,11 +164,14 @@ const ScrcpyVideoStream = {
         deviceScreenshot.style.display = 'none';
       }
 
-      // 创建并显示 iframe 来嵌入 ws-scrcpy 页面
-      this.createStreamIframe(deviceId);
+      // 创建 Canvas 视频流
+      this.createVideoCanvas();
+
+      // 连接 WebSocket 并开始接收视频流
+      await this.startStreaming(deviceId);
 
       this.isActive = true;
-      window.rLog('✅ 视频流已激活');
+      window.rLog('✅ 视频流已成功激活');
       return true;
 
     } catch (error) {
@@ -145,159 +181,424 @@ const ScrcpyVideoStream = {
   },
 
   /**
-   * 创建视频流 iframe
-   * @param {string} deviceId - 设备 ID
+   * 创建 Canvas 元素
    */
-  createStreamIframe(deviceId) {
-    // 移除旧的 iframe
-    if (this.streamIframe) {
-      this.streamIframe.remove();
-      this.streamIframe = null;
+  createVideoCanvas() {
+    // 移除旧的
+    if (this.videoWrapper) {
+      this.videoWrapper.remove();
     }
 
-    // 构建 ws-scrcpy URL 参数
-    const params = new URLSearchParams();
-    params.set('action', 'stream');
-    params.set('udid', deviceId);
-    params.set('player', 'webcodecs');  // 使用 WebCodecs 播放器
-    params.set('ws', `ws://localhost:${this.serverPort}/?action=proxy-adb&remote=tcp:8886&udid=${deviceId}`);
+    // 创建包装容器
+    this.videoWrapper = document.createElement('div');
+    this.videoWrapper.id = 'scrcpyVideoWrapper';
+    this.videoWrapper.className = 'scrcpy-video-wrapper';
 
-    // 创建 iframe
-    this.streamIframe = document.createElement('iframe');
-    this.streamIframe.id = 'scrcpyStreamFrame';
-    this.streamIframe.src = `${this.serverUrl}/#!${params.toString()}`;
+    // 创建 Canvas
+    this.videoCanvas = document.createElement('canvas');
+    this.videoCanvas.id = 'scrcpyVideoCanvas';
+    this.videoCanvas.className = 'scrcpy-video-canvas';
 
-    // 设置样式 - 填充整个容器
-    this.streamIframe.style.width = '100%';
-    this.streamIframe.style.height = '100%';
-    this.streamIframe.style.border = 'none';
-    this.streamIframe.style.display = 'block';
-    this.streamIframe.style.backgroundColor = '#000';
-    this.streamIframe.style.flex = '1';  // 使用 flex 布局填充父容器
+    // 创建调整大小的控制点
+    const resizeHandles = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'];
+    resizeHandles.forEach(pos => {
+      const handle = document.createElement('div');
+      handle.className = `resize-handle resize-handle-${pos}`;
+      handle.dataset.position = pos;
+      this.videoWrapper.appendChild(handle);
+    });
 
-    // 添加加载完成事件
-    this.streamIframe.onload = () => {
-      window.rLog('视频流 iframe 加载完成');
-
-      // 尝试注入样式到 iframe 内部（跨域可能失败）
-      try {
-        this.injectIframeStyles();
-      } catch (e) {
-        window.rLog('无法注入 iframe 样式（跨域限制）:', e.message);
-      }
-    };
-
-    // 添加错误处理
-    this.streamIframe.onerror = (error) => {
-      window.rError('视频流 iframe 加载失败:', error);
-    };
-
-    // 添加到容器
-    this.streamContainer.appendChild(this.streamIframe);
-
-    // 给容器添加 class 标记，表示正在显示视频流
+    this.videoWrapper.appendChild(this.videoCanvas);
+    this.streamContainer.appendChild(this.videoWrapper);
     this.streamContainer.classList.add('has-video-stream');
 
-    // 添加全局样式来隐藏控制按钮
     this.addGlobalStyles();
+    this.setupResizeHandlers();
+    this.setupTouchHandlers();
 
-    window.rLog('视频流 iframe 已创建');
+    window.rLog('Canvas 已创建');
   },
 
   /**
-   * 添加全局样式来优化视频流显示
+   * 添加全局样式
    */
   addGlobalStyles() {
-    // 检查是否已经添加过样式
-    if (document.getElementById('scrcpy-stream-styles')) {
-      return;
-    }
+    if (document.getElementById('scrcpy-stream-styles')) return;
 
     const style = document.createElement('style');
     style.id = 'scrcpy-stream-styles';
     style.textContent = `
-      /* 优化 iframe 容器 */
-      #scrcpyStreamFrame {
-        background: #000 !important;
-        min-width: 100% !important;
-        min-height: 100% !important;
+      .scrcpy-video-wrapper {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #000;
+        position: relative;
+        overflow: hidden;
       }
-
-      /* 确保容器是黑色背景，并移除 padding */
+      .scrcpy-video-canvas {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        background: #000;
+        cursor: pointer;
+      }
+      .resize-handle {
+        position: absolute;
+        background: rgba(78, 201, 176, 0.3);
+        border: 1px solid rgba(78, 201, 176, 0.6);
+        transition: all 0.2s ease;
+        opacity: 0;
+        z-index: 10;
+        pointer-events: auto;
+      }
+      .scrcpy-video-wrapper:hover .resize-handle {
+        opacity: 1;
+      }
+      .resize-handle:hover {
+        background: rgba(78, 201, 176, 0.6);
+      }
+      .resize-handle-nw, .resize-handle-ne, .resize-handle-sw, .resize-handle-se {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .resize-handle-nw { top: -6px; left: -6px; cursor: nw-resize; }
+      .resize-handle-ne { top: -6px; right: -6px; cursor: ne-resize; }
+      .resize-handle-sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+      .resize-handle-se { bottom: -6px; right: -6px; cursor: se-resize; }
+      .resize-handle-n, .resize-handle-s {
+        width: 80px;
+        height: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .resize-handle-e, .resize-handle-w {
+        width: 6px;
+        height: 80px;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .resize-handle-n { top: -3px; cursor: n-resize; }
+      .resize-handle-s { bottom: -3px; cursor: s-resize; }
+      .resize-handle-e { right: -3px; cursor: e-resize; }
+      .resize-handle-w { left: -3px; cursor: w-resize; }
       #screenContent {
         background-color: #000 !important;
         padding: 0 !important;
       }
-
-      /* 当有视频流时，隐藏截图 */
       #screenContent.has-video-stream #deviceScreenshot {
         display: none !important;
+      }
+      .scrcpy-video-wrapper.resizing .scrcpy-video-canvas {
+        pointer-events: none;
       }
     `;
     document.head.appendChild(style);
   },
 
   /**
-   * 尝试注入样式到 iframe 内部
-   * 注意：由于同源策略，这只在同域名时有效
+   * 开始视频流传输
    */
-  injectIframeStyles() {
-    if (!this.streamIframe) return;
+  async startStreaming(deviceId) {
+    // 重要发现：从网页版 URL 可以看出，实际使用的是 action=proxy-adb
+    // 网页版 URL: ws://localhost:8000/?action=proxy-adb&remote=tcp%3A8886&udid=127.0.0.1%3A26656
+    // 这意味着 ws-scrcpy 先启动了 scrcpy-server (监听 tcp:8886)，然后代理 ADB 连接到这个端口
+    // 因此我们也需要使用 action=proxy-adb&remote=tcp:8886
 
-    const iframeDoc = this.streamIframe.contentDocument || this.streamIframe.contentWindow.document;
-    if (!iframeDoc) {
-      window.rLog('无法访问 iframe document');
-      return;
-    }
+    const wsUrl = `${this.serverUrl.replace('http', 'ws')}/?action=proxy-adb&remote=tcp%3A8886&udid=${deviceId}`;
+    window.rLog('连接 WebSocket (proxy-adb 模式):', wsUrl);
 
-    // 创建样式元素
-    const style = iframeDoc.createElement('style');
-    style.textContent = `
-      /* 隐藏所有控制按钮和工具栏 */
-      .control-buttons-list,
-      .action-button,
-      .stream-controls,
-      .toolbox,
-      .more-box,
-      [class*="control"],
-      [class*="button"] {
-        display: none !important;
+    // 创建 WebSocket 连接
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+    this.streamReceiver = ws;
+
+    // 创建解码器
+    const WebCodecsDecoder = window.ScrcpyWebCodecsDecoder;
+    this.decoder = new WebCodecsDecoder(this.videoCanvas);
+    this.decoder.init();
+
+    // 等待连接建立
+    await new Promise((resolve, reject) => {
+      ws.onopen = () => {
+        window.rLog('✅ WebSocket 已连接 (proxy-adb 模式)');
+        resolve();
+      };
+      ws.onerror = (error) => {
+        window.rError('WebSocket 错误:', error);
+        reject(error);
+      };
+    });
+
+    // 标记是否已发送视频设置
+    let sentVideoSettings = false;
+
+    // 处理接收到的消息 (直接连接模式的消息格式)
+    ws.onmessage = (event) => {
+      if (!(event.data instanceof ArrayBuffer)) {
+        window.rLog('收到非二进制消息，忽略');
+        return;
       }
 
-      /* 确保视频填充整个区域 */
-      body {
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        background: #000 !important;
+      const data = new Uint8Array(event.data);
+
+      // 添加详细日志：显示收到的数据大小和前几个字节
+      if (data.length <= 100) {
+        // 如果数据很小，显示完整内容
+        const hex = Array.from(data.slice(0, Math.min(32, data.length)))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        window.rLog(`📦 收到数据: ${data.length} 字节, 前${Math.min(32, data.length)}字节: ${hex}`);
+      } else {
+        // 如果数据很大，只显示前16字节
+        const hex = Array.from(data.slice(0, 16))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        window.rLog(`📦 收到数据: ${data.length} 字节, 前16字节: ${hex}`);
       }
 
-      /* 视频容器样式 */
-      .screen {
-        width: 100% !important;
-        height: 100% !important;
-        display: flex !important;
-        justify-content: center !important;
-        align-items: center !important;
-        background: #000 !important;
+      // 检查是否是初始信息 (magic bytes: 'scrcpy_initial')
+      const MAGIC_BYTES = new Uint8Array([115, 99, 114, 99, 112, 121, 95, 105, 110, 105, 116, 105, 97, 108]);
+      if (data.length >= MAGIC_BYTES.length) {
+        let isInitial = true;
+        for (let i = 0; i < MAGIC_BYTES.length; i++) {
+          if (data[i] !== MAGIC_BYTES[i]) {
+            isInitial = false;
+            break;
+          }
+        }
+
+        if (isInitial) {
+          window.rLog('📩 收到初始信息 (scrcpy_initial)');
+
+          // 解析设备名称 (64字节)
+          const nameBytes = data.slice(MAGIC_BYTES.length, MAGIC_BYTES.length + 64);
+          const deviceName = new TextDecoder().decode(nameBytes).replace(/\0/g, '').trim();
+          window.rLog('设备名称:', deviceName);
+
+          // 解析 displaysCount (4字节, Big Endian)
+          let offset = MAGIC_BYTES.length + 64;
+          const view = new DataView(data.buffer, data.byteOffset);
+          const displaysCount = view.getInt32(offset, false); // false = Big Endian
+          window.rLog(`显示器数量: ${displaysCount}`);
+
+          // 关键发现：根据浏览器日志，必须在收到 scrcpy_initial 后发送视频设置命令
+          // 服务器收到视频设置命令后才会开始推送视频流！
+          if (!sentVideoSettings) {
+            sentVideoSettings = true;
+            window.rLog('🚀 发送视频设置命令以启动视频流...');
+            this.sendVideoSettings(ws);
+          } else {
+            window.rLog('⚠️  已发送过视频设置，跳过');
+          }
+
+          return;
+        }
       }
 
-      /* canvas 或 video 元素 */
-      canvas, video {
-        max-width: 100% !important;
-        max-height: 100% !important;
-        object-fit: contain !important;
-        background: #000 !important;
-      }
-    `;
+      // 否则当作视频帧数据处理
+      window.rLog('🎬 尝试解码视频帧...');
+      this.decoder.decode(data);
+    };
 
-    iframeDoc.head.appendChild(style);
-    window.rLog('✅ iframe 样式注入成功');
+    ws.onclose = (event) => {
+      window.rLog('WebSocket 已断开:', event.code, event.reason);
+      this.cleanup();
+    };
   },
 
   /**
-   * 停用视频流显示
-   * @returns {Promise<boolean>}
+   * 发送视频设置命令
+   */
+  sendVideoSettings(ws) {
+    const VideoSettings = window.ScrcpyVideoSettings;
+    const ControlMessage = window.ScrcpyControlMessage;
+
+    // 创建视频设置 (默认参数)
+    // 关键发现：bounds 不能为 null，必须设置一个合理的值！
+    // 参考浏览器版本：bounds 设置为 480x480
+    const settings = new VideoSettings({
+      bitrate: 524288,    // 512 kbps
+      maxFps: 24,         // 24 fps
+      iFrameInterval: 5,  // 5秒
+      bounds: { width: 480, height: 480 },  // 限制最大分辨率 (关键!)
+      sendFrameMeta: false,
+      lockedVideoOrientation: -1,
+      displayId: 0
+    });
+
+    // 创建控制消息
+    const message = ControlMessage.createSetVideoSettingsCommand(settings);
+
+    // 显示消息内容（十六进制）
+    const hex = Array.from(message.slice(0, Math.min(64, message.length)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join(' ');
+    window.rLog(`📤 准备发送视频设置命令: ${message.length} 字节`);
+    window.rLog(`   前${Math.min(64, message.length)}字节: ${hex}`);
+
+    // 发送
+    try {
+      ws.send(message);
+      window.rLog('✅ 视频设置命令已发送');
+    } catch (e) {
+      window.rError('❌ 发送视频设置失败:', e);
+    }
+  },
+
+  /**
+   * 设置尺寸调整处理器
+   */
+  setupResizeHandlers() {
+    if (!this.videoWrapper) return;
+
+    const handles = this.videoWrapper.querySelectorAll('.resize-handle');
+
+    handles.forEach(handle => {
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.isResizing = true;
+        this.videoWrapper.classList.add('resizing');
+        this.currentResizeHandle = handle.dataset.position;
+        this.resizeStartX = e.clientX;
+        this.resizeStartY = e.clientY;
+
+        const rect = this.videoWrapper.getBoundingClientRect();
+        this.resizeStartWidth = rect.width;
+        this.resizeStartHeight = rect.height;
+
+        document.addEventListener('mousemove', this.handleResize);
+        document.addEventListener('mouseup', this.handleResizeEnd);
+      });
+    });
+  },
+
+  handleResize(e) {
+    const self = ScrcpyVideoStream;
+    if (!self.isResizing) return;
+
+    const deltaX = e.clientX - self.resizeStartX;
+    const deltaY = e.clientY - self.resizeStartY;
+
+    let newWidth = self.resizeStartWidth;
+    let newHeight = self.resizeStartHeight;
+
+    const handle = self.currentResizeHandle;
+
+    // 根据拖拽的控制点计算新尺寸
+    if (handle.includes('e')) {
+      newWidth = self.resizeStartWidth + deltaX;
+    } else if (handle.includes('w')) {
+      newWidth = self.resizeStartWidth - deltaX;
+    }
+
+    if (handle.includes('s')) {
+      newHeight = self.resizeStartHeight + deltaY;
+    } else if (handle.includes('n')) {
+      newHeight = self.resizeStartHeight - deltaY;
+    }
+
+    // 保持宽高比
+    const videoSize = self.decoder ? self.decoder.getVideoSize() : null;
+    if (videoSize && videoSize.width > 0 && videoSize.height > 0) {
+      const aspectRatio = videoSize.height / videoSize.width; // 注意: 手机通常是竖屏
+      if (handle.includes('e') || handle.includes('w')) {
+        newHeight = newWidth * aspectRatio;
+      } else if (handle.includes('n') || handle.includes('s')) {
+        newWidth = newHeight / aspectRatio;
+      }
+    }
+
+    // 限制最小尺寸
+    const minWidth = 200;
+    const minHeight = 300;
+    if (newWidth < minWidth) newWidth = minWidth;
+    if (newHeight < minHeight) newHeight = minHeight;
+
+    // 限制最大尺寸 (不超过容器)
+    const container = self.streamContainer.getBoundingClientRect();
+    if (newWidth > container.width) newWidth = container.width;
+    if (newHeight > container.height) newHeight = container.height;
+
+    self.videoWrapper.style.width = newWidth + 'px';
+    self.videoWrapper.style.height = newHeight + 'px';
+  },
+
+  handleResizeEnd() {
+    const self = ScrcpyVideoStream;
+    if (self.videoWrapper) {
+      self.videoWrapper.classList.remove('resizing');
+    }
+    self.isResizing = false;
+    self.currentResizeHandle = null;
+
+    document.removeEventListener('mousemove', self.handleResize);
+    document.removeEventListener('mouseup', self.handleResizeEnd);
+  },
+
+  /**
+   * 设置触摸处理器
+   */
+  setupTouchHandlers() {
+    if (!this.videoCanvas) return;
+
+    this.videoCanvas.addEventListener('mousedown', (e) => {
+      if (this.isResizing) return;
+      this.handleTouch('down', e);
+    });
+
+    this.videoCanvas.addEventListener('mousemove', (e) => {
+      if (this.isResizing) return;
+      if (e.buttons === 1) { // 左键按下
+        this.handleTouch('move', e);
+      }
+    });
+
+    this.videoCanvas.addEventListener('mouseup', (e) => {
+      if (this.isResizing) return;
+      this.handleTouch('up', e);
+    });
+  },
+
+  /**
+   * 处理触摸事件
+   */
+  handleTouch(action, event) {
+    if (!this.decoder) return;
+
+    const rect = this.videoCanvas.getBoundingClientRect();
+    const videoSize = this.decoder.getVideoSize();
+
+    if (!videoSize || videoSize.width === 0 || videoSize.height === 0) {
+      window.rLog('视频尺寸未知, 无法计算触摸坐标');
+      return;
+    }
+
+    // Canvas 坐标
+    const canvasX = event.clientX - rect.left;
+    const canvasY = event.clientY - rect.top;
+
+    // 转换为设备坐标
+    const deviceX = Math.round((canvasX / rect.width) * videoSize.width);
+    const deviceY = Math.round((canvasY / rect.height) * videoSize.height);
+
+    window.rLog(`触摸 ${action}: Canvas(${canvasX.toFixed(0)}, ${canvasY.toFixed(0)}) -> 设备(${deviceX}, ${deviceY})`);
+
+    // TODO: 发送真正的触摸控制消息
+    // const ControlMessage = window.ScrcpyControlMessage;
+    // const touchMsg = ControlMessage.createTouchEvent(action, deviceX, deviceY);
+    // if (touchMsg && this.streamReceiver) {
+    //   this.streamReceiver.sendMessage(touchMsg);
+    // }
+  },
+
+  /**
+   * 停用视频流
    */
   async deactivate() {
     if (!this.isActive) {
@@ -308,22 +609,7 @@ const ScrcpyVideoStream = {
     try {
       window.rLog('停用视频流');
 
-      // 移除 iframe
-      if (this.streamIframe) {
-        this.streamIframe.remove();
-        this.streamIframe = null;
-      }
-
-      // 移除容器的 class 标记
-      if (this.streamContainer) {
-        this.streamContainer.classList.remove('has-video-stream');
-      }
-
-      // 恢复显示截图元素
-      const deviceScreenshot = document.getElementById('deviceScreenshot');
-      if (deviceScreenshot) {
-        deviceScreenshot.style.display = 'block';
-      }
+      this.cleanup();
 
       this.isActive = false;
       this.currentDeviceId = null;
@@ -338,32 +624,61 @@ const ScrcpyVideoStream = {
   },
 
   /**
-   * 检查视频流是否激活
-   * @returns {boolean}
+   * 清理资源
    */
-  isStreamActive() {
-    return this.isActive;
+  cleanup() {
+    // 停止解码器
+    if (this.decoder) {
+      this.decoder.stop();
+      this.decoder = null;
+    }
+
+    // 断开 WebSocket
+    if (this.streamReceiver) {
+      this.streamReceiver.disconnect();
+      this.streamReceiver = null;
+    }
+
+    // 移除 DOM 元素
+    if (this.videoWrapper) {
+      this.videoWrapper.remove();
+      this.videoWrapper = null;
+    }
+    this.videoCanvas = null;
+
+    // 移除容器标记
+    if (this.streamContainer) {
+      this.streamContainer.classList.remove('has-video-stream');
+    }
+
+    // 恢复显示截图
+    const deviceScreenshot = document.getElementById('deviceScreenshot');
+    if (deviceScreenshot) {
+      deviceScreenshot.style.display = 'block';
+    }
   },
 
   /**
-   * 清理资源
+   * 检查视频流是否激活
    */
-  async cleanup() {
-    await this.deactivate();
-
-    // 停止服务器（可选，根据需求决定）
-    // await this.stopServer();
+  isStreamActive() {
+    return this.isActive;
   }
 };
 
-// 导出到 window
+// 导出到全局
 window.ScrcpyVideoStream = ScrcpyVideoStream;
+window.rLog('✅ [scrcpy-video-stream.js] ScrcpyVideoStream 已导出到 window');
 
 // 页面加载后自动初始化
+window.rLog(`🔍 [scrcpy-video-stream.js] document.readyState = ${document.readyState}`);
 if (document.readyState === 'loading') {
+  window.rLog('⏳ [scrcpy-video-stream.js] 页面加载中, 等待 DOMContentLoaded');
   document.addEventListener('DOMContentLoaded', () => {
+    window.rLog('✅ [scrcpy-video-stream.js] DOMContentLoaded 触发, 调用 init()');
     ScrcpyVideoStream.init();
   });
 } else {
+  window.rLog('✅ [scrcpy-video-stream.js] 页面已加载, 立即调用 init()');
   ScrcpyVideoStream.init();
 }
