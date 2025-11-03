@@ -507,26 +507,90 @@ const ScrcpyVideoStream = {
   },
 
   /**
+   * 计算 Canvas 实际显示区域 (考虑 object-fit: contain)
+   * 类似于 coordinate-converter.js 的处理方式
+   */
+  getCanvasDisplayArea() {
+    if (!this.videoCanvas) return null;
+
+    const rect = this.videoCanvas.getBoundingClientRect();
+    const videoSize = this.decoder.getVideoSize();
+
+    if (!videoSize || videoSize.width === 0 || videoSize.height === 0) {
+      return null;
+    }
+
+    // Canvas 的显示尺寸 (CSS 尺寸)
+    const displayWidth = rect.width;
+    const displayHeight = rect.height;
+
+    // 视频的实际尺寸
+    const videoWidth = videoSize.width;
+    const videoHeight = videoSize.height;
+
+    // 计算视频在 Canvas 中的实际显示尺寸 (保持宽高比)
+    const videoRatio = videoWidth / videoHeight;
+    const displayRatio = displayWidth / displayHeight;
+
+    let actualWidth, actualHeight, offsetX, offsetY;
+
+    if (displayRatio > videoRatio) {
+      // Canvas 更宽，视频在左右有黑边
+      actualHeight = displayHeight;
+      actualWidth = actualHeight * videoRatio;
+      offsetX = (displayWidth - actualWidth) / 2;
+      offsetY = 0;
+    } else {
+      // Canvas 更高，视频在上下有黑边
+      actualWidth = displayWidth;
+      actualHeight = actualWidth / videoRatio;
+      offsetX = 0;
+      offsetY = (displayHeight - actualHeight) / 2;
+    }
+
+    return {
+      left: offsetX,
+      top: offsetY,
+      width: actualWidth,
+      height: actualHeight,
+      videoWidth: videoWidth,
+      videoHeight: videoHeight
+    };
+  },
+
+  /**
    * 处理触摸事件
    */
   handleTouch(action, event) {
     if (!this.decoder || !this.streamReceiver) return;
 
     const rect = this.videoCanvas.getBoundingClientRect();
-    const videoSize = this.decoder.getVideoSize();
+    const displayArea = this.getCanvasDisplayArea();
 
-    if (!videoSize || videoSize.width === 0 || videoSize.height === 0) {
-      window.rLog('视频尺寸未知, 无法计算触摸坐标');
+    if (!displayArea) {
+      window.rLog('视频显示区域未知, 无法计算触摸坐标');
       return;
     }
 
-    // Canvas 坐标
+    // 获取相对于 Canvas 的点击坐标
     const canvasX = event.clientX - rect.left;
     const canvasY = event.clientY - rect.top;
 
-    // 转换为设备坐标
-    const deviceX = Math.round((canvasX / rect.width) * videoSize.width);
-    const deviceY = Math.round((canvasY / rect.height) * videoSize.height);
+    // 转换为视频内坐标 (减去黑边偏移)
+    const videoX = canvasX - displayArea.left;
+    const videoY = canvasY - displayArea.top;
+
+    // 检查是否在视频显示区域内
+    if (videoX < 0 || videoX > displayArea.width || videoY < 0 || videoY > displayArea.height) {
+      window.rLog('点击位置在黑边区域, 忽略');
+      return;
+    }
+
+    // 转换为设备坐标 (缩放到实际视频分辨率)
+    const scaleX = displayArea.videoWidth / displayArea.width;
+    const scaleY = displayArea.videoHeight / displayArea.height;
+    const deviceX = Math.round(videoX * scaleX);
+    const deviceY = Math.round(videoY * scaleY);
 
     // 动作映射
     const ControlMessage = window.ScrcpyControlMessage;
@@ -551,13 +615,13 @@ const ScrcpyVideoStream = {
       0, // pointerId (通常为 0)
       deviceX,
       deviceY,
-      videoSize.width,
-      videoSize.height
+      displayArea.videoWidth,
+      displayArea.videoHeight
     );
 
     if (this.streamReceiver && this.streamReceiver.readyState === WebSocket.OPEN) {
       this.streamReceiver.send(touchMsg);
-      window.rLog(`触摸 ${action}: 设备(${deviceX}, ${deviceY})`);
+      window.rLog(`触摸 ${action}: 设备(${deviceX}, ${deviceY}) / ${displayArea.videoWidth}x${displayArea.videoHeight}`);
     }
   },
 
