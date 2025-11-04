@@ -1,6 +1,11 @@
 {
   "versions": [
     {
+      "version": "0.5.16-beta",
+      "date": "2025-11-04T07:53:19Z",
+      "file": "0.5.16-beta.md"
+    },
+    {
       "version": "0.5.15-beta",
       "date": "2025-11-04T05:04:02Z",
       "file": "0.5.15-beta.md"
