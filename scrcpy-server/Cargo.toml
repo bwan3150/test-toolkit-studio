@@ -1,0 +1,46 @@
+[package]
+name = "tke-scrcpy"
+version = "0.5.14"
+edition = "2021"
+
+[dependencies]
+# WebSocket 服务器
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.21"
+tungstenite = "0.21"
+
+# HTTP 服务器
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
+
+# 异步运行时
+futures = "0.3"
+futures-util = "0.3"
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 字节操作
+bytes = "1.5"
+byteorder = "1.5"
+
+# 错误处理
+anyhow = "1.0"
+thiserror = "1.0"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# URL 解析
+url = "2.5"
+urlencoding = "2.1"
+
+[profile.release]
+opt-level = "z"     # 优化文件大小
+lto = true          # Link Time Optimization
+codegen-units = 1   # 更好的优化
+strip = true        # 移除符号信息
+panic = "abort"     # 减小二进制大小
