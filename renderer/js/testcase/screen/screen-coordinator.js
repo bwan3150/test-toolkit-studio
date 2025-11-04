@@ -191,9 +191,19 @@ const ScreenCoordinator = {
           if (result && result.success && result.path) {
             const deviceScreenshot = document.getElementById('deviceScreenshot');
             if (deviceScreenshot) {
-              deviceScreenshot.src = `file://${result.path}?t=${Date.now()}`;
-              deviceScreenshot.style.display = 'block';
-              window.rLog('✅ 截图已加载并显示');
+              // 等待图片加载完成
+              await new Promise((resolve) => {
+                deviceScreenshot.onload = () => {
+                  deviceScreenshot.style.display = 'block';
+                  window.rLog('✅ 截图已加载并显示');
+                  resolve();
+                };
+                deviceScreenshot.onerror = () => {
+                  window.rError('❌ 截图加载失败');
+                  resolve();
+                };
+                deviceScreenshot.src = `file://${result.path}?t=${Date.now()}`;
+              });
             }
           }
         } else {
@@ -235,9 +245,19 @@ const ScreenCoordinator = {
           if (result && result.success && result.path) {
             const deviceScreenshot = document.getElementById('deviceScreenshot');
             if (deviceScreenshot) {
-              deviceScreenshot.src = `file://${result.path}?t=${Date.now()}`;
-              deviceScreenshot.style.display = 'block';
-              window.rLog('✅ 截图已加载并显示');
+              // 等待图片加载完成
+              await new Promise((resolve) => {
+                deviceScreenshot.onload = () => {
+                  deviceScreenshot.style.display = 'block';
+                  window.rLog('✅ 截图已加载并显示');
+                  resolve();
+                };
+                deviceScreenshot.onerror = () => {
+                  window.rError('❌ 截图加载失败');
+                  resolve();
+                };
+                deviceScreenshot.src = `file://${result.path}?t=${Date.now()}`;
+              });
             }
           }
         } else {

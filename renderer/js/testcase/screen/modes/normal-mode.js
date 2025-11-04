@@ -65,6 +65,12 @@ const NormalMode = {
     if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.videoCanvas) {
       const canvas = window.ScrcpyVideoStream.videoCanvas;
       const wrapper = window.ScrcpyVideoStream.videoWrapper;
+      const screenContent = document.getElementById('screenContent');
+
+      // 添加 has-video-stream 类，隐藏静态截图
+      if (screenContent) {
+        screenContent.classList.add('has-video-stream');
+      }
 
       // 显示 Canvas 和容器
       if (wrapper) {
@@ -96,12 +102,18 @@ const NormalMode = {
     if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.videoCanvas) {
       const canvas = window.ScrcpyVideoStream.videoCanvas;
       const wrapper = window.ScrcpyVideoStream.videoWrapper;
+      const screenContent = document.getElementById('screenContent');
 
       // 隐藏 Canvas 和容器
       canvas.style.display = 'none';
       canvas.style.opacity = '0';
       if (wrapper) {
         wrapper.style.display = 'none';
+      }
+
+      // 移除 has-video-stream 类，允许显示静态截图
+      if (screenContent) {
+        screenContent.classList.remove('has-video-stream');
       }
 
       window.rLog('✅ 视频流 Canvas 已隐藏');
