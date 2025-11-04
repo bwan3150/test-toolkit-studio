@@ -103,6 +103,19 @@ const NormalMode = {
     if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
       await window.ScrcpyVideoStream.deactivate();
     }
+
+    // 锁定滑块并归位到 normal 模式
+    if (window.ModeSlider) {
+      if (window.ModeSlider.lockSlider) {
+        window.ModeSlider.lockSlider();
+        window.rLog('🔒 视频流已停止，滑块已锁定');
+      }
+
+      // 归位到 normal 模式
+      if (window.ModeSlider.setMode) {
+        window.ModeSlider.setMode('normal');
+      }
+    }
   }
 };
 

@@ -133,11 +133,14 @@ const ScreenCoordinator = {
     const previousMode = this.currentMode;
     this.currentMode = modeName;
 
-    // 3. 更新滑块UI
+    // 3. 准备模式切换所需的数据（截图和/或 XML）
+    await this._prepareDataForMode(previousMode, modeName);
+
+    // 4. 更新滑块UI
     const uiMode = modeName === 'screenshot' ? 'crop' : modeName;
     window.ModeSlider.updateSliderPosition(uiMode);
 
-    // 4. 激活新模式
+    // 5. 激活新模式
     try {
       await this._activateMode(modeName);
       window.rLog(`✅ 模式切换成功: ${previousMode} → ${modeName}`);
@@ -149,8 +152,99 @@ const ScreenCoordinator = {
       await this._activateMode('normal');
     }
 
-    // 5. 更新缩放控制的可见性
+    // 6. 更新缩放控制的可见性
     this._updateZoomControlsVisibility();
+  },
+
+  /**
+   * 准备模式切换所需的数据（截图和/或 XML）
+   * @param {string} fromMode - 源模式
+   * @param {string} toMode - 目标模式
+   */
+  async _prepareDataForMode(fromMode, toMode) {
+    try {
+      const needsScreenshot = (fromMode === 'normal' && (toMode === 'xml' || toMode === 'screenshot' || toMode === 'coordinate'));
+      const needsXml = (toMode === 'xml');
+
+      // 情况1: normal → xml overlay
+      // 需要：捕获视频帧 + 获取 XML
+      if (fromMode === 'normal' && toMode === 'xml') {
+        window.rLog('📸 从 normal 切换到 xml：捕获视频帧 + 获取 XML');
+
+        // 1. 捕获视频帧
+        if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
+          await window.ScrcpyVideoStream.captureLatestFrame();
+          window.rLog('✅ 视频帧已捕获');
+        } else {
+          window.rWarn('⚠️ 视频流未激活，无法捕获视频帧');
+        }
+
+        // 2. 获取 XML
+        const deviceSelect = document.getElementById('deviceSelect');
+        if (deviceSelect?.value) {
+          const deviceId = deviceSelect.value;
+          const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+
+          if (ipcRenderer) {
+            window.rLog('📄 获取设备 UI XML...');
+            const result = await ipcRenderer.invoke('execute-tke-command', {
+              command: 'controller',
+              args: ['capture-xml'],
+              deviceId: deviceId
+            });
+
+            if (result.success) {
+              window.rLog('✅ UI XML 已获取');
+            } else {
+              window.rError('❌ 获取 UI XML 失败:', result.error);
+            }
+          }
+        }
+      }
+
+      // 情况2: normal → screenshot/coordinate
+      // 需要：只捕获视频帧，不获取 XML
+      else if (fromMode === 'normal' && (toMode === 'screenshot' || toMode === 'coordinate')) {
+        window.rLog('📸 从 normal 切换到 screenshot/coordinate：仅捕获视频帧');
+
+        if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
+          await window.ScrcpyVideoStream.captureLatestFrame();
+          window.rLog('✅ 视频帧已捕获');
+        } else {
+          window.rWarn('⚠️ 视频流未激活，无法捕获视频帧');
+        }
+      }
+
+      // 情况3: screenshot/coordinate → xml overlay
+      // 需要：获取 XML（截图已存在）
+      else if ((fromMode === 'screenshot' || fromMode === 'coordinate') && toMode === 'xml') {
+        window.rLog('📄 从 screenshot/coordinate 切换到 xml：仅获取 XML');
+
+        const deviceSelect = document.getElementById('deviceSelect');
+        if (deviceSelect?.value) {
+          const deviceId = deviceSelect.value;
+          const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+
+          if (ipcRenderer) {
+            window.rLog('📄 获取设备 UI XML...');
+            const result = await ipcRenderer.invoke('execute-tke-command', {
+              command: 'controller',
+              args: ['capture-xml'],
+              deviceId: deviceId
+            });
+
+            if (result.success) {
+              window.rLog('✅ UI XML 已获取');
+            } else {
+              window.rError('❌ 获取 UI XML 失败:', result.error);
+            }
+          }
+        }
+      }
+
+    } catch (error) {
+      window.rError('❌ 准备模式数据失败:', error);
+    }
   },
 
   /**

@@ -705,6 +705,51 @@ const ScrcpyVideoStream = {
    */
   isStreamActive() {
     return this.isActive;
+  },
+
+  /**
+   * 从当前视频流中捕获最新一帧并保存到 workarea/current_screenshot.png
+   * @returns {Promise<Object>} - { success: boolean, path: string }
+   */
+  async captureLatestFrame() {
+    try {
+      if (!this.isActive || !this.videoCanvas) {
+        throw new Error('视频流未激活或 Canvas 不可用');
+      }
+
+      window.rLog('📸 从视频流捕获最新帧...');
+
+      // 从 Canvas 获取图像数据（PNG 格式）
+      const dataUrl = this.videoCanvas.toDataURL('image/png');
+
+      // 将 Data URL 转换为 Blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+
+      // 转换为 ArrayBuffer
+      const arrayBuffer = await blob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // 通过 IPC 保存到项目的 workarea/current_screenshot.png
+      const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+      if (!ipcRenderer) {
+        throw new Error('ipcRenderer 不可用');
+      }
+
+      const result = await ipcRenderer.invoke('save-screenshot-from-stream', {
+        imageBuffer: buffer
+      });
+
+      if (result.success) {
+        window.rLog('✅ 视频帧已保存:', result.path);
+        return result;
+      } else {
+        throw new Error(result.error || '保存失败');
+      }
+    } catch (error) {
+      window.rError('❌ 捕获视频帧失败:', error);
+      throw error;
+    }
   }
 };
 
