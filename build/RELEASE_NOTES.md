@@ -1,7 +1,12 @@
 ## 新增功能
-- 新增: 用Rust重写ws-scrcpy作为子项目, 提供高效的手机投屏与实时操作能力
-- 新增: 将tke-scrcpy嵌入Testcase页面Device Screen部分, 用于实时展示设备投屏与实时操作
+- 新增: DEVICE SCREEN组件加载视频流时显示loading独立组件
 
 ## 改进优化
-- 改进: 进一步拆分Device Screen组件功能, 以适配未来更多的流式展示与操作功能
+- 重构: 基于视频流模式的DEVICE SCREEN组件结构, 提高测试灵活性和实时反馈能力
+- 改进: 将原有tke controller capture的截图功能, 改为使用获取视频流最新帧实现, 极大提高截图获取速度
+- 改进: .tks Script Runner模块统一改为基于视频流DEVICE SCREEN展示模式
+
+## 问题修复
+- 修复: 视频流展示和原有截图展示模式混杂导致的切换混乱问题
+- 修复: 视频流和其他基于截图的模式, 图像分辨率不统一的问题
 
