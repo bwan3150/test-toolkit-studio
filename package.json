@@ -100,6 +100,13 @@
           "filter": [
             "**/*"
           ]
+        },
+        {
+          "from": "resources/public",
+          "to": "public",
+          "filter": [
+            "**/*"
+          ]
         }
       ]
     },
@@ -116,6 +123,13 @@
           "filter": [
             "**/*"
           ]
+        },
+        {
+          "from": "resources/public",
+          "to": "public",
+          "filter": [
+            "**/*"
+          ]
         }
       ]
     },
@@ -129,6 +143,13 @@
         {
           "from": "resources/linux",
           "to": "linux",
+          "filter": [
+            "**/*"
+          ]
+        },
+        {
+          "from": "resources/public",
+          "to": "public",
           "filter": [
             "**/*"
           ]

@@ -1142,3 +1142,60 @@
     font-size: 12px;
 }
 
+/* 视频流控制按钮 - 全新样式 */
+.video-toggle-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+}
+
+.video-toggle-btn:hover {
+    background: var(--bg-hover);
+}
+
+.video-toggle-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 图标默认白色 */
+.video-toggle-btn img {
+    filter: brightness(0) invert(1);
+}
+
+/* 停止状态 - 播放图标 */
+.video-toggle-btn[data-state="stopped"] .video-play-icon {
+    display: block;
+}
+
+.video-toggle-btn[data-state="stopped"] .video-stop-icon {
+    display: none;
+}
+
+/* 播放状态 - 暂停图标 + 橙色背景 */
+.video-toggle-btn[data-state="streaming"] {
+    background: var(--accent-primary);
+}
+
+.video-toggle-btn[data-state="streaming"]:hover {
+    background: var(--accent-primary);
+    opacity: 0.9;
+}
+
+.video-toggle-btn[data-state="streaming"] .video-play-icon {
+    display: none;
+}
+
+.video-toggle-btn[data-state="streaming"] .video-stop-icon {
+    display: block;
+}
+

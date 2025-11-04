@@ -170,6 +170,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/testcase/screen/utils/overlay-renderer.js');
         await loadScript('../js/testcase/screen/utils/coordinate-converter.js');
 
+        // ⚠️ 重要: 必须在 normal-mode.js 之前加载 scrcpy-video-stream.js
+        // 因为 normal-mode.js 会立即检查 window.ScrcpyVideoStream 是否存在
+        await loadScript('../js/testcase/screen/scrcpy-video-stream.js'); // ws-scrcpy 视频流
+
         // 加载屏幕模式管理器 - 4种模式
         await loadScript('../js/testcase/screen/modes/normal-mode.js');
         await loadScript('../js/testcase/screen/modes/xml-overlay-mode.js');
@@ -179,6 +183,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 加载屏幕模式管理器 - UI 和协调器
         await loadScript('../js/testcase/screen/mode-slider.js');
         await loadScript('../js/testcase/screen/screen-prompt.js');
+        // scrcpy-video-stream.js 已在上方 normal-mode.js 之前加载
         await loadScript('../js/testcase/screen/screen-coordinator.js');
 
         // 加载主控制器（依赖上面的子模块）

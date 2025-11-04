@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TKE MJPEG 视频流测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .info {
+            background: #2a2a2a;
+            padding: 15px 20px;
+            border-radius: 8px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        .info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .info code {
+            background: #3a3a3a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #4fc3f7;
+        }
+
+        .stream-container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        #videoStream {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        .status {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status.loading {
+            background: #ff9800;
+            color: #000;
+        }
+
+        .status.connected {
+            background: #4caf50;
+            color: #fff;
+        }
+
+        .status.error {
+            background: #f44336;
+            color: #fff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #1976d2;
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>📹 TKE MJPEG 视频流测试</h1>
+
+    <div class="info">
+        <h3>测试步骤：</h3>
+        <p>1. 确保设备已连接: <code>adb devices</code></p>
+        <p>2. 启动 autoserver scrcpy 模式（端口 27183）</p>
+        <p>3. 启动 TKE 视频流服务器: <code>tke server video-stream -p 8766 -v 27183</code></p>
+        <p>4. 点击下方"连接视频流"按钮</p>
+    </div>
+
+    <div id="statusDiv" class="status loading">等待连接...</div>
+
+    <div class="controls">
+        <button id="connectBtn" onclick="connectStream()">连接视频流</button>
+        <button id="disconnectBtn" onclick="disconnectStream()" disabled>断开连接</button>
+        <button onclick="location.reload()">重新加载页面</button>
+    </div>
+
+    <div class="stream-container">
+        <img id="videoStream" alt="MJPEG 视频流" />
+    </div>
+
+    <div class="info">
+        <h3>技术信息：</h3>
+        <p>📡 视频流 URL: <code id="streamUrl">http://127.0.0.1:8766/stream</code></p>
+        <p>🎥 格式: MJPEG (Motion JPEG)</p>
+        <p>⚙️ 后端: TKE Rust 服务器 + ffmpeg</p>
+    </div>
+
+    <script>
+        const img = document.getElementById('videoStream');
+        const statusDiv = document.getElementById('statusDiv');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const streamUrlDisplay = document.getElementById('streamUrl');
+
+        // 默认视频流 URL
+        const STREAM_URL = 'http://127.0.0.1:8766/stream';
+
+        function updateStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function connectStream() {
+            updateStatus('正在连接视频流...', 'loading');
+
+            img.onload = function() {
+                updateStatus('✅ 视频流已连接', 'connected');
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                console.log('MJPEG 视频流连接成功');
+            };
+
+            img.onerror = function() {
+                updateStatus('❌ 连接失败 - 请检查 TKE 服务器是否运行', 'error');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                console.error('MJPEG 视频流连接失败');
+            };
+
+            // 添加时间戳防止缓存
+            img.src = STREAM_URL + '?t=' + Date.now();
+        }
+
+        function disconnectStream() {
+            img.src = '';
+            updateStatus('已断开连接', 'loading');
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+        }
+
+        // 页面加载时自动尝试连接
+        window.addEventListener('load', () => {
+            console.log('页面加载完成，准备测试 MJPEG 流');
+            setTimeout(() => {
+                // 3秒后自动连接
+                console.log('自动连接视频流...');
+                connectStream();
+            }, 3000);
+        });
+    </script>
+</body>
+</html>

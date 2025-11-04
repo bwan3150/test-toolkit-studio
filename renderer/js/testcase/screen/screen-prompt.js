@@ -120,7 +120,7 @@ const ScreenPrompt = {
   },
 
   /**
-   * 获取屏幕信息并解锁滑块
+   * 获取屏幕信息并解锁滑块（或启动视频流）
    */
   async _captureScreenAndUnlock() {
     const deviceSelect = document.getElementById('deviceSelect');
@@ -135,6 +135,54 @@ const ScreenPrompt = {
       window.AppNotifications?.projectRequired();
       return;
     }
+
+    // ========== 检查当前模式 ==========
+    // 如果当前是 normal 模式，启动视频流而不是截图
+    if (window.ScreenCoordinator && window.ScreenCoordinator.getCurrentMode) {
+      const currentMode = window.ScreenCoordinator.getCurrentMode();
+      window.rLog('🔍 当前模式:', currentMode);
+
+      if (currentMode === 'normal') {
+        window.rLog('📹 当前是 normal 模式，启动视频流而不是截图');
+
+        // 移除提示
+        this.removePrompt();
+
+        // 启动视频流
+        if (window.ScrcpyVideoStream) {
+          const deviceId = deviceSelect.value;
+          window.rLog('🚀 启动视频流，设备:', deviceId);
+
+          const success = await window.ScrcpyVideoStream.activate(deviceId);
+
+          if (success) {
+            window.rLog('✅ 视频流已成功激活');
+
+            // 更新视频流按钮状态
+            const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
+            if (toggleVideoStreamBtn) {
+              toggleVideoStreamBtn.setAttribute('data-state', 'streaming');
+            }
+
+            // 解锁滑块
+            if (window.ModeSlider && window.ModeSlider.unlockSlider) {
+              window.ModeSlider.unlockSlider();
+            }
+
+            window.AppNotifications?.success('视频流已启动');
+          } else {
+            window.rError('❌ 视频流激活失败');
+            window.AppNotifications?.error('视频流启动失败');
+          }
+        } else {
+          window.rError('❌ ScrcpyVideoStream 模块未加载');
+          window.AppNotifications?.error('视频流模块未加载');
+        }
+
+        return; // 结束函数，不执行后面的截图逻辑
+      }
+    }
+    // ========== 检查模式结束 ==========
 
     // 显示加载状态
     this.setButtonLoading();

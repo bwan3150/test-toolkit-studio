@@ -5,7 +5,10 @@ dist/
 out/
 toolkit-engine/target/
 tester-ai/target/
-resources/
+scrcpy-server/target/
+resources/darwin/
+resources/win32/
+resources/linux/
 
 # TKS Language Support (VSCode 扩展)
 tks-language-support/node_modules/
@@ -62,7 +65,6 @@ pids
 .env.production.local
 
 # 测试项目
-test-projects/
 projects/
 tester-ai/examples/
 
@@ -71,3 +73,4 @@ local/
 
 # Electron
 electron-builder.yml
+
