@@ -31,6 +31,7 @@ const ScreenshotMode = {
 
     const screenContent = document.getElementById('screenContent');
     const screenshotSelector = document.getElementById('screenshotSelector');
+    const deviceScreenshot = document.getElementById('deviceScreenshot');
 
     if (!screenContent || !screenshotSelector) {
       window.rError('截图模式所需元素未找到');
@@ -39,6 +40,12 @@ const ScreenshotMode = {
 
     // 添加截图模式类
     screenContent.classList.add('screenshot-mode');
+
+    // 显示静态截图（如果有）
+    if (deviceScreenshot && deviceScreenshot.src) {
+      deviceScreenshot.style.display = 'block';
+      window.rLog('✅ 静态截图已显示');
+    }
 
     // 设置事件监听器
     this._setupEventListeners();

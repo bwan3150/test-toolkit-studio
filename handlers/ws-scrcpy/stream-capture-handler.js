@@ -11,16 +11,16 @@ const path = require('path');
  */
 function registerStreamCaptureHandlers(app) {
   // 保存从视频流捕获的截图
-  ipcMain.handle('save-screenshot-from-stream', async (event, { imageBuffer }) => {
+  ipcMain.handle('save-screenshot-from-stream', async (event, { imageBuffer, projectPath }) => {
     try {
-      // 获取当前项目路径
-      const projectPath = global.currentProjectPath;
-      if (!projectPath) {
+      // 获取当前项目路径（从参数或全局变量）
+      const currentProjectPath = projectPath || global.currentProjectPath;
+      if (!currentProjectPath) {
         throw new Error('未设置项目路径');
       }
 
       // 确保 workarea 目录存在
-      const workareaPath = path.join(projectPath, 'workarea');
+      const workareaPath = path.join(currentProjectPath, 'workarea');
       if (!fs.existsSync(workareaPath)) {
         fs.mkdirSync(workareaPath, { recursive: true });
       }

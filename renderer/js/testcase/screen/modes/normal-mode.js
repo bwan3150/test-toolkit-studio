@@ -12,6 +12,7 @@ const NormalMode = {
     const screenContent = document.getElementById('screenContent');
     const screenshotSelector = document.getElementById('screenshotSelector');
     const coordinateMarker = document.getElementById('coordinateMarker');
+    const deviceScreenshot = document.getElementById('deviceScreenshot');
 
     // 移除所有模式类
     if (screenContent) {
@@ -25,6 +26,11 @@ const NormalMode = {
 
     if (coordinateMarker) {
       coordinateMarker.style.display = 'none';
+    }
+
+    // 隐藏静态截图
+    if (deviceScreenshot) {
+      deviceScreenshot.style.display = 'none';
     }
 
     // 移除 XML overlay
@@ -43,49 +49,97 @@ const NormalMode = {
       window.ScreenState.setXmlOverlayEnabled(false);
     }
 
-    // 尝试启动视频流（如果设备已连接）
-    await this.tryActivateVideoStream();
+    // 显示视频流 Canvas（如果视频流已激活）
+    this._showVideoStreamCanvas();
+
+    // 如果视频流未激活，尝试启动
+    if (!window.VideoStreamStateManager || !window.VideoStreamStateManager.isVideoStreamActive()) {
+      await this._tryActivateVideoStream();
+    }
   },
 
   /**
-   * 尝试激活视频流
+   * 显示视频流 Canvas
    */
-  async tryActivateVideoStream() {
+  _showVideoStreamCanvas() {
+    if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.videoCanvas) {
+      const canvas = window.ScrcpyVideoStream.videoCanvas;
+      const wrapper = window.ScrcpyVideoStream.videoWrapper;
+
+      // 显示 Canvas 和容器
+      if (wrapper) {
+        wrapper.style.display = 'flex';
+      }
+      canvas.style.display = 'block';
+      canvas.style.opacity = '1';
+
+      // 强制重新计算布局，修复视频模糊问题
+      // 触发重绘以确保 Canvas 正常渲染
+      canvas.style.transform = 'translateZ(0)';
+
+      // 请求下一帧重绘（确保渲染管线正常工作）
+      requestAnimationFrame(() => {
+        if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.decoder) {
+          // 解码器会持续更新 Canvas，无需手动干预
+          window.rLog('✅ 视频流 Canvas 已显示并触发重绘');
+        }
+      });
+
+      window.rLog('✅ 视频流 Canvas 已显示');
+    }
+  },
+
+  /**
+   * 隐藏视频流 Canvas
+   */
+  _hideVideoStreamCanvas() {
+    if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.videoCanvas) {
+      const canvas = window.ScrcpyVideoStream.videoCanvas;
+      const wrapper = window.ScrcpyVideoStream.videoWrapper;
+
+      // 隐藏 Canvas 和容器
+      canvas.style.display = 'none';
+      canvas.style.opacity = '0';
+      if (wrapper) {
+        wrapper.style.display = 'none';
+      }
+
+      window.rLog('✅ 视频流 Canvas 已隐藏');
+    }
+  },
+
+  /**
+   * 尝试激活视频流（通过统一管理器）
+   */
+  async _tryActivateVideoStream() {
     try {
       // 检查设备是否已连接
       const deviceSelect = document.getElementById('deviceSelect');
       if (!deviceSelect || !deviceSelect.value) {
         window.rLog('💡 未选择设备，显示连接设备提示');
-        // 保持显示"连接设备"提示
+
+        // 显示连接设备提示（只在 normal 模式下）
+        if (window.ScreenPrompt && window.ScreenPrompt.showConnectDevicePrompt) {
+          window.ScreenPrompt.showConnectDevicePrompt();
+        }
+
         return;
       }
 
       const deviceId = deviceSelect.value;
 
-      // 检查 ScrcpyVideoStream 是否可用
-      if (!window.ScrcpyVideoStream) {
-        window.rError('❌ ScrcpyVideoStream 模块未加载');
-        return;
-      }
+      // 通过统一管理器启动视频流
+      if (window.VideoStreamStateManager) {
+        const success = await window.VideoStreamStateManager.startVideoStream(deviceId);
 
-      // 激活视频流
-      window.rLog('🚀 尝试激活视频流，设备:', deviceId);
-      const success = await window.ScrcpyVideoStream.activate(deviceId);
-
-      if (success) {
-        window.rLog('✅ 视频流已成功激活');
-
-        // 移除提示（如果有）
-        if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
-          window.ScreenPrompt.removePrompt();
-        }
-
-        // 解锁滑块
-        if (window.ModeSlider && window.ModeSlider.unlockSlider) {
-          window.ModeSlider.unlockSlider();
+        if (!success) {
+          // 显示获取屏幕提示（只在 normal 模式下）
+          if (window.ScreenPrompt && window.ScreenPrompt.showCaptureScreenPrompt) {
+            window.ScreenPrompt.showCaptureScreenPrompt();
+          }
         }
       } else {
-        window.rError('❌ 视频流激活失败');
+        window.rError('❌ VideoStreamStateManager 模块未加载');
       }
 
     } catch (error) {
@@ -94,27 +148,17 @@ const NormalMode = {
   },
 
   /**
-   * 停用普通模式
+   * 停用普通模式（不停止视频流，只隐藏 Canvas）
    */
   async deactivate() {
-    window.rLog('📱 停用普通屏幕模式（视频流模式）');
+    window.rLog('📱 停用普通屏幕模式（隐藏视频流，但不停止）');
 
-    // 停用视频流
-    if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
-      await window.ScrcpyVideoStream.deactivate();
-    }
+    // 只隐藏视频流 Canvas，不停止视频流
+    this._hideVideoStreamCanvas();
 
-    // 锁定滑块并归位到 normal 模式
-    if (window.ModeSlider) {
-      if (window.ModeSlider.lockSlider) {
-        window.ModeSlider.lockSlider();
-        window.rLog('🔒 视频流已停止，滑块已锁定');
-      }
-
-      // 归位到 normal 模式
-      if (window.ModeSlider.setMode) {
-        window.ModeSlider.setMode('normal');
-      }
+    // 移除提示
+    if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
+      window.ScreenPrompt.removePrompt();
     }
   }
 };

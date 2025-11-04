@@ -736,8 +736,15 @@ const ScrcpyVideoStream = {
         throw new Error('ipcRenderer 不可用');
       }
 
+      // 获取当前项目路径
+      const projectPath = window.AppGlobals?.currentProject;
+      if (!projectPath) {
+        throw new Error('未设置项目路径');
+      }
+
       const result = await ipcRenderer.invoke('save-screenshot-from-stream', {
-        imageBuffer: buffer
+        imageBuffer: buffer,
+        projectPath: projectPath
       });
 
       if (result.success) {

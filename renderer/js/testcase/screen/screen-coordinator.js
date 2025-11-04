@@ -74,11 +74,17 @@ const ScreenCoordinator = {
   },
 
   /**
-   * 检查设备状态并显示相应提示
+   * 检查设备状态并显示相应提示（只在 normal 模式下显示提示）
    */
   async checkDeviceStatusAndPrompt() {
     const deviceSelect = document.getElementById('deviceSelect');
-    const deviceImage = document.getElementById('deviceScreenshot');
+
+    // 只在 normal 模式下检查和显示提示
+    if (this.currentMode !== 'normal') {
+      // 非 normal 模式，移除所有提示
+      window.ScreenPrompt.removePrompt();
+      return;
+    }
 
     // 情况1: 没有选择设备
     if (!deviceSelect?.value) {
@@ -88,18 +94,18 @@ const ScreenCoordinator = {
       return;
     }
 
-    // 情况2: 已选择设备，但没有截图
-    if (!deviceImage || !deviceImage.complete || deviceImage.naturalWidth === 0 || deviceImage.style.display === 'none') {
-      window.rLog('📷 设备已连接但无屏幕数据，显示获取屏幕提示');
+    // 情况2: 已选择设备，检查视频流状态
+    if (window.VideoStreamStateManager && window.VideoStreamStateManager.isVideoStreamActive()) {
+      // 视频流已激活，解锁滑块，移除提示
+      window.rLog('✅ 视频流已激活，解锁滑块');
+      window.ScreenPrompt.removePrompt();
+      window.ModeSlider.unlockSlider();
+    } else {
+      // 视频流未激活，显示获取屏幕提示，锁定滑块
+      window.rLog('📷 设备已连接但视频流未激活，显示获取屏幕提示');
       window.ModeSlider.lockSlider();
       window.ScreenPrompt.showCaptureScreenPrompt();
-      return;
     }
-
-    // 情况3: 已有截图，解锁滑块
-    window.rLog('✅ 设备已连接且有屏幕数据，解锁滑块');
-    window.ScreenPrompt.removePrompt();
-    window.ModeSlider.unlockSlider();
   },
 
   /**
@@ -133,17 +139,22 @@ const ScreenCoordinator = {
     const previousMode = this.currentMode;
     this.currentMode = modeName;
 
-    // 3. 准备模式切换所需的数据（截图和/或 XML）
-    await this._prepareDataForMode(previousMode, modeName);
-
-    // 4. 更新滑块UI
+    // 3. 立即更新滑块UI，确保同步
     const uiMode = modeName === 'screenshot' ? 'crop' : modeName;
     window.ModeSlider.updateSliderPosition(uiMode);
+    window.rLog(`🎯 滑块已更新到: ${uiMode}`);
+
+    // 4. 准备模式切换所需的数据（截图和/或 XML）
+    await this._prepareDataForMode(previousMode, modeName);
 
     // 5. 激活新模式
     try {
       await this._activateMode(modeName);
       window.rLog(`✅ 模式切换成功: ${previousMode} → ${modeName}`);
+
+      // 切换成功后，检查并显示提示（只在 normal 模式下）
+      await this.checkDeviceStatusAndPrompt();
+
     } catch (error) {
       window.rError(`❌ 激活模式 ${modeName} 失败:`, error);
       // 切换失败,回退到 normal 模式
@@ -173,8 +184,18 @@ const ScreenCoordinator = {
 
         // 1. 捕获视频帧
         if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
-          await window.ScrcpyVideoStream.captureLatestFrame();
+          const result = await window.ScrcpyVideoStream.captureLatestFrame();
           window.rLog('✅ 视频帧已捕获');
+
+          // 立即加载并显示截图
+          if (result && result.success && result.path) {
+            const deviceScreenshot = document.getElementById('deviceScreenshot');
+            if (deviceScreenshot) {
+              deviceScreenshot.src = `file://${result.path}?t=${Date.now()}`;
+              deviceScreenshot.style.display = 'block';
+              window.rLog('✅ 截图已加载并显示');
+            }
+          }
         } else {
           window.rWarn('⚠️ 视频流未激活，无法捕获视频帧');
         }
@@ -183,21 +204,20 @@ const ScreenCoordinator = {
         const deviceSelect = document.getElementById('deviceSelect');
         if (deviceSelect?.value) {
           const deviceId = deviceSelect.value;
+          const projectPath = window.AppGlobals?.currentProject;
           const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
 
-          if (ipcRenderer) {
+          if (ipcRenderer && projectPath) {
             window.rLog('📄 获取设备 UI XML...');
-            const result = await ipcRenderer.invoke('execute-tke-command', {
-              command: 'controller',
-              args: ['capture-xml'],
-              deviceId: deviceId
-            });
+            const result = await ipcRenderer.invoke('tke-controller-capture-xml', deviceId, projectPath);
 
             if (result.success) {
               window.rLog('✅ UI XML 已获取');
             } else {
               window.rError('❌ 获取 UI XML 失败:', result.error);
             }
+          } else {
+            window.rWarn('⚠️ ipcRenderer 或项目路径不可用，跳过获取 XML');
           }
         }
       }
@@ -208,8 +228,18 @@ const ScreenCoordinator = {
         window.rLog('📸 从 normal 切换到 screenshot/coordinate：仅捕获视频帧');
 
         if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
-          await window.ScrcpyVideoStream.captureLatestFrame();
+          const result = await window.ScrcpyVideoStream.captureLatestFrame();
           window.rLog('✅ 视频帧已捕获');
+
+          // 立即加载并显示截图
+          if (result && result.success && result.path) {
+            const deviceScreenshot = document.getElementById('deviceScreenshot');
+            if (deviceScreenshot) {
+              deviceScreenshot.src = `file://${result.path}?t=${Date.now()}`;
+              deviceScreenshot.style.display = 'block';
+              window.rLog('✅ 截图已加载并显示');
+            }
+          }
         } else {
           window.rWarn('⚠️ 视频流未激活，无法捕获视频帧');
         }
@@ -223,21 +253,20 @@ const ScreenCoordinator = {
         const deviceSelect = document.getElementById('deviceSelect');
         if (deviceSelect?.value) {
           const deviceId = deviceSelect.value;
+          const projectPath = window.AppGlobals?.currentProject;
           const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
 
-          if (ipcRenderer) {
+          if (ipcRenderer && projectPath) {
             window.rLog('📄 获取设备 UI XML...');
-            const result = await ipcRenderer.invoke('execute-tke-command', {
-              command: 'controller',
-              args: ['capture-xml'],
-              deviceId: deviceId
-            });
+            const result = await ipcRenderer.invoke('tke-controller-capture-xml', deviceId, projectPath);
 
             if (result.success) {
               window.rLog('✅ UI XML 已获取');
             } else {
               window.rError('❌ 获取 UI XML 失败:', result.error);
             }
+          } else {
+            window.rWarn('⚠️ ipcRenderer 或项目路径不可用，跳过获取 XML');
           }
         }
       }
