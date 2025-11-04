@@ -26,7 +26,11 @@ async fn main() {
 
     let adb_path = env::var("ADB_PATH").ok();
 
+    // 获取编译时注入的版本号
+    let version = env!("BUILD_VERSION");
+
     info!("scrcpy-server 启动中...");
+    info!("版本: {}", version);
     info!("监听端口: {}", port);
     if let Some(ref path) = adb_path {
         info!("使用 ADB 路径: {}", path);

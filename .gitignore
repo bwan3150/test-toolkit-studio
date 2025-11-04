@@ -9,8 +9,6 @@ scrcpy-server/target/
 resources/darwin/
 resources/win32/
 resources/linux/
-resources/public/nodejs/
-resources/public/ws-scrcpy/node_modules/
 
 # TKS Language Support (VSCode 扩展)
 tks-language-support/node_modules/
@@ -67,7 +65,6 @@ pids
 .env.production.local
 
 # 测试项目
-test-projects/
 projects/
 tester-ai/examples/
 
@@ -77,20 +74,3 @@ local/
 # Electron
 electron-builder.yml
 
-# Android / Gradle (autoserver-android)
-# Android / Gradle (autoserver-android)
-autoserver-android/.gradle/
-autoserver-android/.idea/
-autoserver-android/.cxx/
-autoserver-android/.externalNativeBuild/
-autoserver-android/captures/
-autoserver-android/local.properties
-autoserver-android/*.iml
-autoserver-android/*.apk
-autoserver-android/*.dex
-autoserver-android/*.class
-autoserver-android/.DS_Store
-
-# Build folder
-autoserver-android/build/*
-!autoserver-android/build/.gitkeep

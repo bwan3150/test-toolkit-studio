@@ -33,12 +33,12 @@ echo ""
 echo ">>> [5/6] Building AI Tester (Rust)..."
 ./tester-ai/build-mac.sh
 
-# 6. 构建手机端流传输和控制服务器 
+# 6. 构建 Rust 项目：scrcpy-server
 echo ""
-echo ">>> [6/6] Scrcpy WebSocket (TypeScript)..."
-echo "NOT AVAILIBLE RIGHT NOW"
+echo ">>> [6/6] Building Scrcpy Server (Rust)..."
+./scrcpy-server/build-mac.sh
 
-# 6. 构建 Electron 应用（macOS）
+# 7. 构建 Electron 应用（macOS）
 echo ""
 echo ">>> Building Electron app for macOS..."
 # 使用 unsigned 版本，本地开发无需签名
