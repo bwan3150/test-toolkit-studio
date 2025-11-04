@@ -1,5 +1,5 @@
 // Proxy-ADB 处理模块
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, anyhow};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{WebSocketStream, connect_async};
 use tungstenite::Message;
@@ -45,21 +45,42 @@ pub async fn handle_proxy_adb(
 
     // 3. 连接到本地转发端口（WebSocket 客户端）
     // 注意：scrcpy-server 内置了 WebSocket 服务器
+    // 需要重试，因为 scrcpy-server 启动需要时间
     let ws_url = format!("ws://127.0.0.1:{}", local_port);
     info!("连接到 scrcpy-server WebSocket: {}", ws_url);
 
-    let (remote_ws, _) = match connect_async(&ws_url).await {
-        Ok(result) => {
-            info!("✅ 成功连接到 scrcpy-server WebSocket");
-            result
+    // 先等待一段时间，让 scrcpy-server 完全启动
+    info!("等待 scrcpy-server WebSocket 就绪...");
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    let mut remote_ws = None;
+    let max_retries = 10;
+    let retry_interval = tokio::time::Duration::from_millis(1000);
+
+    for attempt in 1..=max_retries {
+        info!("尝试连接 scrcpy-server WebSocket（第 {} 次）...", attempt);
+
+        match connect_async(&ws_url).await {
+            Ok(result) => {
+                info!("✅ 成功连接到 scrcpy-server WebSocket");
+                remote_ws = Some(result.0);
+                break;
+            }
+            Err(e) => {
+                if attempt < max_retries {
+                    info!("连接失败: {}，{}ms 后重试...", e, retry_interval.as_millis());
+                    tokio::time::sleep(retry_interval).await;
+                } else {
+                    error!("连接到 scrcpy-server WebSocket 失败（已重试 {} 次）: {}", max_retries, e);
+                    // 清理 forward
+                    let _ = adb_utils.remove_forward(udid, local_port).await;
+                    return Err(e.into());
+                }
+            }
         }
-        Err(e) => {
-            error!("连接到 scrcpy-server WebSocket 失败: {}", e);
-            // 清理 forward
-            let _ = adb_utils.remove_forward(udid, local_port).await;
-            return Err(e.into());
-        }
-    };
+    }
+
+    let remote_ws = remote_ws.ok_or_else(|| anyhow!("无法连接到 scrcpy-server WebSocket"))?;
 
     // 4. 双向转发数据（WebSocket 到 WebSocket）
     let result = bidirectional_forward_ws(ws_stream, remote_ws).await;

@@ -102,8 +102,28 @@ async function startScrcpyServer(port = 8000, adbPath = null) {
         console.log('使用 tke adb 路径:', adbPath);
       }
 
+      // 获取环境信息
+      const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+
       console.log(`启动 scrcpy-server，端口: ${port}`);
       console.log('二进制文件:', serverBin);
+      console.log('process.resourcesPath:', process.resourcesPath);
+      console.log('__dirname:', __dirname);
+      console.log('isDev:', isDev);
+
+      // 检查 jar 文件是否存在
+      const path = require('path');
+      const jarPath = path.join(path.dirname(serverBin), 'scrcpy-server.jar');
+      console.log('预期的 jar 文件路径:', jarPath);
+      console.log('jar 文件存在:', fs.existsSync(jarPath));
+
+      // 列出二进制文件所在目录的所有文件
+      const serverDir = path.dirname(serverBin);
+      console.log('scrcpy-server 目录:', serverDir);
+      if (fs.existsSync(serverDir)) {
+        const files = fs.readdirSync(serverDir);
+        console.log('目录中的文件:', files);
+      }
 
       // 启动 Rust 二进制
       scrcpyServerProcess = spawn(serverBin, [], {

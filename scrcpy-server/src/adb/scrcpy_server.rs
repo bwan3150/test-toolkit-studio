@@ -52,19 +52,32 @@ impl ScrcpyServer {
         // 获取可执行文件所在目录
         let exe_path = std::env::current_exe()
             .context("无法获取可执行文件路径")?;
+        info!("📁 可执行文件路径: {}", exe_path.display());
+
         let exe_dir = exe_path.parent()
             .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?;
+        info!("📁 可执行文件目录: {}", exe_dir.display());
 
         // scrcpy-server.jar 直接放在可执行文件旁边
         let jar_path = exe_dir.join("scrcpy-server.jar");
+        info!("🔍 查找 jar 文件: {}", jar_path.display());
 
         if !jar_path.exists() {
+            // 列出目录下的所有文件，帮助调试
+            if let Ok(entries) = std::fs::read_dir(exe_dir) {
+                info!("📂 可执行文件目录下的文件:");
+                for entry in entries.flatten() {
+                    info!("  - {}", entry.path().display());
+                }
+            }
+
             return Err(anyhow!(
                 "scrcpy-server.jar 不存在: {}，请确保将 scrcpy-server.jar 放在可执行文件旁边",
                 jar_path.display()
             ));
         }
 
+        info!("✅ 找到 jar 文件: {}", jar_path.display());
         Ok(jar_path)
     }
 
@@ -122,11 +135,15 @@ impl ScrcpyServer {
 
     /// 将 scrcpy-server.jar 推送到手机
     async fn push_server(&self, udid: &str) -> Result<()> {
+        info!("开始获取 jar 文件路径...");
         let jar_path = Self::get_server_jar_path()?;
         let remote_path = format!("{}{}", TEMP_PATH, FILE_NAME);
 
-        info!("推送 scrcpy-server.jar 到设备: {} -> {}",
-              jar_path.display(), remote_path);
+        info!("📤 推送 scrcpy-server.jar 到设备");
+        info!("  本地路径: {}", jar_path.display());
+        info!("  远程路径: {}", remote_path);
+        info!("  设备 UDID: {}", udid);
+        info!("  ADB 路径: {}", self.adb_path);
 
         let args = self.build_adb_args(&[
             "-s", udid,
@@ -134,6 +151,9 @@ impl ScrcpyServer {
             jar_path.to_str().unwrap(),
             &remote_path
         ]);
+
+        info!("📝 执行命令: {} {:?}", self.adb_path, args);
+
         let output = Command::new(&self.adb_path)
             .args(&args)
             .stdout(Stdio::piped())
@@ -142,8 +162,15 @@ impl ScrcpyServer {
             .await
             .context("执行 adb push 失败")?;
 
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        info!("📄 命令输出 stdout: {}", stdout.trim());
+        if !stderr.is_empty() {
+            info!("📄 命令输出 stderr: {}", stderr.trim());
+        }
+
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(anyhow!("推送 scrcpy-server.jar 失败: {}", stderr));
         }
 
@@ -174,9 +201,13 @@ impl ScrcpyServer {
             args
         );
 
-        info!("启动 scrcpy-server: {}", run_command);
+        info!("🚀 启动 scrcpy-server");
+        info!("  命令: {}", run_command);
+        info!("  设备 UDID: {}", udid);
 
         let args = self.build_adb_args(&["-s", udid, "shell", &run_command]);
+        info!("📝 执行命令: {} {:?}", self.adb_path, args);
+
         let output = Command::new(&self.adb_path)
             .args(&args)
             .stdout(Stdio::piped())
@@ -185,12 +216,18 @@ impl ScrcpyServer {
             .await
             .context("执行启动命令失败")?;
 
-        // 注意：由于使用了 nohup 和 &，命令会立即返回
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        info!("📄 启动命令输出 stdout: {}", stdout.trim());
+        if !stderr.is_empty() {
+            info!("📄 启动命令输出 stderr: {}", stderr.trim());
+        }
+
+        // 注意：由于使用了 & 后台运行，命令会立即返回
         // 检查输出以便调试
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            info!("启动命令返回非零状态（可能正常）: stdout={}, stderr={}", stdout, stderr);
+            info!("⚠️ 启动命令返回非零状态（可能正常）");
         }
 
         info!("✅ scrcpy-server 启动命令已执行");
