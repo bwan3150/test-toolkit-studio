@@ -338,11 +338,20 @@ const ScreenCoordinator = {
    * @param {boolean} isRunning - 是否正在运行测试
    */
   setTestRunning(isRunning) {
-    window.ModeSlider.setTestRunning(isRunning);
-
-    // 如果测试开始,强制切换到纯屏幕模式
-    if (isRunning && this.currentMode !== 'normal') {
-      this.switchTo('normal');
+    if (isRunning) {
+      // 测试开始：锁定滑块
+      window.rLog('🔒 测试运行中，锁定模式滑块');
+      if (window.ModeSlider) {
+        window.ModeSlider.setTestRunning(true);
+        window.ModeSlider.lockSlider();
+      }
+    } else {
+      // 测试结束：解锁滑块
+      window.rLog('🔓 测试结束，解锁模式滑块');
+      if (window.ModeSlider) {
+        window.ModeSlider.setTestRunning(false);
+        window.ModeSlider.unlockSlider();
+      }
     }
   },
 

@@ -125,10 +125,24 @@ class ScriptRunner {
         // 输出脚本开始执行
         window.ExecutionOutput?.scriptStart();
 
-        // 设置测试运行状态并锁定滑块到 normal 模式
-        if (window.ModeSlider) {
-            window.ModeSlider.setTestRunning(true);
-            window.ModeSlider.lockSlider();
+        // 切换到 normal 模式并启动视频流
+        if (window.ScreenCoordinator) {
+            const currentMode = window.ScreenCoordinator.getCurrentMode();
+            if (currentMode !== 'normal') {
+                window.rLog('🔄 测试开始，切换到 normal 模式');
+                await window.ScreenCoordinator.switchTo('normal');
+            }
+        }
+
+        // 启动视频流（如果尚未启动）
+        if (window.VideoStreamStateManager && !window.VideoStreamStateManager.isVideoStreamActive()) {
+            window.rLog('🚀 测试开始，启动视频流');
+            await window.VideoStreamStateManager.startVideoStream(deviceId);
+        }
+
+        // 设置测试运行状态并锁定滑块
+        if (window.ScreenCoordinator) {
+            window.ScreenCoordinator.setTestRunning(true);
         }
 
         // 锁定编辑器并更新状态栏
@@ -238,9 +252,8 @@ class ScriptRunner {
 
         } finally {
             // 清除测试运行状态并解锁滑块
-            if (window.ModeSlider) {
-                window.ModeSlider.setTestRunning(false);
-                window.ModeSlider.unlockSlider();
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.setTestRunning(false);
             }
 
             // 解锁编辑器并恢复状态栏
@@ -265,8 +278,8 @@ class ScriptRunner {
             this.shouldStop = true;
 
             // 清除测试运行状态
-            if (window.ModeSlider) {
-                window.ModeSlider.setTestRunning(false);
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.setTestRunning(false);
             }
 
             // 立即解锁编辑器并恢复状态栏
