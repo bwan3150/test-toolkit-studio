@@ -55,20 +55,34 @@ impl Controller {
     // 指令1: 获取设备截图和XML并保存到项目目录
     pub async fn capture_ui_state(&self, project_path: &PathBuf) -> Result<()> {
         let workarea = project_path.join("workarea");
-        
+
         // 确保workarea目录存在
         std::fs::create_dir_all(&workarea)
             .map_err(|e| TkeError::IoError(e))?;
-        
+
         // 获取截图
         self.capture_screenshot(&workarea.join("current_screenshot.png")).await?;
-        
+
         // 获取UI树
         self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
 
         Ok(())
     }
-    
+
+    // 仅获取UI XML并保存到项目目录 (不截图)
+    pub async fn capture_xml_only(&self, project_path: &PathBuf) -> Result<()> {
+        let workarea = project_path.join("workarea");
+
+        // 确保workarea目录存在
+        std::fs::create_dir_all(&workarea)
+            .map_err(|e| TkeError::IoError(e))?;
+
+        // 只获取UI树
+        self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
+
+        Ok(())
+    }
+
     // 获取截图
     async fn capture_screenshot(&self, output_path: &PathBuf) -> Result<()> {
         let temp_path = "/sdcard/screenshot.png";
