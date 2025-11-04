@@ -229,14 +229,14 @@ jobs:
           cp target/release/tke-scrcpy ../resources/darwin/scrcpy-server/tke-scrcpy
           chmod +x ../resources/darwin/scrcpy-server/tke-scrcpy
 
-          # 复制 vendor 目录（包含 scrcpy-server.jar）
-          cp -r vendor ../resources/darwin/scrcpy-server/
+          # 直接复制 scrcpy-server.jar 到二进制文件旁边
+          cp vendor/Genymobile/scrcpy/scrcpy-server.jar ../resources/darwin/scrcpy-server/scrcpy-server.jar
 
           echo "✅ scrcpy-server 构建完成"
           ls -lh ../resources/darwin/scrcpy-server/tke-scrcpy
 
-          # 验证 vendor 文件
-          SCRCPY_JAR="../resources/darwin/scrcpy-server/vendor/Genymobile/scrcpy/scrcpy-server.jar"
+          # 验证 jar 文件
+          SCRCPY_JAR="../resources/darwin/scrcpy-server/scrcpy-server.jar"
           if [ -f "$SCRCPY_JAR" ]; then
             echo "scrcpy-server.jar: $(du -h "$SCRCPY_JAR" | cut -f1)"
           else
@@ -263,7 +263,7 @@ jobs:
           resources/darwin/scrcpy-server/tke-scrcpy --version || resources/darwin/scrcpy-server/tke-scrcpy --help
 
           echo "📦 scrcpy-server.jar:"
-          ls -lh resources/darwin/scrcpy-server/vendor/Genymobile/scrcpy/scrcpy-server.jar
+          ls -lh resources/darwin/scrcpy-server/scrcpy-server.jar
 
           echo "✅ 所有二进制文件验证完成"
 
@@ -524,16 +524,16 @@ jobs:
           REM 复制二进制文件
           copy /Y "target\release\tke-scrcpy.exe" "..\resources\win32\scrcpy-server\tke-scrcpy.exe"
 
-          REM 复制 vendor 目录（包含 scrcpy-server.jar）
-          xcopy /E /I /Y "vendor" "..\resources\win32\scrcpy-server\vendor"
+          REM 直接复制 scrcpy-server.jar 到二进制文件旁边
+          copy /Y "vendor\Genymobile\scrcpy\scrcpy-server.jar" "..\resources\win32\scrcpy-server\scrcpy-server.jar"
 
           echo ✅ scrcpy-server 构建完成
           dir "..\resources\win32\scrcpy-server\tke-scrcpy.exe"
 
-          REM 验证 vendor 文件
-          if exist "..\resources\win32\scrcpy-server\vendor\Genymobile\scrcpy\scrcpy-server.jar" (
+          REM 验证 jar 文件
+          if exist "..\resources\win32\scrcpy-server\scrcpy-server.jar" (
             echo scrcpy-server.jar 已复制
-            dir "..\resources\win32\scrcpy-server\vendor\Genymobile\scrcpy\scrcpy-server.jar"
+            dir "..\resources\win32\scrcpy-server\scrcpy-server.jar"
           ) else (
             echo ❌ scrcpy-server.jar 未找到
             exit /b 1
@@ -565,7 +565,7 @@ jobs:
           )
 
           echo 📦 scrcpy-server.jar:
-          dir resources\win32\scrcpy-server\vendor\Genymobile\scrcpy\scrcpy-server.jar
+          dir resources\win32\scrcpy-server\scrcpy-server.jar
 
           echo ✅ 所有二进制文件验证完成
 

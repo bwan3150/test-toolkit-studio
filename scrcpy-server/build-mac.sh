@@ -74,9 +74,9 @@ mkdir -p "$TARGET_DIR"
 # 复制二进制文件
 cp "$SOURCE_BINARY" "$TARGET_BINARY"
 
-# 复制 vendor 目录（包含 scrcpy-server.jar）
-echo "Copying vendor directory..."
-cp -r "$SCRIPT_DIR/vendor" "$TARGET_DIR/"
+# 直接复制 scrcpy-server.jar 到二进制文件旁边
+echo "Copying scrcpy-server.jar..."
+cp "$SCRIPT_DIR/vendor/Genymobile/scrcpy/scrcpy-server.jar" "$TARGET_DIR/scrcpy-server.jar"
 
 # 给二进制文件添加执行权限（Linux/macOS）
 if [[ "$OS" != MINGW* && "$OS" != MSYS* && "$OS" != CYGWIN* ]]; then
@@ -88,8 +88,8 @@ echo "Cp to: $TARGET_BINARY"
 echo "Size: $(du -h "$TARGET_BINARY" | cut -f1)"
 echo "Vendor: $TARGET_DIR/vendor/"
 
-# 验证 vendor 文件
-SCRCPY_JAR="$TARGET_DIR/vendor/Genymobile/scrcpy/scrcpy-server.jar"
+# 验证 jar 文件
+SCRCPY_JAR="$TARGET_DIR/scrcpy-server.jar"
 if [ -f "$SCRCPY_JAR" ]; then
     echo "scrcpy-server.jar: $(du -h "$SCRCPY_JAR" | cut -f1)"
 else

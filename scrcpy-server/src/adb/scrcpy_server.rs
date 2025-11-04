@@ -55,12 +55,12 @@ impl ScrcpyServer {
         let exe_dir = exe_path.parent()
             .ok_or_else(|| anyhow!("无法获取可执行文件目录"))?;
 
-        // scrcpy-server.jar 应该在 exe 同级的 vendor 目录下
-        let jar_path = exe_dir.join("vendor/Genymobile/scrcpy/scrcpy-server.jar");
+        // scrcpy-server.jar 直接放在可执行文件旁边
+        let jar_path = exe_dir.join("scrcpy-server.jar");
 
         if !jar_path.exists() {
             return Err(anyhow!(
-                "scrcpy-server.jar 不存在: {}，请确保将 vendor 目录放在可执行文件旁边",
+                "scrcpy-server.jar 不存在: {}，请确保将 scrcpy-server.jar 放在可执行文件旁边",
                 jar_path.display()
             ));
         }
