@@ -1,10 +1,9 @@
 // Proxy-ADB 处理模块
 use anyhow::{Result, Context};
 use tokio::net::TcpStream;
-use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::{WebSocketStream, connect_async};
 use tungstenite::Message;
 use futures_util::{StreamExt, SinkExt};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{info, error, debug};
 
 use crate::adb::{AdbUtils, ScrcpyServer};
@@ -23,12 +22,18 @@ pub async fn handle_proxy_adb(
     let adb_path = adb_utils.get_adb_path();
     let scrcpy_server = ScrcpyServer::new(adb_path.to_string());
 
-    // 1. 确保 scrcpy-server 在手机上运行
-    info!("确保 scrcpy-server 在设备上运行...");
-    scrcpy_server
-        .ensure_server_running(udid)
-        .await
-        .context("启动 scrcpy-server 失败")?;
+    // 1. 先停止旧的 scrcpy-server（如果存在）
+    // 因为 scrcpy-server 每次只能处理一个连接，旧连接可能已死但进程还在
+    info!("停止旧的 scrcpy-server（如果存在）...");
+    let _ = scrcpy_server.stop_server(udid).await; // 忽略错误
+
+    // 2. 重新启动 scrcpy-server
+    info!("重新启动 scrcpy-server...");
+    if let Err(e) = scrcpy_server.ensure_server_running(udid).await {
+        error!("❌ 启动 scrcpy-server 失败: {}", e);
+        return Err(e).context("启动 scrcpy-server 失败");
+    }
+    info!("✅ scrcpy-server 已成功启动并就绪");
 
     // 2. 建立 ADB forward
     let local_port = adb_utils
@@ -38,23 +43,26 @@ pub async fn handle_proxy_adb(
 
     info!("ADB forward 建立成功，本地端口: {}", local_port);
 
-    // 3. 连接到本地转发端口
-    let tcp_addr = format!("127.0.0.1:{}", local_port);
-    let tcp_stream = match TcpStream::connect(&tcp_addr).await {
-        Ok(stream) => {
-            info!("成功连接到本地端口: {}", local_port);
-            stream
+    // 3. 连接到本地转发端口（WebSocket 客户端）
+    // 注意：scrcpy-server 内置了 WebSocket 服务器
+    let ws_url = format!("ws://127.0.0.1:{}", local_port);
+    info!("连接到 scrcpy-server WebSocket: {}", ws_url);
+
+    let (remote_ws, _) = match connect_async(&ws_url).await {
+        Ok(result) => {
+            info!("✅ 成功连接到 scrcpy-server WebSocket");
+            result
         }
         Err(e) => {
-            error!("连接到本地端口 {} 失败: {}", local_port, e);
+            error!("连接到 scrcpy-server WebSocket 失败: {}", e);
             // 清理 forward
             let _ = adb_utils.remove_forward(udid, local_port).await;
             return Err(e.into());
         }
     };
 
-    // 4. 双向转发数据
-    let result = bidirectional_forward(ws_stream, tcp_stream).await;
+    // 4. 双向转发数据（WebSocket 到 WebSocket）
+    let result = bidirectional_forward_ws(ws_stream, remote_ws).await;
 
     // 5. 清理：不移除 forward（因为可能有其他连接在使用）
     // 在实际应用中，ws-scrcpy 也不会立即清理 forward
@@ -63,90 +71,80 @@ pub async fn handle_proxy_adb(
     result
 }
 
-/// 在 WebSocket 和 TCP 之间双向转发数据
-async fn bidirectional_forward(
-    ws_stream: WebSocketStream<TcpStream>,
-    tcp_stream: TcpStream,
+/// 在两个 WebSocket 之间双向转发数据
+async fn bidirectional_forward_ws(
+    client_ws: WebSocketStream<TcpStream>,
+    remote_ws: WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>,
 ) -> Result<()> {
-    // 分离 WebSocket 的读写
-    let (ws_write, mut ws_read) = ws_stream.split();
-    let ws_write = std::sync::Arc::new(tokio::sync::Mutex::new(ws_write));
+    // 分离客户端 WebSocket
+    let (client_write, mut client_read) = client_ws.split();
+    let client_write = std::sync::Arc::new(tokio::sync::Mutex::new(client_write));
 
-    // 分离 TCP 的读写
-    let (mut tcp_read, mut tcp_write) = tcp_stream.into_split();
+    // 分离远程 WebSocket (scrcpy-server)
+    let (remote_write, mut remote_read) = remote_ws.split();
+    let remote_write = std::sync::Arc::new(tokio::sync::Mutex::new(remote_write));
 
-    // 创建两个任务：
-    // 1. WebSocket -> TCP (控制消息)
-    // 2. TCP -> WebSocket (视频流)
-
-    let ws_write_clone = ws_write.clone();
-    let ws_to_tcp = async move {
-        while let Some(msg) = ws_read.next().await {
+    // 任务 1: 客户端 -> scrcpy-server (控制消息)
+    let remote_write_clone = remote_write.clone();
+    let client_to_remote = async move {
+        let mut msg_count = 0;
+        while let Some(msg) = client_read.next().await {
             match msg {
-                Ok(Message::Binary(data)) => {
-                    debug!("WebSocket -> TCP: {} 字节", data.len());
-                    if let Err(e) = tcp_write.write_all(&data).await {
-                        error!("写入 TCP 失败: {}", e);
-                        break;
+                Ok(msg) => {
+                    msg_count += 1;
+                    if msg_count <= 3 {
+                        info!("客户端 -> scrcpy-server [消息 {}]: {:?}", msg_count, msg);
                     }
-                }
-                Ok(Message::Close(_)) => {
-                    debug!("WebSocket 关闭");
-                    break;
-                }
-                Ok(Message::Ping(data)) => {
-                    debug!("收到 Ping");
-                    let mut writer = ws_write_clone.lock().await;
-                    if let Err(e) = writer.send(Message::Pong(data)).await {
-                        error!("发送 Pong 失败: {}", e);
-                        break;
-                    }
-                }
-                Ok(_) => {
-                    // 忽略其他类型消息（Text, Pong 等）
-                }
-                Err(e) => {
-                    error!("WebSocket 读取错误: {}", e);
-                    break;
-                }
-            }
-        }
-        info!("WebSocket -> TCP 转发结束");
-    };
-
-    let tcp_to_ws = async move {
-        let mut buffer = vec![0u8; 65536]; // 64KB 缓冲区
-        loop {
-            match tcp_read.read(&mut buffer).await {
-                Ok(0) => {
-                    debug!("TCP 连接关闭");
-                    break;
-                }
-                Ok(n) => {
-                    debug!("TCP -> WebSocket: {} 字节", n);
-                    let data = &buffer[..n];
-                    let mut writer = ws_write.lock().await;
-                    if let Err(e) = writer.send(Message::Binary(data.to_vec())).await {
-                        error!("发送 WebSocket 消息失败: {}", e);
+                    let mut writer = remote_write_clone.lock().await;
+                    if let Err(e) = writer.send(msg).await {
+                        error!("发送到 scrcpy-server 失败: {}", e);
                         break;
                     }
                 }
                 Err(e) => {
-                    error!("TCP 读取错误: {}", e);
+                    error!("客户端 WebSocket 读取错误: {}", e);
                     break;
                 }
             }
         }
-        info!("TCP -> WebSocket 转发结束");
+        info!("客户端 -> scrcpy-server 转发结束（总计 {} 条消息）", msg_count);
     };
 
-    // 并发执行两个转发任务，任一任务结束则全部结束
+    // 任务 2: scrcpy-server -> 客户端 (视频流)
+    let client_write_clone = client_write.clone();
+    let remote_to_client = async move {
+        let mut msg_count = 0;
+        while let Some(msg) = remote_read.next().await {
+            match msg {
+                Ok(msg) => {
+                    msg_count += 1;
+                    if msg_count <= 3 {
+                        info!("scrcpy-server -> 客户端 [消息 {}]: {:?}", msg_count, msg);
+                    } else if msg_count % 100 == 0 {
+                        info!("scrcpy-server -> 客户端: 已转发 {} 条消息", msg_count);
+                    }
+                    let mut writer = client_write_clone.lock().await;
+                    if let Err(e) = writer.send(msg).await {
+                        error!("发送到客户端失败: {}", e);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("scrcpy-server WebSocket 读取错误: {}", e);
+                    break;
+                }
+            }
+        }
+        info!("scrcpy-server -> 客户端 转发结束（总计 {} 条消息）", msg_count);
+    };
+
+    // 并发执行两个转发任务
     tokio::select! {
-        _ = ws_to_tcp => {
-            debug!("WebSocket -> TCP 任务完成");
+        _ = client_to_remote => {
+            debug!("客户端 -> scrcpy-server 任务完成");
         }
-        _ = tcp_to_ws => {
-            debug!("TCP -> WebSocket 任务完成");
+        _ = remote_to_client => {
+            debug!("scrcpy-server -> 客户端 任务完成");
         }
     }
 

@@ -13,7 +13,7 @@ const SERVER_PORT: u16 = 8886;
 const SERVER_VERSION: &str = "1.19-ws6";
 const SERVER_TYPE: &str = "web";
 const LOG_LEVEL: &str = "ERROR";
-const SCRCPY_LISTENS_ON_ALL_INTERFACES: bool = false;
+const SCRCPY_LISTENS_ON_ALL_INTERFACES: bool = true; // ws-scrcpy 使用 true
 const SERVER_PROCESS_NAME: &str = "app_process";
 
 const TEMP_PATH: &str = "/data/local/tmp/";
@@ -164,8 +164,10 @@ impl ScrcpyServer {
             SCRCPY_LISTENS_ON_ALL_INTERFACES
         );
 
+        //  使用 & 后台运行，不重定向输出
+        // 注意：重定向到 /dev/null 可能导致 adb shell 挂起
         let run_command = format!(
-            "CLASSPATH={}{} nohup app_process / {} {} 2>&1 > /dev/null &",
+            "CLASSPATH={}{} app_process / {} {} </dev/null >/dev/null 2>&1 &",
             TEMP_PATH,
             FILE_NAME,
             SERVER_PACKAGE,
@@ -184,9 +186,14 @@ impl ScrcpyServer {
             .context("执行启动命令失败")?;
 
         // 注意：由于使用了 nohup 和 &，命令会立即返回
-        // 不检查 status，因为后台运行总是返回成功
+        // 检查输出以便调试
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            info!("启动命令返回非零状态（可能正常）: stdout={}, stderr={}", stdout, stderr);
+        }
 
-        debug!("scrcpy-server 启动命令已执行");
+        info!("✅ scrcpy-server 启动命令已执行");
         Ok(())
     }
 
@@ -200,15 +207,21 @@ impl ScrcpyServer {
         for i in 0..MAX_RETRIES {
             tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
 
-            if self.is_server_running(udid).await? {
-                info!("✅ scrcpy-server 已启动");
-                return Ok(());
+            match self.is_server_running(udid).await {
+                Ok(true) => {
+                    info!("✅ scrcpy-server 已启动（第 {} 次检查）", i + 1);
+                    return Ok(());
+                }
+                Ok(false) => {
+                    info!("等待 scrcpy-server 启动... ({}/{})", i + 1, MAX_RETRIES);
+                }
+                Err(e) => {
+                    info!("检查 scrcpy-server 状态时出错: {}", e);
+                }
             }
-
-            debug!("等待 scrcpy-server 启动... ({}/{})", i + 1, MAX_RETRIES);
         }
 
-        Err(anyhow!("scrcpy-server 启动超时"))
+        Err(anyhow!("scrcpy-server 启动超时（等待 {} 次，每次 {}ms）", MAX_RETRIES, RETRY_DELAY_MS))
     }
 
     /// 确保 scrcpy-server 在设备上运行
