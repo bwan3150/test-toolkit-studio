@@ -26,6 +26,23 @@ impl AdbUtils {
         &self.adb_path
     }
 
+    /// 检查是否使用 tke
+    fn is_using_tke(&self) -> bool {
+        self.adb_path.contains("tke")
+    }
+
+    /// 构建 adb 命令参数
+    /// 如果使用 tke，需要在前面加上 "adb" 子命令
+    fn build_adb_args(&self, args: &[&str]) -> Vec<String> {
+        if self.is_using_tke() {
+            let mut result = vec!["adb".to_string()];
+            result.extend(args.iter().map(|s| s.to_string()));
+            result
+        } else {
+            args.iter().map(|s| s.to_string()).collect()
+        }
+    }
+
     /// 建立 ADB forward 转发
     /// 将本地端口转发到设备上的远程地址
     ///
@@ -48,8 +65,9 @@ impl AdbUtils {
 
         // 3. 建立转发
         debug!("执行 adb -s {} forward {} {}", udid, local, remote);
+        let args = self.build_adb_args(&["-s", udid, "forward", &local, remote]);
         let output = Command::new(&self.adb_path)
-            .args(&["-s", udid, "forward", &local, remote])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -69,8 +87,9 @@ impl AdbUtils {
     async fn find_existing_forward(&self, udid: &str, remote: &str) -> Result<Option<u16>> {
         debug!("检查已存在的 forward: {} -> {}", udid, remote);
 
+        let args = self.build_adb_args(&["forward", "--list"]);
         let output = Command::new(&self.adb_path)
-            .args(&["forward", "--list"])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -126,8 +145,9 @@ impl AdbUtils {
         let local = format!("tcp:{}", local_port);
         debug!("移除 forward: {} {}", udid, local);
 
+        let args = self.build_adb_args(&["-s", udid, "forward", "--remove", &local]);
         let output = Command::new(&self.adb_path)
-            .args(&["-s", udid, "forward", "--remove", &local])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()

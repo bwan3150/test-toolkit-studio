@@ -30,6 +30,23 @@ impl ScrcpyServer {
         Self { adb_path }
     }
 
+    /// 检查是否使用 tke
+    fn is_using_tke(&self) -> bool {
+        self.adb_path.contains("tke")
+    }
+
+    /// 构建 adb 命令参数
+    /// 如果使用 tke，需要在前面加上 "adb" 子命令
+    fn build_adb_args(&self, args: &[&str]) -> Vec<String> {
+        if self.is_using_tke() {
+            let mut result = vec!["adb".to_string()];
+            result.extend(args.iter().map(|s| s.to_string()));
+            result
+        } else {
+            args.iter().map(|s| s.to_string()).collect()
+        }
+    }
+
     /// 获取 scrcpy-server.jar 的路径
     fn get_server_jar_path() -> Result<PathBuf> {
         // 获取可执行文件所在目录
@@ -56,8 +73,9 @@ impl ScrcpyServer {
         debug!("检查 scrcpy-server 是否在设备 {} 上运行", udid);
 
         // 获取所有 app_process 进程
+        let args = self.build_adb_args(&["-s", udid, "shell", "pidof", SERVER_PROCESS_NAME]);
         let output = Command::new(&self.adb_path)
-            .args(&["-s", udid, "shell", "pidof", SERVER_PROCESS_NAME])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -79,8 +97,10 @@ impl ScrcpyServer {
 
         // 检查每个进程的 cmdline
         for pid in pids {
+            let cmd = format!("cat /proc/{}/cmdline", pid);
+            let args = self.build_adb_args(&["-s", udid, "shell", &cmd]);
             let cmdline_output = Command::new(&self.adb_path)
-                .args(&["-s", udid, "shell", &format!("cat /proc/{}/cmdline", pid)])
+                .args(&args)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()
@@ -108,13 +128,14 @@ impl ScrcpyServer {
         info!("推送 scrcpy-server.jar 到设备: {} -> {}",
               jar_path.display(), remote_path);
 
+        let args = self.build_adb_args(&[
+            "-s", udid,
+            "push",
+            jar_path.to_str().unwrap(),
+            &remote_path
+        ]);
         let output = Command::new(&self.adb_path)
-            .args(&[
-                "-s", udid,
-                "push",
-                jar_path.to_str().unwrap(),
-                &remote_path
-            ])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -153,8 +174,9 @@ impl ScrcpyServer {
 
         info!("启动 scrcpy-server: {}", run_command);
 
+        let args = self.build_adb_args(&["-s", udid, "shell", &run_command]);
         let output = Command::new(&self.adb_path)
-            .args(&["-s", udid, "shell", &run_command])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -217,8 +239,9 @@ impl ScrcpyServer {
         info!("停止设备 {} 上的 scrcpy-server", udid);
 
         // 查找进程 ID
+        let args = self.build_adb_args(&["-s", udid, "shell", "pidof", SERVER_PROCESS_NAME]);
         let output = Command::new(&self.adb_path)
-            .args(&["-s", udid, "shell", "pidof", SERVER_PROCESS_NAME])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
@@ -235,8 +258,10 @@ impl ScrcpyServer {
 
         // 杀死每个匹配的进程
         for pid in pids {
+            let cmd = format!("cat /proc/{}/cmdline", pid);
+            let args = self.build_adb_args(&["-s", udid, "shell", &cmd]);
             let cmdline_output = Command::new(&self.adb_path)
-                .args(&["-s", udid, "shell", &format!("cat /proc/{}/cmdline", pid)])
+                .args(&args)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .output()
@@ -246,8 +271,9 @@ impl ScrcpyServer {
                 let cmdline = String::from_utf8_lossy(&output.stdout);
                 if cmdline.contains(SERVER_PACKAGE) {
                     info!("杀死 scrcpy-server 进程 (PID: {})", pid);
+                    let args = self.build_adb_args(&["-s", udid, "shell", "kill", pid]);
                     let _ = Command::new(&self.adb_path)
-                        .args(&["-s", udid, "shell", "kill", pid])
+                        .args(&args)
                         .output()
                         .await;
                 }
