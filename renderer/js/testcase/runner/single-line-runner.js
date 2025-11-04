@@ -50,6 +50,26 @@ class SingleLineRunner {
         const editor = window.EditorManager?.getActiveEditor();
 
         try {
+            // 切换到 normal 模式并启动视频流
+            if (window.ScreenCoordinator) {
+                const currentMode = window.ScreenCoordinator.getCurrentMode();
+                if (currentMode !== 'normal') {
+                    window.rLog('🔄 单行执行开始，切换到 normal 模式');
+                    await window.ScreenCoordinator.switchTo('normal');
+                }
+            }
+
+            // 启动视频流（如果尚未启动）
+            if (window.VideoStreamStateManager && !window.VideoStreamStateManager.isVideoStreamActive()) {
+                window.rLog('🚀 单行执行开始，启动视频流');
+                await window.VideoStreamStateManager.startVideoStream(deviceId);
+            }
+
+            // 设置测试运行状态并锁定滑块
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.setTestRunning(true);
+            }
+
             // 输出开始执行
             window.ExecutionOutput?.log('info', `执行第 ${lineNumber} 行: ${trimmed}`);
 
@@ -114,6 +134,11 @@ class SingleLineRunner {
             window.ExecutionOutput?.log('error', `执行异常: ${error.message}`);
             window.AppNotifications?.error('命令执行异常');
         } finally {
+            // 清除测试运行状态并解锁滑块
+            if (window.ScreenCoordinator) {
+                window.ScreenCoordinator.setTestRunning(false);
+            }
+
             this.isExecuting = false;
         }
     }

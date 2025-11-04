@@ -155,7 +155,7 @@ function registerControllerHandlers(app) {
         fs.mkdirSync(workareaPath, { recursive: true });
       }
 
-      const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture', 'xml'];
+      const args = ['--device', deviceId, '--project', projectPath, 'controller', 'capture-xml'];
       const output = await execTkeCommand(app, args);
 
       return {

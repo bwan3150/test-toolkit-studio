@@ -1121,7 +1121,7 @@
 
 .screen-content {
     flex: 1;
-    padding: 12px;
+    padding: 0; /* 移除 padding,让截图和视频流尺寸一致 */
     display: flex;
     align-items: center;
     justify-content: center;

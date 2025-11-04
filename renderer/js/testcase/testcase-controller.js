@@ -77,30 +77,28 @@ function initializeTestcasePage() {
                     return;
                 }
 
-                if (window.ScrcpyVideoStream) {
+                if (window.VideoStreamStateManager) {
                     toggleVideoStreamBtn.disabled = true; // 禁用按钮防止重复点击
 
-                    const success = await window.ScrcpyVideoStream.activate(deviceId);
+                    const success = await window.VideoStreamStateManager.startVideoStream(deviceId);
 
                     if (success) {
-                        toggleVideoStreamBtn.setAttribute('data-state', 'streaming');
-                        // 移除"点击获取屏幕信息"按钮
-                        if (window.ScreenPrompt) {
-                            window.ScreenPrompt.removePrompt();
-                        }
+                        window.rLog('✅ 视频流已启动（通过按钮）');
+                    } else {
+                        window.rError('❌ 视频流启动失败');
                     }
 
                     toggleVideoStreamBtn.disabled = false;
                 } else {
-                    window.rError('视频流模块未加载');
+                    window.rError('视频流状态管理器未加载');
                 }
             } else {
                 // 停止视频流
-                if (window.ScrcpyVideoStream) {
+                if (window.VideoStreamStateManager) {
                     toggleVideoStreamBtn.disabled = true; // 禁用按钮防止重复点击
 
-                    await window.ScrcpyVideoStream.deactivate();
-                    toggleVideoStreamBtn.setAttribute('data-state', 'stopped');
+                    await window.VideoStreamStateManager.stopVideoStream();
+                    window.rLog('✅ 视频流已停止（通过按钮）');
 
                     toggleVideoStreamBtn.disabled = false;
                 }

@@ -89,15 +89,10 @@ const ModeSlider = {
   },
 
   /**
-   * 锁定滑块 - 先切换到 normal 模式，然后禁止切换到其他模式
+   * 锁定滑块 - 禁止切换到其他模式（不主动切换模式，避免循环调用）
    */
   lockSlider() {
-    // 1. 先切换到 normal 模式
-    if (this.switchModeCallback) {
-      this.switchModeCallback('normal');
-    }
-
-    // 2. 禁用其他模式的按钮
+    // 禁用其他模式的按钮
     const modeOptions = document.querySelectorAll('.mode-option');
     modeOptions.forEach(option => {
       // 只锁定非 normal 模式
@@ -105,6 +100,9 @@ const ModeSlider = {
         option.classList.add('disabled');
       }
     });
+
+    // 确保滑块 UI 在 normal 位置
+    this.updateSliderPosition('normal');
 
     window.rLog('🔒 滑块已锁定到 normal 模式');
   },

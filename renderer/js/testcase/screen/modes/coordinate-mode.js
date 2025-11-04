@@ -12,6 +12,7 @@ const CoordinateMode = {
     window.rLog('📍 激活坐标点取值模式');
 
     const screenContent = document.getElementById('screenContent');
+    const deviceScreenshot = document.getElementById('deviceScreenshot');
 
     if (!screenContent) {
       window.rError('坐标模式所需元素未找到');
@@ -20,6 +21,12 @@ const CoordinateMode = {
 
     // 添加坐标模式类
     screenContent.classList.add('coordinate-mode');
+
+    // 显示静态截图（如果有）
+    if (deviceScreenshot && deviceScreenshot.src) {
+      deviceScreenshot.style.display = 'block';
+      window.rLog('✅ 静态截图已显示');
+    }
 
     // 设置点击事件
     this._setupClickHandler();

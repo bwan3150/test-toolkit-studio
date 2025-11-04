@@ -9,6 +9,8 @@ pub enum ControllerCommands {
     Devices,
     /// 获取设备截图和XML并保存到项目workarea
     Capture,
+    /// 仅获取设备UI XML并保存到项目workarea (不截图)
+    CaptureXml,
     /// 点击坐标
     Tap {
         /// X坐标
@@ -76,6 +78,17 @@ pub async fn handle(action: ControllerCommands, device_id: Option<String>, proje
             JsonOutput::print(serde_json::json!({
                 "success": true,
                 "screenshot": screenshot_path.to_string_lossy(),
+                "xml": xml_path.to_string_lossy()
+            }));
+        }
+        ControllerCommands::CaptureXml => {
+            // 只获取UI XML，不截图
+            controller.capture_xml_only(&project_path).await?;
+
+            let xml_path = project_path.join("workarea").join("current_ui_tree.xml");
+
+            JsonOutput::print(serde_json::json!({
+                "success": true,
                 "xml": xml_path.to_string_lossy()
             }));
         }

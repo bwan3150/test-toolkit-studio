@@ -42,6 +42,7 @@ const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/
 
 // ws-scrcpy 模块
 const { registerScrcpyHandlers, cleanupScrcpyServer } = require('./handlers/ws-scrcpy/scrcpy-server-handler');
+const { registerStreamCaptureHandlers } = require('./handlers/ws-scrcpy/stream-capture-handler');
 
 // 全局变量
 let mainWindow;
@@ -252,6 +253,7 @@ function registerAllHandlers() {
     // ws-scrcpy 模块
     console.log('注册ws-scrcpy处理器...');
     registerScrcpyHandlers(app);
+    registerStreamCaptureHandlers(app);
 
     // 注册其他IPC处理器（scrcpy, STB, screenshot等）
     registerOtherHandlers();

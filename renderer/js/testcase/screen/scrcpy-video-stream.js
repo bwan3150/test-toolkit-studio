@@ -222,11 +222,6 @@ const ScrcpyVideoStream = {
     const style = document.createElement('style');
     style.id = 'scrcpy-stream-styles';
     style.textContent = `
-      /* 视频流模式：移除 screen-content 的 padding */
-      .screen-content.has-video-stream {
-        padding: 0 !important;
-      }
-
       /* 视频包装容器：填满整个父容器 */
       .scrcpy-video-wrapper {
         width: 100%;
@@ -277,6 +272,28 @@ const ScrcpyVideoStream = {
     const WebCodecsDecoder = window.ScrcpyWebCodecsDecoder;
     this.decoder = new WebCodecsDecoder(this.videoCanvas);
     this.decoder.init();
+
+    // 设置首帧渲染回调
+    let loadingRemoved = false;
+    const removeLoadingOnce = () => {
+      if (!loadingRemoved) {
+        loadingRemoved = true;
+        window.rLog('🎬 首帧已渲染，移除 loading 动画');
+        if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
+          window.ScreenPrompt.removePrompt();
+        }
+      }
+    };
+
+    this.decoder.setOnFirstFrameCallback(removeLoadingOnce);
+
+    // 超时保护：如果 5 秒内没有首帧，也移除 loading
+    setTimeout(() => {
+      if (!loadingRemoved) {
+        window.rWarn('⚠️ 5秒内未收到首帧，移除 loading 动画');
+        removeLoadingOnce();
+      }
+    }, 5000);
 
     // 等待连接建立
     await new Promise((resolve, reject) => {
@@ -705,6 +722,58 @@ const ScrcpyVideoStream = {
    */
   isStreamActive() {
     return this.isActive;
+  },
+
+  /**
+   * 从当前视频流中捕获最新一帧并保存到 workarea/current_screenshot.png
+   * @returns {Promise<Object>} - { success: boolean, path: string }
+   */
+  async captureLatestFrame() {
+    try {
+      if (!this.isActive || !this.videoCanvas) {
+        throw new Error('视频流未激活或 Canvas 不可用');
+      }
+
+      window.rLog('📸 从视频流捕获最新帧...');
+
+      // 从 Canvas 获取图像数据（PNG 格式）
+      const dataUrl = this.videoCanvas.toDataURL('image/png');
+
+      // 将 Data URL 转换为 Blob
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+
+      // 转换为 ArrayBuffer
+      const arrayBuffer = await blob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // 通过 IPC 保存到项目的 workarea/current_screenshot.png
+      const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+      if (!ipcRenderer) {
+        throw new Error('ipcRenderer 不可用');
+      }
+
+      // 获取当前项目路径
+      const projectPath = window.AppGlobals?.currentProject;
+      if (!projectPath) {
+        throw new Error('未设置项目路径');
+      }
+
+      const result = await ipcRenderer.invoke('save-screenshot-from-stream', {
+        imageBuffer: buffer,
+        projectPath: projectPath
+      });
+
+      if (result.success) {
+        window.rLog('✅ 视频帧已保存:', result.path);
+        return result;
+      } else {
+        throw new Error(result.error || '保存失败');
+      }
+    } catch (error) {
+      window.rError('❌ 捕获视频帧失败:', error);
+      throw error;
+    }
   }
 };
 

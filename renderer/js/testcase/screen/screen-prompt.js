@@ -74,6 +74,24 @@ const ScreenPrompt = {
   },
 
   /**
+   * 显示 loading 动画（只有图标，无文字）
+   */
+  showLoadingSpinner() {
+    this._removeExistingPrompt();
+
+    const screenContent = document.getElementById('screenContent');
+    if (!screenContent) return;
+
+    const promptDiv = document.createElement('div');
+    promptDiv.className = 'screen-prompt screen-loading-spinner';
+    promptDiv.innerHTML = `
+      <div class="loading-spinner-icon"></div>
+    `;
+
+    screenContent.appendChild(promptDiv);
+  },
+
+  /**
    * 将提示按钮设置为 loading 状态
    */
   setButtonLoading() {
@@ -145,38 +163,22 @@ const ScreenPrompt = {
       if (currentMode === 'normal') {
         window.rLog('📹 当前是 normal 模式，启动视频流而不是截图');
 
-        // 移除提示
-        this.removePrompt();
-
-        // 启动视频流
-        if (window.ScrcpyVideoStream) {
+        // 通过统一管理器启动视频流（会自动显示 loading）
+        if (window.VideoStreamStateManager) {
           const deviceId = deviceSelect.value;
-          window.rLog('🚀 启动视频流，设备:', deviceId);
+          window.rLog('🚀 通过 VideoStreamStateManager 启动视频流，设备:', deviceId);
 
-          const success = await window.ScrcpyVideoStream.activate(deviceId);
+          const success = await window.VideoStreamStateManager.startVideoStream(deviceId);
 
           if (success) {
-            window.rLog('✅ 视频流已成功激活');
-
-            // 更新视频流按钮状态
-            const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
-            if (toggleVideoStreamBtn) {
-              toggleVideoStreamBtn.setAttribute('data-state', 'streaming');
-            }
-
-            // 解锁滑块
-            if (window.ModeSlider && window.ModeSlider.unlockSlider) {
-              window.ModeSlider.unlockSlider();
-            }
-
             window.AppNotifications?.success('视频流已启动');
           } else {
             window.rError('❌ 视频流激活失败');
             window.AppNotifications?.error('视频流启动失败');
           }
         } else {
-          window.rError('❌ ScrcpyVideoStream 模块未加载');
-          window.AppNotifications?.error('视频流模块未加载');
+          window.rError('❌ VideoStreamStateManager 模块未加载');
+          window.AppNotifications?.error('视频流状态管理器未加载');
         }
 
         return; // 结束函数，不执行后面的截图逻辑
@@ -285,6 +287,20 @@ style.textContent = `
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* Loading spinner 样式 */
+  .screen-loading-spinner {
+    pointer-events: none; /* 加载时不可点击 */
+  }
+
+  .loading-spinner-icon {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 `;
 document.head.appendChild(style);
