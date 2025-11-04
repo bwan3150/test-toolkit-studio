@@ -120,6 +120,7 @@ jobs:
             ~/.cargo/git
             toolkit-engine/target
             tester-ai/target
+            scrcpy-server/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
@@ -210,6 +211,39 @@ jobs:
           echo "✅ tester-ai 构建完成"
           ls -lh ../resources/darwin/tester-ai/tester-ai
 
+      # 构建 scrcpy-server (Rust)
+      - name: 构建 Scrcpy Server (Rust)
+        working-directory: scrcpy-server
+        run: |
+          set -e  # 遇到错误立即退出
+          echo "=== 构建 scrcpy-server for macOS ==="
+          echo "版本号: $BUILD_VERSION"
+
+          # 构建（build.rs 会自动从 BUILD_VERSION 环境变量读取版本）
+          cargo build --release
+
+          # 创建目标目录
+          mkdir -p ../resources/darwin/scrcpy-server
+
+          # 复制二进制文件
+          cp target/release/tke-scrcpy ../resources/darwin/scrcpy-server/tke-scrcpy
+          chmod +x ../resources/darwin/scrcpy-server/tke-scrcpy
+
+          # 复制 vendor 目录（包含 scrcpy-server.jar）
+          cp -r vendor ../resources/darwin/scrcpy-server/
+
+          echo "✅ scrcpy-server 构建完成"
+          ls -lh ../resources/darwin/scrcpy-server/tke-scrcpy
+
+          # 验证 vendor 文件
+          SCRCPY_JAR="../resources/darwin/scrcpy-server/vendor/Genymobile/scrcpy/scrcpy-server.jar"
+          if [ -f "$SCRCPY_JAR" ]; then
+            echo "scrcpy-server.jar: $(du -h "$SCRCPY_JAR" | cut -f1)"
+          else
+            echo "❌ scrcpy-server.jar 未找到"
+            exit 1
+          fi
+
       # 验证所有二进制文件
       - name: 验证构建产物
         run: |
@@ -224,6 +258,12 @@ jobs:
 
           echo "📦 tester-ai:"
           resources/darwin/tester-ai/tester-ai --version || resources/darwin/tester-ai/tester-ai --help
+
+          echo "📦 tke-scrcpy:"
+          resources/darwin/scrcpy-server/tke-scrcpy --version || resources/darwin/scrcpy-server/tke-scrcpy --help
+
+          echo "📦 scrcpy-server.jar:"
+          ls -lh resources/darwin/scrcpy-server/vendor/Genymobile/scrcpy/scrcpy-server.jar
 
           echo "✅ 所有二进制文件验证完成"
 
@@ -365,6 +405,7 @@ jobs:
             ~/.cargo/git
             toolkit-engine/target
             tester-ai/target
+            scrcpy-server/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
@@ -466,6 +507,38 @@ jobs:
           echo ✅ tester-ai 构建完成
           dir "..\resources\win32\tester-ai\tester-ai.exe"
 
+      # 构建 scrcpy-server (Rust)
+      - name: 构建 Scrcpy Server (Rust)
+        working-directory: scrcpy-server
+        shell: cmd
+        run: |
+          echo === 构建 scrcpy-server for Windows ===
+          echo 版本号: %BUILD_VERSION%
+
+          REM 构建（build.rs 会自动从 BUILD_VERSION 环境变量读取版本）
+          cargo build --release
+
+          REM 创建目标目录
+          if not exist "..\resources\win32\scrcpy-server" mkdir "..\resources\win32\scrcpy-server"
+
+          REM 复制二进制文件
+          copy /Y "target\release\tke-scrcpy.exe" "..\resources\win32\scrcpy-server\tke-scrcpy.exe"
+
+          REM 复制 vendor 目录（包含 scrcpy-server.jar）
+          xcopy /E /I /Y "vendor" "..\resources\win32\scrcpy-server\vendor"
+
+          echo ✅ scrcpy-server 构建完成
+          dir "..\resources\win32\scrcpy-server\tke-scrcpy.exe"
+
+          REM 验证 vendor 文件
+          if exist "..\resources\win32\scrcpy-server\vendor\Genymobile\scrcpy\scrcpy-server.jar" (
+            echo scrcpy-server.jar 已复制
+            dir "..\resources\win32\scrcpy-server\vendor\Genymobile\scrcpy\scrcpy-server.jar"
+          ) else (
+            echo ❌ scrcpy-server.jar 未找到
+            exit /b 1
+          )
+
       # 验证所有二进制文件
       - name: 验证构建产物
         shell: cmd
@@ -483,6 +556,16 @@ jobs:
           echo 📦 tester-ai:
           resources\win32\tester-ai\tester-ai.exe --version
           if errorlevel 1 exit /b 1
+
+          echo 📦 tke-scrcpy:
+          resources\win32\scrcpy-server\tke-scrcpy.exe --version
+          if errorlevel 1 (
+            echo 尝试显示帮助信息...
+            resources\win32\scrcpy-server\tke-scrcpy.exe --help
+          )
+
+          echo 📦 scrcpy-server.jar:
+          dir resources\win32\scrcpy-server\vendor\Genymobile\scrcpy\scrcpy-server.jar
 
           echo ✅ 所有二进制文件验证完成
 
