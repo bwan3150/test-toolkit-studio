@@ -198,6 +198,7 @@
             cursor: pointer;
             position: relative;
             overflow: hidden;
+            font-family: inherit;
         }
 
         .download-container:hover .main-download-btn {
@@ -606,7 +607,7 @@
         <!-- 下载按钮 -->
         <div class="download-section">
             <div class="download-container">
-                <a href="#" class="main-download-btn loading" id="mainDownloadBtn">
+                <button class="main-download-btn loading" id="mainDownloadBtn">
                     <div class="platform-info">
                         <span class="download-label">
                             <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" id="mainIcon">
@@ -616,7 +617,7 @@
                         </span>
                         <span class="platform-details" id="mainPlatformDetails">macOS Apple Silicon · 加载中...</span>
                     </div>
-                </a>
+                </button>
                 <button class="dropdown-toggle" id="dropdownToggle">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M7 10l5 5 5-5z"/>
@@ -903,16 +904,18 @@
             if (data) {
                 // 格式: "Apple Silicon · v0.5.0"
                 mainDetails.textContent = `${platformInfo.subtitle} · v${data.version}`;
-                mainBtn.href = data.downloadUrl;
                 mainBtn.classList.remove('loading');
+
+                // 绑定点击事件触发下载
+                mainBtn.onclick = () => {
+                    window.location.href = data.downloadUrl;
+                };
             } else {
                 mainDetails.textContent = `${platformInfo.subtitle} · 暂不可用`;
-                mainBtn.href = '#';
                 mainBtn.classList.remove('loading');
-                if (!data) {
-                    mainBtn.style.opacity = '0.6';
-                    mainBtn.style.pointerEvents = 'none';
-                }
+                mainBtn.style.opacity = '0.6';
+                mainBtn.style.pointerEvents = 'none';
+                mainBtn.onclick = null;
             }
         }
 
@@ -945,9 +948,10 @@
                 const disabled = !data ? 'disabled' : '';
 
                 return `
-                    <a href="${data ? data.downloadUrl : '#'}"
+                    <a href="javascript:void(0);"
                        class="dropdown-item ${disabled}"
-                       data-platform="${platform.key}">
+                       data-platform="${platform.key}"
+                       data-url="${data ? data.downloadUrl : ''}">
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             ${PLATFORM_ICONS[platform.iconKey]}
                         </svg>
@@ -958,6 +962,17 @@
                     </a>
                 `;
             }).join('');
+
+            // 为下拉菜单项绑定点击事件
+            dropdown.querySelectorAll('.dropdown-item:not(.disabled)').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const downloadUrl = item.getAttribute('data-url');
+                    if (downloadUrl) {
+                        window.location.href = downloadUrl;
+                    }
+                });
+            });
         }
 
         // 设置下拉菜单事件
