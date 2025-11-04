@@ -74,6 +74,24 @@ const ScreenPrompt = {
   },
 
   /**
+   * 显示 loading 动画（只有图标，无文字）
+   */
+  showLoadingSpinner() {
+    this._removeExistingPrompt();
+
+    const screenContent = document.getElementById('screenContent');
+    if (!screenContent) return;
+
+    const promptDiv = document.createElement('div');
+    promptDiv.className = 'screen-prompt screen-loading-spinner';
+    promptDiv.innerHTML = `
+      <div class="loading-spinner-icon"></div>
+    `;
+
+    screenContent.appendChild(promptDiv);
+  },
+
+  /**
    * 将提示按钮设置为 loading 状态
    */
   setButtonLoading() {
@@ -145,10 +163,7 @@ const ScreenPrompt = {
       if (currentMode === 'normal') {
         window.rLog('📹 当前是 normal 模式，启动视频流而不是截图');
 
-        // 移除提示
-        this.removePrompt();
-
-        // 通过统一管理器启动视频流
+        // 通过统一管理器启动视频流（会自动显示 loading）
         if (window.VideoStreamStateManager) {
           const deviceId = deviceSelect.value;
           window.rLog('🚀 通过 VideoStreamStateManager 启动视频流，设备:', deviceId);
@@ -272,6 +287,20 @@ style.textContent = `
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* Loading spinner 样式 */
+  .screen-loading-spinner {
+    pointer-events: none; /* 加载时不可点击 */
+  }
+
+  .loading-spinner-icon {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 `;
 document.head.appendChild(style);

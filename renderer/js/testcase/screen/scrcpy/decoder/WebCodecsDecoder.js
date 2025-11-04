@@ -21,6 +21,10 @@ class WebCodecsDecoder {
     // 解码帧队列 (用于平滑渲染)
     this.frameQueue = [];
     this.isRendering = false;
+
+    // 首帧渲染标志
+    this.hasRenderedFirstFrame = false;
+    this.onFirstFrameCallback = null;
   }
 
   /**
@@ -200,6 +204,18 @@ class WebCodecsDecoder {
     // 直接渲染到 Canvas
     try {
       this.canvasContext.drawImage(frame, 0, 0);
+
+      // 检测首帧渲染
+      if (!this.hasRenderedFirstFrame) {
+        this.hasRenderedFirstFrame = true;
+        window.rLog('🎬 首帧已渲染');
+
+        // 触发首帧回调
+        if (this.onFirstFrameCallback) {
+          this.onFirstFrameCallback();
+          this.onFirstFrameCallback = null; // 只调用一次
+        }
+      }
     } catch (e) {
       window.rError('渲染帧失败:', e);
     } finally {
@@ -216,6 +232,14 @@ class WebCodecsDecoder {
   }
 
   /**
+   * 设置首帧渲染回调
+   * @param {Function} callback - 首帧渲染后调用的回调函数
+   */
+  setOnFirstFrameCallback(callback) {
+    this.onFirstFrameCallback = callback;
+  }
+
+  /**
    * 停止解码器
    */
   stop() {
@@ -227,6 +251,8 @@ class WebCodecsDecoder {
     this.bufferedSPS = null;
     this.bufferedPPS = null;
     this.hadIDR = false;
+    this.hasRenderedFirstFrame = false;
+    this.onFirstFrameCallback = null;
   }
 
   /**

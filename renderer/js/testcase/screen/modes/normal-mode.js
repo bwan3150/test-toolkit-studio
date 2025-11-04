@@ -52,7 +52,7 @@ const NormalMode = {
     // 显示视频流 Canvas（如果视频流已激活）
     this._showVideoStreamCanvas();
 
-    // 如果视频流未激活，尝试启动
+    // 如果视频流未激活，尝试启动（会自动显示 loading）
     if (!window.VideoStreamStateManager || !window.VideoStreamStateManager.isVideoStreamActive()) {
       await this._tryActivateVideoStream();
     }

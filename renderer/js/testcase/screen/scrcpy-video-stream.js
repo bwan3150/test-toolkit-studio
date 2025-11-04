@@ -222,11 +222,6 @@ const ScrcpyVideoStream = {
     const style = document.createElement('style');
     style.id = 'scrcpy-stream-styles';
     style.textContent = `
-      /* 视频流模式：移除 screen-content 的 padding */
-      .screen-content.has-video-stream {
-        padding: 0 !important;
-      }
-
       /* 视频包装容器：填满整个父容器 */
       .scrcpy-video-wrapper {
         width: 100%;
@@ -277,6 +272,28 @@ const ScrcpyVideoStream = {
     const WebCodecsDecoder = window.ScrcpyWebCodecsDecoder;
     this.decoder = new WebCodecsDecoder(this.videoCanvas);
     this.decoder.init();
+
+    // 设置首帧渲染回调
+    let loadingRemoved = false;
+    const removeLoadingOnce = () => {
+      if (!loadingRemoved) {
+        loadingRemoved = true;
+        window.rLog('🎬 首帧已渲染，移除 loading 动画');
+        if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
+          window.ScreenPrompt.removePrompt();
+        }
+      }
+    };
+
+    this.decoder.setOnFirstFrameCallback(removeLoadingOnce);
+
+    // 超时保护：如果 5 秒内没有首帧，也移除 loading
+    setTimeout(() => {
+      if (!loadingRemoved) {
+        window.rWarn('⚠️ 5秒内未收到首帧，移除 loading 动画');
+        removeLoadingOnce();
+      }
+    }, 5000);
 
     // 等待连接建立
     await new Promise((resolve, reject) => {

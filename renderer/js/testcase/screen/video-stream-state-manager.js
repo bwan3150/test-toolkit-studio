@@ -32,6 +32,11 @@ const VideoStreamStateManager = {
 
     window.rLog('🚀 启动视频流，设备:', deviceId);
 
+    // 显示 loading 动画
+    if (window.ScreenPrompt && window.ScreenPrompt.showLoadingSpinner) {
+      window.ScreenPrompt.showLoadingSpinner();
+    }
+
     try {
       // 检查 ScrcpyVideoStream 是否可用
       if (!window.ScrcpyVideoStream) {
@@ -46,12 +51,10 @@ const VideoStreamStateManager = {
         this.isStreamActive = true;
         this.currentDeviceId = deviceId;
 
-        window.rLog('✅ 视频流已成功激活');
+        window.rLog('✅ 视频流已成功激活（等待首帧渲染...）');
 
-        // 移除"点击获取屏幕信息"提示
-        if (window.ScreenPrompt && window.ScreenPrompt.removePrompt) {
-          window.ScreenPrompt.removePrompt();
-        }
+        // 注意：不在这里移除 loading 动画
+        // loading 动画会在解码器渲染首帧时自动移除（通过 onFirstFrameCallback）
 
         // 解锁滑块
         this._unlockSlider();
@@ -62,10 +65,22 @@ const VideoStreamStateManager = {
         return true;
       } else {
         window.rError('❌ 视频流激活失败');
+
+        // 移除 loading 动画，恢复提示
+        if (window.ScreenPrompt) {
+          window.ScreenPrompt.showCaptureScreenPrompt();
+        }
+
         return false;
       }
     } catch (error) {
       window.rError('❌ 启动视频流时发生错误:', error);
+
+      // 移除 loading 动画，恢复提示
+      if (window.ScreenPrompt) {
+        window.ScreenPrompt.showCaptureScreenPrompt();
+      }
+
       return false;
     }
   },
