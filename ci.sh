@@ -8,7 +8,7 @@ NC='\033[0m' # No Color
 
 # 显示现有tags
 echo -e "${GREEN}=== 现有标签 ===${NC}"
-git tag -l
+git tag -l | sort -V
 echo ""
 
 # 输入新tag
@@ -29,36 +29,51 @@ fi
 # 准备release notes
 RELEASE_FILE="./build/RELEASE_NOTES.md"
 TEMP_FILE=$(mktemp)
+TEMP_CONTENT=$(mktemp)
 
 echo -e "${GREEN}=== 填写Release Notes ===${NC}\n"
 
 # 新增功能
-echo "## 新增功能" > "$TEMP_FILE"
 echo -e "${YELLOW}输入新增功能:${NC}"
+> "$TEMP_CONTENT"
 while IFS= read -e -r line; do
     [ -z "$line" ] && break
-    echo "- $line" >> "$TEMP_FILE"
+    echo "- $line" >> "$TEMP_CONTENT"
 done
+if [ -s "$TEMP_CONTENT" ]; then
+    echo "## 新增功能" >> "$TEMP_FILE"
+    cat "$TEMP_CONTENT" >> "$TEMP_FILE"
+    echo "" >> "$TEMP_FILE"
+fi
 
 # 改进优化
-echo "" >> "$TEMP_FILE"
-echo "## 改进优化" >> "$TEMP_FILE"
 echo -e "${YELLOW}输入改进优化:${NC}"
+> "$TEMP_CONTENT"
 while IFS= read -e -r line; do
     [ -z "$line" ] && break
-    echo "- $line" >> "$TEMP_FILE"
+    echo "- $line" >> "$TEMP_CONTENT"
 done
+if [ -s "$TEMP_CONTENT" ]; then
+    echo "## 改进优化" >> "$TEMP_FILE"
+    cat "$TEMP_CONTENT" >> "$TEMP_FILE"
+    echo "" >> "$TEMP_FILE"
+fi
 
 # 问题修复
-echo "" >> "$TEMP_FILE"
-echo "## 问题修复" >> "$TEMP_FILE"
 echo -e "${YELLOW}输入问题修复:${NC}"
+> "$TEMP_CONTENT"
 while IFS= read -e -r line; do
     [ -z "$line" ] && break
-    echo "- $line" >> "$TEMP_FILE"
+    echo "- $line" >> "$TEMP_CONTENT"
 done
+if [ -s "$TEMP_CONTENT" ]; then
+    echo "## 问题修复" >> "$TEMP_FILE"
+    cat "$TEMP_CONTENT" >> "$TEMP_FILE"
+    echo "" >> "$TEMP_FILE"
+fi
 
-echo "" >> "$TEMP_FILE"
+# 清理临时文件
+rm "$TEMP_CONTENT"
 
 # 预览
 echo -e "\n${GREEN}=== release notes 预览 ===${NC}"
