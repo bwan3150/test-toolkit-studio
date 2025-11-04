@@ -13,7 +13,7 @@ echo ""
 
 # 输入新tag
 echo -e "${YELLOW}新版本tag号:${NC}"
-read -r NEW_TAG
+read -e -r NEW_TAG
 
 if [ -z "$NEW_TAG" ]; then
     echo -e "${RED}错误: tag不能为空${NC}"
