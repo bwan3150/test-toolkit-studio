@@ -1,22 +1,25 @@
 // 渲染进程日志模块
 // 将渲染进程的日志发送到主进程，在CLI中显示
+// 同时集成 Sentry 进行错误追踪
 (function() {
     'use strict';
-    
+
     const { ipcRenderer } = require('electron');
-    
+
     class RendererLogger {
         constructor() {
             this.enabled = true;
             this.prefix = '[Renderer]';
             this.logBuffer = []; // 缓存日志
             this.maxBufferSize = 10000; // 最大缓存10000条日志
+            // 获取 Sentry 实例（由 sentry-init.js 提供）
+            this.Sentry = window.Sentry;
         }
         
         // 基础日志方法
         _log(level, ...args) {
             if (!this.enabled) return;
-            
+
             // 将参数转换为字符串
             const message = args.map(arg => {
                 if (typeof arg === 'object') {
@@ -28,21 +31,45 @@
                 }
                 return String(arg);
             }).join(' ');
-            
+
             const logEntry = {
                 level: level,
                 message: message,
                 timestamp: new Date().toISOString()
             };
-            
+
             // 添加到缓存
             this.logBuffer.push(logEntry);
-            
+
             // 限制缓存大小
             if (this.logBuffer.length > this.maxBufferSize) {
                 this.logBuffer.shift(); // 移除最旧的日志
             }
-            
+
+            // 发送到 Sentry
+            if (this.Sentry) {
+                if (level === 'error') {
+                    // 检查是否有 Error 对象
+                    const errorObj = args.find(arg => arg instanceof Error);
+                    if (errorObj) {
+                        this.Sentry.captureException(errorObj, {
+                            contexts: { custom: { message } }
+                        });
+                    } else {
+                        this.Sentry.captureMessage(message, { level: 'error' });
+                    }
+                } else if (level === 'warn') {
+                    this.Sentry.captureMessage(message, { level: 'warning' });
+                } else {
+                    // info, log, debug 级别作为面包屑
+                    this.Sentry.addBreadcrumb({
+                        message,
+                        level: level === 'debug' ? 'debug' : 'info',
+                        timestamp: Date.now() / 1000,
+                    });
+                }
+            }
+
             // 发送到主进程
             try {
                 ipcRenderer.send('renderer-log', logEntry);
@@ -50,7 +77,7 @@
                 // 如果IPC失败，至少在控制台输出
                 console.error('Failed to send log to main process:', error);
             }
-            
+
             // 同时在控制台输出（如果开发者工具开启）
             const consoleMethod = console[level] || console.log;
             consoleMethod(`${this.prefix}`, ...args);

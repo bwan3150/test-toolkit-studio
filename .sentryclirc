@@ -1,0 +1,7 @@
+[defaults]
+org=test-toolkitapp
+project=electron
+
+[auth]
+# 需要在 https://sentry.io/settings/account/api/auth-tokens/ 创建认证令牌
+# 然后在环境变量中设置 SENTRY_AUTH_TOKEN

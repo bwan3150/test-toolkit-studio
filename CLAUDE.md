@@ -3,7 +3,15 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 项目说明
-Electron 桌面应用，用于自动化测试。项目禁止使用开发者模式调试, renderer层的调试只允许使用./renderer/js/utils/renderer-logger.js提供的能力将日志传输到cli中进行debug
+Electron 桌面应用，用于自动化测试。项目禁止使用开发者模式调试, renderer层的调试只允许使用./renderer/js/utils/renderer-logger.js提供的能力将日志传输到cli中进行debug。
+
+## 错误追踪
+- 项目集成了 Sentry (@sentry/electron) 用于错误追踪和性能监控
+- 主进程在 main.js 开头初始化 Sentry
+- Renderer 进程通过 ./renderer/js/utils/sentry-init.js 初始化
+- renderer-logger.js 已集成 Sentry，自动将错误和警告发送到 Sentry
+- DSN: https://cc99833abc12a25305015d39c3bb7adb@o4510309702565888.ingest.de.sentry.io/4510309764497488
+- Sentry 项目: test-toolkitapp/electron
 
 ## Commands
 
@@ -18,7 +26,10 @@ Electron 桌面应用，用于自动化测试。项目禁止使用开发者模�
 - ./renderer文件夹下放着html+css+js专注于UI逻辑, 只允许与handlers交互进行处理, 不能直接请求外部api和与tke, tester-ai等可执行文件交互, 保持项目分层逻辑的统一
 
 ## 代码规范补充
-- **必须**：使用 `window.rLog()`, `window.rError()` 等，不用 `console.log()`
+- **必须**：
+  - Renderer进程：使用 `window.rLog()`, `window.rError()` 等方法进行日志记录，这些方法会自动集成 Sentry
+  - 主进程：使用 `logger.log()`, `logger.error()` 等方法（定义在 main.js 中），会同时输出到控制台和 Sentry
+  - 不要直接使用 `console.log()`
 - 编辑toolkit-engine后, 需要运行 ./toolkit-engine/build-mac.sh 来重新构建, 不要使用cargo build; ./tester-ah也是同理
 - 一定要注意代码单元化, 不要任何耦合, 如果需要则立刻拆分大文件为多个小文件, 并且分类放进不同文件夹
 - 注释用中文
