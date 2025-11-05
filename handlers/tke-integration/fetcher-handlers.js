@@ -2,7 +2,7 @@
 // 负责 UI 元素提取、屏幕尺寸推断、UI 树生成等
 // 注意：此模块只负责执行 TKE 命令并返回原始输出，JSON 解析在 renderer 层完成
 const { ipcMain } = require('electron');
-const { spawn } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { getTkePath } = require('./adb-handlers');
@@ -11,14 +11,8 @@ const { extractJsonFromOutput } = require('./tke-utils');
 // 通用的 TKE 命令执行函数（支持 stdin 输入）
 async function execTkeCommandWithStdin(tkePath, args, stdinData = null) {
   return new Promise((resolve, reject) => {
-    const options = {
-      stdio: ['pipe', 'pipe', 'pipe']
-    };
-    // Windows 下需要 shell: true 来正确处理带空格的路径
-    if (process.platform === 'win32') {
-      options.shell = true;
-    }
-    const child = spawn(tkePath, args, options);
+    // 使用 execFile 替代 spawn，自动处理路径中的空格和特殊字符
+    const child = execFile(tkePath, args);
 
     let stdout = '';
     let stderr = '';
@@ -172,14 +166,8 @@ function registerFetcherHandlers(app) {
       const xmlContent = fs.readFileSync(xmlPath, 'utf8');
 
       return new Promise((resolve, reject) => {
-        const options = {
-          stdio: ['pipe', 'pipe', 'pipe']
-        };
-        // Windows 下需要 shell: true 来正确处理带空格的路径
-        if (process.platform === 'win32') {
-          options.shell = true;
-        }
-        const child = spawn(tkePath, args, options);
+        // 使用 execFile 替代 spawn，自动处理路径中的空格和特殊字符
+        const child = execFile(tkePath, args);
 
         let stdout = '';
         let stderr = '';
