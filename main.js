@@ -1,17 +1,35 @@
 // Test Toolkit Studio - 主进程
 // 必须在最开始初始化 Sentry
+
+// 检测是否为开发环境
+const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+const environment = isDev ? 'development' : 'production';
+
 const Sentry = require("@sentry/electron/main");
-Sentry.init({
-  dsn: "https://cc99833abc12a25305015d39c3bb7adb@o4510309702565888.ingest.de.sentry.io/4510309764497488",
-  // 可选：设置环境
-  environment: process.env.NODE_ENV || 'production',
-  // 可选：设置应用版本
-  release: require('./package.json').version,
-  // 启用实验性日志功能
-  _experiments: {
+
+// 只在生产环境启用 Sentry
+if (!isDev) {
+  Sentry.init({
+    dsn: "https://cc99833abc12a25305015d39c3bb7adb@o4510309702565888.ingest.de.sentry.io/4510309764497488",
+    environment: environment,
+    release: require('./package.json').version,
+    // 启用日志功能
     enableLogs: true,
-  },
-});
+    // 设置采样率
+    tracesSampleRate: 1.0,
+    // 过滤日志：只发送 warn 和 error 到 Logs
+    beforeSendLog: (log) => {
+      // 过滤掉 info 和 debug 级别的日志
+      if (log.level === 'info' || log.level === 'debug' || log.level === 'trace') {
+        return null;
+      }
+      return log;
+    },
+  });
+  console.log('✅ Sentry 已启用 (生产环境)');
+} else {
+  console.log('ℹ️  Sentry 已禁用 (开发环境)');
+}
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
@@ -47,7 +65,7 @@ const { registerProjectHandlers } = require('./handlers/project/project-handlers
 const { registerDeviceConfigHandlers } = require('./handlers/property-manage/device-config-handlers');
 
 // API 代理模块 - 与外部 API 服务交互
-const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
+const { registerAuthHandlers, initializeSentryUser } = require('./handlers/api-proxy/toolkit-gateway');
 const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
 const { registerReleaseNotesHandlers } = require('./handlers/api-proxy/release-notes-handler');
 
@@ -65,31 +83,57 @@ let mainWindow;
 const logger = {
   log: (message, context = {}) => {
     console.log(message);
-    // 使用 Sentry 官方日志 API
-    Sentry.logger.info(message, context);
+    if (!isDev && Sentry.addBreadcrumb) {
+      // info/log 只作为 breadcrumb，不单独发送
+      Sentry.addBreadcrumb({
+        message,
+        level: 'info',
+        data: context,
+      });
+    }
   },
   info: (message, context = {}) => {
     console.log(message);
-    Sentry.logger.info(message, context);
+    if (!isDev && Sentry.addBreadcrumb) {
+      // info 只作为 breadcrumb，不单独发送
+      Sentry.addBreadcrumb({
+        message,
+        level: 'info',
+        data: context,
+      });
+    }
   },
   warn: (message, context = {}) => {
     console.warn(message);
-    Sentry.logger.warn(message, context);
+    if (!isDev && Sentry.logger) {
+      // warn 发送到 Logs
+      Sentry.logger.warn(message, context);
+    }
   },
   error: (message, error = null, context = {}) => {
     console.error(message, error);
-    if (error instanceof Error) {
-      // 对于 Error 对象，仍使用 captureException 以获得完整堆栈
-      Sentry.captureException(error, {
-        contexts: { custom: { message, ...context } },
-      });
-    } else {
-      Sentry.logger.error(message, context);
+    if (!isDev) {
+      if (error instanceof Error && Sentry.captureException) {
+        // 对于 Error 对象，使用 captureException 以获得完整堆栈
+        Sentry.captureException(error, {
+          contexts: { custom: { message, ...context } },
+        });
+      } else if (Sentry.logger) {
+        // 纯文本错误发送到 Logs
+        Sentry.logger.error(message, context);
+      }
     }
   },
   debug: (message, context = {}) => {
     console.debug(message);
-    Sentry.logger.debug(message, context);
+    if (!isDev && Sentry.addBreadcrumb) {
+      // debug 只作为 breadcrumb，不单独发送
+      Sentry.addBreadcrumb({
+        message,
+        level: 'debug',
+        data: context,
+      });
+    }
   },
 };
 
@@ -322,6 +366,11 @@ app.whenReady().then(() => {
 
   // 初始化环境
   initializeEnvironment();
+
+  // 初始化 Sentry 用户上下文（如果已登录）
+  initializeSentryUser().catch(error => {
+    logger.error('初始化 Sentry 用户上下文失败', error);
+  });
 });
 
 // 注册其他IPC处理器

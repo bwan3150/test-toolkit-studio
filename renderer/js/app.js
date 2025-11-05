@@ -286,6 +286,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 window.rWarn('ApiClient模块未加载，跳过初始化');
             }
+
+            // 初始化 Sentry 用户上下文（如果已登录）
+            if (window.setSentryUser) {
+                try {
+                    await window.setSentryUser();
+                } catch (error) {
+                    window.rWarn('初始化 Sentry 用户上下文失败:', error);
+                }
+            }
             
             window.KeyboardShortcutsModule.initializeKeyboardShortcuts();
             // console.log('✓ 快捷键模块已初始化'); // 已禁用以减少日志

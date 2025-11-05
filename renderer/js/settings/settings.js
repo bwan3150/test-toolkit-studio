@@ -41,6 +41,11 @@ function initializeSettingsPage() {
     
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async () => {
+            // 清除 Sentry 用户上下文
+            if (window.clearSentryUser) {
+                window.clearSentryUser();
+            }
+
             await ipcRenderer.invoke('logout');
             await ipcRenderer.invoke('navigate-to-login');
         });

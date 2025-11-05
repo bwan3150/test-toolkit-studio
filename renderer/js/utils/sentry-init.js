@@ -5,20 +5,35 @@
 
     const Sentry = require("@sentry/electron/renderer");
 
-    Sentry.init({
-        dsn: "https://cc99833abc12a25305015d39c3bb7adb@o4510309702565888.ingest.de.sentry.io/4510309764497488",
-        // 可选：设置环境
-        environment: process.env.NODE_ENV || 'production',
-        // 可选：设置应用版本
-        release: require('../../../package.json').version,
-        // 启用实验性日志功能
-        _experiments: {
+    // 检测是否为开发环境
+    const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+    const environment = isDev ? 'development' : 'production';
+
+    // 只在生产环境启用 Sentry
+    if (!isDev) {
+        Sentry.init({
+            dsn: "https://cc99833abc12a25305015d39c3bb7adb@o4510309702565888.ingest.de.sentry.io/4510309764497488",
+            environment: environment,
+            release: require('../../../package.json').version,
+            // 启用日志功能
             enableLogs: true,
-        },
-    });
+            // 设置采样率
+            tracesSampleRate: 1.0,
+            // 过滤日志：只发送 warn 和 error 到 Logs
+            beforeSendLog: (log) => {
+                // 过滤掉 info 和 debug 级别的日志
+                if (log.level === 'info' || log.level === 'debug' || log.level === 'trace') {
+                    return null;
+                }
+                return log;
+            },
+        });
+        console.log('✅ Renderer 进程 Sentry 已启用 (生产环境)');
+    } else {
+        console.log('ℹ️  Renderer 进程 Sentry 已禁用 (开发环境)');
+    }
 
-    // 导出 Sentry 实例供其他模块使用
+    // 导出 Sentry 实例供其他模块使用（即使在开发环境也导出，以避免错误）
     window.Sentry = Sentry;
-
-    console.log('Renderer 进程 Sentry 已初始化 (日志功能已启用)');
+    window.isSentryEnabled = !isDev;
 })();

@@ -46,27 +46,30 @@
                 this.logBuffer.shift(); // 移除最旧的日志
             }
 
-            // 发送到 Sentry（使用官方日志 API）
-            if (this.Sentry && this.Sentry.logger) {
+            // 发送到 Sentry（仅在生产环境）
+            if (window.isSentryEnabled && this.Sentry) {
                 if (level === 'error') {
                     // 检查是否有 Error 对象
                     const errorObj = args.find(arg => arg instanceof Error);
-                    if (errorObj) {
+                    if (errorObj && this.Sentry.captureException) {
                         // 对于 Error 对象，使用 captureException 获得完整堆栈
                         this.Sentry.captureException(errorObj, {
                             contexts: { custom: { message } }
                         });
-                    } else {
-                        // 使用官方日志 API
+                    } else if (this.Sentry.logger) {
+                        // 纯文本错误发送到 Logs
                         this.Sentry.logger.error(message);
                     }
-                } else if (level === 'warn') {
+                } else if (level === 'warn' && this.Sentry.logger) {
+                    // warn 发送到 Logs
                     this.Sentry.logger.warn(message);
-                } else if (level === 'debug') {
-                    this.Sentry.logger.debug(message);
-                } else {
-                    // info, log 级别
-                    this.Sentry.logger.info(message);
+                } else if (this.Sentry.addBreadcrumb) {
+                    // info, log, debug 只作为 breadcrumb，不单独发送
+                    this.Sentry.addBreadcrumb({
+                        message,
+                        level: level === 'debug' ? 'debug' : 'info',
+                        timestamp: Date.now() / 1000,
+                    });
                 }
             }
 
@@ -185,16 +188,55 @@
     
     // 创建全局实例
     const logger = new RendererLogger();
-    
+
     // 导出到全局
     window.RendererLogger = logger;
-    
+
     // 为了方便使用，也创建全局快捷方法
     window.rLog = (...args) => logger.log(...args);
     window.rInfo = (...args) => logger.info(...args);
     window.rWarn = (...args) => logger.warn(...args);
     window.rError = (...args) => logger.error(...args);
     window.rDebug = (...args) => logger.debug(...args);
-    
+
+    // Sentry 用户上下文管理
+    window.setSentryUser = async () => {
+        try {
+            if (!window.isSentryEnabled || !window.Sentry) {
+                return; // 开发环境或 Sentry 未启用
+            }
+
+            const result = await ipcRenderer.invoke('get-user-info');
+            if (result.success && result.data) {
+                const userData = result.data;
+                if (window.Sentry.setUser) {
+                    window.Sentry.setUser({
+                        id: userData.id || userData.user_id,
+                        email: userData.email,
+                        username: userData.username || userData.name,
+                    });
+                    console.log('渲染进程 Sentry 用户上下文已设置:', userData.email);
+                }
+            }
+        } catch (error) {
+            console.error('设置渲染进程 Sentry 用户上下文失败:', error);
+        }
+    };
+
+    window.clearSentryUser = () => {
+        try {
+            if (!window.isSentryEnabled || !window.Sentry) {
+                return; // 开发环境或 Sentry 未启用
+            }
+
+            if (window.Sentry.setUser) {
+                window.Sentry.setUser(null);
+                console.log('渲染进程 Sentry 用户上下文已清除');
+            }
+        } catch (error) {
+            console.error('清除渲染进程 Sentry 用户上下文失败:', error);
+        }
+    };
+
     console.log('渲染进程日志模块已加载');
 })();

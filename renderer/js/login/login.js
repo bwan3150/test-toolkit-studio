@@ -54,7 +54,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.success) {
                 // Save email for next time
                 await ipcRenderer.invoke('store-set', 'last_email', credentials.email);
-                
+
+                // 设置 Sentry 用户上下文
+                if (window.setSentryUser) {
+                    await window.setSentryUser();
+                }
+
                 // Navigate to main app
                 await ipcRenderer.invoke('navigate-to-app');
             } else {
