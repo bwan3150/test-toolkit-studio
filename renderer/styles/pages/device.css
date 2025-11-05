@@ -1339,10 +1339,10 @@
 
 /* 连接向导弹窗样式 */
 #connectionGuideModal .modal-dialog {
-    width: 600px;
-    max-width: 90vw;
-    height: 500px;
-    max-height: 90vh;
+    width: 900px; /* 增加宽度 */
+    max-width: 95vw;
+    height: 700px; /* 增加高度 */
+    max-height: 95vh;
     display: flex;
     flex-direction: column;
     background: #2B2B2B;
@@ -1502,20 +1502,27 @@
     display: flex;
     gap: 8px;
     margin-top: 8px;
+    flex-wrap: wrap; /* 允许按钮换行 */
 }
 
 .action-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 6px 12px;
+    padding: 6px 12px; /* 紧凑的padding */
     border: 1px solid #414141;
-    border-radius: 3px;
+    border-radius: 4px;
     background: #2B2B2B;
     color: #CCCCCC;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
+    line-height: 1.3; /* 紧凑的行高 */
+    white-space: nowrap; /* 防止文字换行 */
     transition: all 0.2s;
+    min-height: 28px; /* 降低最小高度 */
+    flex: 0 1 auto; /* 改为根据内容自适应,不强制平分 */
+    width: auto; /* 自动宽度 */
 }
 
 .action-btn:hover {
@@ -1705,6 +1712,11 @@
     display: flex;
     gap: 8px;
     margin-bottom: 0;
+    flex-wrap: wrap; /* 允许按钮换行 */
+}
+
+.qr-actions .action-btn {
+    /* 使用默认的自适应宽度即可 */
 }
 
 .qr-info {
@@ -1719,6 +1731,12 @@
 /* 配对操作样式 */
 .pairing-actions {
     margin-bottom: 0;
+    display: flex;
+    justify-content: flex-start; /* 按钮左对齐 */
+}
+
+.pairing-actions .action-btn {
+    /* 使用默认的自适应宽度即可 */
 }
 
 .manual-pairing-tip,

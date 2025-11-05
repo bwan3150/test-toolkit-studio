@@ -2,7 +2,7 @@
 // 负责设备控制操作：点击、滑动、截图、应用启动等
 // 注意：此模块只负责执行 TKE 命令并返回原始输出，JSON 解析在 renderer 层完成
 const { ipcMain } = require('electron');
-const { spawn } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { getTkePath } = require('./adb-handlers');
@@ -19,9 +19,8 @@ async function execTkeCommand(app, args) {
   console.log('执行TKE命令:', tkePath, args.join(' '));
 
   return new Promise((resolve, reject) => {
-    // Windows 下需要 shell: true 来正确处理带空格的路径
-    const options = process.platform === 'win32' ? { shell: true } : {};
-    const child = spawn(tkePath, args, options);
+    // 使用 execFile 替代 spawn，自动处理路径中的空格和特殊字符
+    const child = execFile(tkePath, args);
 
     let stdout = '';
     let stderr = '';

@@ -2,7 +2,7 @@
 const { ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { execFile } = require('child_process');
 
 // 获取TKE可执行文件路径
 function getTkePath(app) {
@@ -34,11 +34,10 @@ async function execTkeAaptCommand(app, aaptArgs) {
     args.push(aaptArgs);
   }
 
-  // 使用spawn执行命令
+  // 使用execFile执行命令
   return new Promise((resolve, reject) => {
-    // Windows 下需要 shell: true 来正确处理带空格的路径
-    const options = process.platform === 'win32' ? { shell: true } : {};
-    const child = spawn(tkePath, args, options);
+    // 使用 execFile 替代 spawn，自动处理路径中的空格和特殊字符
+    const child = execFile(tkePath, args);
 
     let stdout = '';
     let stderr = '';

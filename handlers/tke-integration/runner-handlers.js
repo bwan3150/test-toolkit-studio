@@ -2,7 +2,7 @@
 // 负责脚本和项目的执行
 // 注意：所有 runner 命令都返回 JSON 格式输出
 const { ipcMain } = require('electron');
-const { spawn } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { getTkePath } = require('./adb-handlers');
@@ -18,9 +18,8 @@ async function execTkeRunnerCommand(app, args) {
   console.log('执行TKE Runner命令:', tkePath, args.join(' '));
 
   return new Promise((resolve, reject) => {
-    // Windows 下需要 shell: true 来正确处理带空格的路径
-    const options = process.platform === 'win32' ? { shell: true } : {};
-    const child = spawn(tkePath, args, options);
+    // 使用 execFile 替代 spawn，自动处理路径中的空格和特殊字符
+    const child = execFile(tkePath, args);
 
     let stdout = '';
     let stderr = '';
