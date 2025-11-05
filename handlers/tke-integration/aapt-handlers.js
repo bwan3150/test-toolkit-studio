@@ -36,7 +36,9 @@ async function execTkeAaptCommand(app, aaptArgs) {
 
   // 使用spawn执行命令
   return new Promise((resolve, reject) => {
-    const child = spawn(tkePath, args);
+    // Windows 下需要 shell: true 来正确处理带空格的路径
+    const options = process.platform === 'win32' ? { shell: true } : {};
+    const child = spawn(tkePath, args, options);
 
     let stdout = '';
     let stderr = '';
