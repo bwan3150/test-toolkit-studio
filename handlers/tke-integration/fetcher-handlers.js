@@ -11,9 +11,14 @@ const { extractJsonFromOutput } = require('./tke-utils');
 // 通用的 TKE 命令执行函数（支持 stdin 输入）
 async function execTkeCommandWithStdin(tkePath, args, stdinData = null) {
   return new Promise((resolve, reject) => {
-    const child = spawn(tkePath, args, {
+    const options = {
       stdio: ['pipe', 'pipe', 'pipe']
-    });
+    };
+    // Windows 下需要 shell: true 来正确处理带空格的路径
+    if (process.platform === 'win32') {
+      options.shell = true;
+    }
+    const child = spawn(tkePath, args, options);
 
     let stdout = '';
     let stderr = '';
@@ -167,9 +172,14 @@ function registerFetcherHandlers(app) {
       const xmlContent = fs.readFileSync(xmlPath, 'utf8');
 
       return new Promise((resolve, reject) => {
-        const child = spawn(tkePath, args, {
+        const options = {
           stdio: ['pipe', 'pipe', 'pipe']
-        });
+        };
+        // Windows 下需要 shell: true 来正确处理带空格的路径
+        if (process.platform === 'win32') {
+          options.shell = true;
+        }
+        const child = spawn(tkePath, args, options);
 
         let stdout = '';
         let stderr = '';

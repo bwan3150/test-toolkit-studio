@@ -889,9 +889,14 @@ function registerAdbHandlers(app) {
       
       // 执行 TKE 命令，通过stdin传入XML文件内容
       const xmlContent = fs.readFileSync(xmlPath, 'utf8');
-      const child = spawn(tkePath, args, { 
-        stdio: ['pipe', 'pipe', 'pipe'] 
-      });
+      const options = {
+        stdio: ['pipe', 'pipe', 'pipe']
+      };
+      // Windows 下需要 shell: true 来正确处理带空格的路径
+      if (process.platform === 'win32') {
+        options.shell = true;
+      }
+      const child = spawn(tkePath, args, options);
       
       // 写入XML内容到stdin
       child.stdin.write(xmlContent);
@@ -1018,7 +1023,9 @@ async function execTkeAdbCommand(app, deviceId, adbArgs) {
 
   // 使用spawn而不是execPromise来正确处理参数中的空格
   return new Promise((resolve, reject) => {
-    const child = spawn(tkePath, args);
+    // Windows 下需要 shell: true 来正确处理带空格的路径
+    const options = process.platform === 'win32' ? { shell: true } : {};
+    const child = spawn(tkePath, args, options);
 
     let stdout = '';
     let stderr = '';

@@ -19,7 +19,9 @@ async function execTkeCommand(app, args) {
   console.log('执行TKE命令:', tkePath, args.join(' '));
 
   return new Promise((resolve, reject) => {
-    const child = spawn(tkePath, args);
+    // Windows 下需要 shell: true 来正确处理带空格的路径
+    const options = process.platform === 'win32' ? { shell: true } : {};
+    const child = spawn(tkePath, args, options);
 
     let stdout = '';
     let stderr = '';
