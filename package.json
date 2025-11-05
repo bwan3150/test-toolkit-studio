@@ -62,7 +62,9 @@
       "!**/.DS_Store",
       "!**/Thumbs.db",
       "!**/*.log",
-      "!**/*.md"
+      "!**/*.md",
+      "!.sentryclirc",
+      "!sentry.properties"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

@@ -11,10 +11,14 @@
         environment: process.env.NODE_ENV || 'production',
         // 可选：设置应用版本
         release: require('../../../package.json').version,
+        // 启用实验性日志功能
+        _experiments: {
+            enableLogs: true,
+        },
     });
 
     // 导出 Sentry 实例供其他模块使用
     window.Sentry = Sentry;
 
-    console.log('Renderer 进程 Sentry 已初始化');
+    console.log('Renderer 进程 Sentry 已初始化 (日志功能已启用)');
 })();

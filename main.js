@@ -7,6 +7,10 @@ Sentry.init({
   environment: process.env.NODE_ENV || 'production',
   // 可选：设置应用版本
   release: require('./package.json').version,
+  // 启用实验性日志功能
+  _experiments: {
+    enableLogs: true,
+  },
 });
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
@@ -57,43 +61,35 @@ const { registerStreamCaptureHandlers } = require('./handlers/ws-scrcpy/stream-c
 // 全局变量
 let mainWindow;
 
-// 日志辅助函数 - 使用 Sentry 记录日志
+// 日志辅助函数 - 使用 Sentry 官方日志 API
 const logger = {
   log: (message, context = {}) => {
     console.log(message);
-    Sentry.addBreadcrumb({
-      message,
-      level: 'info',
-      data: context,
-    });
+    // 使用 Sentry 官方日志 API
+    Sentry.logger.info(message, context);
   },
   info: (message, context = {}) => {
     console.log(message);
-    Sentry.addBreadcrumb({
-      message,
-      level: 'info',
-      data: context,
-    });
+    Sentry.logger.info(message, context);
   },
   warn: (message, context = {}) => {
     console.warn(message);
-    Sentry.captureMessage(message, {
-      level: 'warning',
-      contexts: { custom: context },
-    });
+    Sentry.logger.warn(message, context);
   },
   error: (message, error = null, context = {}) => {
     console.error(message, error);
     if (error instanceof Error) {
+      // 对于 Error 对象，仍使用 captureException 以获得完整堆栈
       Sentry.captureException(error, {
         contexts: { custom: { message, ...context } },
       });
     } else {
-      Sentry.captureMessage(message, {
-        level: 'error',
-        contexts: { custom: context },
-      });
+      Sentry.logger.error(message, context);
     }
+  },
+  debug: (message, context = {}) => {
+    console.debug(message);
+    Sentry.logger.debug(message, context);
   },
 };
 

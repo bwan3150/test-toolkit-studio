@@ -46,27 +46,27 @@
                 this.logBuffer.shift(); // 移除最旧的日志
             }
 
-            // 发送到 Sentry
-            if (this.Sentry) {
+            // 发送到 Sentry（使用官方日志 API）
+            if (this.Sentry && this.Sentry.logger) {
                 if (level === 'error') {
                     // 检查是否有 Error 对象
                     const errorObj = args.find(arg => arg instanceof Error);
                     if (errorObj) {
+                        // 对于 Error 对象，使用 captureException 获得完整堆栈
                         this.Sentry.captureException(errorObj, {
                             contexts: { custom: { message } }
                         });
                     } else {
-                        this.Sentry.captureMessage(message, { level: 'error' });
+                        // 使用官方日志 API
+                        this.Sentry.logger.error(message);
                     }
                 } else if (level === 'warn') {
-                    this.Sentry.captureMessage(message, { level: 'warning' });
+                    this.Sentry.logger.warn(message);
+                } else if (level === 'debug') {
+                    this.Sentry.logger.debug(message);
                 } else {
-                    // info, log, debug 级别作为面包屑
-                    this.Sentry.addBreadcrumb({
-                        message,
-                        level: level === 'debug' ? 'debug' : 'info',
-                        timestamp: Date.now() / 1000,
-                    });
+                    // info, log 级别
+                    this.Sentry.logger.info(message);
                 }
             }
 
