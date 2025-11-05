@@ -1,22 +1,25 @@
 // 渲染进程日志模块
 // 将渲染进程的日志发送到主进程，在CLI中显示
+// 同时集成 Sentry 进行错误追踪
 (function() {
     'use strict';
-    
+
     const { ipcRenderer } = require('electron');
-    
+
     class RendererLogger {
         constructor() {
             this.enabled = true;
             this.prefix = '[Renderer]';
             this.logBuffer = []; // 缓存日志
             this.maxBufferSize = 10000; // 最大缓存10000条日志
+            // 获取 Sentry 实例（由 sentry-init.js 提供）
+            this.Sentry = window.Sentry;
         }
         
         // 基础日志方法
         _log(level, ...args) {
             if (!this.enabled) return;
-            
+
             // 将参数转换为字符串
             const message = args.map(arg => {
                 if (typeof arg === 'object') {
@@ -28,21 +31,48 @@
                 }
                 return String(arg);
             }).join(' ');
-            
+
             const logEntry = {
                 level: level,
                 message: message,
                 timestamp: new Date().toISOString()
             };
-            
+
             // 添加到缓存
             this.logBuffer.push(logEntry);
-            
+
             // 限制缓存大小
             if (this.logBuffer.length > this.maxBufferSize) {
                 this.logBuffer.shift(); // 移除最旧的日志
             }
-            
+
+            // 发送到 Sentry（仅在生产环境）
+            if (window.isSentryEnabled && this.Sentry) {
+                if (level === 'error') {
+                    // 检查是否有 Error 对象
+                    const errorObj = args.find(arg => arg instanceof Error);
+                    if (errorObj && this.Sentry.captureException) {
+                        // 对于 Error 对象，使用 captureException 获得完整堆栈
+                        this.Sentry.captureException(errorObj, {
+                            contexts: { custom: { message } }
+                        });
+                    } else if (this.Sentry.logger) {
+                        // 纯文本错误发送到 Logs
+                        this.Sentry.logger.error(message);
+                    }
+                } else if (level === 'warn' && this.Sentry.logger) {
+                    // warn 发送到 Logs
+                    this.Sentry.logger.warn(message);
+                } else if (this.Sentry.addBreadcrumb) {
+                    // info, log, debug 只作为 breadcrumb，不单独发送
+                    this.Sentry.addBreadcrumb({
+                        message,
+                        level: level === 'debug' ? 'debug' : 'info',
+                        timestamp: Date.now() / 1000,
+                    });
+                }
+            }
+
             // 发送到主进程
             try {
                 ipcRenderer.send('renderer-log', logEntry);
@@ -50,7 +80,7 @@
                 // 如果IPC失败，至少在控制台输出
                 console.error('Failed to send log to main process:', error);
             }
-            
+
             // 同时在控制台输出（如果开发者工具开启）
             const consoleMethod = console[level] || console.log;
             consoleMethod(`${this.prefix}`, ...args);
@@ -158,16 +188,55 @@
     
     // 创建全局实例
     const logger = new RendererLogger();
-    
+
     // 导出到全局
     window.RendererLogger = logger;
-    
+
     // 为了方便使用，也创建全局快捷方法
     window.rLog = (...args) => logger.log(...args);
     window.rInfo = (...args) => logger.info(...args);
     window.rWarn = (...args) => logger.warn(...args);
     window.rError = (...args) => logger.error(...args);
     window.rDebug = (...args) => logger.debug(...args);
-    
+
+    // Sentry 用户上下文管理
+    window.setSentryUser = async () => {
+        try {
+            if (!window.isSentryEnabled || !window.Sentry) {
+                return; // 开发环境或 Sentry 未启用
+            }
+
+            const result = await ipcRenderer.invoke('get-user-info');
+            if (result.success && result.data) {
+                const userData = result.data;
+                if (window.Sentry.setUser) {
+                    window.Sentry.setUser({
+                        id: userData.id || userData.user_id,
+                        email: userData.email,
+                        username: userData.username || userData.name,
+                    });
+                    console.log('渲染进程 Sentry 用户上下文已设置:', userData.email);
+                }
+            }
+        } catch (error) {
+            console.error('设置渲染进程 Sentry 用户上下文失败:', error);
+        }
+    };
+
+    window.clearSentryUser = () => {
+        try {
+            if (!window.isSentryEnabled || !window.Sentry) {
+                return; // 开发环境或 Sentry 未启用
+            }
+
+            if (window.Sentry.setUser) {
+                window.Sentry.setUser(null);
+                console.log('渲染进程 Sentry 用户上下文已清除');
+            }
+        } catch (error) {
+            console.error('清除渲染进程 Sentry 用户上下文失败:', error);
+        }
+    };
+
     console.log('渲染进程日志模块已加载');
 })();

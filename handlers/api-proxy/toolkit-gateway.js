@@ -2,6 +2,7 @@
 // 负责与 Toolkit 网关服务的通信，包括用户认证、token管理等
 const { ipcMain } = require('electron');
 const Store = require('electron-store');
+const Sentry = require('@sentry/electron/main');
 
 // 初始化store
 const store = new Store();
@@ -24,16 +25,20 @@ function registerAuthHandlers() {
       );
       
       const data = response.data;
-      
+
       // 存储tokens
       store.set('access_token', data.access_token);
       store.set('refresh_token', data.refresh_token);
       store.set('base_url', credentials.baseUrl);
       store.set('token_expiry', new Date(Date.now() + data.expires_in * 1000).toISOString());
-      
+
       isAuthenticated = true;
       // 启动定期token检查
       startTokenCheck();
+
+      // 设置 Sentry 用户上下文
+      await setSentryUser();
+
       return { success: true, data };
     } catch (error) {
       return { success: false, error: error.message };
@@ -53,6 +58,10 @@ function registerAuthHandlers() {
     isAuthenticated = false;
     // 停止定期token检查
     stopTokenCheck();
+
+    // 清除 Sentry 用户上下文
+    clearSentryUser();
+
     return { success: true };
   });
 
@@ -169,6 +178,77 @@ function stopTokenCheck() {
   }
 }
 
+// 设置 Sentry 用户上下文
+async function setSentryUser() {
+  try {
+    // 检查是否在开发环境
+    const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+    if (isDev) {
+      return; // 开发环境不设置 Sentry
+    }
+
+    const axios = require('axios');
+    const token = store.get('access_token');
+    const baseUrl = store.get('base_url');
+
+    if (!token || !baseUrl) {
+      console.log('No token or baseUrl, skipping Sentry user context');
+      return;
+    }
+
+    const response = await axios.get(`${baseUrl}/api/users/me`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const userData = response.data;
+
+    // 设置 Sentry 用户上下文
+    if (Sentry && Sentry.setUser) {
+      Sentry.setUser({
+        id: userData.id || userData.user_id,
+        email: userData.email,
+        username: userData.username || userData.name,
+      });
+      console.log('Sentry 用户上下文已设置:', userData.email);
+    }
+  } catch (error) {
+    console.error('设置 Sentry 用户上下文失败:', error.message);
+  }
+}
+
+// 清除 Sentry 用户上下文
+function clearSentryUser() {
+  try {
+    // 检查是否在开发环境
+    const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+    if (isDev) {
+      return; // 开发环境不清除 Sentry
+    }
+
+    if (Sentry && Sentry.setUser) {
+      Sentry.setUser(null);
+      console.log('Sentry 用户上下文已清除');
+    }
+  } catch (error) {
+    console.error('清除 Sentry 用户上下文失败:', error.message);
+  }
+}
+
+// 初始化时检查并设置用户上下文
+async function initializeSentryUser() {
+  try {
+    const token = store.get('access_token');
+    if (token) {
+      await setSentryUser();
+    }
+  } catch (error) {
+    console.error('初始化 Sentry 用户上下文失败:', error.message);
+  }
+}
+
 module.exports = {
-  registerAuthHandlers
+  registerAuthHandlers,
+  initializeSentryUser
 };

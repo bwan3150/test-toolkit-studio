@@ -1,4 +1,36 @@
 // Test Toolkit Studio - 主进程
+// 必须在最开始初始化 Sentry
+
+// 检测是否为开发环境
+const isDev = process.env.ELECTRON_DEV_MODE === 'true';
+const environment = isDev ? 'development' : 'production';
+
+const Sentry = require("@sentry/electron/main");
+
+// 只在生产环境启用 Sentry
+if (!isDev) {
+  Sentry.init({
+    dsn: "https://cc99833abc12a25305015d39c3bb7adb@o4510309702565888.ingest.de.sentry.io/4510309764497488",
+    environment: environment,
+    release: require('./package.json').version,
+    // 启用日志功能
+    enableLogs: true,
+    // 设置采样率
+    tracesSampleRate: 1.0,
+    // 过滤日志：只发送 warn 和 error 到 Logs
+    beforeSendLog: (log) => {
+      // 过滤掉 info 和 debug 级别的日志
+      if (log.level === 'info' || log.level === 'debug' || log.level === 'trace') {
+        return null;
+      }
+      return log;
+    },
+  });
+  console.log('✅ Sentry 已启用 (生产环境)');
+} else {
+  console.log('ℹ️  Sentry 已禁用 (开发环境)');
+}
+
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -33,7 +65,7 @@ const { registerProjectHandlers } = require('./handlers/project/project-handlers
 const { registerDeviceConfigHandlers } = require('./handlers/property-manage/device-config-handlers');
 
 // API 代理模块 - 与外部 API 服务交互
-const { registerAuthHandlers } = require('./handlers/api-proxy/toolkit-gateway');
+const { registerAuthHandlers, initializeSentryUser } = require('./handlers/api-proxy/toolkit-gateway');
 const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
 const { registerReleaseNotesHandlers } = require('./handlers/api-proxy/release-notes-handler');
 
@@ -46,6 +78,64 @@ const { registerStreamCaptureHandlers } = require('./handlers/ws-scrcpy/stream-c
 
 // 全局变量
 let mainWindow;
+
+// 日志辅助函数 - 使用 Sentry 官方日志 API
+const logger = {
+  log: (message, context = {}) => {
+    console.log(message);
+    if (!isDev && Sentry.addBreadcrumb) {
+      // info/log 只作为 breadcrumb，不单独发送
+      Sentry.addBreadcrumb({
+        message,
+        level: 'info',
+        data: context,
+      });
+    }
+  },
+  info: (message, context = {}) => {
+    console.log(message);
+    if (!isDev && Sentry.addBreadcrumb) {
+      // info 只作为 breadcrumb，不单独发送
+      Sentry.addBreadcrumb({
+        message,
+        level: 'info',
+        data: context,
+      });
+    }
+  },
+  warn: (message, context = {}) => {
+    console.warn(message);
+    if (!isDev && Sentry.logger) {
+      // warn 发送到 Logs
+      Sentry.logger.warn(message, context);
+    }
+  },
+  error: (message, error = null, context = {}) => {
+    console.error(message, error);
+    if (!isDev) {
+      if (error instanceof Error && Sentry.captureException) {
+        // 对于 Error 对象，使用 captureException 以获得完整堆栈
+        Sentry.captureException(error, {
+          contexts: { custom: { message, ...context } },
+        });
+      } else if (Sentry.logger) {
+        // 纯文本错误发送到 Logs
+        Sentry.logger.error(message, context);
+      }
+    }
+  },
+  debug: (message, context = {}) => {
+    console.debug(message);
+    if (!isDev && Sentry.addBreadcrumb) {
+      // debug 只作为 breadcrumb，不单独发送
+      Sentry.addBreadcrumb({
+        message,
+        level: 'debug',
+        data: context,
+      });
+    }
+  },
+};
 
 // 创建主窗口
 function createWindow() {
@@ -164,14 +254,14 @@ async function cleanupProcesses() {
   try {
     cleanupIosProcesses();
   } catch (e) {
-    console.error('清理iOS进程失败:', e);
+    logger.error('清理iOS进程失败', e);
   }
 
   // 清理 ws-scrcpy 服务器进程
   try {
     await cleanupScrcpyServer();
   } catch (e) {
-    console.error('清理ws-scrcpy进程失败:', e);
+    logger.error('清理ws-scrcpy进程失败', e);
   }
 }
 
@@ -258,9 +348,9 @@ function registerAllHandlers() {
     // 注册其他IPC处理器（scrcpy, STB, screenshot等）
     registerOtherHandlers();
 
-    console.log('所有IPC处理器注册完成');
+    logger.log('所有IPC处理器注册完成');
   } catch (error) {
-    console.error('注册IPC处理器失败:', error);
+    logger.error('注册IPC处理器失败', error);
   }
 }
 
@@ -276,6 +366,11 @@ app.whenReady().then(() => {
 
   // 初始化环境
   initializeEnvironment();
+
+  // 初始化 Sentry 用户上下文（如果已登录）
+  initializeSentryUser().catch(error => {
+    logger.error('初始化 Sentry 用户上下文失败', error);
+  });
 });
 
 // 注册其他IPC处理器
@@ -310,7 +405,7 @@ function registerOtherHandlers() {
       await shell.openExternal(url);
       return { success: true };
     } catch (error) {
-      console.error('打开外部链接失败:', error);
+      logger.error('打开外部链接失败', error, { url });
       return { success: false, error: error.message };
     }
   });
@@ -321,20 +416,20 @@ function registerOtherHandlers() {
 function initializeEnvironment() {
   // 输出TKE路径信息
   const tkePath = getTkePath(app);
-  console.log('TKE路径:', tkePath);
+  logger.log('TKE路径: ' + tkePath);
 
   // 检查TKE是否存在
   const tkeExists = fs.existsSync(tkePath);
-  console.log('TKE存在:', tkeExists);
+  logger.log('TKE存在: ' + tkeExists);
 
   // 启动ADB服务器（通过TKE内置的ADB）
   if (tkeExists) {
     const startServerCommand = buildTkeAdbCommand(tkePath, null, ['start-server']);
     exec(startServerCommand, (error, stdout, stderr) => {
       if (error) {
-        console.error('启动ADB服务器失败:', error);
+        logger.error('启动ADB服务器失败', error);
       } else {
-        console.log('ADB服务器已启动');
+        logger.log('ADB服务器已启动');
       }
     });
   }

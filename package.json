@@ -22,6 +22,7 @@
     "electron-builder": "^24.9.1"
   },
   "dependencies": {
+    "@sentry/electron": "^7.2.0",
     "adb-qc": "^1.0.4",
     "axios": "^1.6.2",
     "codejar": "^4.3.0",
@@ -61,7 +62,9 @@
       "!**/.DS_Store",
       "!**/Thumbs.db",
       "!**/*.log",
-      "!**/*.md"
+      "!**/*.md",
+      "!.sentryclirc",
+      "!sentry.properties"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
