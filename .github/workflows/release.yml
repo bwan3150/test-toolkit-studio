@@ -444,8 +444,23 @@ jobs:
           REM 创建目标目录
           if not exist "..\resources\win32\toolkit-engine" mkdir "..\resources\win32\toolkit-engine"
 
-          REM 复制到资源目录
+          REM 复制 tke.exe 到资源目录
           copy /Y "target\release\tke.exe" "..\resources\win32\toolkit-engine\tke.exe"
+
+          REM 复制 ADB 的 DLL 依赖 (Windows adb.exe 需要这些 DLL)
+          if exist "resources\win32\AdbWinApi.dll" (
+            copy /Y "resources\win32\AdbWinApi.dll" "..\resources\win32\toolkit-engine\AdbWinApi.dll"
+            echo ✅ Copied AdbWinApi.dll
+          ) else (
+            echo ⚠️  Warning: AdbWinApi.dll not found in resources\win32\
+          )
+
+          if exist "resources\win32\AdbWinUsbApi.dll" (
+            copy /Y "resources\win32\AdbWinUsbApi.dll" "..\resources\win32\toolkit-engine\AdbWinUsbApi.dll"
+            echo ✅ Copied AdbWinUsbApi.dll
+          ) else (
+            echo ⚠️  Warning: AdbWinUsbApi.dll not found in resources\win32\
+          )
 
           echo ✅ TKE 构建完成
           dir "..\resources\win32\toolkit-engine\tke.exe"

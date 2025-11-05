@@ -36,6 +36,7 @@ function getScrcpyServerPath() {
  * 获取 tke adb 的完整路径
  * @param {Object} app - Electron app 实例
  * @returns {string} tke adb 可执行文件的完整路径
+ * @throws {Error} 如果找不到 tke 可执行文件则抛出错误
  */
 function getTkeAdbPath(app) {
   const platform = os.platform();
@@ -54,13 +55,17 @@ function getTkeAdbPath(app) {
   // 检查哪个路径存在
   const fs = require('fs');
   if (fs.existsSync(devPath)) {
+    console.log('✅ 找到 tke (开发环境):', devPath);
     return devPath;
   } else if (fs.existsSync(prodPath)) {
+    console.log('✅ 找到 tke (生产环境):', prodPath);
     return prodPath;
   }
 
-  console.warn('未找到 tke 可执行文件，将使用系统默认 adb');
-  return null;
+  // 找不到 tke，抛出错误
+  const error = `未找到 tke 可执行文件。\n尝试的路径:\n  开发: ${devPath}\n  生产: ${prodPath}\n请确保 tke 已正确编译并放置在 resources/${platform}/toolkit-engine/ 目录下`;
+  console.error(error);
+  throw new Error(error);
 }
 
 /**
@@ -96,11 +101,15 @@ async function startScrcpyServer(port = 8000, adbPath = null) {
       // 设置端口
       env.PORT = port.toString();
 
-      // 如果提供了 tke adb 路径，设置为 ADB_PATH
-      if (adbPath) {
-        env.ADB_PATH = adbPath;
-        console.log('使用 tke adb 路径:', adbPath);
+      // 必须提供 tke adb 路径，不使用系统 adb
+      if (!adbPath) {
+        const error = 'adbPath 为空，无法启动 scrcpy-server';
+        console.error(error);
+        return reject(new Error(error));
       }
+
+      env.ADB_PATH = adbPath;
+      console.log('✅ 使用 tke adb 路径:', adbPath);
 
       // 获取环境信息
       const isDev = process.env.ELECTRON_DEV_MODE === 'true';
@@ -253,17 +262,29 @@ function registerScrcpyHandlers(app) {
     try {
       const port = options.port || 8000;
 
-      // 如果没有提供 adbPath，则自动获取 tke 的路径
+      // 必须获取 tke 的路径，不使用系统 adb
       let adbPath = options.adbPath;
       if (!adbPath) {
-        adbPath = getTkeAdbPath(app);
-        console.log('自动获取的 tke 路径:', adbPath);
+        try {
+          adbPath = getTkeAdbPath(app);
+          console.log('✅ 自动获取的 tke 路径:', adbPath);
+        } catch (error) {
+          console.error('❌ 获取 tke 路径失败:', error.message);
+          return { success: false, error: `无法找到 tke 可执行文件: ${error.message}` };
+        }
+      }
+
+      // 再次检查 adbPath 是否有效
+      if (!adbPath) {
+        const error = '未提供 adbPath 且无法自动获取 tke 路径';
+        console.error('❌', error);
+        return { success: false, error };
       }
 
       const result = await startScrcpyServer(port, adbPath);
       return result;
     } catch (error) {
-      console.error('启动 scrcpy-server 失败:', error);
+      console.error('❌ 启动 scrcpy-server 失败:', error);
       return { success: false, error: error.message };
     }
   });

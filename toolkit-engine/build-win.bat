@@ -60,6 +60,23 @@ if not exist "%TARGET_DIR%" mkdir "%TARGET_DIR%"
 REM 复制二进制文件
 copy /Y "%SOURCE_BINARY%" "%TARGET_BINARY%"
 
+REM 复制 ADB 的 DLL 依赖 (Windows adb.exe 需要这些 DLL)
+REM DLL 文件应该放在 toolkit-engine/resources/win32/ 下
+set DLL_SOURCE_DIR=%~dp0resources\win32
+if exist "%DLL_SOURCE_DIR%\AdbWinApi.dll" (
+    copy /Y "%DLL_SOURCE_DIR%\AdbWinApi.dll" "%TARGET_DIR%\AdbWinApi.dll"
+    echo Copied AdbWinApi.dll
+) else (
+    echo Warning: AdbWinApi.dll not found in %DLL_SOURCE_DIR%
+)
+
+if exist "%DLL_SOURCE_DIR%\AdbWinUsbApi.dll" (
+    copy /Y "%DLL_SOURCE_DIR%\AdbWinUsbApi.dll" "%TARGET_DIR%\AdbWinUsbApi.dll"
+    echo Copied AdbWinUsbApi.dll
+) else (
+    echo Warning: AdbWinUsbApi.dll not found in %DLL_SOURCE_DIR%
+)
+
 echo Build successfully
 echo Copied to: %TARGET_BINARY%
 
