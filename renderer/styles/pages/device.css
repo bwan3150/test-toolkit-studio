@@ -2278,11 +2278,17 @@
     background: transparent !important;
 }
 
-/* 平台图标 (Android/iOS) */
+/* 手机内部平台图标 (Android/iOS) */
 .device-platform-icon {
-    width: 42px;
-    height: 42px;
-    filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 8px;
+    color: var(--text-secondary);
+}
+
+.device-platform-icon svg {
+    width: 100%;
+    height: 100%;
 }
 
 /* 连接类型图标 (USB/WiFi) */
@@ -2314,11 +2320,7 @@
     animation: pulse-status 2s infinite;
 }
 
-/* 设备信息文本区域 */
-.device-info-text {
-    text-align: center;
-    width: 100%;
-}
+/* 设备信息文本区域 - 已移至文件末尾统一定义 */
 
 .device-id {
     font-family: var(--font-mono);
@@ -2331,15 +2333,15 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* App信息显示 - Hover浮层 */
+/* App信息显示 - Hover浮层（显示在中间位置） */
 .device-app-info {
     position: absolute;
-    bottom: -80px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     width: 280px;
     max-width: 90vw;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(10px);
     border-radius: 8px;
     padding: 12px 16px;
@@ -2349,12 +2351,13 @@
     transition: all 0.3s ease;
     z-index: 100;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    pointer-events: none; /* 防止浮层阻挡鼠标事件 */
 }
 
 .device-phone-mockup:hover .device-app-info {
     opacity: 1;
     visibility: visible;
-    bottom: -70px;
+    pointer-events: auto; /* hover时允许交互 */
 }
 
 .device-app-info-title {
@@ -2788,13 +2791,48 @@
     margin-top: 4px;
 }
 
-.device-name {
-    font-weight: 600;
-    color: var(--text-primary);
-    font-size: 14px;
+/* 手机内部设备名称（大字） */
+.device-phone-mockup .device-info-text .device-name {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+    max-width: 15ch !important; /* 限制最多显示15个字符 */
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
 
+/* 手机内部设备ID（小字） */
+.device-phone-mockup .device-info-text .device-id-small {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+}
 
+/* 手机内部设备model（小字） */
+.device-phone-mockup .device-info-text .device-model-small {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+}
 
 /* 连接类型标识 */
 .connection-type-badge {
@@ -3283,5 +3321,128 @@
 
 .back-button:hover svg {
     transform: translateX(-2px);
+}
+
+/* ==================== 平台分组布局 ==================== */
+
+.device-section h3 .platform-icon {
+    fill: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* Web Browser使用stroke样式 */
+.device-section h3 .platform-icon[stroke] {
+    fill: none;
+    stroke: var(--text-secondary);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-disabled);
+    font-size: 14px;
+}
+
+/* ==================== 连接状态标签 ==================== */
+
+.device-connection-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.device-connection-badge .badge-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.device-connection-badge .badge-dot {
+    display: none; /* 隐藏圆点指示器 */
+}
+
+.device-connection-badge .badge-text {
+    white-space: nowrap;
+}
+
+/* USB 连接状态 */
+.device-connection-badge.usb-connected {
+    background: rgba(78, 201, 176, 0.15);
+    border-color: rgba(78, 201, 176, 0.3);
+    color: #4ec9b0;
+}
+
+.device-connection-badge.usb-connected .badge-icon {
+    fill: #4ec9b0;
+}
+
+/* USB 未连接状态 */
+.device-connection-badge.usb-disconnected {
+    background: rgba(128, 128, 128, 0.15);
+    border-color: rgba(128, 128, 128, 0.2);
+    color: #888;
+}
+
+.device-connection-badge.usb-disconnected .badge-icon {
+    fill: #666;
+}
+
+/* WiFi 连接状态 */
+.device-connection-badge.wifi-connected {
+    background: rgba(79, 193, 255, 0.15);
+    border-color: rgba(79, 193, 255, 0.3);
+    color: #4fc1ff;
+}
+
+.device-connection-badge.wifi-connected .badge-icon {
+    fill: #4fc1ff;
+}
+
+/* WiFi 未连接状态 */
+.device-connection-badge.wifi-disconnected {
+    background: rgba(128, 128, 128, 0.15);
+    border-color: rgba(128, 128, 128, 0.2);
+    color: #888;
+}
+
+.device-connection-badge.wifi-disconnected .badge-icon {
+    fill: #666;
+}
+
+/* 设备信息文本容器 */
+.device-phone-mockup .device-info-text {
+    width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.device-phone-mockup .device-id {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-phone-mockup .device-model {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 

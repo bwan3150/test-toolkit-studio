@@ -7,24 +7,34 @@ function getGlobals() {
     return window.AppGlobals;
 }
 
-// 加载保存的设备（统一管理有线和无线设备）
-async function loadSavedDevices() {
+// 加载保存的设备（按平台分组显示）
+// @param {boolean} skipConnected - 是否跳过已连接的设备（避免与scanner重复显示）
+async function loadSavedDevices(skipConnected = false) {
     const { ipcRenderer, path, fs, yaml } = getGlobals();
     if (!window.AppGlobals.currentProject) return;
 
-    const savedDevicesGrid = document.getElementById('savedDevicesGrid');
-    if (!savedDevicesGrid) return;
+    const iosDevicesGrid = document.getElementById('iosDevicesGrid');
+    const androidDevicesGrid = document.getElementById('androidDevicesGrid');
 
-    savedDevicesGrid.innerHTML = '';
+    if (!iosDevicesGrid || !androidDevicesGrid) return;
 
     const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
 
     try {
-        // 先获取连接的设备
-        const connectedResult = await ipcRenderer.invoke('adb-devices');
-        const connectedDevices = connectedResult.success ? connectedResult.devices : [];
+        // 获取连接的Android和iOS设备
+        const [androidResult, iosResult] = await Promise.all([
+            ipcRenderer.invoke('adb-devices'),
+            ipcRenderer.invoke('get-ios-devices')
+        ]);
+
+        const connectedAndroidDevices = androidResult.success ? androidResult.devices : [];
+        const connectedIosDevices = iosResult.success ? iosResult.devices : [];
 
         const files = await fs.readdir(devicesPath);
+
+        // 分类保存的设备
+        const iosDevices = [];
+        const androidDevices = [];
 
         for (const file of files) {
             if (file.endsWith('.yaml')) {
@@ -32,94 +42,260 @@ async function loadSavedDevices() {
                 const content = await fs.readFile(filePath, 'utf-8');
                 const config = yaml.load(content);
 
-                // 通过匹配deviceId检查此设备是否已连接
-                const isConnected = config.deviceId && connectedDevices.some(d =>
-                    d.id === config.deviceId && d.status === 'device'
-                );
+                // 获取平台类型
+                const platform = config.platform?.toLowerCase() === 'ios' ? 'ios' : 'android';
 
-                // 判断连接类型：包含冒号或mDNS格式为无线设备
+                // 判断连接类型
                 const connectionType = config.connectionType || 'usb';
                 const isWifi = connectionType === 'wifi' ||
                                (config.ipAddress && config.port) ||
                                config.deviceId?.includes(':') ||
                                config.deviceId?.includes('._adb-tls-connect._tcp');
 
-                // 获取平台类型 (android/ios)
-                const platform = config.platformName?.toLowerCase() === 'ios' ? 'ios' : 'android';
-                const platformIcon = platform === 'ios' ?
-                    '../../assets/icons/device-page/apple.svg' :
-                    '../../assets/icons/device-page/android.svg';
-                const connectionIcon = isWifi ?
-                    '../../assets/icons/device-page/wifi.svg' :
-                    '../../assets/icons/device-page/usb.svg';
-
-                const card = document.createElement('div');
-                card.className = 'device-phone-mockup';
-                card.innerHTML = `
-                    <div class="device-status-indicator ${isConnected ? 'connected' : ''}" title="${isConnected ? '已连接' : '未连接'}"></div>
-                    <div class="device-saved-label">已保存</div>
-                    <div class="device-screen-content">
-                        <img src="${platformIcon}" class="device-platform-icon" alt="${platform}">
-                        <img src="${connectionIcon}" class="device-connection-icon" alt="${isWifi ? 'WiFi' : 'USB'}">
-                        <div class="device-info-text">
-                            <div class="device-id">${isWifi ?
-                                `${config.ipAddress}:${config.port || 5555}` :
-                                (config.deviceId || config.deviceName)
-                            }</div>
-                            <div class="no-app-info">${config.platformName} ${config.platformVersion}</div>
-                        </div>
-                    </div>
-                    <div class="device-actions">
-                        ${isWifi && !isConnected ? `
-                            <button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">连接</button>
-                        ` : ''}
-                        ${isWifi && isConnected ? `
-                            <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>
-                        ` : ''}
-                        <button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">编辑</button>
-                        <button class="btn btn-outline btn-small" onclick="deleteDevice('${file}')" title="删除">删除</button>
-                    </div>
-                `;
-
-                // 为保存的设备卡片也添加拖拽功能
-                // 根据平台类型获取设备标识符
-                let deviceIdentifier = null;
-
-                if (config.platform === 'ios') {
-                    // iOS设备使用udid
-                    deviceIdentifier = config.udid;
-                } else {
-                    // Android设备使用deviceId，如果没有deviceId，尝试使用其他标识
-                    deviceIdentifier = config.deviceId;
-
-                    // 如果没有deviceId但是连接设备，尝试从连接的设备中查找
-                    if (!deviceIdentifier && isConnected && connectedDevices.length > 0) {
-                        // 尝试找到对应的连接设备
-                        const connectedDevice = connectedDevices.find(d =>
-                            d.status === 'device' && config.deviceName &&
-                            (config.deviceName.includes(d.id.substring(0, 8)) ||
-                             (config.ipAddress && d.id.includes(config.ipAddress)))
-                        );
-                        if (connectedDevice) {
-                            deviceIdentifier = connectedDevice.id;
-                        }
-                    }
+                // 检查设备是否已连接
+                let isConnected = false;
+                if (platform === 'android') {
+                    isConnected = config.deviceId && connectedAndroidDevices.some(d =>
+                        d.id === config.deviceId && d.status === 'device'
+                    );
+                } else if (platform === 'ios') {
+                    // iOS设备通过UDID匹配
+                    isConnected = config.udid && connectedIosDevices.some(d =>
+                        d.udid === config.udid
+                    );
                 }
 
-                if (deviceIdentifier) {
-                    if (window.setupDragAndDropForDevice) {
-                        window.setupDragAndDropForDevice(card, deviceIdentifier);
-                        window.rLog('为保存的设备添加拖拽功能:', config.deviceName, deviceIdentifier);
-                    }
-                } else {
-                    window.rLog('无法为设备添加拖拽功能（缺少设备标识）:', config.deviceName);
-                }
+                const deviceData = {
+                    file,
+                    config,
+                    platform,
+                    isWifi,
+                    isConnected
+                };
 
-                savedDevicesGrid.appendChild(card);
+                // 按平台分类
+                if (platform === 'ios') {
+                    iosDevices.push(deviceData);
+                } else {
+                    androidDevices.push(deviceData);
+                }
             }
         }
+
+        // 对设备进行排序：正在连接的设备排在最前面
+        iosDevices.sort((a, b) => {
+            if (a.isConnected && !b.isConnected) return -1;
+            if (!a.isConnected && b.isConnected) return 1;
+            return 0;
+        });
+
+        androidDevices.sort((a, b) => {
+            if (a.isConnected && !b.isConnected) return -1;
+            if (!a.isConnected && b.isConnected) return 1;
+            return 0;
+        });
+
+        // 根据参数决定是否过滤已连接的设备
+        // skipConnected=true: 只渲染未连接的设备（从scanner调用时，避免重复显示）
+        // skipConnected=false: 渲染所有设备（初始化或独立调用时）
+        const iosDevicesToRender = skipConnected ? iosDevices.filter(d => !d.isConnected) : iosDevices;
+        await renderSavedDevices(iosDevicesToRender, iosDevicesGrid, connectedIosDevices);
+
+        const androidDevicesToRender = skipConnected ? androidDevices.filter(d => !d.isConnected) : androidDevices;
+        await renderSavedDevices(androidDevicesToRender, androidDevicesGrid, connectedAndroidDevices);
+
+        // 检查每个平台的设备总数，如果为空则显示空状态提示
+        if (iosDevicesGrid.children.length === 0) {
+            iosDevicesGrid.innerHTML = '<div class="empty-state">No devices found. Connect a device or add a configuration.</div>';
+        }
+
+        if (androidDevicesGrid.children.length === 0) {
+            androidDevicesGrid.innerHTML = '<div class="empty-state">No devices found. Connect a device or add a configuration.</div>';
+        }
+
     } catch (error) {
         window.rError('Failed to load saved devices:', error);
+    }
+}
+
+// 渲染保存的设备列表
+async function renderSavedDevices(devices, gridElement, connectedDevices) {
+    // 注意：不清空grid，因为连接的设备也在同一个grid中
+
+    for (const deviceData of devices) {
+        const { file, config, platform, isWifi, isConnected } = deviceData;
+
+        // 获取平台图标 SVG
+        const platformIconSvg = platform === 'ios' ?
+            `<svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+            </svg>` :
+            `<svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 18c0 .55.45 1 1 1h1v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h2v3.5c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5V19h1c.55 0 1-.45 1-1V8H6v10zM3.5 8C2.67 8 2 8.67 2 9.5v7c0 .83.67 1.5 1.5 1.5S5 17.33 5 16.5v-7C5 8.67 4.33 8 3.5 8zm17 0c-.83 0-1.5.67-1.5 1.5v7c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-4.97-5.84l1.3-1.3c.2-.2.2-.51 0-.71-.2-.2-.51-.2-.71 0l-1.48 1.48C13.85 1.23 12.95 1 12 1c-.96 0-1.86.23-2.66.63L7.85.15c-.2-.2-.51-.2-.71 0-.2.2-.2.51 0 .71l1.31 1.31C6.97 3.26 6 5.01 6 7h12c0-1.99-.97-3.75-2.47-4.84zM10 5H9V4h1v1zm5 0h-1V4h1v1z"/>
+            </svg>`;
+
+        // 构建连接状态标签HTML（与device-scanner.js完全一致）
+        let connectionBadgeHtml = '';
+        if (isConnected) {
+            if (isWifi) {
+                // WiFi已连接
+                connectionBadgeHtml = `
+                    <div class="device-connection-badge wifi-connected">
+                        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h.01"/>
+                            <path d="M2 8.82a15 15 0 0 1 20 0"/>
+                            <path d="M5 12.859a10 10 0 0 1 14 0"/>
+                            <path d="M8.5 16.429a5 5 0 0 1 7 0"/>
+                        </svg>
+                        <span class="badge-dot"></span>
+                        <span class="badge-text">Wi-Fi</span>
+                    </div>
+                `;
+            } else {
+                // USB已连接
+                connectionBadgeHtml = `
+                    <div class="device-connection-badge usb-connected">
+                        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 17H7A5 5 0 0 1 7 7h2"/>
+                            <path d="M15 7h2a5 5 0 1 1 0 10h-2"/>
+                            <line x1="8" x2="16" y1="12" y2="12"/>
+                        </svg>
+                        <span class="badge-dot"></span>
+                        <span class="badge-text">USB</span>
+                    </div>
+                `;
+            }
+        } else {
+            if (isWifi) {
+                // WiFi未连接
+                connectionBadgeHtml = `
+                    <div class="device-connection-badge wifi-disconnected">
+                        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 20h.01"/>
+                            <path d="M8.5 16.429a5 5 0 0 1 7 0"/>
+                            <path d="M5 12.859a10 10 0 0 1 5.17-2.69"/>
+                            <path d="M19 12.859a10 10 0 0 0-2.007-1.523"/>
+                            <path d="M2 8.82a15 15 0 0 1 4.177-2.643"/>
+                            <path d="M22 8.82a15 15 0 0 0-11.288-3.764"/>
+                            <path d="m2 2 20 20"/>
+                        </svg>
+                        <span class="badge-dot"></span>
+                        <span class="badge-text">Disconnected</span>
+                    </div>
+                `;
+            } else {
+                // USB未连接
+                connectionBadgeHtml = `
+                    <div class="device-connection-badge usb-disconnected">
+                        <svg class="badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 17H7A5 5 0 0 1 7 7"/>
+                            <path d="M15 7h2a5 5 0 0 1 4 8"/>
+                            <line x1="8" x2="12" y1="12" y2="12"/>
+                            <line x1="2" x2="22" y1="2" y2="22"/>
+                        </svg>
+                        <span class="badge-dot"></span>
+                        <span class="badge-text">Disconnected</span>
+                    </div>
+                `;
+            }
+        }
+
+        // 构建设备信息显示
+        const deviceIdText = platform === 'android' ?
+            (config.deviceId || config.deviceName) :
+            (config.udid || config.deviceName);
+
+        let deviceInfoHtml = '';
+        if (config.deviceName) {
+            // 有设备名称：显示设备名称作为昵称，下面显示ID和model
+            const deviceIdPart = `<div class="device-id-small">${deviceIdText}</div>`;
+            const modelPart = config.model ? `<div class="device-model-small">${config.model}</div>` : '';
+            deviceInfoHtml = `
+                <div class="device-platform-icon">
+                    ${platformIconSvg}
+                </div>
+                <div class="device-name">${config.deviceName}</div>
+                ${deviceIdPart}
+                ${modelPart}
+            `;
+        } else {
+            // 无设备名称：显示设备ID作为昵称，下面显示model
+            const modelPart = config.model ? `<div class="device-model-small">${config.model}</div>` : '';
+            deviceInfoHtml = `
+                <div class="device-platform-icon">
+                    ${platformIconSvg}
+                </div>
+                <div class="device-name">${deviceIdText}</div>
+                ${modelPart}
+            `;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'device-phone-mockup';
+
+        let cardContent = `
+            ${connectionBadgeHtml}
+            <div class="device-screen-content">
+                <div class="device-info-text">
+                    ${deviceInfoHtml}
+                </div>
+            </div>
+        `;
+
+        // 添加操作按钮
+        const actionButtons = [];
+
+        if (isWifi && !isConnected) {
+            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">连接</button>`);
+        }
+
+        if (isWifi && isConnected) {
+            actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>`);
+        }
+
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${file}')" title="删除">删除</button>`);
+
+        if (actionButtons.length > 0) {
+            cardContent += `
+                <div class="device-actions">
+                    ${actionButtons.join('\n')}
+                </div>
+            `;
+        }
+
+        card.innerHTML = cardContent;
+
+        // 为保存的设备卡片添加拖拽功能
+        let deviceIdentifier = null;
+
+        if (platform === 'ios') {
+            // iOS设备使用udid
+            deviceIdentifier = config.udid;
+        } else {
+            // Android设备使用deviceId
+            deviceIdentifier = config.deviceId;
+
+            // 如果没有deviceId但设备已连接，尝试从连接的设备中查找
+            if (!deviceIdentifier && isConnected && connectedDevices.length > 0) {
+                const connectedDevice = connectedDevices.find(d =>
+                    d.status === 'device' && config.deviceName &&
+                    (config.deviceName.includes(d.id.substring(0, 8)) ||
+                     (config.ipAddress && d.id.includes(config.ipAddress)))
+                );
+                if (connectedDevice) {
+                    deviceIdentifier = connectedDevice.id;
+                }
+            }
+        }
+
+        // 为Android已连接设备添加拖拽功能
+        if (platform === 'android' && isConnected && deviceIdentifier && window.setupDragAndDropForDevice) {
+            window.setupDragAndDropForDevice(card, deviceIdentifier);
+            window.rLog('为保存的设备添加拖拽功能:', config.deviceName, deviceIdentifier);
+        }
+
+        gridElement.appendChild(card);
     }
 }
 
