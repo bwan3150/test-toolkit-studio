@@ -12,7 +12,24 @@
 // 5. ui/resizable-panels.js - 可调整面板
 // 6. modules/project-manager.js - 项目管理
 // 7. testcase/testcase-controller.js - 测试用例控制器
-// 8. modules/device-manager.js - 设备管理
+// 8. device/* - 设备管理（已模块化拆分为16个子模块，按依赖顺序加载）
+//    - utils/device-utils.js - 工具函数
+//    - core/device-globals.js - 全局辅助函数
+//    - core/device-ui-fields.js - UI字段控制
+//    - apk/apk-launcher.js - APK启动
+//    - apk/apk-ui.js - APK UI
+//    - ios/wda-helper.js - WDA辅助
+//    - crud/device-loader.js - 设备加载
+//    - crud/device-editor.js - 设备编辑
+//    - crud/device-creator.js - 设备创建
+//    - connection/wireless-connection.js - 无线连接
+//    - connection/qr-pairing.js - QR码配对
+//    - connection/pairing-code.js - 配对码
+//    - connection/device-scanner.js - 设备扫描
+//    - guide/connection-guide-ui.js - 连接向导UI
+//    - apk/apk-installer.js - APK安装
+//    - core/device-initializer.js - 设备初始化
+//    - device-manager.js - 主入口（组织和导出所有模块）
 // 9. utils/keyboard-shortcuts.js - 键盘快捷键
 // 10. utils/ipc-handlers.js - IPC消息处理
 
@@ -189,6 +206,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 加载主控制器（依赖上面的子模块）
         await loadScript('../js/testcase/testcase-controller.js');
+
+        // 设备管理模块 - 按照依赖顺序加载
+        // 第一批：基础模块（无依赖）
+        await loadScript('../js/device/utils/device-utils.js');
+        await loadScript('../js/device/core/device-globals.js');
+        await loadScript('../js/device/core/device-ui-fields.js');
+
+        // 第二批：基础功能模块
+        await loadScript('../js/device/apk/apk-launcher.js');
+        await loadScript('../js/device/apk/apk-ui.js');
+        await loadScript('../js/device/ios/wda-helper.js');
+
+        // 第三批：CRUD操作模块
+        await loadScript('../js/device/crud/device-loader.js');
+        await loadScript('../js/device/crud/device-editor.js');
+        await loadScript('../js/device/crud/device-creator.js');
+
+        // 第四批：连接功能模块
+        await loadScript('../js/device/connection/wireless-connection.js');
+        await loadScript('../js/device/connection/qr-pairing.js');
+        await loadScript('../js/device/connection/pairing-code.js');
+        await loadScript('../js/device/connection/device-scanner.js');
+
+        // 第五批：UI和集成模块
+        await loadScript('../js/device/guide/connection-guide-ui.js');
+        await loadScript('../js/device/apk/apk-installer.js');
+        await loadScript('../js/device/core/device-initializer.js');
+
+        // 设备管理主入口（依赖所有子模块）
         await loadScript('../js/device/device-manager.js');
         await loadScript('../js/testcase/controller/locator-manager-tke.js');
         await loadScript('../js/logviewer/log-manager.js');
