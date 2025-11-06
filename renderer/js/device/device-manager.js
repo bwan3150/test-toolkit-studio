@@ -582,15 +582,22 @@ async function refreshConnectedDevices() {
                         <div class="device-id">${device.id}</div>
             `;
 
-            // 获取并显示当前App信息
+
+            cardContent += `
+                    </div>
+                </div>`;
+
+            // 获取并显示当前App信息作为hover浮层
+            let appInfoHtml = '';
             try {
                 const appResult = await ipcRenderer.invoke('get-current-app', device.id);
                 if (appResult.success) {
                     const deviceIdClean = device.id.replace(/[^a-zA-Z0-9]/g, '_');
-                    cardContent += `
+                    appInfoHtml = `
                         <div class="device-app-info">
+                            <div class="device-app-info-title">正在运行:</div>
                             <div class="device-app-field">
-                                <span class="device-app-label">PKG</span>
+                                <span class="device-app-label">包名</span>
                                 <span class="device-app-value" title="${appResult.packageName}">${appResult.packageName}</span>
                                 <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_package')" title="复制包名">
                                     <svg viewBox="0 0 24 24">
@@ -600,7 +607,7 @@ async function refreshConnectedDevices() {
                                 <span id="${deviceIdClean}_package" style="display: none;">${appResult.packageName}</span>
                             </div>
                             <div class="device-app-field">
-                                <span class="device-app-label">ACT</span>
+                                <span class="device-app-label">Activity</span>
                                 <span class="device-app-value" title="${appResult.activityName}">${appResult.activityName}</span>
                                 <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_activity')" title="复制Activity">
                                     <svg viewBox="0 0 24 24">
@@ -611,16 +618,14 @@ async function refreshConnectedDevices() {
                             </div>
                         </div>
                     `;
-                } else {
-                    cardContent += `<div class="no-app-info">无应用运行</div>`;
                 }
             } catch (error) {
-                cardContent += `<div class="no-app-info">无法获取应用</div>`;
+                // 不显示错误信息,只是不显示hover浮层
             }
 
+            cardContent += appInfoHtml;
+
             cardContent += `
-                    </div>
-                </div>
                 <div class="device-actions">
                     ${!isSaved ? `
                         <button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${device.id}')">保存配置</button>
