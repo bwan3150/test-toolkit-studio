@@ -338,49 +338,40 @@ async function loadSavedDevices() {
                                config.deviceId?.includes(':') || 
                                config.deviceId?.includes('._adb-tls-connect._tcp');
                 
+                // 获取平台类型 (android/ios)
+                const platform = config.platformName?.toLowerCase() === 'ios' ? 'ios' : 'android';
+                const platformIcon = platform === 'ios' ?
+                    '../../assets/icons/device-page/apple.svg' :
+                    '../../assets/icons/device-page/android.svg';
+                const connectionIcon = isWifi ?
+                    '../../assets/icons/device-page/wifi.svg' :
+                    '../../assets/icons/device-page/usb.svg';
+
                 const card = document.createElement('div');
-                card.className = 'device-card';
+                card.className = 'device-phone-mockup';
                 card.innerHTML = `
-                    <div class="device-card-header">
-                        <div class="device-status ${isConnected ? 'connected' : ''}" title="${isConnected ? 'Connected' : 'Not Connected'}"></div>
-                        <div class="device-name">${config.deviceName}</div>
-                        <span class="connection-type-badge ${isWifi ? 'wifi' : 'usb'}">${isWifi ? 'WiFi' : 'USB'}</span>
-                    </div>
-                    <div class="device-info">
-                        <div>${config.platformName} ${config.platformVersion}</div>
-                        ${isWifi ? 
-                            `<div class="device-id">IP: ${config.ipAddress}:${config.port || 5555}</div>` : 
-                            (config.deviceId ? `<div class="device-id">ID: ${config.deviceId}</div>` : '')
-                        }
+                    <div class="device-status-indicator ${isConnected ? 'connected' : ''}" title="${isConnected ? '已连接' : '未连接'}"></div>
+                    <div class="device-saved-label">已保存</div>
+                    <div class="device-screen-content">
+                        <img src="${platformIcon}" class="device-platform-icon" alt="${platform}">
+                        <img src="${connectionIcon}" class="device-connection-icon" alt="${isWifi ? 'WiFi' : 'USB'}">
+                        <div class="device-info-text">
+                            <div class="device-id">${isWifi ?
+                                `${config.ipAddress}:${config.port || 5555}` :
+                                (config.deviceId || config.deviceName)
+                            }</div>
+                            <div class="no-app-info">${config.platformName} ${config.platformVersion}</div>
+                        </div>
                     </div>
                     <div class="device-actions">
                         ${isWifi && !isConnected ? `
-                            <button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">
-                                <svg viewBox="0 0 24 24" width="14" height="14">
-                                    <path fill="currentColor" d="M8 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8z"/>
-                                </svg>
-                                Connect
-                            </button>
+                            <button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">连接</button>
                         ` : ''}
                         ${isWifi && isConnected ? `
-                            <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">
-                                <svg viewBox="0 0 24 24" width="14" height="14">
-                                    <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                                </svg>
-                                Disconnect
-                            </button>
+                            <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>
                         ` : ''}
-                        <button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                            </svg>
-                            Edit
-                        </button>
-                        <button class="btn btn-outline btn-small btn-icon-only" onclick="deleteDevice('${file}')" title="Delete">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
-                            </svg>
-                        </button>
+                        <button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">编辑</button>
+                        <button class="btn btn-outline btn-small" onclick="deleteDevice('${file}')" title="删除">删除</button>
                     </div>
                 `;
                 
@@ -562,123 +553,87 @@ async function refreshConnectedDevices() {
             }
             
             const item = document.createElement('div');
-            item.className = 'device-card';
-            
-            // 创建卡片内容
-            const deviceName = savedConfig ? savedConfig.deviceName : (device.name || '未知设备');
-            const platformBadge = device.platform === 'ios' ? 'iOS' : 'Android';
-            
+            item.className = 'device-phone-mockup';
+
             // 设置设备状态
             let deviceStatus = 'connected';
             let statusTitle = 'Connected';
-            
+
             if (device.platform === 'ios' && device.wdaStatus !== 'connected') {
                 deviceStatus = 'disconnected';
                 statusTitle = 'iOS Device Found - WDA Not Available';
             }
 
+            // 获取平台图标和连接图标
+            const platformIcon = device.platform === 'ios' ?
+                '../../assets/icons/device-page/apple.svg' :
+                '../../assets/icons/device-page/android.svg';
+            const connectionIcon = isWifi ?
+                '../../assets/icons/device-page/wifi.svg' :
+                '../../assets/icons/device-page/usb.svg';
+
             let cardContent = `
-                <div class="device-card-header">
-                    <div class="device-status ${deviceStatus}" title="${statusTitle}"></div>
-                    <div class="device-name">${deviceName}</div>
-                    <span class="platform-badge ${device.platform}">${platformBadge}</span>
-                    <span class="connection-type-badge ${isWifi ? 'wifi' : 'usb'} ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? 'offline' : ''}">${connectionType}</span>
-                </div>
-                <div class="device-info">
-                    <div class="device-id">ID: ${device.id}</div>
-                    ${device.model ? `<div class="device-model">Model: ${device.model}</div>` : ''}
-                    ${device.version ? `<div class="device-version">Version: ${device.version}</div>` : ''}
-                    ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? 
-                        `<div class="device-status-info">WDA连接失败: ${device.wdaError || 'WDA service not available'}</div>` : ''}
-                </div>
+                <div class="device-status-indicator ${deviceStatus}" title="${statusTitle}"></div>
+                ${isSaved ? '<div class="device-saved-label">已保存</div>' : ''}
+                <div class="device-screen-content">
+                    <img src="${platformIcon}" class="device-platform-icon" alt="${device.platform}">
+                    <img src="${connectionIcon}" class="device-connection-icon" alt="${isWifi ? 'WiFi' : 'USB'}">
+                    <div class="device-info-text">
+                        <div class="device-id">${device.id}</div>
             `;
-            
+
             // 获取并显示当前App信息
             try {
                 const appResult = await ipcRenderer.invoke('get-current-app', device.id);
                 if (appResult.success) {
+                    const deviceIdClean = device.id.replace(/[^a-zA-Z0-9]/g, '_');
                     cardContent += `
-                        <div class="device-card-body">
-                            <div class="app-section">
-                                <div class="app-title">当前运行应用</div>
-                                <div class="app-details">
-                                    <div class="app-field">
-                                        <span class="field-label">PACKAGE</span>
-                                        <div class="field-value-group">
-                                            <span class="field-value">${appResult.packageName}</span>
-                                            <button class="copy-btn" onclick="copyToClipboard('package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
-                                                <svg viewBox="0 0 24 24" width="14" height="14">
-                                                    <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                </svg>
-                                            </button>
-                                            <span id="package-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.packageName}</span>
-                                        </div>
-                                    </div>
-                                    <div class="app-field">
-                                        <span class="field-label">Activity</span>
-                                        <div class="field-value-group">
-                                            <span class="field-value">${appResult.activityName}</span>
-                                            <button class="copy-btn" onclick="copyToClipboard('activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}')" title="复制">
-                                                <svg viewBox="0 0 24 24" width="14" height="14">
-                                                    <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                                </svg>
-                                            </button>
-                                            <span id="activity-${device.id.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">${appResult.activityName}</span>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="device-app-info">
+                            <div class="device-app-field">
+                                <span class="device-app-label">PKG</span>
+                                <span class="device-app-value" title="${appResult.packageName}">${appResult.packageName}</span>
+                                <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_package')" title="复制包名">
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                    </svg>
+                                </button>
+                                <span id="${deviceIdClean}_package" style="display: none;">${appResult.packageName}</span>
+                            </div>
+                            <div class="device-app-field">
+                                <span class="device-app-label">ACT</span>
+                                <span class="device-app-value" title="${appResult.activityName}">${appResult.activityName}</span>
+                                <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_activity')" title="复制Activity">
+                                    <svg viewBox="0 0 24 24">
+                                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                    </svg>
+                                </button>
+                                <span id="${deviceIdClean}_activity" style="display: none;">${appResult.activityName}</span>
                             </div>
                         </div>
                     `;
                 } else {
-                    cardContent += `
-                        <div class="device-card-body">
-                            <div class="app-section">
-                                <div class="no-app-info">无法获取应用信息</div>
-                            </div>
-                        </div>
-                    `;
+                    cardContent += `<div class="no-app-info">无应用运行</div>`;
                 }
             } catch (error) {
-                cardContent += `
-                    <div class="device-card-body">
-                        <div class="app-section">
-                            <div class="no-app-info">获取应用信息失败</div>
-                        </div>
-                    </div>
-                `;
+                cardContent += `<div class="no-app-info">无法获取应用</div>`;
             }
-            
-            // 添加操作按钮
+
             cardContent += `
+                    </div>
+                </div>
                 <div class="device-actions">
                     ${!isSaved ? `
-                        <button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${device.id}')">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                            </svg>
-                            Save Config
-                        </button>
+                        <button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${device.id}')">保存配置</button>
                     ` : ''}
                     ${device.platform === 'ios' && device.wdaStatus !== 'connected' ? `
-                        <button class="btn btn-secondary btn-small" onclick="showWdaSetupGuide('${device.id}')">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
-                            </svg>
-                            WDA Guide
-                        </button>
+                        <button class="btn btn-secondary btn-small" onclick="showWdaSetupGuide('${device.id}')">WDA设置</button>
                     ` : ''}
                     ${isWifi ? `
-                        <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${device.id.split(':')[0]}', ${device.id.split(':')[1] || 5555})">
-                            <svg viewBox="0 0 24 24" width="14" height="14">
-                                <path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                            </svg>
-                            Disconnect
-                        </button>
+                        <button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${device.id.split(':')[0]}', ${device.id.split(':')[1] || 5555})">断开</button>
                     ` : ''}
                 </div>
             `;
-            
+
             item.innerHTML = cardContent;
             
             // 添加拖拽功能
