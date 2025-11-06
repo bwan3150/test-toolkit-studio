@@ -8,8 +8,8 @@ function getGlobals() {
 }
 
 // 加载保存的设备（按平台分组显示）
-// @param {boolean} skipConnected - 是否跳过已连接的设备（避免与scanner重复显示）
-async function loadSavedDevices(skipConnected = false) {
+// 显示所有保存的设备，包含已连接和未连接的状态
+async function loadSavedDevices() {
     const { ipcRenderer, path, fs, yaml } = getGlobals();
     if (!window.AppGlobals.currentProject) return;
 
@@ -95,14 +95,10 @@ async function loadSavedDevices(skipConnected = false) {
             return 0;
         });
 
-        // 根据参数决定是否过滤已连接的设备
-        // skipConnected=true: 只渲染未连接的设备（从scanner调用时，避免重复显示）
-        // skipConnected=false: 渲染所有设备（初始化或独立调用时）
-        const iosDevicesToRender = skipConnected ? iosDevices.filter(d => !d.isConnected) : iosDevices;
-        await renderSavedDevices(iosDevicesToRender, iosDevicesGrid, connectedIosDevices);
-
-        const androidDevicesToRender = skipConnected ? androidDevices.filter(d => !d.isConnected) : androidDevices;
-        await renderSavedDevices(androidDevicesToRender, androidDevicesGrid, connectedAndroidDevices);
+        // 渲染所有保存的设备，无论是否已连接
+        // 已连接的设备将显示"已连接"状态，未连接的显示"未连接"状态
+        await renderSavedDevices(iosDevices, iosDevicesGrid, connectedIosDevices);
+        await renderSavedDevices(androidDevices, androidDevicesGrid, connectedAndroidDevices);
 
         // 检查每个平台的设备总数，如果为空则显示空状态提示
         if (iosDevicesGrid.children.length === 0) {
@@ -121,9 +117,17 @@ async function loadSavedDevices(skipConnected = false) {
 // 渲染保存的设备列表
 async function renderSavedDevices(devices, gridElement, connectedDevices) {
     // 注意：不清空grid，因为连接的设备也在同一个grid中
+    // 但需要检查设备是否已存在，避免重复添加
 
     for (const deviceData of devices) {
         const { file, config, platform, isWifi, isConnected } = deviceData;
+
+        // 检查设备是否已存在 - 通过检查是否有相同的data-device-file属性
+        const existingCard = gridElement.querySelector(`[data-device-file="${file}"]`);
+        if (existingCard) {
+            window.rLog('设备已存在，跳过:', config.deviceName || file);
+            continue; // 跳过已存在的设备
+        }
 
         // 获取平台图标 SVG
         const platformIconSvg = platform === 'ios' ?
@@ -232,6 +236,7 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
 
         const card = document.createElement('div');
         card.className = 'device-phone-mockup';
+        card.setAttribute('data-device-file', file); // 用于去重检查
 
         let cardContent = `
             ${connectionBadgeHtml}

@@ -79,8 +79,8 @@ async function initializeDevicePage() {
 
     if (scanDevicesBtn) {
         scanDevicesBtn.addEventListener('click', () => {
-            if (window.DeviceListModule && window.DeviceListModule.refreshConnectedDevices) {
-                window.DeviceListModule.refreshConnectedDevices();
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                window.DeviceScanner.refreshConnectedDevices();
             }
         });
     }
@@ -268,12 +268,12 @@ async function initializeDevicePage() {
                 delete deviceForm.dataset.filename;
 
                 // 重新加载设备列表
-                if (window.DeviceListModule) {
-                    if (window.DeviceListModule.loadSavedDevices) {
-                        await window.DeviceListModule.loadSavedDevices();
+                if (window.DeviceLoader) {
+                    if (window.DeviceLoader.loadSavedDevices) {
+                        await window.DeviceLoader.loadSavedDevices();
                     }
-                    if (window.DeviceListModule.refreshDeviceList) {
-                        await window.DeviceListModule.refreshDeviceList();
+                    if (window.DeviceLoader.refreshDeviceList) {
+                        await window.DeviceLoader.refreshDeviceList();
                     }
                 }
             } catch (error) {
@@ -283,8 +283,8 @@ async function initializeDevicePage() {
     }
 
     // 加载保存的设备
-    if (window.DeviceListModule && window.DeviceListModule.loadSavedDevices) {
-        window.DeviceListModule.loadSavedDevices();
+    if (window.DeviceLoader && window.DeviceLoader.loadSavedDevices) {
+        window.DeviceLoader.loadSavedDevices();
     }
 
     // 确保页面加载时字段显示正确
@@ -303,8 +303,8 @@ async function initializeDevicePage() {
             if (window.ConnectionQR && window.ConnectionQR.resetQRDisplay) {
                 window.ConnectionQR.resetQRDisplay();
             }
-            if (window.DeviceListModule && window.DeviceListModule.refreshConnectedDevices) {
-                window.DeviceListModule.refreshConnectedDevices();
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                window.DeviceScanner.refreshConnectedDevices();
             }
         }, 2000);
     });

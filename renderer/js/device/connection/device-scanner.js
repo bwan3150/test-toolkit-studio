@@ -22,9 +22,14 @@ async function refreshConnectedDevices() {
 
     if (!iosDevicesGrid || !androidDevicesGrid) return;
 
-    // 清空两个容器
+    // 清空两个容器 - 只清空一次
     iosDevicesGrid.innerHTML = '';
     androidDevicesGrid.innerHTML = '';
+
+    // 先加载并显示所有保存的设备（包含已连接和未连接状态）
+    if (window.DeviceLoader?.loadSavedDevices) {
+        await window.DeviceLoader.loadSavedDevices();
+    }
 
     // 获取Android和iOS设备列表
     const androidDevices = androidResult.success ? androidResult.devices.map(device => ({ ...device, platform: 'android' })) : [];
@@ -50,17 +55,11 @@ async function refreshConnectedDevices() {
         }
     }
 
-    // 处理iOS设备
+    // 处理iOS设备（只添加未保存配置的连接设备）
     await processDevicesByPlatform(iosDevices, 'ios', iosDevicesGrid, savedDeviceConfigs);
 
-    // 处理Android设备
+    // 处理Android设备（只添加未保存配置的连接设备）
     await processDevicesByPlatform(androidDevices, 'android', androidDevicesGrid, savedDeviceConfigs);
-
-    // 重新加载保存的设备以更新连接状态
-    // 传入 skipConnected=true 以避免重复显示已连接的设备
-    if (window.DeviceLoader?.loadSavedDevices) {
-        await window.DeviceLoader.loadSavedDevices(true);
-    }
 
     // 更新设备选择下拉框
     if (window.DeviceLoader?.refreshDeviceList) {
@@ -91,27 +90,33 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
         }
     }
 
-    // 判断设备的连接状态
-    const devicesWithConnectionStatus = validDevices.map(device => {
-        let isConnected = false;
-        let isWifi = false;
+    // 判断设备的连接状态，同时过滤掉已保存配置的设备
+    const devicesWithConnectionStatus = validDevices
+        .filter(device => {
+            // 过滤掉已保存配置的设备（这些设备会在loadSavedDevices中显示）
+            const isSaved = !!savedDeviceConfigs[device.id];
+            return !isSaved;
+        })
+        .map(device => {
+            let isConnected = false;
+            let isWifi = false;
 
-        if (platform === 'android') {
-            // Android: 判断是否为无线设备
-            isWifi = device.id.includes(':') || device.id.includes('._adb-tls-connect._tcp');
-            isConnected = true; // Android设备如果在列表中就是已连接
-        } else if (platform === 'ios') {
-            // iOS: 根据WDA检测结果判断连接状态
-            isConnected = device.wdaStatus === 'connected';
-            isWifi = device.connectionType === 'wifi';
-        }
+            if (platform === 'android') {
+                // Android: 判断是否为无线设备
+                isWifi = device.id.includes(':') || device.id.includes('._adb-tls-connect._tcp');
+                isConnected = true; // Android设备如果在列表中就是已连接
+            } else if (platform === 'ios') {
+                // iOS: 根据WDA检测结果判断连接状态
+                isConnected = device.wdaStatus === 'connected';
+                isWifi = device.connectionType === 'wifi';
+            }
 
-        return {
-            ...device,
-            isConnected,
-            isWifi
-        };
-    });
+            return {
+                ...device,
+                isConnected,
+                isWifi
+            };
+        });
 
     // 排序：已连接的设备排在前面
     devicesWithConnectionStatus.sort((a, b) => {
@@ -120,13 +125,20 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
         return 0;
     });
 
-    // 为每个设备创建卡片
+    // 为每个设备创建卡片（这些都是未保存配置的设备）
     for (const device of devicesWithConnectionStatus) {
-        const savedConfig = savedDeviceConfigs[device.id];
-        const isSaved = !!savedConfig;
+        const isSaved = false; // 这里的设备都是未保存的
+
+        // 检查设备是否已存在 - 通过检查是否有相同的data-device-id属性
+        const existingCard = targetGrid.querySelector(`[data-device-id="${device.id}"]`);
+        if (existingCard) {
+            window.rLog('未保存的设备已存在，跳过:', device.id);
+            continue; // 跳过已存在的设备
+        }
 
         const item = document.createElement('div');
         item.className = 'device-phone-mockup';
+        item.setAttribute('data-device-id', device.id); // 用于去重检查
 
         // 获取平台图标 SVG
         const platformIconSvg = platform === 'ios' ?
