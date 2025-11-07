@@ -64,9 +64,14 @@ async function execTkeCommand(app, args) {
 // 注册 TKE Controller 相关的 IPC 处理器
 function registerControllerHandlers(app) {
   // 获取设备列表 - tke controller devices
-  ipcMain.handle('tke-controller-devices', async () => {
+  ipcMain.handle('tke-controller-devices', async (event, projectPath) => {
     try {
-      const args = ['controller', 'devices'];
+      // 如果有项目路径,传递给 TKE 以加载已保存的设备配置
+      // 如果没有项目路径,只显示已连接的设备
+      const args = projectPath && path.isAbsolute(projectPath)
+        ? ['--project', projectPath, 'controller', 'devices']
+        : ['controller', 'devices'];
+
       const output = await execTkeCommand(app, args);
 
       return {

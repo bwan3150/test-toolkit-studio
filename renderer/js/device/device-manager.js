@@ -111,6 +111,7 @@ window.retryWdaConnection = window.WdaHelper?.retryWdaConnection;
 /**
  * 初始化设备页面
  * 委托给 DeviceInitializer 模块处理
+ * 注意：不要在这里自动初始化，由 app.js 统一管理页面初始化
  */
 function initializeDevicePage() {
     if (window.DeviceInitializer && window.DeviceInitializer.initializeDevicePage) {
@@ -120,10 +121,4 @@ function initializeDevicePage() {
     }
 }
 
-// 在 DOM 加载完成后初始化设备页面
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeDevicePage);
-} else {
-    // DOM 已经加载完成
-    initializeDevicePage();
-}
+// 注意：已移除自动初始化逻辑，由 app.js 在页面切换时统一调用
