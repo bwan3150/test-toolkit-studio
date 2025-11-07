@@ -1,8 +1,11 @@
 // Controller模块 - 负责ADB控制
 
+mod device_categorizer;
+
 use crate::{Result, TkeError, DeviceInfo, AdbManager};
 use std::path::PathBuf;
 use std::process::Command;
+pub use device_categorizer::{CategorizedDevices, SavedDevicesInfo, DeviceCategorizer};
 
 pub struct Controller {
     device_id: Option<String>,
@@ -34,7 +37,7 @@ impl Controller {
             .arg("devices")
             .output()
             .map_err(|e| TkeError::AdbError(format!("执行adb devices失败: {}", e)))?;
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let devices: Vec<String> = stdout
             .lines()
@@ -48,8 +51,29 @@ impl Controller {
                 }
             })
             .collect();
-        
+
         Ok(devices)
+    }
+
+    // 获取分类后的设备列表
+    pub fn get_devices_categorized(&self, project_path: &PathBuf) -> Result<CategorizedDevices> {
+        // 1. 获取已连接的Android设备
+        let connected_android = self.get_devices()?;
+
+        // 2. 获取已连接的iOS设备 (TODO: 需要实现iOS设备检测)
+        let connected_ios = Vec::new();
+
+        // 3. 加载已保存的设备配置
+        let saved_devices = DeviceCategorizer::load_saved_devices(project_path)?;
+
+        // 4. 分类设备
+        let categorized = DeviceCategorizer::categorize_devices(
+            connected_android,
+            connected_ios,
+            saved_devices,
+        );
+
+        Ok(categorized)
     }
     
     // 指令1: 获取设备截图和XML并保存到项目目录

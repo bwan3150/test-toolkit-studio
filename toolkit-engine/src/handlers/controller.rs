@@ -5,7 +5,7 @@ use tke::{Result, Controller, JsonOutput};
 /// Controller 命令枚举
 #[derive(clap::Subcommand)]
 pub enum ControllerCommands {
-    /// 获取连接的设备列表
+    /// 获取分类后的设备列表（包含已保存、未保存、已连接、未连接状态）
     Devices,
     /// 获取设备截图和XML并保存到项目workarea
     Capture,
@@ -63,10 +63,8 @@ pub async fn handle(action: ControllerCommands, device_id: Option<String>, proje
 
     match action {
         ControllerCommands::Devices => {
-            let devices = controller.get_devices()?;
-            JsonOutput::print(serde_json::json!({
-                "devices": devices
-            }));
+            let categorized = controller.get_devices_categorized(&project_path)?;
+            JsonOutput::print(serde_json::to_value(categorized).unwrap());
         }
         ControllerCommands::Capture => {
             // 使用传入的 project_path 参数而不是 current_dir()
