@@ -85,51 +85,55 @@ impl ScrcpyServer {
     async fn is_server_running(&self, udid: &str) -> Result<bool> {
         debug!("检查 scrcpy-server 是否在设备 {} 上运行", udid);
 
-        // 获取所有 app_process 进程
-        let args = self.build_adb_args(&["-s", udid, "shell", "pidof", SERVER_PROCESS_NAME]);
+        // 使用更可靠的方法: 检查 /proc/*/cmdline
+        // 先获取所有 app_process 进程
+        let args = self.build_adb_args(&["-s", udid, "shell", "ps | grep app_process"]);
         let output = Command::new(&self.adb_path)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
             .await
-            .context("执行 pidof 命令失败")?;
+            .context("执行 ps 命令失败")?;
 
+        // grep 没找到匹配时会返回非 0 状态码,这是正常的
         if !output.status.success() {
-            debug!("没有找到 {} 进程", SERVER_PROCESS_NAME);
+            debug!("没有找到 app_process 进程");
             return Ok(false);
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let pids: Vec<&str> = stdout.trim().split_whitespace().collect();
 
-        if pids.is_empty() {
-            debug!("没有找到 {} 进程", SERVER_PROCESS_NAME);
-            return Ok(false);
-        }
+        // 解析 ps 输出,提取 PID
+        for line in stdout.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let pid = parts[1];
 
-        // 检查每个进程的 cmdline
-        for pid in pids {
-            let cmd = format!("cat /proc/{}/cmdline", pid);
-            let args = self.build_adb_args(&["-s", udid, "shell", &cmd]);
-            let cmdline_output = Command::new(&self.adb_path)
-                .args(&args)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .output()
-                .await;
+                // 检查 cmdline 是否包含 scrcpy-server 的特征
+                let cmd = format!("cat /proc/{}/cmdline", pid);
+                let args = self.build_adb_args(&["-s", udid, "shell", &cmd]);
+                let cmdline_output = Command::new(&self.adb_path)
+                    .args(&args)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+                    .await;
 
-            if let Ok(output) = cmdline_output {
-                let cmdline = String::from_utf8_lossy(&output.stdout);
-                // cmdline 使用 \0 分隔参数
-                if cmdline.contains(SERVER_PACKAGE) && cmdline.contains(SERVER_VERSION) {
-                    info!("发现已运行的 scrcpy-server (PID: {})", pid);
-                    return Ok(true);
+                if let Ok(output) = cmdline_output {
+                    let cmdline = String::from_utf8_lossy(&output.stdout);
+                    // 检查是否是 scrcpy.Server (不是 CleanUp)
+                    if cmdline.contains(SERVER_PACKAGE) &&
+                       cmdline.contains("Server") &&
+                       !cmdline.contains("CleanUp") {
+                        info!("发现已运行的 scrcpy-server (PID: {})", pid);
+                        return Ok(true);
+                    }
                 }
             }
         }
 
-        debug!("没有找到匹配版本的 scrcpy-server");
+        debug!("没有找到运行中的 scrcpy-server");
         Ok(false)
     }
 
@@ -288,44 +292,51 @@ impl ScrcpyServer {
     pub async fn stop_server(&self, udid: &str) -> Result<()> {
         info!("停止设备 {} 上的 scrcpy-server", udid);
 
-        // 查找进程 ID
-        let args = self.build_adb_args(&["-s", udid, "shell", "pidof", SERVER_PROCESS_NAME]);
+        // 获取所有 app_process 进程
+        let args = self.build_adb_args(&["-s", udid, "shell", "ps | grep app_process"]);
         let output = Command::new(&self.adb_path)
             .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
             .await
-            .context("执行 pidof 命令失败")?;
+            .context("执行 ps 命令失败")?;
 
+        // grep 没找到匹配时会返回非 0 状态码,这是正常的
         if !output.status.success() {
-            debug!("没有找到运行中的 scrcpy-server");
+            debug!("没有找到 app_process 进程");
             return Ok(());
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let pids: Vec<&str> = stdout.trim().split_whitespace().collect();
 
-        // 杀死每个匹配的进程
-        for pid in pids {
-            let cmd = format!("cat /proc/{}/cmdline", pid);
-            let args = self.build_adb_args(&["-s", udid, "shell", &cmd]);
-            let cmdline_output = Command::new(&self.adb_path)
-                .args(&args)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .output()
-                .await;
+        // 解析 ps 输出,提取 PID 并检查 cmdline
+        for line in stdout.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                let pid = parts[1];
 
-            if let Ok(output) = cmdline_output {
-                let cmdline = String::from_utf8_lossy(&output.stdout);
-                if cmdline.contains(SERVER_PACKAGE) {
-                    info!("杀死 scrcpy-server 进程 (PID: {})", pid);
-                    let args = self.build_adb_args(&["-s", udid, "shell", "kill", pid]);
-                    let _ = Command::new(&self.adb_path)
-                        .args(&args)
-                        .output()
-                        .await;
+                // 检查 cmdline 是否包含 scrcpy
+                let cmd = format!("cat /proc/{}/cmdline", pid);
+                let args = self.build_adb_args(&["-s", udid, "shell", &cmd]);
+                let cmdline_output = Command::new(&self.adb_path)
+                    .args(&args)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .output()
+                    .await;
+
+                if let Ok(output) = cmdline_output {
+                    let cmdline = String::from_utf8_lossy(&output.stdout);
+                    // 只杀死 scrcpy.Server,不杀 CleanUp
+                    if cmdline.contains(SERVER_PACKAGE) && cmdline.contains("Server") {
+                        info!("杀死 scrcpy-server 进程 (PID: {})", pid);
+                        let args = self.build_adb_args(&["-s", udid, "shell", "kill", pid]);
+                        let _ = Command::new(&self.adb_path)
+                            .args(&args)
+                            .output()
+                            .await;
+                    }
                 }
             }
         }
