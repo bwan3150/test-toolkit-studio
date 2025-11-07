@@ -1,0 +1,487 @@
+/* 设备卡片样式 */
+
+.device-card {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    position: relative;
+    transition: all 0.2s;
+}
+
+.device-card:hover {
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.device-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.device-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.device-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    position: relative;
+    padding-right: 50px; /* 为标识留出空间 */
+}
+
+.device-card-body {
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    margin-top: 12px;
+}
+
+/* 拖拽APK时的高亮效果 - 旧的device-card样式 */
+.device-card.drag-over {
+    border-color: var(--accent-success);
+    background: rgba(76, 175, 80, 0.05);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.3);
+}
+
+.device-card.drag-over::after {
+    content: '拖放APK文件以安装';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-success);
+    background: var(--bg-tertiary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 2px dashed var(--accent-success);
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Device Phone Mockup - 手机图片就是全部 */
+.device-phone-mockup {
+    position: relative;
+    width: 200px;
+    height: 344px;
+    background-image: url('../../../../assets/images/device-page/old_phone_mockup.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform 0.3s ease;
+}
+
+.device-phone-mockup:hover {
+    transform: translateY(-8px);
+}
+
+/* 手机屏幕内容区域 */
+.device-screen-content {
+    position: absolute;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 88%;
+    bottom: 10%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 8px;
+    background: transparent !important;
+}
+
+/* 手机内部平台图标 (Android/iOS) */
+.device-platform-icon {
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 8px;
+    color: var(--text-secondary);
+}
+
+.device-platform-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* 连接类型图标 (USB/WiFi) */
+.device-connection-icon {
+    width: 32px;
+    height: 32px;
+    filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* 设备状态指示器 */
+.device-status-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #6b7280;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    transition: all 0.2s ease;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.device-status-indicator.connected {
+    background: #22c55e;
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.8), 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: pulse-status 2s infinite;
+}
+
+/* 设备信息文本区域 */
+.device-phone-mockup .device-info-text {
+    width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.device-phone-mockup .device-id {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-phone-mockup .device-model {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-id {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 8px;
+    word-break: break-all;
+    line-height: 1.4;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 手机内部设备名称（大字） */
+.device-phone-mockup .device-info-text .device-name {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+    max-width: 15ch !important; /* 限制最多显示15个字符 */
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* 手机内部设备ID（小字） */
+.device-phone-mockup .device-info-text .device-id-small {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+}
+
+/* 手机内部设备model（小字） */
+.device-phone-mockup .device-info-text .device-model-small {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+}
+
+/* App信息显示 - Hover浮层（显示在中间位置） */
+.device-app-info {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 280px;
+    max-width: 90vw;
+    background: rgba(0, 0, 0, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    pointer-events: none; /* 防止浮层阻挡鼠标事件 */
+}
+
+.device-phone-mockup:hover .device-app-info {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto; /* hover时允许交互 */
+}
+
+.device-app-info-title {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.device-app-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.device-app-field:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.device-app-label {
+    font-size: 10px;
+    color: #d1d5db;
+    font-weight: 600;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+.device-app-value {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+}
+
+.device-app-copy-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.device-app-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.05);
+}
+
+.device-app-copy-btn svg {
+    width: 12px;
+    height: 12px;
+    fill: #ffffff;
+}
+
+/* App信息显示样式简化 */
+.device-app-info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.device-app-package,
+.device-app-activity {
+    font-size: 11px;
+    color: #ffffff;
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+.device-app-package {
+    font-weight: 600;
+}
+
+.device-app-activity {
+    font-weight: 400;
+    color: #d1d5db;
+}
+
+/* 设备操作按钮区域 */
+.device-actions {
+    position: absolute;
+    bottom: -45px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 200px;
+}
+
+.device-actions .btn {
+    font-size: 10px;
+    padding: 4px 8px;
+    min-width: auto;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+.device-actions .btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* 无App信息提示 */
+.no-app-info {
+    color: #f3f4f6;
+    font-size: 9px;
+    text-align: center;
+    font-style: italic;
+    opacity: 0.8;
+    font-weight: 500;
+}
+
+/* 已保存设备标识 */
+.device-saved-label {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: rgba(34, 197, 94, 0.9);
+    color: white;
+    font-size: 9px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    z-index: 10;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
+}
+
+/* 设备卡片拖拽状态 - 针对phone-mockup（移除外框效果） */
+.device-phone-mockup.drag-over {
+    /* 不添加任何外框效果，只显示内部的提示信息 */
+}
+
+/* 禁用拖拽状态 - 未连接的设备 */
+.device-phone-mockup.drag-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* 设备未连接 - 显示带icon的提示 */
+.device-phone-mockup.drag-disabled .device-disconnect-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.15);
+    backdrop-filter: blur(4px);
+    color: rgba(239, 68, 68, 1);
+    font-size: 11px;
+    font-weight: 500;
+    border: 2px dashed rgba(239, 68, 68, 0.6);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+}
+
+.device-disconnect-icon {
+    width: 16px;
+    height: 16px;
+    color: rgba(239, 68, 68, 1);
+    stroke-width: 2;
+    flex-shrink: 0;
+}
+
+/* App部分样式 */
+.app-section {
+    color: var(--text-secondary);
+}
+
+.app-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.app-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.app-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.field-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    font-weight: 600;
+}
+
+.field-value-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-value {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    word-break: break-all;
+}

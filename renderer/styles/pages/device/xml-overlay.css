@@ -1,0 +1,987 @@
+/* XML Overlay 相关样式 */
+
+.ui-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* 确保overlay不会阻挡图片下方的交互 */
+.ui-overlay {
+    pointer-events: none;
+}
+
+.element-tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    max-width: 300px;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    font-family: var(--font-mono);
+}
+
+.tooltip-header {
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #4CAF50;
+    border-bottom: 1px solid #555;
+    padding-bottom: 5px;
+}
+
+.tooltip-content div {
+    margin: 3px 0;
+}
+
+.ui-elements-panel {
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 320px;
+    max-height: 70vh;
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid #555;
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1000;
+    color: white;
+    font-size: 14px;
+    overflow-y: auto;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.ui-elements-panel h4 {
+    margin: 0 0 15px 0;
+    color: #4CAF50;
+    font-size: 16px;
+}
+
+.elements-list {
+    max-height: calc(70vh - 80px);
+    overflow-y: auto;
+}
+
+.element-item {
+    padding: 8px;
+    margin: 5px 0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: transparent;
+}
+
+.element-item:hover {
+    background: rgba(76, 175, 80, 0.2);
+    border-color: #4CAF50;
+}
+
+.element-item:active {
+    background: rgba(76, 175, 80, 0.3);
+}
+
+.element-properties-panel {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    width: 350px;
+    max-height: 60vh;
+    background: rgba(30, 30, 30, 0.95);
+    border: 1px solid #555;
+    border-radius: 8px;
+    padding: 15px;
+    z-index: 1000;
+    color: white;
+    font-size: 14px;
+    overflow-y: auto;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.element-properties-panel h4 {
+    margin: 0;
+    color: #4CAF50;
+    font-size: 16px;
+}
+
+.element-properties-panel button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s ease;
+    margin: 2px;
+}
+
+.element-properties-panel button:hover {
+    background: #45a049;
+}
+
+.element-properties-panel button:active {
+    background: #3d8b40;
+}
+
+/* 滚动条样式 */
+.ui-elements-panel::-webkit-scrollbar,
+.element-properties-panel::-webkit-scrollbar,
+.elements-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ui-elements-panel::-webkit-scrollbar-track,
+.element-properties-panel::-webkit-scrollbar-track,
+.elements-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.ui-elements-panel::-webkit-scrollbar-thumb,
+.element-properties-panel::-webkit-scrollbar-thumb,
+.elements-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.ui-elements-panel::-webkit-scrollbar-thumb:hover,
+.element-properties-panel::-webkit-scrollbar-thumb:hover,
+.elements-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* XML Overlay按钮状态样式 */
+#toggleXmlBtn.active {
+    background: #4CAF50 !important;
+    color: white !important;
+}
+
+/* 确保设备屏幕容器支持叠层 */
+#screenContent {
+    position: relative;
+}
+
+/* XML Overlay 标记 - 统一优化样式 */
+.ui-element-marker {
+    position: absolute;
+    /* 使用更细的边框，视觉效果更好 */
+    border: 1px solid #007ACC;
+    background: rgba(0, 122, 204, 0.08);
+    /* 只有标记本身可以交互，不阻挡下层元素 */
+    pointer-events: all;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 2px;
+    /* 确保小元素仍可见和可点击 */
+    min-width: 8px;
+    min-height: 8px;
+    /* 提升性能的优化 */
+    will-change: transform, border-color, background-color;
+}
+
+.ui-element-marker:hover {
+    border-color: #005a9e;
+    background: rgba(0, 122, 204, 0.15);
+    box-shadow: 0 0 0 1px rgba(0, 122, 204, 0.25);
+    transform: scale(1.01);
+    z-index: 20;
+}
+
+.ui-element-marker:hover .element-label {
+    background: #005a9e;
+    transform: scale(1.05);
+}
+
+.ui-element-marker.selected {
+    border-color: #ff6b35;
+    background: rgba(255, 107, 53, 0.12);
+    box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.4);
+    z-index: 15;
+}
+
+.ui-element-marker.selected .element-label {
+    background: #ff6b35;
+}
+
+/* 元素标签优化 */
+.element-label {
+    position: absolute;
+    top: -16px;
+    left: 0;
+    background: #007ACC;
+    color: white;
+    padding: 1px 4px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 2px;
+    min-width: 14px;
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+    /* 防止标签超出屏幕边界 */
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* 性能优化 */
+    will-change: transform, background-color;
+}
+
+/* 嵌入式UI元素面板样式 */
+.ui-elements-bottom-panel {
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    height: 300px; /* 使用固定高度而不是max-height */
+    min-height: 40px;
+    display: flex;
+    flex-direction: column;
+    transition: height 0.3s ease;
+    position: relative;
+}
+
+.ui-elements-bottom-panel.collapsed {
+    height: 40px !important;
+}
+
+.ui-elements-bottom-panel.collapsed .tab-content {
+    display: none;
+}
+
+/* 标签页样式 */
+.elements-tabs {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex: 1; /* 确保占满父容器 */
+}
+
+.elements-tabs .tab-header {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    min-height: 40px;
+    padding-right: 16px;
+}
+
+.tab-header .tab-btn {
+    margin-right: 0;
+}
+
+.tab-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.elements-tabs .tab-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    border-bottom: 2px solid transparent;
+}
+
+.elements-tabs .tab-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.elements-tabs .tab-btn.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+    background: var(--bg-secondary);
+}
+
+.elements-tabs .tab-content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.elements-tabs .tab-pane {
+    flex: 1;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.elements-tabs .tab-pane:not(.active) {
+    display: none;
+}
+
+.elements-tabs .tab-pane.active {
+    display: flex !important;
+    flex-direction: column;
+}
+
+/* 统一的面板内容容器样式 */
+.panel-content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    overflow: hidden;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    margin: 8px;
+    border: 1px solid var(--border-color);
+}
+
+/* 元素列表容器 */
+.elements-list-container {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0; /* 允许收缩 */
+    padding: 0; /* 移除padding让内容填满 */
+    background: transparent; /* 直接使用面板背景 */
+}
+
+.elements-list-container .element-item {
+    padding: 10px;
+    margin: 4px 0;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.02);
+    font-size: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.elements-list-container .element-main {
+    flex: 1;
+    cursor: pointer;
+}
+
+.elements-list-container .element-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    padding-top: 2px;
+}
+
+.elements-list-container .element-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+}
+
+.elements-list-container .element-item.selected {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}
+
+.elements-list-container .element-index {
+    color: var(--accent-primary);
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.elements-list-container .element-desc {
+    color: var(--text-primary);
+}
+
+.elements-list-container .element-details {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* 元素属性容器 */
+.element-props-container {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 12px;
+    min-height: 0; /* 允许收缩 */
+    padding: 0; /* 移除padding让内容填满 */
+    background: transparent; /* 直接使用面板背景 */
+}
+
+.element-props-container .props-section {
+    margin-bottom: 16px;
+}
+
+.element-props-container .props-section h5 {
+    margin: 0 0 8px 0;
+    color: var(--accent-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.element-props-container .props-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    padding: 2px 0;
+}
+
+.element-props-container .props-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.element-props-container .props-value {
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    text-align: right;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.element-props-container .action-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.element-props-container .action-buttons button {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.2s ease;
+}
+
+.element-props-container .action-buttons button:hover {
+    background: var(--accent-primary-hover, #45a049);
+}
+
+/* 隐藏旧的浮动面板（现在使用嵌入式） */
+.ui-elements-panel,
+.element-properties-panel {
+    display: none !important;
+}
+
+/* 针对locator库的empty-state，不设置最小高度 */
+.locator-list .empty-state {
+    min-height: 120px;
+}
+
+/* Locator库样式 */
+.locator-lib-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0; /* 移除padding让内容填满 */
+}
+
+.locator-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: visible;
+    padding: 0; /* 移除padding让内容填满 */
+    background: transparent; /* 直接使用面板背景 */
+    /* 恢复Grid布局显示卡片 */
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    align-content: start;
+}
+
+.locator-search-bar {
+    margin: 0;
+    padding: 0;
+}
+
+.locator-search-bar input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.locator-search-bar input:focus {
+    outline: none;
+    border-color: #007ACC;
+}
+
+.locator-item {
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    padding: 8px;
+    cursor: move;
+    transition: all 0.2s;
+}
+
+.locator-item:hover {
+    background: #333;
+    border-color: #007ACC;
+    transform: translateX(2px);
+}
+
+.locator-item[draggable="true"]:active {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.locator-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.locator-name {
+    font-weight: bold;
+    color: #4EC9B0;
+    font-size: 13px;
+}
+
+.locator-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.locator-actions .btn-icon-small {
+    background: transparent;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s;
+}
+
+.locator-actions .btn-icon-small:hover {
+    color: #fff;
+}
+
+.locator-details {
+    font-size: 11px;
+    color: #999;
+}
+
+.locator-text,
+.locator-id,
+.locator-type {
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.locator-type {
+    color: #D7BA7D;
+}
+
+/* Locator库中的图片项样式 */
+.locator-item.image-type {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.locator-item.image-type .item-thumbnail {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #1e1e1e;
+}
+
+.locator-item.image-type .item-info {
+    flex: 1;
+}
+
+.locator-item.image-type .item-name {
+    font-weight: 500;
+    color: #4EC9B0;
+}
+
+.locator-item.image-type .item-path {
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+}
+
+/* Locator库网格布局 */
+#locatorList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    margin-top: 16px; /* 增加与搜索栏的间距 */
+}
+
+/* 新的Locator卡片样式 */
+.locator-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 12px;
+    cursor: move;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    user-select: none;
+    min-height: 60px;
+    flex-shrink: 0;
+    /* Grid布局不需要margin，gap统一处理间距 */
+}
+
+.locator-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.locator-card[draggable="true"]:active {
+    opacity: 0.7;
+    cursor: grabbing;
+}
+
+/* 图片定位器卡片 */
+.locator-card.image-type .card-thumbnail {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.locator-card.image-type .card-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* XML元素卡片 */
+.locator-card.xml-type .card-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(64, 158, 255, 0.1);
+    border-radius: 6px;
+    color: #409EFF;
+    flex-shrink: 0;
+}
+
+/* 卡片内容 */
+.locator-card .card-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.locator-card .card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.locator-card .card-info {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.locator-card .card-text,
+.locator-card .card-id {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.locator-card .card-type {
+    color: var(--accent-primary);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+/* 右键菜单样式 */
+.locator-context-menu {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 4px 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.context-menu-item svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+/* 设备屏幕模式滑块切换器 */
+.mode-slider-container {
+    margin-left: auto;
+    position: relative;
+}
+
+.mode-slider {
+    position: relative;
+    display: flex;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 3px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.slider-track {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    bottom: 3px;
+    width: calc(25% - 3px);
+    pointer-events: none;
+}
+
+.slider-indicator {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.mode-options {
+    display: flex;
+    position: relative;
+    z-index: 1;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 16px;
+    position: relative;
+}
+
+.mode-option:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-option.active {
+    color: white;
+}
+
+.mode-option.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.mode-icon {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    transition: all 0.2s ease;
+}
+
+/* 四种模式的不同颜色 */
+.slider-indicator.mode-normal {
+    background: linear-gradient(135deg, #FF9800, #F57C00);
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.4);
+}
+
+.slider-indicator.mode-xml {
+    background: linear-gradient(135deg, #2196F3, #1976D2);
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+}
+
+.slider-indicator.mode-crop {
+    background: linear-gradient(135deg, #4CAF50, #45a049);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+.slider-indicator.mode-coordinate {
+    background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+    box-shadow: 0 2px 8px rgba(156, 39, 176, 0.4);
+}
+
+/* 滑块指示器位置动画 */
+.mode-slider[data-active="normal"] .slider-indicator {
+    transform: translateX(0);
+}
+
+.mode-slider[data-active="xml"] .slider-indicator {
+    transform: translateX(100%);
+}
+
+.mode-slider[data-active="crop"] .slider-indicator {
+    transform: translateX(200%);
+}
+
+.mode-slider[data-active="coordinate"] .slider-indicator {
+    transform: translateX(300%);
+}
+
+/* 截图选择器样式 */
+.screenshot-selector {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    cursor: crosshair;
+}
+
+.selector-box {
+    position: absolute;
+    border: 2px dashed #4CAF50;
+    background: rgba(76, 175, 80, 0.2);
+    pointer-events: none;
+}
+
+.selector-controls {
+    position: absolute;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(45, 45, 45, 0.95);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    z-index: 150; /* 确保按钮在最上层 */
+    pointer-events: all; /* 确保可以点击 */
+}
+
+.selector-controls button {
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+/* 坐标标记样式 */
+.coordinate-marker {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.coordinate-dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #ff5722;
+    border: 2px solid white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.coordinate-label {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(45, 45, 45, 0.95);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 坐标模式下的鼠标样式 */
+#screenContent.coordinate-mode {
+    cursor: crosshair;
+}
+
+/* 截图模式下禁用XML overlay */
+#screenContent.screenshot-mode .ui-overlay {
+    display: none;
+}
+
+/* 缩放控制样式 */
+.screen-zoom-controls {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(45, 45, 45, 0.9);
+    border-radius: 6px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 200;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.zoom-level {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 40px;
+    text-align: center;
+    padding: 0 4px;
+}
+
+/* 支持缩放的屏幕内容 */
+.screen-content.zoomable {
+    overflow: auto;
+    cursor: grab;
+}
+
+.screen-content.zoomable:active {
+    cursor: grabbing;
+}
+
+.screen-content.zoomable #deviceScreenshot {
+    transition: transform 0.2s ease;
+    transform-origin: center center;
+}

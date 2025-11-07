@@ -1,0 +1,153 @@
+/* 控制台样式 */
+
+/* 控制台tab特殊样式 */
+#consoleOutputPane {
+    padding: 0; /* 控制台自己有padding */
+}
+
+#consoleOutputPane.active {
+    display: flex !important;
+    flex-direction: column;
+}
+
+#consoleOutput {
+    flex: 1;
+    overflow-y: auto;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 8px;
+    background: transparent;
+}
+
+/* 嵌入式控制台样式 */
+.console-output {
+    flex: 1;
+    padding: 8px 0; /* 上下留一点padding */
+    overflow-y: auto;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    background: transparent; /* 直接使用面板背景 */
+    color: var(--text-primary);
+    height: 100%;
+}
+
+.console-welcome {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+}
+
+.console-welcome-text {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.console-welcome-hint {
+    font-size: 14px;
+    font-style: italic;
+}
+
+.console-log {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 2px;
+    padding: 2px 8px;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    border-left: 3px solid transparent;
+}
+
+.console-log:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* 日志类型样式 */
+.console-log.console-log {
+    color: var(--text-primary);
+    border-left-color: transparent;
+}
+
+.console-log.console-info {
+    color: var(--text-primary);
+    border-left-color: #2196F3;
+}
+
+.console-log.console-warn {
+    color: #FF9800;
+    border-left-color: #FF9800;
+}
+
+.console-log.console-error {
+    color: #F44336;
+    border-left-color: #F44336;
+    background: rgba(244, 67, 54, 0.05);
+}
+
+.console-log.console-debug {
+    color: #9E9E9E;
+    border-left-color: #9E9E9E;
+    opacity: 0.8;
+}
+
+.console-log.console-system {
+    color: #4CAF50;
+    border-left-color: #4CAF50;
+    font-style: italic;
+}
+
+/* 时间戳样式 */
+.console-timestamp {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    margin-right: 12px;
+    min-width: 80px;
+    opacity: 0.7;
+}
+
+/* 类型标签样式 */
+.console-type {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-right: 12px;
+    min-width: 50px;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+}
+
+.console-type-log {
+    color: var(--text-secondary);
+}
+
+.console-type-info {
+    color: #2196F3;
+}
+
+.console-type-warn {
+    color: #FF9800;
+}
+
+.console-type-error {
+    color: #F44336;
+}
+
+.console-type-debug {
+    color: #9E9E9E;
+}
+
+.console-type-system {
+    color: #4CAF50;
+}
+
+/* 消息内容样式 */
+.console-message {
+    flex: 1;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+    line-height: 1.4;
+}

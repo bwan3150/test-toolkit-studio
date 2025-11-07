@@ -108,25 +108,6 @@
     white-space: nowrap;
 }
 
-.device-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-color);
-}
-
-.device-actions .btn {
-    flex: 1;
-    padding: 6px 12px;
-    font-size: 12px;
-}
-
-.device-actions .btn-icon-only {
-    flex: 0 0 auto;
-    width: 32px;
-    padding: 6px;
-}
 
 .connected-list {
     display: flex;
@@ -2264,176 +2245,241 @@
     transform-origin: center center;
 }
 
-/* Device Card Styles - Clean Design */
-.device-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    margin-bottom: 16px;
-    overflow: hidden;
-    transition: all 0.2s ease;
+/* Device Phone Mockup - 手机图片就是全部 */
+.device-phone-mockup {
+    position: relative;
+    width: 200px;
+    height: 344px;
+    background-image: url('../../../assets/images/device-page/old_phone_mockup.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform 0.3s ease;
 }
 
-.device-card:hover {
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.device-phone-mockup:hover {
+    transform: translateY(-8px);
 }
 
-.device-card-header {
-    padding: 16px 20px 12px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.device-main-row {
+/* 手机屏幕内容区域 */
+.device-screen-content {
+    position: absolute;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 88%;
+    bottom: 10%;
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
-    margin-bottom: 6px;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 8px;
+    background: transparent !important;
 }
 
-.device-id-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+/* 手机内部平台图标 (Android/iOS) */
+.device-platform-icon {
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 8px;
+    color: var(--text-secondary);
 }
 
+.device-platform-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* 连接类型图标 (USB/WiFi) */
+.device-connection-icon {
+    width: 32px;
+    height: 32px;
+    filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* 设备状态指示器 */
 .device-status-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
     width: 12px;
     height: 12px;
     border-radius: 50%;
     background: #6b7280;
-    border: 2px solid rgba(107, 114, 128, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.8);
     transition: all 0.2s ease;
-    flex-shrink: 0;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .device-status-indicator.connected {
     background: #22c55e;
-    border-color: rgba(34, 197, 94, 0.3);
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+    border-color: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.8), 0 2px 4px rgba(0, 0, 0, 0.2);
+    animation: pulse-status 2s infinite;
 }
+
+/* 设备信息文本区域 - 已移至文件末尾统一定义 */
 
 .device-id {
     font-family: var(--font-mono);
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.device-actions-inline {
-    display: flex;
-    align-items: center;
-}
-
-.saved-indicator-inline {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--color-success);
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.device-saved-label {
-    background: rgba(34, 197, 94, 0.1);
-    color: var(--color-success);
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-weight: 500;
-    width: fit-content;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    border: 1px solid rgba(34, 197, 94, 0.2);
-}
-
-.device-saved-label::before {
-    content: "📱";
-    font-size: 10px;
-}
-
-
-.device-card-body {
-    padding: 16px 20px;
-}
-
-.app-section {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.app-title {
-    color: var(--text-primary);
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 9px;
+    font-weight: 700;
+    color: #ffffff;
     margin-bottom: 8px;
+    word-break: break-all;
+    line-height: 1.4;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-.app-details {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+/* App信息显示 - Hover浮层（显示在中间位置） */
+.device-app-info {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 280px;
+    max-width: 90vw;
+    background: rgba(0, 0, 0, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    pointer-events: none; /* 防止浮层阻挡鼠标事件 */
 }
 
-.app-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+.device-phone-mockup:hover .device-app-info {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto; /* hover时允许交互 */
 }
 
-.field-label {
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.device-app-info-title {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-bottom: 8px;
+    font-weight: 600;
 }
 
-.field-value-group {
+.device-app-field {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    padding: 8px 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.field-value {
+.device-app-field:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.device-app-label {
+    font-size: 10px;
+    color: #d1d5db;
+    font-weight: 600;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+.device-app-value {
     flex: 1;
     font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--text-primary);
-    word-break: break-all;
+    font-size: 11px;
+    font-weight: 500;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
 }
 
-.copy-btn {
+.device-app-copy-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
     padding: 4px;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
-    color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s;
 }
 
-.copy-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: var(--text-primary);
+.device-app-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.05);
 }
 
+.device-app-copy-btn svg {
+    width: 12px;
+    height: 12px;
+    fill: #ffffff;
+}
+
+/* 设备操作按钮区域 */
+.device-actions {
+    position: absolute;
+    bottom: -45px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 200px;
+}
+
+.device-actions .btn {
+    font-size: 10px;
+    padding: 4px 8px;
+    min-width: auto;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+
+.device-actions .btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* 无App信息提示 */
 .no-app-info {
-    color: var(--text-secondary);
-    font-size: 13px;
+    color: #f3f4f6;
+    font-size: 9px;
     text-align: center;
-    padding: 16px 0;
     font-style: italic;
+    opacity: 0.8;
+    font-weight: 500;
+}
+
+/* 已保存设备标识 */
+.device-saved-label {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    background: rgba(34, 197, 94, 0.9);
+    color: white;
+    font-size: 9px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 700;
+    z-index: 10;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
 }
 
 /* 无线设备管理样式 */
@@ -2624,7 +2670,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 拖拽APK时的高亮效果 */
+/* 拖拽APK时的高亮效果 - 旧的device-card样式 */
 .device-card.drag-over {
     border-color: var(--accent-success);
     background: rgba(76, 175, 80, 0.05);
@@ -2745,13 +2791,48 @@
     margin-top: 4px;
 }
 
-.device-name {
-    font-weight: 600;
-    color: var(--text-primary);
-    font-size: 14px;
+/* 手机内部设备名称（大字） */
+.device-phone-mockup .device-info-text .device-name {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+    max-width: 15ch !important; /* 限制最多显示15个字符 */
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
 
+/* 手机内部设备ID（小字） */
+.device-phone-mockup .device-info-text .device-id-small {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+}
 
+/* 手机内部设备model（小字） */
+.device-phone-mockup .device-info-text .device-model-small {
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    margin-bottom: 0 !important;
+    padding-right: 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    width: 100% !important;
+}
 
 /* 连接类型标识 */
 .connection-type-badge {
@@ -2818,25 +2899,13 @@
     padding-left: 16px;
 }
 
-.device-id {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-disabled);
-    margin-top: 4px;
-}
-
-.device-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    padding-left: 16px;
-}
-
 .device-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
     margin-top: 16px;
+    justify-content: flex-start;
+    padding: 20px;
 }
 
 .device-sections {
@@ -3252,5 +3321,216 @@
 
 .back-button:hover svg {
     transform: translateX(-2px);
+}
+
+/* ==================== 平台分组布局 ==================== */
+
+.device-section h3 .platform-icon {
+    fill: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* Web Browser使用stroke样式 */
+.device-section h3 .platform-icon[stroke] {
+    fill: none;
+    stroke: var(--text-secondary);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-disabled);
+    font-size: 14px;
+}
+
+/* ==================== 连接状态标签 ==================== */
+
+.device-connection-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.device-connection-badge .badge-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.device-connection-badge .badge-dot {
+    display: none; /* 隐藏圆点指示器 */
+}
+
+.device-connection-badge .badge-text {
+    white-space: nowrap;
+}
+
+/* USB 连接状态 */
+.device-connection-badge.usb-connected {
+    background: rgba(78, 201, 176, 0.15);
+    border-color: rgba(78, 201, 176, 0.3);
+    color: #4ec9b0;
+}
+
+.device-connection-badge.usb-connected .badge-icon {
+    fill: #4ec9b0;
+}
+
+/* USB 未连接状态 */
+.device-connection-badge.usb-disconnected {
+    background: rgba(128, 128, 128, 0.15);
+    border-color: rgba(128, 128, 128, 0.2);
+    color: #888;
+}
+
+.device-connection-badge.usb-disconnected .badge-icon {
+    fill: #666;
+}
+
+/* WiFi 连接状态 */
+.device-connection-badge.wifi-connected {
+    background: rgba(79, 193, 255, 0.15);
+    border-color: rgba(79, 193, 255, 0.3);
+    color: #4fc1ff;
+}
+
+.device-connection-badge.wifi-connected .badge-icon {
+    fill: #4fc1ff;
+}
+
+/* WiFi 未连接状态 */
+.device-connection-badge.wifi-disconnected {
+    background: rgba(128, 128, 128, 0.15);
+    border-color: rgba(128, 128, 128, 0.2);
+    color: #888;
+}
+
+.device-connection-badge.wifi-disconnected .badge-icon {
+    fill: #666;
+}
+
+/* 设备信息文本容器 */
+.device-phone-mockup .device-info-text {
+    width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.device-phone-mockup .device-id {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.device-phone-mockup .device-model {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* APK安装指示器 - 拖拽时显示 */
+.apk-install-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    background: rgba(76, 175, 80, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.apk-install-icon {
+    width: 48px;
+    height: 48px;
+    color: #ffffff;
+    stroke-width: 2.5;
+}
+
+.apk-install-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 设备卡片拖拽状态 - 针对phone-mockup */
+.device-phone-mockup.drag-over {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
+    border: 2px solid rgba(76, 175, 80, 0.8);
+}
+
+/* 禁用拖拽状态 - 未连接的设备 */
+.device-phone-mockup.drag-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.device-phone-mockup.drag-disabled::after {
+    content: '设备未连接';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 12px 20px;
+    background: rgba(239, 68, 68, 0.95);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* App信息显示样式简化 */
+.device-app-info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.device-app-package,
+.device-app-activity {
+    font-size: 11px;
+    color: #ffffff;
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+.device-app-package {
+    font-weight: 600;
+}
+
+.device-app-activity {
+    font-weight: 400;
+    color: #d1d5db;
 }
 

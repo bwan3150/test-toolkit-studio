@@ -1,0 +1,607 @@
+/* 连接状态相关样式 */
+
+/* 连接类型标识 */
+.connection-type-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.connection-type-badge.wifi {
+    background: rgba(33, 150, 243, 0.1);
+    color: #2196F3;
+}
+
+.connection-type-badge.usb {
+    background: rgba(255, 152, 0, 0.1);
+    color: #FF9800;
+}
+
+.connection-type-badge.offline {
+    background: rgba(244, 67, 54, 0.1);
+    color: #F44336;
+}
+
+/* 平台标识 */
+.platform-badge {
+    position: absolute;
+    top: 0;
+    right: 60px; /* 位于连接类型标识左侧 */
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.platform-badge.android {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4CAF50;
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.platform-badge.ios {
+    background: rgba(96, 125, 139, 0.1);
+    color: #607D8B;
+    border-color: rgba(96, 125, 139, 0.3);
+}
+
+/* 设备连接状态标签 */
+.device-connection-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.device-connection-badge .badge-icon {
+    width: 14px;
+    height: 14px;
+}
+
+.device-connection-badge .badge-dot {
+    display: none; /* 隐藏圆点指示器 */
+}
+
+.device-connection-badge .badge-text {
+    white-space: nowrap;
+}
+
+/* USB 连接状态 */
+.device-connection-badge.usb-connected {
+    background: rgba(78, 201, 176, 0.15);
+    border-color: rgba(78, 201, 176, 0.3);
+    color: #4ec9b0;
+}
+
+.device-connection-badge.usb-connected .badge-icon {
+    fill: #4ec9b0;
+}
+
+/* USB 未连接状态 */
+.device-connection-badge.usb-disconnected {
+    background: rgba(128, 128, 128, 0.15);
+    border-color: rgba(128, 128, 128, 0.2);
+    color: #888;
+}
+
+.device-connection-badge.usb-disconnected .badge-icon {
+    fill: #666;
+}
+
+/* WiFi 连接状态 */
+.device-connection-badge.wifi-connected {
+    background: rgba(79, 193, 255, 0.15);
+    border-color: rgba(79, 193, 255, 0.3);
+    color: #4fc1ff;
+}
+
+.device-connection-badge.wifi-connected .badge-icon {
+    fill: #4fc1ff;
+}
+
+/* WiFi 未连接状态 */
+.device-connection-badge.wifi-disconnected {
+    background: rgba(128, 128, 128, 0.15);
+    border-color: rgba(128, 128, 128, 0.2);
+    color: #888;
+}
+
+.device-connection-badge.wifi-disconnected .badge-icon {
+    fill: #666;
+}
+
+/* 无线设备管理样式 */
+.wireless-connection-form {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wireless-devices-section, .wireless-scan-section {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.wireless-devices-section h3, .wireless-scan-section h3 {
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* 无线设备卡片样式 */
+.wireless-device-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.wireless-device-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.wireless-device-card.connected {
+    border-color: var(--accent-success);
+    background: rgba(76, 175, 80, 0.05);
+}
+
+.wireless-device-card .device-info {
+    flex: 1;
+}
+
+.wireless-device-card .device-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.wireless-device-card .device-address {
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.wireless-device-card .device-model {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.wireless-device-card .device-status {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 12px;
+    display: inline-block;
+}
+
+.wireless-device-card .device-status.connected {
+    background: rgba(76, 175, 80, 0.1);
+    color: var(--accent-success);
+}
+
+.wireless-device-card .device-status.disconnected {
+    background: rgba(158, 158, 158, 0.1);
+    color: var(--text-secondary);
+}
+
+.wireless-device-card .device-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+/* 扫描结果样式 */
+.scan-results-header {
+    margin-bottom: 16px;
+}
+
+.scan-results-header h4 {
+    color: var(--text-primary);
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.scan-results-empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-secondary);
+}
+
+.scan-results-list {
+    margin-top: 16px;
+}
+
+/* 保存指示器样式 */
+.saved-indicator, .saved-indicator-inline {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent-success);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.saved-indicator svg, .saved-indicator-inline svg {
+    fill: var(--accent-success);
+}
+
+/* 连接向导弹窗样式 */
+#connectionGuideModal .modal-dialog {
+    width: 900px; /* 增加宽度 */
+    max-width: 95vw;
+    height: 700px; /* 增加高度 */
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+    background: #2B2B2B;
+    border: 1px solid #414141;
+    position: relative;
+}
+
+#connectionGuideModal .modal-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* 连接标签页样式 */
+.connection-tabs {
+    flex-shrink: 0;
+}
+
+.tab-list {
+    display: flex;
+    background: #2B2B2B;
+}
+
+.tab-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: #CCCCCC;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-button:hover {
+    background: #3C3C3C;
+    color: #FFFFFF;
+}
+
+.tab-button.active {
+    background: #383838;
+    color: #FFFFFF;
+    border-bottom-color: #0078D4;
+}
+
+.tab-icon {
+    fill: currentColor;
+}
+
+/* 标签页内容样式 */
+.tab-content {
+    flex: 1;
+    padding: 16px;
+    background: #383838;
+    overflow-y: auto;
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* 指导面板样式 */
+.instruction-panel {
+    background: #2B2B2B;
+    border: 1px solid #414141;
+    border-radius: 4px;
+    padding: 16px;
+}
+
+.instruction-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    color: #CCCCCC;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.header-icon {
+    fill: #0078D4;
+}
+
+.instruction-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.instruction-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.instruction-step {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #0078D4;
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.instruction-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.instruction-text strong {
+    color: #CCCCCC;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.instruction-text span {
+    color: #9D9D9D;
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+/* 配对方法按钮样式 */
+.pairing-method-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap; /* 允许按钮换行 */
+}
+
+/* 配对部分样式 */
+.pairing-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: #2B2B2B;
+    border: 1px solid #414141;
+    border-radius: 4px;
+}
+
+.pairing-section h4 {
+    margin: 0 0 12px 0;
+    color: #CCCCCC;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* 配对信息样式 */
+.pairing-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.info-item label {
+    color: #9D9D9D;
+    min-width: 60px;
+}
+
+/* 配对表单样式 */
+.pairing-instruction {
+    margin-bottom: 16px;
+    color: #9D9D9D;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.pairing-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-bottom: 12px;
+}
+
+.pairing-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pairing-form .form-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.pairing-form .flex-wide {
+    flex: 2;
+}
+
+.pairing-form .flex-narrow {
+    flex: 1;
+}
+
+.pairing-form label {
+    color: #CCCCCC;
+    font-size: 12px;
+    font-weight: 500;
+    margin: 0;
+    padding: 0;
+}
+
+.pairing-input {
+    background: #1E1E1E;
+    border: 1px solid #414141;
+    color: #CCCCCC;
+    padding: 6px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    margin: 0;
+}
+
+.pairing-input:focus {
+    outline: none;
+    border-color: #0078D4;
+    box-shadow: 0 0 0 1px #0078D4;
+}
+
+.pairing-input::placeholder {
+    color: #5A5A5A;
+}
+
+.pairing-input[readonly] {
+    background: #2A2A2A;
+    color: #9D9D9D;
+    cursor: not-allowed;
+    border-color: #5A5A5A;
+}
+
+.highlight-code {
+    background: #1E1E1E;
+    color: #4EC9B0;
+    padding: 2px 6px;
+    border-radius: 2px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+}
+
+/* QR码样式 */
+.qr-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.qr-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    background: #1E1E1E;
+    border: 1px solid #414141;
+    border-radius: 4px;
+}
+
+.qr-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: #9D9D9D;
+}
+
+.qr-placeholder .qr-icon {
+    fill: #5A5A5A;
+}
+
+.qr-placeholder p {
+    margin: 0;
+    font-size: 12px;
+}
+
+#qrCanvas {
+    max-width: 180px;
+    max-height: 180px;
+    background: #FFFFFF;
+    border-radius: 4px;
+}
+
+.qr-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 0;
+    flex-wrap: wrap; /* 允许按钮换行 */
+}
+
+.qr-info {
+    padding: 8px;
+    background: #1E1E1E;
+    border: 1px solid #414141;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #9D9D9D;
+}
+
+/* 配对操作样式 */
+.pairing-actions {
+    margin-bottom: 0;
+    display: flex;
+    justify-content: flex-start; /* 按钮左对齐 */
+}
+
+.manual-pairing-tip,
+.qr-note {
+    padding: 8px;
+    background: #1E1E1E;
+    border-left: 3px solid #0078D4;
+    color: #9D9D9D;
+    font-size: 11px;
+    line-height: 1.4;
+    margin-top: 12px;
+}
+
+.qr-note strong {
+    color: #CCCCCC;
+}

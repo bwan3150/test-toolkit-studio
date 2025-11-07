@@ -1,0 +1,101 @@
+/* 响应式样式 */
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .right-panel {
+        width: 280px;
+    }
+
+    .ui-elements-bottom-panel {
+        max-height: 250px;
+    }
+
+    .element-item {
+        font-size: 12px;
+    }
+
+    .action-buttons .btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    .wireless-device-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .wireless-device-card .device-actions {
+        align-self: flex-end;
+    }
+}
+
+@media (max-width: 1024px) {
+    .file-explorer {
+        width: 200px;
+    }
+}
+
+/* 响应式调整 */
+@media (max-width: 1200px) {
+    .ui-elements-bottom-panel {
+        max-height: 250px;
+    }
+
+    .element-item {
+        font-size: 12px;
+    }
+
+    .action-buttons .btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+}
+
+@media (max-height: 800px) {
+    .ui-elements-bottom-panel {
+        max-height: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .ui-elements-bottom-panel {
+        max-height: 180px;
+    }
+
+    .panel-header {
+        padding: 6px 12px;
+    }
+
+    .element-item {
+        padding: 6px;
+        margin: 3px 0;
+    }
+
+    .action-buttons {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .action-buttons .btn {
+        padding: 4px 6px;
+        font-size: 10px;
+        min-width: auto;
+    }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 480px) {
+    .ui-elements-bottom-panel {
+        max-height: 150px;
+    }
+
+    .tab-header {
+        padding: 4px;
+    }
+
+    .tab-btn {
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+}
