@@ -9,25 +9,146 @@ function getGlobals() {
     return window.AppGlobals;
 }
 
+// 显示APK安装图标提示
+function showApkInstallIndicator(deviceCard) {
+    // 检查是否已存在指示器
+    let indicator = deviceCard.querySelector('.apk-install-indicator');
+    if (indicator) {
+        indicator.style.display = 'flex';
+        return;
+    }
+
+    // 创建指示器
+    indicator = document.createElement('div');
+    indicator.className = 'apk-install-indicator';
+    indicator.innerHTML = `
+        <svg class="apk-install-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/>
+            <path d="M14 2v5a1 1 0 0 0 1 1h5"/>
+            <path d="M12 18v-6"/>
+            <path d="m9 15 3 3 3-3"/>
+        </svg>
+        <div class="apk-install-text">松手安装APK</div>
+    `;
+
+    deviceCard.appendChild(indicator);
+}
+
+// 隐藏APK安装图标提示
+function hideApkInstallIndicator(deviceCard) {
+    const indicator = deviceCard.querySelector('.apk-install-indicator');
+    if (indicator) {
+        indicator.style.display = 'none';
+    }
+}
+
+// 显示设备未连接提示
+function showDisconnectIndicator(deviceCard, isWifi = false) {
+    // 检查是否已存在指示器
+    let indicator = deviceCard.querySelector('.device-disconnect-indicator');
+    if (indicator) {
+        indicator.style.display = 'flex';
+        return;
+    }
+
+    // 选择图标（WiFi或USB离线）
+    const iconSvg = isWifi ? `
+        <svg class="device-disconnect-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h.01"/>
+            <path d="M8.5 16.429a5 5 0 0 1 7 0"/>
+            <path d="M5 12.859a10 10 0 0 1 5.17-2.69"/>
+            <path d="M19 12.859a10 10 0 0 0-2.007-1.523"/>
+            <path d="M2 8.82a15 15 0 0 1 4.177-2.643"/>
+            <path d="M22 8.82a15 15 0 0 0-11.288-3.764"/>
+            <path d="m2 2 20 20"/>
+        </svg>
+    ` : `
+        <svg class="device-disconnect-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 17H7A5 5 0 0 1 7 7"/>
+            <path d="M15 7h2a5 5 0 0 1 4 8"/>
+            <line x1="8" x2="12" y1="12" y2="12"/>
+            <line x1="2" x2="22" y1="2" y2="22"/>
+        </svg>
+    `;
+
+    // 创建指示器
+    indicator = document.createElement('div');
+    indicator.className = 'device-disconnect-indicator';
+    indicator.innerHTML = `
+        ${iconSvg}
+        <div>设备未连接</div>
+    `;
+
+    deviceCard.appendChild(indicator);
+}
+
+// 隐藏设备未连接提示
+function hideDisconnectIndicator(deviceCard) {
+    const indicator = deviceCard.querySelector('.device-disconnect-indicator');
+    if (indicator) {
+        indicator.style.display = 'none';
+    }
+}
+
 // 设置设备卡片的拖拽功能
-function setupDragAndDropForDevice(deviceCard, deviceId) {
+function setupDragAndDropForDevice(deviceCard, deviceId, isConnected = true, isWifi = false) {
+    // 如果设备未连接，禁用拖放功能
+    if (!isConnected) {
+        deviceCard.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            // 添加禁用样式
+            deviceCard.classList.add('drag-disabled');
+            // 显示未连接提示
+            showDisconnectIndicator(deviceCard, isWifi);
+        });
+
+        deviceCard.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            deviceCard.classList.remove('drag-disabled');
+            // 隐藏未连接提示
+            hideDisconnectIndicator(deviceCard);
+        });
+
+        deviceCard.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            deviceCard.classList.remove('drag-disabled');
+            // 隐藏未连接提示
+            hideDisconnectIndicator(deviceCard);
+            window.AppNotifications?.warn('设备未连接，无法安装APK');
+        });
+
+        return;
+    }
+
     // 防止默认拖拽行为
     deviceCard.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.stopPropagation();
         deviceCard.classList.add('drag-over');
+
+        // 显示安装图标提示
+        showApkInstallIndicator(deviceCard);
     });
 
     deviceCard.addEventListener('dragleave', (e) => {
         e.preventDefault();
         e.stopPropagation();
         deviceCard.classList.remove('drag-over');
+
+        // 隐藏安装图标提示
+        hideApkInstallIndicator(deviceCard);
     });
 
     deviceCard.addEventListener('drop', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         deviceCard.classList.remove('drag-over');
+
+        // 隐藏安装图标提示
+        hideApkInstallIndicator(deviceCard);
 
         const files = e.dataTransfer.files;
 

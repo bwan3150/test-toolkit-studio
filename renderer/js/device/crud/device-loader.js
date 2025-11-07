@@ -237,6 +237,11 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
         const card = document.createElement('div');
         card.className = 'device-phone-mockup';
         card.setAttribute('data-device-file', file); // 用于去重检查
+        // 同时设置 data-device-id 用于与未保存设备的去重
+        const deviceKey = platform === 'ios' ? config.udid : config.deviceId;
+        if (deviceKey) {
+            card.setAttribute('data-device-id', deviceKey);
+        }
 
         let cardContent = `
             ${connectionBadgeHtml}
@@ -246,6 +251,48 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
                 </div>
             </div>
         `;
+
+        // 获取并显示当前App信息作为hover浮层（仅已连接的Android设备）
+        if (isConnected && platform === 'android') {
+            const deviceId = config.deviceId;
+            if (deviceId) {
+                try {
+                    const { ipcRenderer } = getGlobals();
+                    const appResult = await ipcRenderer.invoke('get-current-app', deviceId);
+                    if (appResult && appResult.success) {
+                        const deviceIdClean = deviceId.replace(/[^a-zA-Z0-9]/g, '_');
+                        cardContent += `
+                            <div class="device-app-info">
+                                <div class="device-app-info-title">当前运行应用</div>
+                                <div class="device-app-field">
+                                    <span class="device-app-label">包名</span>
+                                    <span class="device-app-value" title="${appResult.packageName}">${appResult.packageName}</span>
+                                    <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_package')" title="复制包名">
+                                        <svg viewBox="0 0 24 24">
+                                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                        </svg>
+                                    </button>
+                                    <span id="${deviceIdClean}_package" style="display: none;">${appResult.packageName}</span>
+                                </div>
+                                <div class="device-app-field">
+                                    <span class="device-app-label">Activity</span>
+                                    <span class="device-app-value" title="${appResult.activityName}">${appResult.activityName}</span>
+                                    <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_activity')" title="复制Activity">
+                                        <svg viewBox="0 0 24 24">
+                                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                        </svg>
+                                    </button>
+                                    <span id="${deviceIdClean}_activity" style="display: none;">${appResult.activityName}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    // 不显示错误信息，只是不显示hover浮层
+                    window.rError('获取应用信息失败:', error);
+                }
+            }
+        }
 
         // 添加操作按钮
         const actionButtons = [];
@@ -294,10 +341,10 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
             }
         }
 
-        // 为Android已连接设备添加拖拽功能
-        if (platform === 'android' && isConnected && deviceIdentifier && window.setupDragAndDropForDevice) {
-            window.setupDragAndDropForDevice(card, deviceIdentifier);
-            window.rLog('为保存的设备添加拖拽功能:', config.deviceName, deviceIdentifier);
+        // 为Android设备添加拖拽功能（已连接和未连接都添加，但未连接会禁用）
+        if (platform === 'android' && deviceIdentifier && window.setupDragAndDropForDevice) {
+            window.setupDragAndDropForDevice(card, deviceIdentifier, isConnected, isWifi);
+            window.rLog('为保存的设备添加拖拽功能:', config.deviceName, deviceIdentifier, '连接状态:', isConnected, 'WiFi:', isWifi);
         }
 
         gridElement.appendChild(card);

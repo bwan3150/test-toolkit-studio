@@ -1,0 +1,503 @@
+/* 基础样式和通用样式 */
+
+/* 设备列表和连接设备的基础布局 */
+.device-list,
+.connected-devices {
+    margin-bottom: 32px;
+}
+
+.device-list {
+    order: 2; /* 保存的设备列表第二 */
+}
+
+.connected-devices {
+    order: 3; /* 在线设备列表第三 */
+}
+
+.device-list h3,
+.connected-devices h3 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
+/* 设备网格布局 */
+.device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.device-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    margin-top: 16px;
+    justify-content: flex-start;
+    padding: 20px;
+}
+
+/* 设备内容容器 */
+.device-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* 设备分组 */
+.device-sections {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.device-section {
+    margin-bottom: 32px;
+}
+
+.device-section h3 {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.device-section h3 .platform-icon {
+    fill: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* Web Browser使用stroke样式 */
+.device-section h3 .platform-icon[stroke] {
+    fill: none;
+    stroke: var(--text-secondary);
+}
+
+/* 空状态样式 */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-disabled);
+    font-size: 14px;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1; /* 占满父容器可用空间 */
+    min-height: 100px;
+    opacity: 0.6;
+}
+
+.empty-state-text {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* 连接列表 */
+.connected-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.connected-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+.connected-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.connected-item .device-id {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.connected-item .device-status-text {
+    font-size: 12px;
+    color: var(--accent-success);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 12px;
+}
+
+.connected-item .btn {
+    font-size: 12px;
+    padding: 4px 12px;
+}
+
+/* 设备状态指示器 */
+.device-status {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-disabled);
+}
+
+.device-status.connected {
+    background: var(--accent-success);
+    animation: pulse-status 2s infinite;
+}
+
+@keyframes pulse-status {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(78, 201, 176, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(78, 201, 176, 0);
+    }
+}
+
+.device-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-disabled);
+    flex-shrink: 0;
+}
+
+.device-status.connected {
+    background: var(--accent-success);
+    box-shadow: 0 0 4px rgba(76, 175, 80, 0.4);
+}
+
+.device-status.disconnected {
+    background: #F44336;
+    box-shadow: 0 0 4px rgba(244, 67, 54, 0.4);
+}
+
+.device-status-info {
+    font-size: 11px;
+    color: #F44336;
+    margin-top: 4px;
+}
+
+/* 设备信息 */
+.device-name {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    padding-right: 30px; /* Space for status indicator */
+}
+
+.device-info {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.device-info span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.device-info {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-bottom: 12px;
+    padding-left: 16px;
+}
+
+/* 设置页面样式 */
+.settings-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.settings-section {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.settings-section h3 {
+    font-size: 16px;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.detail-row:last-child {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    width: 140px;
+}
+
+.detail-value {
+    font-size: 13px;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.sdk-status {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.status-item span:first-child {
+    font-size: 13px;
+    color: var(--text-secondary);
+    width: 100px;
+}
+
+.status-indicator {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.status-indicator.success {
+    background: rgba(78, 201, 176, 0.2);
+    color: var(--accent-success);
+}
+
+.status-indicator.error {
+    background: rgba(244, 135, 113, 0.2);
+    color: var(--accent-danger);
+}
+
+.about-info {
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--text-secondary);
+}
+
+.about-info strong {
+    color: var(--text-primary);
+}
+
+/* Welcome Screen 样式 */
+.welcome-logo {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 24px;
+    object-fit: contain;
+}
+
+.welcome-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
+}
+
+.project-welcome h3 {
+    font-size: 20px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.project-welcome p {
+    margin-bottom: 0;
+    color: var(--text-secondary);
+}
+
+/* Recent Projects List */
+.recent-projects {
+    width: 100%;
+}
+
+.recent-projects h4 {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 24px;
+    color: var(--text-primary);
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.project-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.project-item:first-child {
+    border-top: 1px solid var(--border-color);
+}
+
+.project-item:hover {
+    background: var(--bg-secondary);
+    padding-left: 24px;
+}
+
+.project-item-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    fill: var(--accent-primary);
+    flex-shrink: 0;
+}
+
+.project-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.project-item-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.project-item-path {
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+
+.project-item-date {
+    font-size: 11px;
+    color: var(--text-disabled);
+    margin-left: auto;
+    flex-shrink: 0;
+    padding-left: 16px;
+}
+
+.project-item-remove {
+    opacity: 0;
+    margin-left: 12px;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    border-radius: 3px;
+}
+
+.project-item:hover .project-item-remove {
+    opacity: 1;
+}
+
+.project-item-remove:hover {
+    background: var(--bg-hover);
+    color: var(--accent-danger);
+}
+
+/* 错误状态样式 */
+.error-state {
+    text-align: center;
+    padding: 20px;
+    color: var(--accent-danger);
+}
+
+.error-text {
+    font-size: 14px;
+}
+
+/* 按钮加载状态 */
+.btn-icon.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 滚动条优化 */
+.elements-list-container::-webkit-scrollbar,
+.element-props-container::-webkit-scrollbar,
+.console-output::-webkit-scrollbar {
+    width: 6px;
+}
+
+.elements-list-container::-webkit-scrollbar-track,
+.element-props-container::-webkit-scrollbar-track,
+.console-output::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.elements-list-container::-webkit-scrollbar-thumb,
+.element-props-container::-webkit-scrollbar-thumb,
+.console-output::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}
+
+.elements-list-container::-webkit-scrollbar-thumb:hover,
+.element-props-container::-webkit-scrollbar-thumb:hover,
+.console-output::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* 编辑器拖放提示 */
+#editorTextarea[data-drag-over="true"] {
+    border: 2px dashed #4EC9B0;
+    background: rgba(78, 201, 176, 0.1);
+}

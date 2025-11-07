@@ -45,8 +45,12 @@ async function refreshConnectedDevices() {
                 if (file.endsWith('.yaml')) {
                     const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
                     const config = yaml.load(content);
+                    // Android 用 deviceId, iOS 用 udid
                     if (config.deviceId) {
                         savedDeviceConfigs[config.deviceId] = config;
+                    }
+                    if (config.udid) {
+                        savedDeviceConfigs[config.udid] = config;
                     }
                 }
             }
@@ -94,7 +98,9 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
     const devicesWithConnectionStatus = validDevices
         .filter(device => {
             // 过滤掉已保存配置的设备（这些设备会在loadSavedDevices中显示）
-            const isSaved = !!savedDeviceConfigs[device.id];
+            // Android用id, iOS用udid
+            const deviceKey = platform === 'ios' ? device.udid : device.id;
+            const isSaved = !!savedDeviceConfigs[deviceKey];
             return !isSaved;
         })
         .map(device => {
@@ -130,15 +136,16 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
         const isSaved = false; // 这里的设备都是未保存的
 
         // 检查设备是否已存在 - 通过检查是否有相同的data-device-id属性
-        const existingCard = targetGrid.querySelector(`[data-device-id="${device.id}"]`);
+        const deviceKey = platform === 'ios' ? device.udid : device.id;
+        const existingCard = gridElement.querySelector(`[data-device-id="${deviceKey}"]`);
         if (existingCard) {
-            window.rLog('未保存的设备已存在，跳过:', device.id);
+            window.rLog('未保存的设备已存在，跳过:', deviceKey);
             continue; // 跳过已存在的设备
         }
 
         const item = document.createElement('div');
         item.className = 'device-phone-mockup';
-        item.setAttribute('data-device-id', device.id); // 用于去重检查
+        item.setAttribute('data-device-id', deviceKey); // 用于去重检查
 
         // 获取平台图标 SVG
         const platformIconSvg = platform === 'ios' ?
@@ -250,15 +257,15 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
             </div>
         `;
 
-        // 获取并显示当前App信息作为hover浮层（仅Android设备且已连接）
-        if (platform === 'android' && device.isConnected) {
+        // 获取并显示当前App信息作为hover浮层（仅已连接设备）
+        if (device.isConnected && platform === 'android') {
             try {
                 const appResult = await ipcRenderer.invoke('get-current-app', device.id);
                 if (appResult.success) {
                     const deviceIdClean = device.id.replace(/[^a-zA-Z0-9]/g, '_');
                     cardContent += `
                         <div class="device-app-info">
-                            <div class="device-app-info-title">正在运行:</div>
+                            <div class="device-app-info-title">当前运行应用</div>
                             <div class="device-app-field">
                                 <span class="device-app-label">包名</span>
                                 <span class="device-app-value" title="${appResult.packageName}">${appResult.packageName}</span>
@@ -283,7 +290,8 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
                     `;
                 }
             } catch (error) {
-                // 不显示错误信息,只是不显示hover浮层
+                // 不显示错误信息，只是不显示hover浮层
+                window.rError('获取应用信息失败:', error);
             }
         }
 
@@ -314,9 +322,9 @@ async function processDevicesByPlatform(devices, platform, gridElement, savedDev
 
         item.innerHTML = cardContent;
 
-        // 添加拖拽功能（仅Android设备且已连接）
-        if (platform === 'android' && device.isConnected && window.setupDragAndDropForDevice) {
-            window.setupDragAndDropForDevice(item, device.id);
+        // 添加拖拽功能（Android设备，已连接和未连接都添加，但未连接会禁用）
+        if (platform === 'android' && window.setupDragAndDropForDevice) {
+            window.setupDragAndDropForDevice(item, device.id, device.isConnected, device.isWifi);
         }
 
         gridElement.appendChild(item);

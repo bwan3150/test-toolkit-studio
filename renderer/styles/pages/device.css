@@ -2670,7 +2670,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 拖拽APK时的高亮效果 */
+/* 拖拽APK时的高亮效果 - 旧的device-card样式 */
 .device-card.drag-over {
     border-color: var(--accent-success);
     background: rgba(76, 175, 80, 0.05);
@@ -3444,5 +3444,93 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* APK安装指示器 - 拖拽时显示 */
+.apk-install-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    background: rgba(76, 175, 80, 0.95);
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.apk-install-icon {
+    width: 48px;
+    height: 48px;
+    color: #ffffff;
+    stroke-width: 2.5;
+}
+
+.apk-install-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 设备卡片拖拽状态 - 针对phone-mockup */
+.device-phone-mockup.drag-over {
+    transform: scale(1.02);
+    box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
+    border: 2px solid rgba(76, 175, 80, 0.8);
+}
+
+/* 禁用拖拽状态 - 未连接的设备 */
+.device-phone-mockup.drag-disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.device-phone-mockup.drag-disabled::after {
+    content: '设备未连接';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 12px 20px;
+    background: rgba(239, 68, 68, 0.95);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* App信息显示样式简化 */
+.device-app-info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.device-app-package,
+.device-app-activity {
+    font-size: 11px;
+    color: #ffffff;
+    font-family: var(--font-mono);
+    word-break: break-all;
+}
+
+.device-app-package {
+    font-weight: 600;
+}
+
+.device-app-activity {
+    font-weight: 400;
+    color: #d1d5db;
 }
 

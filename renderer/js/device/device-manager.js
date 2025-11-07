@@ -7,20 +7,20 @@
  * 子模块结构：
  * - core/device-utils.js - 工具函数
  * - core/device-globals.js - 全局变量获取
- * - ui/device-ui-fields.js - UI字段显示控制
+ * - core/device-ui-fields.js - UI字段显示控制
+ * - core/device-initializer.js - 设备页面初始化
  * - apk/apk-launcher.js - APK启动功能
  * - apk/apk-ui.js - APK安装UI
- * - ios/wda-helper.js - iOS WDA辅助
- * - device-loader.js - 设备加载
- * - device-editor.js - 设备编辑
- * - device-creator.js - 设备创建
- * - wireless/wireless-connection.js - 无线连接
- * - wireless/qr-pairing.js - QR码配对
- * - wireless/pairing-code.js - 配对码连接
- * - device-scanner.js - 设备扫描
- * - ui/connection-guide-ui.js - 连接向导UI
  * - apk/apk-installer.js - APK安装器
- * - device-initializer.js - 设备页面初始化
+ * - ios/wda-helper.js - iOS WDA辅助
+ * - crud/device-loader.js - 设备加载
+ * - crud/device-editor.js - 设备编辑
+ * - crud/device-creator.js - 设备创建
+ * - connection/device-scanner.js - 设备扫描
+ * - wifi/wireless-connection.js - 无线连接
+ * - wifi/connection-qr.js - QR码配对
+ * - wifi/connection-pairing.js - 配对码连接
+ * - guide/connection-guide-ui.js - 连接向导UI
  */
 
 // ==================== 模块组织 ====================

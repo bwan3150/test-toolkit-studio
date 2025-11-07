@@ -26,7 +26,7 @@
 /* ========== 页面样式 ========== */
 @import url('./pages/project.css');
 @import url('./pages/testcase.css');
-@import url('./pages/device.css');
+@import url('./pages/device/index.css');
 @import url('./pages/log.css');
 @import url('./pages/settings.css');
 @import url('./pages/report.css');
