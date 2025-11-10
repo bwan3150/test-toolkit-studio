@@ -34,10 +34,34 @@ window.ContextMenuManager = {
    * 显示右键菜单
    * @param {number} x - X坐标
    * @param {number} y - Y坐标
-   * @param {Object} selection - 当前选择的项目信息
+   * @param {Object} selection - 当前选择的项目信息 {paths, isDir}
    */
   show(x, y, selection) {
     this.currentSelection = selection;
+
+    // 根据选择类型显示/隐藏菜单项
+    const openItem = this.menuElement.querySelector('[data-action="open"]');
+    const renameItem = this.menuElement.querySelector('[data-action="rename"]');
+    const downloadItem = this.menuElement.querySelector('[data-action="download"]');
+    const newfolderItem = this.menuElement.querySelector('[data-action="newfolder"]');
+    const deleteItem = this.menuElement.querySelector('[data-action="delete"]');
+
+    if (selection.paths && selection.paths.length > 0) {
+      // 选中了文件/文件夹
+      if (openItem) openItem.style.display = selection.isDir ? 'block' : 'none'; // 只对文件夹显示Open
+      if (renameItem) renameItem.style.display = 'block';
+      if (downloadItem) downloadItem.style.display = 'block';
+      if (newfolderItem) newfolderItem.style.display = 'none';
+      if (deleteItem) deleteItem.style.display = 'block';
+    } else {
+      // 空白处右键
+      if (openItem) openItem.style.display = 'none';
+      if (renameItem) renameItem.style.display = 'none';
+      if (downloadItem) downloadItem.style.display = 'none';
+      if (newfolderItem) newfolderItem.style.display = 'block';
+      if (deleteItem) deleteItem.style.display = 'none';
+    }
+
     this.menuElement.style.display = 'block';
     this.menuElement.style.left = x + 'px';
     this.menuElement.style.top = y + 'px';

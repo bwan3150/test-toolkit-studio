@@ -117,6 +117,18 @@ class FileExplorerController {
         this.loadDirectory(this.currentPath);
       }
     });
+
+    // 空白处右键菜单
+    this.fileListContent.addEventListener('contextmenu', (e) => {
+      // 如果点击的不是文件项,显示空白处菜单
+      if (!e.target.closest('.file-item')) {
+        e.preventDefault();
+        window.ContextMenuManager.show(e.clientX, e.clientY, {
+          paths: [],
+          isDir: false
+        });
+      }
+    });
   }
 
   initEventListeners() {
@@ -227,8 +239,10 @@ class FileExplorerController {
         this.historyIndex = this.history.length - 1;
       }
 
-      // 更新UI - 禁用path breadcrumb的点击
-      window.FileRenderer.updatePathBreadcrumb(this.pathBreadcrumb, path, null);
+      // 更新UI - 启用path breadcrumb的点击跳转
+      window.FileRenderer.updatePathBreadcrumb(this.pathBreadcrumb, path, (clickedPath) => {
+        this.loadDirectory(clickedPath);
+      });
       this.updateNavigationButtons();
 
       // 显示加载状态

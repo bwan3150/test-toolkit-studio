@@ -131,20 +131,17 @@
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.2s;
+  color: var(--text-primary);
 }
 
 .path-item:hover {
   background: var(--hover-bg);
 }
 
-.path-item::after {
-  content: '/';
-  margin-left: 4px;
+.path-separator {
   color: var(--text-tertiary);
-}
-
-.path-item:last-child::after {
-  display: none;
+  user-select: none;
+  pointer-events: none;
 }
 
 .file-explorer-container {
@@ -264,11 +261,16 @@
   font-size: 13px;
 }
 
-.file-item-name svg {
-  width: 16px;
-  height: 16px;
-  fill: var(--text-secondary);
+.file-item-name svg,
+.file-item-name iconify-icon,
+.file-item-name img {
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
+}
+
+.file-item-name svg {
+  fill: var(--text-secondary);
 }
 
 .file-item-name.is-folder svg {

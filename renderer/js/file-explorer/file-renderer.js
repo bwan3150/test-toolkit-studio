@@ -94,9 +94,11 @@ window.FileRenderer = {
     item.dataset.isDir = file.isDir;
     item.dataset.fileName = file.name;
 
-    const icon = file.isDir
-      ? '<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
-      : '<svg viewBox="0 0 24 24"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>';
+    // 使用FileIcons模块获取图标
+    const icon = window.FileIcons ? window.FileIcons.getIcon(file.name, file.isDir) :
+      (file.isDir
+        ? '<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>');
 
     item.innerHTML = `
       <div class="file-item-name ${file.isDir ? 'is-folder' : ''}">
@@ -153,16 +155,30 @@ window.FileRenderer = {
     let currentPath_build = '/';
     parts.forEach((part, index) => {
       currentPath_build += part + '/';
+
       const pathSpan = document.createElement('span');
       pathSpan.className = 'path-item';
       pathSpan.dataset.path = currentPath_build;
       pathSpan.textContent = part;
 
       if (onPathClick) {
-        pathSpan.addEventListener('click', () => onPathClick(currentPath_build));
+        pathSpan.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const targetPath = e.currentTarget.dataset.path;
+          window.rLog(`点击面包屑: ${part} -> ${targetPath}`);
+          onPathClick(targetPath);
+        });
       }
 
       breadcrumbElement.appendChild(pathSpan);
+
+      // 添加分隔符 (除了最后一个)
+      if (index < parts.length - 1) {
+        const separator = document.createElement('span');
+        separator.className = 'path-separator';
+        separator.textContent = ' / ';
+        breadcrumbElement.appendChild(separator);
+      }
     });
   },
 
