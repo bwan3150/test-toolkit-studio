@@ -144,6 +144,8 @@ function registerAdbHandlers(app) {
           errorMsg = '设备存储空间不足';
         } else if (fullOutput.includes('INSTALL_FAILED_INVALID_APK')) {
           errorMsg = 'APK文件无效或损坏';
+        } else if (fullOutput.includes('INSTALL_FAILED_NO_MATCHING_ABIS')) {
+          errorMsg = 'CPU架构不匹配: APK的native库架构与设备不兼容（如APK是ARM架构但设备是x86模拟器）';
         }
         
         console.error('APK安装失败:', fullOutput);
@@ -188,17 +190,25 @@ function registerAdbHandlers(app) {
       }
       
       if (errorOutput.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE') || errorOutput.includes('signatures do not match')) {
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: '签名不匹配错误',
           needUninstall: true,
           packageName: extractedPackageName,
           details: errorOutput
         };
       }
-      
-      return { 
-        success: false, 
+
+      if (errorOutput.includes('INSTALL_FAILED_NO_MATCHING_ABIS')) {
+        return {
+          success: false,
+          error: 'CPU架构不匹配: APK的native库架构与设备不兼容（如APK是ARM架构但设备是x86模拟器）',
+          details: errorOutput
+        };
+      }
+
+      return {
+        success: false,
         error: error.message,
         packageName: extractedPackageName
       };
