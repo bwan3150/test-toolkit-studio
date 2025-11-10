@@ -25,9 +25,6 @@ class FileExplorerController {
     this.backBtn = document.getElementById('backBtn');
     this.refreshBtn = document.getElementById('refreshBtn');
     this.newFolderBtn = document.getElementById('newFolderBtn');
-    this.pushBtn = document.getElementById('pushBtn');
-    this.pullBtn = document.getElementById('pullBtn');
-    this.deleteBtn = document.getElementById('deleteBtn');
     this.searchInput = document.getElementById('searchInput');
     this.searchBtn = document.getElementById('searchBtn');
 
@@ -36,6 +33,9 @@ class FileExplorerController {
 
     // 右键菜单
     this.contextMenu = document.getElementById('fileContextMenu');
+
+    // 目录统计
+    this.directoryStats = document.getElementById('directoryStats');
   }
 
   initEventListeners() {
@@ -60,9 +60,6 @@ class FileExplorerController {
     this.backBtn.addEventListener('click', () => this.navigateUp());
     this.refreshBtn.addEventListener('click', () => this.loadDirectory(this.currentPath));
     this.newFolderBtn.addEventListener('click', () => this.createFolder());
-    this.pushBtn.addEventListener('click', () => this.pushFile());
-    this.pullBtn.addEventListener('click', () => this.pullSelected());
-    this.deleteBtn.addEventListener('click', () => this.deleteSelected());
 
     // 搜索 - 回车或点击按钮触发
     this.searchInput.addEventListener('keypress', (e) => {
@@ -78,13 +75,6 @@ class FileExplorerController {
       if (e.target.classList.contains('context-menu-item')) {
         const action = e.target.dataset.action;
         this.handleContextMenuAction(action);
-      }
-    });
-
-    // 全局键盘快捷键
-    document.addEventListener('keydown', (e) => {
-      if (document.getElementById('fileExplorerPage').classList.contains('active')) {
-        this.handleKeyboard(e);
       }
     });
 
@@ -279,8 +269,8 @@ class FileExplorerController {
     }
   }
 
-  // 解析并渲染目录内容
-  parseAndRenderDirectory(output, basePath) {
+  // 解析树形输出为文件列表
+  parseTreeOutput(output, basePath) {
     const lines = output.trim().split('\n');
     const files = [];
 
@@ -307,6 +297,12 @@ class FileExplorerController {
       }
     }
 
+    return files;
+  }
+
+  // 解析并渲染目录内容
+  parseAndRenderDirectory(output, basePath) {
+    const files = this.parseTreeOutput(output, basePath);
     this.renderFileList(files);
   }
 
@@ -314,6 +310,7 @@ class FileExplorerController {
   renderFileList(files) {
     if (files.length === 0) {
       this.showEmptyState('Empty directory');
+      this.updateDirectoryStats(0, 0);
       return;
     }
 
@@ -329,6 +326,28 @@ class FileExplorerController {
       const fileItem = this.createFileItem(file);
       this.fileListContent.appendChild(fileItem);
     });
+
+    // 更新统计信息
+    const dirCount = files.filter(f => f.isDir).length;
+    const fileCount = files.filter(f => !f.isDir).length;
+    this.updateDirectoryStats(dirCount, fileCount);
+  }
+
+  // 更新目录统计信息
+  updateDirectoryStats(dirCount, fileCount) {
+    if (!this.directoryStats) return;
+
+    const statsText = this.directoryStats.querySelector('.stats-text');
+    if (statsText) {
+      const parts = [];
+      if (dirCount > 0) {
+        parts.push(`${dirCount} ${dirCount === 1 ? 'folder' : 'folders'}`);
+      }
+      if (fileCount > 0) {
+        parts.push(`${fileCount} ${fileCount === 1 ? 'file' : 'files'}`);
+      }
+      statsText.textContent = parts.length > 0 ? parts.join(', ') : 'Empty';
+    }
   }
 
   // 创建文件项 DOM
@@ -338,11 +357,6 @@ class FileExplorerController {
     item.dataset.path = file.path;
     item.dataset.isDir = file.isDir;
     item.dataset.fileName = file.name;
-
-    // 只有文件可以拖拽取出(目录拖拽比较复杂,暂不支持)
-    if (!file.isDir) {
-      item.draggable = true;
-    }
 
     const icon = file.isDir
       ? '<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
@@ -355,11 +369,13 @@ class FileExplorerController {
       </div>
       <div class="file-item-size">${file.size}</div>
       <div class="file-item-actions">
-        <button class="btn btn-icon btn-sm" title="Download">
-          <svg viewBox="0 0 24 24" width="14" height="14">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-          </svg>
-        </button>
+        ${!file.isDir ? `
+          <button class="btn btn-icon btn-sm file-download-btn" title="取出此文件">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+            </svg>
+          </button>
+        ` : ''}
       </div>
     `;
 
@@ -374,6 +390,11 @@ class FileExplorerController {
 
     // 单击选择
     item.addEventListener('click', (e) => {
+      // 如果点击的是下载按钮,不处理选择
+      if (e.target.closest('.file-download-btn')) {
+        return;
+      }
+
       if (!e.ctrlKey && !e.metaKey) {
         this.clearSelection();
       }
@@ -390,47 +411,50 @@ class FileExplorerController {
       this.showContextMenu(e.clientX, e.clientY);
     });
 
-    // 拖拽取出文件
+    // 下载按钮点击事件 (只对文件)
     if (!file.isDir) {
-      this.setupFileDragOut(item, file);
+      const downloadBtn = item.querySelector('.file-download-btn');
+      if (downloadBtn) {
+        downloadBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await this.pullSingleFile(file.path, file.name);
+        });
+      }
     }
 
     return item;
   }
 
-  // 设置文件拖出功能
-  setupFileDragOut(item, file) {
-    item.addEventListener('dragstart', (e) => {
-      e.stopPropagation();
+  // 取出单个文件
+  async pullSingleFile(remotePath, fileName) {
+    try {
+      const { ipcRenderer } = window.AppGlobals;
 
-      if (!this.currentDevice) {
-        e.preventDefault();
+      // 选择保存目录
+      const localDir = await ipcRenderer.invoke('select-directory');
+      if (!localDir) {
+        window.rLog('用户取消了取出操作');
         return;
       }
 
-      // 设置拖拽效果
-      e.dataTransfer.effectAllowed = 'copy';
+      window.rLog(`开始取出文件: ${fileName} 到 ${localDir}`);
 
-      // 存储文件信息,用于拖拽结束时处理
-      e.dataTransfer.setData('application/x-device-file', JSON.stringify({
-        remotePath: file.path,
-        fileName: file.name,
+      const pullResult = await window.api.tkeFilePull({
+        remote: remotePath,
+        local: localDir,
         deviceId: this.currentDevice
-      }));
+      });
 
-      window.rLog(`开始拖拽文件: ${file.name}`);
-      item.classList.add('dragging');
-    });
-
-    item.addEventListener('dragend', async (e) => {
-      item.classList.remove('dragging');
-
-      // 注意: 由于浏览器安全限制,我们无法直接在dragstart中下载文件
-      // 拖拽取出功能在Web/Electron环境中有限制
-      // 建议用户使用右键菜单或工具栏的"取出"按钮
-
-      window.rLog(`拖拽结束 - 提示: 请使用工具栏"取出"按钮或右键菜单下载文件`);
-    });
+      if (pullResult.success) {
+        window.rLog(`✅ 取出成功: ${fileName}`);
+        alert(`Successfully pulled ${fileName}`);
+      } else {
+        throw new Error(pullResult.error || '取出失败');
+      }
+    } catch (error) {
+      window.rError(`❌ 取出失败 ${fileName}:`, error);
+      alert(`Failed to pull ${fileName}: ${error.message}`);
+    }
   }
 
   // 导航到目录
@@ -485,8 +509,6 @@ class FileExplorerController {
     } else {
       this.selectedFiles.delete(path);
     }
-
-    this.updateToolbarButtons();
   }
 
   clearSelection() {
@@ -494,13 +516,6 @@ class FileExplorerController {
       item.classList.remove('selected');
     });
     this.selectedFiles.clear();
-    this.updateToolbarButtons();
-  }
-
-  updateToolbarButtons() {
-    const hasSelection = this.selectedFiles.size > 0;
-    this.pullBtn.disabled = !hasSelection;
-    this.deleteBtn.disabled = !hasSelection;
   }
 
   // 右键菜单
@@ -749,7 +764,7 @@ class FileExplorerController {
         throw new Error(result.error || '加载目录失败');
       }
 
-      const files = this.parseTreeOutput(result.output);
+      const files = this.parseTreeOutput(result.output, this.currentPath);
 
       // 在当前目录文件中进行过滤(不区分大小写)
       const queryLower = query.toLowerCase();
@@ -772,29 +787,6 @@ class FileExplorerController {
     }
   }
 
-  // 键盘快捷键
-  handleKeyboard(e) {
-    // Ctrl/Cmd + A: 全选
-    if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-      e.preventDefault();
-      document.querySelectorAll('.file-item').forEach(item => {
-        item.classList.add('selected');
-        this.selectedFiles.add(item.dataset.path);
-      });
-      this.updateToolbarButtons();
-    }
-
-    // Delete: 删除选中
-    if (e.key === 'Delete' && this.selectedFiles.size > 0) {
-      this.deleteSelected();
-    }
-
-    // Backspace: 返回上一级
-    if (e.key === 'Backspace' && !this.backBtn.disabled) {
-      e.preventDefault();
-      this.navigateUp();
-    }
-  }
 
   // UI 辅助函数
   showEmptyState(message) {
