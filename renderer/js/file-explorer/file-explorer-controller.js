@@ -25,10 +25,11 @@ class FileExplorerController {
     this.backBtn = document.getElementById('backBtn');
     this.refreshBtn = document.getElementById('refreshBtn');
     this.newFolderBtn = document.getElementById('newFolderBtn');
-    this.uploadBtn = document.getElementById('uploadBtn');
-    this.downloadBtn = document.getElementById('downloadBtn');
+    this.pushBtn = document.getElementById('pushBtn');
+    this.pullBtn = document.getElementById('pullBtn');
     this.deleteBtn = document.getElementById('deleteBtn');
     this.searchInput = document.getElementById('searchInput');
+    this.searchBtn = document.getElementById('searchBtn');
 
     // 文件列表
     this.fileListContent = document.getElementById('fileListContent');
@@ -59,12 +60,17 @@ class FileExplorerController {
     this.backBtn.addEventListener('click', () => this.navigateUp());
     this.refreshBtn.addEventListener('click', () => this.loadDirectory(this.currentPath));
     this.newFolderBtn.addEventListener('click', () => this.createFolder());
-    this.uploadBtn.addEventListener('click', () => this.uploadFile());
-    this.downloadBtn.addEventListener('click', () => this.downloadSelected());
+    this.pushBtn.addEventListener('click', () => this.pushFile());
+    this.pullBtn.addEventListener('click', () => this.pullSelected());
     this.deleteBtn.addEventListener('click', () => this.deleteSelected());
 
-    // 搜索
-    this.searchInput.addEventListener('input', (e) => this.handleSearch(e.target.value));
+    // 搜索 - 回车或点击按钮触发
+    this.searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.handleSearch();
+      }
+    });
+    this.searchBtn.addEventListener('click', () => this.handleSearch());
 
     // 右键菜单
     document.addEventListener('click', () => this.hideContextMenu());
@@ -81,6 +87,118 @@ class FileExplorerController {
         this.handleKeyboard(e);
       }
     });
+
+    // 拖拽上传文件到设备
+    this.setupDragAndDrop();
+  }
+
+  // 设置拖拽功能
+  setupDragAndDrop() {
+    const dropZone = this.fileListContent;
+
+    // 防止默认拖拽行为
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 只在有设备选择时允许拖拽
+      if (this.currentDevice) {
+        dropZone.classList.add('drag-over');
+      }
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drag-over');
+
+      if (!this.currentDevice) {
+        alert('Please select a device first');
+        return;
+      }
+
+      const files = e.dataTransfer.files;
+
+      // 检查是否有文件
+      if (files.length === 0) {
+        return;
+      }
+
+      // 获取文件路径列表
+      const filePaths = [];
+
+      try {
+        const { webUtils } = require('electron');
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const filePath = webUtils.getPathForFile(file);
+          if (filePath) {
+            filePaths.push(filePath);
+          }
+        }
+      } catch (error) {
+        window.rError('无法获取文件路径:', error);
+        alert('Failed to get file paths');
+        return;
+      }
+
+      if (filePaths.length === 0) {
+        return;
+      }
+
+      // 上传文件到设备
+      await this.pushFilesFromPaths(filePaths);
+    });
+  }
+
+  // 从文件路径上传文件
+  async pushFilesFromPaths(filePaths) {
+    window.rLog(`开始拖拽放入 ${filePaths.length} 个文件到 ${this.currentPath}`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const localPath of filePaths) {
+      try {
+        const pushResult = await window.api.tkeFilePush({
+          local: localPath,
+          remote: this.currentPath,
+          deviceId: this.currentDevice
+        });
+
+        if (pushResult.success) {
+          window.rLog(`✅ 放入成功: ${localPath}`);
+          successCount++;
+        } else {
+          throw new Error(pushResult.error || '放入失败');
+        }
+      } catch (error) {
+        window.rError(`❌ 放入失败 ${localPath}:`, error);
+        failCount++;
+      }
+    }
+
+    // 显示结果
+    if (successCount > 0) {
+      window.rLog(`✅ 成功放入 ${successCount} 个文件`);
+    }
+    if (failCount > 0) {
+      window.rError(`❌ ${failCount} 个文件放入失败`);
+    }
+
+    if (successCount > 0 || failCount > 0) {
+      alert(`Pushed ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+    }
+
+    // 刷新当前目录
+    this.loadDirectory(this.currentPath);
   }
 
   // 加载设备列表
@@ -219,6 +337,12 @@ class FileExplorerController {
     item.className = 'file-item';
     item.dataset.path = file.path;
     item.dataset.isDir = file.isDir;
+    item.dataset.fileName = file.name;
+
+    // 只有文件可以拖拽取出(目录拖拽比较复杂,暂不支持)
+    if (!file.isDir) {
+      item.draggable = true;
+    }
 
     const icon = file.isDir
       ? '<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
@@ -266,7 +390,47 @@ class FileExplorerController {
       this.showContextMenu(e.clientX, e.clientY);
     });
 
+    // 拖拽取出文件
+    if (!file.isDir) {
+      this.setupFileDragOut(item, file);
+    }
+
     return item;
+  }
+
+  // 设置文件拖出功能
+  setupFileDragOut(item, file) {
+    item.addEventListener('dragstart', (e) => {
+      e.stopPropagation();
+
+      if (!this.currentDevice) {
+        e.preventDefault();
+        return;
+      }
+
+      // 设置拖拽效果
+      e.dataTransfer.effectAllowed = 'copy';
+
+      // 存储文件信息,用于拖拽结束时处理
+      e.dataTransfer.setData('application/x-device-file', JSON.stringify({
+        remotePath: file.path,
+        fileName: file.name,
+        deviceId: this.currentDevice
+      }));
+
+      window.rLog(`开始拖拽文件: ${file.name}`);
+      item.classList.add('dragging');
+    });
+
+    item.addEventListener('dragend', async (e) => {
+      item.classList.remove('dragging');
+
+      // 注意: 由于浏览器安全限制,我们无法直接在dragstart中下载文件
+      // 拖拽取出功能在Web/Electron环境中有限制
+      // 建议用户使用右键菜单或工具栏的"取出"按钮
+
+      window.rLog(`拖拽结束 - 提示: 请使用工具栏"取出"按钮或右键菜单下载文件`);
+    });
   }
 
   // 导航到目录
@@ -335,7 +499,7 @@ class FileExplorerController {
 
   updateToolbarButtons() {
     const hasSelection = this.selectedFiles.size > 0;
-    this.downloadBtn.disabled = !hasSelection;
+    this.pullBtn.disabled = !hasSelection;
     this.deleteBtn.disabled = !hasSelection;
   }
 
@@ -364,7 +528,7 @@ class FileExplorerController {
         // TODO: 实现复制
         break;
       case 'download':
-        await this.downloadSelected();
+        await this.pullSelected();
         break;
       case 'delete':
         await this.deleteSelected();
@@ -457,18 +621,98 @@ class FileExplorerController {
     }
   }
 
-  async downloadSelected() {
+  async pullSelected() {
     if (this.selectedFiles.size === 0) return;
 
-    // TODO: 实现文件下载功能
-    window.rLog('下载功能待实现');
-    alert('Download feature coming soon');
+    try {
+      const { ipcRenderer } = window.AppGlobals;
+
+      // 选择保存目录
+      const localDir = await ipcRenderer.invoke('select-directory');
+      if (!localDir) {
+        // 用户取消选择
+        window.rLog('用户取消了取出操作');
+        return;
+      }
+      const selectedPaths = Array.from(this.selectedFiles);
+
+      window.rLog(`开始取出 ${selectedPaths.length} 个文件到 ${localDir}`);
+
+      // 逐个下载文件
+      for (const remotePath of selectedPaths) {
+        try {
+          const pullResult = await window.api.tkeFilePull({
+            remote: remotePath,
+            local: localDir,
+            deviceId: this.currentDevice
+          });
+
+          if (pullResult.success) {
+            window.rLog(`✅ 取出成功: ${remotePath}`);
+          } else {
+            throw new Error(pullResult.error || '取出失败');
+          }
+        } catch (error) {
+          window.rError(`❌ 取出失败 ${remotePath}:`, error);
+          alert(`Failed to pull ${remotePath}: ${error.message}`);
+        }
+      }
+
+      window.rLog('✅ 文件取出完成');
+      alert(`Successfully pulled ${selectedPaths.length} file(s)`);
+      this.clearSelection();
+    } catch (error) {
+      window.rError('取出文件失败:', error);
+      alert('Failed to pull files: ' + error.message);
+    }
   }
 
-  async uploadFile() {
-    // TODO: 实现文件上传功能
-    window.rLog('上传功能待实现');
-    alert('Upload feature coming soon');
+  async pushFile() {
+    if (!this.currentDevice) {
+      alert('Please select a device first');
+      return;
+    }
+
+    try {
+      const { ipcRenderer } = window.AppGlobals;
+
+      // 选择要上传的文件
+      const localFiles = await ipcRenderer.invoke('select-files');
+
+      if (!localFiles || localFiles.length === 0) {
+        return;
+      }
+      window.rLog(`开始放入 ${localFiles.length} 个文件到 ${this.currentPath}`);
+
+      // 逐个上传文件
+      for (const localPath of localFiles) {
+        try {
+          const pushResult = await window.api.tkeFilePush({
+            local: localPath,
+            remote: this.currentPath,
+            deviceId: this.currentDevice
+          });
+
+          if (pushResult.success) {
+            window.rLog(`✅ 放入成功: ${localPath}`);
+          } else {
+            throw new Error(pushResult.error || '放入失败');
+          }
+        } catch (error) {
+          window.rError(`❌ 放入失败 ${localPath}:`, error);
+          alert(`Failed to push ${localPath}: ${error.message}`);
+        }
+      }
+
+      window.rLog('✅ 文件放入完成');
+      alert(`Successfully pushed ${localFiles.length} file(s)`);
+
+      // 刷新当前目录
+      this.loadDirectory(this.currentPath);
+    } catch (error) {
+      window.rError('放入文件失败:', error);
+      alert('Failed to push files: ' + error.message);
+    }
   }
 
   async openFile(file) {
@@ -476,31 +720,55 @@ class FileExplorerController {
     window.rLog(`打开文件: ${file.path}`);
   }
 
-  // 搜索
-  async handleSearch(query) {
-    if (!query || !this.currentDevice) return;
+  // 搜索 - 只在当前目录层级搜索,不递归
+  async handleSearch() {
+    const query = this.searchInput.value.trim();
+
+    // 如果搜索框为空,重新加载当前目录
+    if (!query) {
+      this.loadDirectory(this.currentPath);
+      return;
+    }
+
+    if (!this.currentDevice) {
+      window.rWarn('请先选择设备');
+      return;
+    }
 
     try {
-      const result = await window.api.tkeFileFind({
+      window.rLog(`在当前目录 ${this.currentPath} 搜索: ${query}`);
+
+      // 先加载当前目录的文件列表
+      const result = await window.api.tkeFileLs({
         path: this.currentPath,
-        pattern: query,
+        level: 1,
         deviceId: this.currentDevice
       });
 
-      if (result.success) {
-        const files = result.output.trim().split('\n')
-          .filter(line => line)
-          .map(path => ({
-            name: path.split('/').pop(),
-            path: path,
-            size: '',
-            isDir: false
-          }));
-
-        this.renderFileList(files);
+      if (!result.success) {
+        throw new Error(result.error || '加载目录失败');
       }
+
+      const files = this.parseTreeOutput(result.output);
+
+      // 在当前目录文件中进行过滤(不区分大小写)
+      const queryLower = query.toLowerCase();
+      const filteredFiles = files.filter(file =>
+        file.name.toLowerCase().includes(queryLower)
+      );
+
+      if (filteredFiles.length === 0) {
+        this.showEmptyState(`No results for "${query}" in current directory`);
+        window.rLog(`在当前目录未找到匹配 "${query}" 的文件`);
+        return;
+      }
+
+      window.rLog(`在当前目录找到 ${filteredFiles.length} 个匹配结果`);
+      this.renderFileList(filteredFiles);
+
     } catch (error) {
       window.rError('搜索失败:', error);
+      this.showError('Search failed: ' + error.message);
     }
   }
 
