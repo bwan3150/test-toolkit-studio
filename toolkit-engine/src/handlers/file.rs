@@ -11,8 +11,8 @@ pub enum FileCommands {
         #[arg(default_value = "/sdcard/")]
         path: String,
 
-        /// 目录深度 (默认: 2)
-        #[arg(short = 'L', long, default_value = "2")]
+        /// 目录深度 (默认: 1)
+        #[arg(short = 'L', long, default_value = "1")]
         level: usize,
     },
 

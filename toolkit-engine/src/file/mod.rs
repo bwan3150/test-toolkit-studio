@@ -214,9 +214,16 @@ impl FileManager {
         }
     }
 
-    /// 搜索文件
+    /// 搜索文件 (支持模糊搜索,自动添加通配符)
     pub fn find(&self, path: &str, pattern: &str) -> Result<String> {
-        let cmd = format!("find {} -name '{}'", path, pattern);
+        // 如果用户没有提供通配符,自动添加 *pattern*
+        let search_pattern = if pattern.contains('*') {
+            pattern.to_string()
+        } else {
+            format!("*{}*", pattern)
+        };
+
+        let cmd = format!("find {} -name '{}'", path, search_pattern);
         self.exec_shell(&cmd)
     }
 
