@@ -52,7 +52,8 @@ function initializeResizablePanels() {
                 case 'vertical':
                     // 右面板垂直调整
                     const deltaX = startX - e.clientX;
-                    const newRightWidth = Math.max(200, Math.min(600, startWidth + deltaX));
+                    // 移除最大宽度限制，只保留最小宽度200px，允许横屏时放大查看
+                    const newRightWidth = Math.max(200, startWidth + deltaX);
                     rightPanel.style.width = newRightWidth + 'px';
                     break;
                     

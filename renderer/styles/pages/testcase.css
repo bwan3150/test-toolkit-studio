@@ -944,7 +944,7 @@
 .right-panel {
     width: 320px;
     min-width: 200px;
-    max-width: 600px;
+    max-width: none !important; /* 强制移除最大宽度限制，允许横屏时放大查看设备屏幕 */
     background: var(--bg-secondary);
     border-left: 1px solid var(--border-color);
     display: flex;
