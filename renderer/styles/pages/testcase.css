@@ -1142,6 +1142,30 @@
     font-size: 12px;
 }
 
+/* 截图按钮样式 */
+#captureScreenshotBtn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+#captureScreenshotBtn:hover {
+    background: var(--bg-hover);
+}
+
+/* 截图按钮图标设为白色 */
+#captureScreenshotBtn img {
+    filter: brightness(0) invert(1);
+}
+
 /* 视频流控制按钮 - 全新样式 */
 .video-toggle-btn {
     width: 32px;
