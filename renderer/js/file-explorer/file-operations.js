@@ -12,9 +12,12 @@ window.FileOperations = {
     window.rLog('开始创建新文件夹');
 
     try {
+      // 确保路径以斜杠结尾
+      const basePath = currentPath.endsWith('/') ? currentPath : currentPath + '/';
+
       // 自动生成文件夹名称
       let folderName = 'new_folder';
-      let folderPath = `${currentPath}${folderName}`;
+      let folderPath = `${basePath}${folderName}`;
 
       // 检查文件夹是否存在,如果存在则添加序号
       let counter = 1;
@@ -30,9 +33,9 @@ window.FileOperations = {
           break;
         }
 
-        // 如果存在,则添加序号
-        folderName = `new_folder(${counter})`;
-        folderPath = `${currentPath}${folderName}`;
+        // 如果存在,则添加序号 (使用下划线而不是括号,避免shell语法错误)
+        folderName = `new_folder_${counter}`;
+        folderPath = `${basePath}${folderName}`;
         counter++;
       }
 
