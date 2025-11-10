@@ -105,6 +105,7 @@ function registerAdbHandlers(app) {
       if (forceReinstall) {
         installFlags.push('-d'); // 允许降级
       }
+      installFlags.push('-t'); // 允许安装 test-only APK
       installFlags.push('-g'); // 授予权限
       installFlags.push(apkPath);
 
