@@ -421,6 +421,43 @@ function registerOtherHandlers() {
     }
   });
 
+  // 获取系统临时目录
+  ipcMain.handle('get-temp-dir', async () => {
+    const os = require('os');
+    const path = require('path');
+
+    // 创建应用专用的临时目录
+    const appTempDir = path.join(os.tmpdir(), 'toolkit-app-media-preview');
+
+    if (!fs.existsSync(appTempDir)) {
+      fs.mkdirSync(appTempDir, { recursive: true });
+    }
+
+    return appTempDir;
+  });
+
+  // 启动文件拖拽到外部
+  ipcMain.handle('start-drag', async (event, { filePath, iconPath }) => {
+    try {
+      // 检查文件是否存在
+      if (!fs.existsSync(filePath)) {
+        throw new Error('文件不存在: ' + filePath);
+      }
+
+      // 启动拖拽
+      event.sender.startDrag({
+        file: filePath,
+        icon: iconPath || filePath // 使用文件本身或指定的图标
+      });
+
+      logger.log('拖拽已启动: ' + filePath);
+      return { success: true };
+    } catch (error) {
+      logger.error('启动拖拽失败', error, { filePath, iconPath });
+      return { success: false, error: error.message };
+    }
+  });
+
 }
 
 // 初始化环境

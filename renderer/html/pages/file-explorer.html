@@ -3,6 +3,20 @@
   <div class="file-explorer-header">
     <div class="header-left">
       <h2>Device Browser</h2>
+      <div class="browser-tabs">
+        <button class="browser-tab active" data-view="filesystem">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+          </svg>
+          <span>File System</span>
+        </button>
+        <button class="browser-tab" data-view="photos">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+          </svg>
+          <span>Photos</span>
+        </button>
+      </div>
     </div>
     <div class="header-right">
       <div class="device-selector">
@@ -80,6 +94,33 @@
     </div>
   </div>
 
+  <!-- Photos视图容器 -->
+  <div class="photos-container" id="photosContainer" style="display: none;">
+    <div class="photos-header">
+      <div class="photos-tabs">
+        <button class="photos-tab active" data-folder="camera">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+          </svg>
+          <span>相机</span>
+        </button>
+        <button class="photos-tab" data-folder="screenshots">
+          <svg viewBox="0 0 24 24" width="18" height="18">
+            <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+          </svg>
+          <span>截图</span>
+        </button>
+      </div>
+      <div class="photos-actions">
+        <button class="btn btn-secondary" id="selectAllPhotosBtn">全选</button>
+        <button class="btn btn-primary" id="downloadSelectedPhotosBtn" disabled>下载选中</button>
+      </div>
+    </div>
+    <div class="photos-grid" id="photosGrid">
+      <!-- 照片网格将在这里动态生成 -->
+    </div>
+  </div>
+
   <!-- 右键菜单 -->
   <div class="context-menu" id="fileContextMenu" style="display: none;">
     <div class="context-menu-item" data-action="open">Open</div>
@@ -89,6 +130,36 @@
     <div class="context-menu-item" data-action="newfolder">New Folder</div>
     <div class="context-menu-divider"></div>
     <div class="context-menu-item context-menu-item-danger" data-action="delete">Delete</div>
+  </div>
+
+  <!-- 图片/视频预览模态框 -->
+  <div class="media-preview-modal" id="mediaPreviewModal" style="display: none;">
+    <div class="preview-header">
+      <span class="preview-filename" id="previewFilename"></span>
+      <button class="btn btn-icon" id="closePreviewBtn">
+        <svg viewBox="0 0 24 24" width="24" height="24">
+          <path fill="white" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+    <div class="preview-content" id="previewContent">
+      <!-- 图片或视频将在这里显示 -->
+    </div>
+    <div class="preview-footer">
+      <button class="btn btn-secondary" id="prevMediaBtn">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+        </svg>
+        上一个
+      </button>
+      <button class="btn btn-primary" id="downloadPreviewMediaBtn">下载</button>
+      <button class="btn btn-secondary" id="nextMediaBtn">
+        下一个
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -115,6 +186,43 @@
   font-size: 18px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+/* Browser Tabs */
+.browser-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.browser-tab:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.browser-tab.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+.browser-tab svg {
+  fill: currentColor;
 }
 
 .path-breadcrumb {
@@ -366,5 +474,218 @@
   font-weight: 500;
   pointer-events: none;
   z-index: 100;
+}
+
+/* Photos Container */
+.photos-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: calc(100% - 65px);
+}
+
+.photos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.photos-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+}
+
+.photos-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.photos-tab:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.photos-tab.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+.photos-tab svg {
+  fill: currentColor;
+}
+
+.photos-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.photos-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  background: var(--bg-primary);
+}
+
+.photo-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  background: var(--bg-secondary);
+}
+
+.photo-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.photo-item.selected {
+  outline: 3px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.photo-item img,
+.photo-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-item-checkbox {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid white;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.photo-item:hover .photo-item-checkbox {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.photo-item.selected .photo-item-checkbox {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.photo-item-checkbox svg {
+  width: 14px;
+  height: 14px;
+  fill: white;
+  display: none;
+}
+
+.photo-item.selected .photo-item-checkbox svg {
+  display: block;
+}
+
+.video-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: white;
+}
+
+.video-indicator svg {
+  width: 14px;
+  height: 14px;
+  fill: white;
+}
+
+/* Media Preview Modal */
+.media-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.preview-filename {
+  color: white;
+  font-size: 14px;
+}
+
+.preview-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.preview-content img,
+.preview-content video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.preview-footer .btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-footer .btn svg {
+  fill: currentColor;
 }
 </style>

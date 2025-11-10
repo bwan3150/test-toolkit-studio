@@ -24,6 +24,12 @@ class FileExplorerController {
     this.deviceSelect = document.getElementById('fileExplorerDeviceSelect');
     this.refreshDeviceBtn = document.getElementById('refreshFileExplorerDeviceBtn');
 
+    // Browser Tabs
+    this.browserTabs = document.querySelectorAll('.browser-tab');
+    this.fileExplorerContainer = document.querySelector('.file-explorer-container');
+    this.photosContainer = document.getElementById('photosContainer');
+    this.currentView = 'filesystem'; // 'filesystem' 或 'photos'
+
     // 路径导航
     this.pathBreadcrumb = document.getElementById('pathBreadcrumb');
 
@@ -48,6 +54,19 @@ class FileExplorerController {
 
     // 目录统计
     this.directoryStats = document.getElementById('directoryStats');
+
+    // Photos 视图元素
+    this.photosGrid = document.getElementById('photosGrid');
+    this.selectAllPhotosBtn = document.getElementById('selectAllPhotosBtn');
+    this.downloadSelectedPhotosBtn = document.getElementById('downloadSelectedPhotosBtn');
+    this.photosTabs = document.querySelectorAll('.photos-tab');
+
+    // Media Preview 模态框
+    this.mediaPreviewModal = document.getElementById('mediaPreviewModal');
+    this.closePreviewBtn = document.getElementById('closePreviewBtn');
+    this.prevMediaBtn = document.getElementById('prevMediaBtn');
+    this.nextMediaBtn = document.getElementById('nextMediaBtn');
+    this.downloadPreviewMediaBtn = document.getElementById('downloadPreviewMediaBtn');
   }
 
   initModules() {
@@ -129,9 +148,25 @@ class FileExplorerController {
         });
       }
     });
+
+    // 初始化 Photos 视图模块
+    window.PhotosView.init({
+      photosGrid: this.photosGrid,
+      selectAllBtn: this.selectAllPhotosBtn,
+      downloadSelectedBtn: this.downloadSelectedPhotosBtn,
+      photosTabs: this.photosTabs
+    });
   }
 
   initEventListeners() {
+    // Browser Tabs 切换
+    this.browserTabs.forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        const view = e.currentTarget.dataset.view;
+        this.switchView(view);
+      });
+    });
+
     // 设备选择
     this.deviceSelect.addEventListener('change', async () => {
       this.currentDevice = this.deviceSelect.value;
@@ -143,8 +178,12 @@ class FileExplorerController {
         // 更新拖拽模块的设备ID
         window.DragUploadManager.setDeviceId(this.currentDevice);
 
-        // 加载目录
-        this.loadDirectory(this.currentPath);
+        // 根据当前视图加载内容
+        if (this.currentView === 'filesystem') {
+          this.loadDirectory(this.currentPath);
+        } else if (this.currentView === 'photos') {
+          window.PhotosView.loadMedia(this.currentDevice);
+        }
       } else {
         window.FileRenderer.showEmptyState(this.fileListContent, 'Select a device to browse files');
       }
@@ -172,6 +211,80 @@ class FileExplorerController {
       }
     });
     this.searchBtn.addEventListener('click', () => this.handleSearch());
+
+    // Media Preview 模态框事件
+    this.closePreviewBtn?.addEventListener('click', () => {
+      window.PhotosView.closePreview();
+    });
+
+    this.prevMediaBtn?.addEventListener('click', () => {
+      window.PhotosView.prevMedia();
+    });
+
+    this.nextMediaBtn?.addEventListener('click', () => {
+      window.PhotosView.nextMedia();
+    });
+
+    this.downloadPreviewMediaBtn?.addEventListener('click', () => {
+      window.PhotosView.downloadCurrentMedia();
+    });
+
+    // 点击模态框背景关闭
+    this.mediaPreviewModal?.addEventListener('click', (e) => {
+      if (e.target === this.mediaPreviewModal) {
+        window.PhotosView.closePreview();
+      }
+    });
+
+    // ESC 键关闭预览
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.mediaPreviewModal?.style.display === 'flex') {
+        window.PhotosView.closePreview();
+      }
+    });
+  }
+
+  // ============ 视图切换 ============
+
+  /**
+   * 切换 Browser 视图 (File System / Photos)
+   * @param {string} view - 视图名称: 'filesystem' 或 'photos'
+   */
+  switchView(view) {
+    if (this.currentView === view) return;
+
+    window.rLog(`切换视图: ${this.currentView} -> ${view}`);
+    this.currentView = view;
+
+    // 更新 tab 激活状态
+    this.browserTabs.forEach(tab => {
+      if (tab.dataset.view === view) {
+        tab.classList.add('active');
+      } else {
+        tab.classList.remove('active');
+      }
+    });
+
+    // 切换容器显示
+    if (view === 'filesystem') {
+      this.fileExplorerContainer.style.display = 'flex';
+      this.photosContainer.style.display = 'none';
+
+      // 如果有设备,加载目录
+      if (this.currentDevice) {
+        this.loadDirectory(this.currentPath);
+      }
+    } else if (view === 'photos') {
+      this.fileExplorerContainer.style.display = 'none';
+      this.photosContainer.style.display = 'flex';
+
+      // 如果有设备,加载照片
+      if (this.currentDevice) {
+        window.PhotosView.loadMedia(this.currentDevice);
+      } else {
+        window.PhotosView.showError('请先选择设备');
+      }
+    }
   }
 
   // ============ 设备管理 ============
