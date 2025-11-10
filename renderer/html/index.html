@@ -8,6 +8,8 @@
     <script src="../js/utils/sentry-init.js"></script>
     <!-- Renderer Logger - 日志模块 -->
     <script src="../js/utils/renderer-logger.js"></script>
+    <!-- Iconify for file icons -->
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
     <link rel="stylesheet" href="../styles/common.css" />
     <link rel="stylesheet" href="../styles/platform.css" />
     <link rel="stylesheet" href="../styles/main.css" />
@@ -70,6 +72,7 @@
           <div id="project-page-container"></div>
           <div id="testcase-page-container"></div>
           <div id="device-page-container"></div>
+          <div id="file-explorer-page-container"></div>
           <div id="insights-page-container"></div>
           <div id="log-page-container"></div>
           <div id="settings-page-container"></div>
@@ -119,6 +122,7 @@
           loadComponentIntoContainer("pages/project.html", "project-page-container");
           loadComponentIntoContainer("pages/testcase.html", "testcase-page-container");
           loadComponentIntoContainer("pages/device.html", "device-page-container");
+          loadComponentIntoContainer("pages/file-explorer.html", "file-explorer-page-container");
           loadComponentIntoContainer("pages/insights.html", "insights-page-container");
           loadComponentIntoContainer("pages/log.html", "log-page-container");
           loadComponentIntoContainer("pages/settings.html", "settings-page-container");
@@ -268,6 +272,14 @@
     <script src="../js/testcase/panels/element-properties-panel.js"></script>
     <script src="../js/testcase/panels/locator-library-panel.js"></script>
     <script src="../js/testcase/panels/console-panel.js"></script>
+    <!-- File Explorer -->
+    <script src="../js/file-explorer/file-icons.js"></script>
+    <script src="../js/file-explorer/file-renderer.js"></script>
+    <script src="../js/file-explorer/file-operations.js"></script>
+    <script src="../js/file-explorer/context-menu.js"></script>
+    <script src="../js/file-explorer/drag-upload.js"></script>
+    <script src="../js/file-explorer/file-api.js"></script>
+    <script src="../js/file-explorer/file-explorer-controller.js"></script>
     <!-- Scrcpy Video Stream 已通过 app.js 动态加载 -->
     <script src="../js/components/custom-titlebar.js"></script>
     <script src="../js/utils/component-loader.js"></script>

@@ -51,7 +51,7 @@ const ScreenPrompt = {
         <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px;">
           <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
         </svg>
-        点击获取屏幕信息
+        点击开启设备投屏
       </button>
     `;
 
@@ -122,7 +122,7 @@ const ScreenPrompt = {
         <svg viewBox="0 0 24 24" width="16" height="16" style="margin-right: 6px;">
           <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
         </svg>
-        点击获取屏幕信息
+        点击开启设备投屏
       `;
     }
   },

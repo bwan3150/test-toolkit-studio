@@ -298,7 +298,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             window.DeviceManagerModule.initializeDevicePage();
             // console.log('✓ 设备管理模块已初始化'); // 已禁用以减少日志
-            
+
+            // 初始化文件浏览器
+            if (window.FileExplorerController) {
+                window.fileExplorerController = new window.FileExplorerController();
+                window.rLog('✓ 文件浏览器模块已初始化');
+            }
+
             try {
                 await window.LogManagerModule.initializeLogPage();
                 window.rLog('✓ 日志管理模块已初始化');

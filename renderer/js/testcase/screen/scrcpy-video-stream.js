@@ -349,7 +349,10 @@ const ScrcpyVideoStream = {
           if (!sentVideoSettings) {
             sentVideoSettings = true;
             window.rLog('🚀 发送视频设置命令以启动视频流...');
-            this.sendVideoSettings(ws);
+            // sendVideoSettings 现在是异步的，需要使用 await
+            this.sendVideoSettings(ws).catch(error => {
+              window.rError('发送视频设置失败:', error);
+            });
           } else {
             window.rLog('⚠️  已发送过视频设置，跳过');
           }
@@ -371,18 +374,48 @@ const ScrcpyVideoStream = {
   /**
    * 发送视频设置命令
    */
-  sendVideoSettings(ws) {
+  async sendVideoSettings(ws) {
     const VideoSettings = window.ScrcpyVideoSettings;
     const ControlMessage = window.ScrcpyControlMessage;
 
-    // 创建视频设置 (默认参数)
-    // 关键发现：bounds 不能为 null，必须设置一个合理的值！
-    // 使用较大的通用 bounds，适配各种设备（手机、平板等）
+    // 获取设备实际分辨率
+    let deviceWidth = 1920;
+    let deviceHeight = 1920;
+
+    try {
+      const ipcRenderer = window.electron?.ipcRenderer || window.AppGlobals?.ipcRenderer;
+      if (ipcRenderer && this.currentDeviceId) {
+        window.rLog('正在获取设备实际分辨率...');
+        const deviceInfo = await ipcRenderer.invoke('get-device-info', this.currentDeviceId);
+
+        if (deviceInfo.success && deviceInfo.deviceInfo.resolution) {
+          // 解析分辨率格式: "1080x2400" 或 "Physical size: 1080x2400"
+          const resolutionStr = deviceInfo.deviceInfo.resolution;
+          const match = resolutionStr.match(/(\d+)x(\d+)/);
+
+          if (match) {
+            deviceWidth = parseInt(match[1]);
+            deviceHeight = parseInt(match[2]);
+            window.rLog(`✅ 获取到设备实际分辨率: ${deviceWidth}x${deviceHeight}`);
+          } else {
+            window.rWarn('⚠️ 无法解析分辨率格式，使用默认值');
+          }
+        } else {
+          window.rWarn('⚠️ 获取设备分辨率失败，使用默认值');
+        }
+      }
+    } catch (error) {
+      window.rError('获取设备分辨率时出错:', error);
+      window.rWarn('使用默认分辨率 1920x1920');
+    }
+
+    // 创建视频设置，使用设备实际分辨率
+    // bounds 设置为设备实际分辨率，确保视频流匹配设备屏幕
     const settings = new VideoSettings({
       bitrate: 2097152,   // 2 Mbps (更高比特率以支持更清晰画面)
       maxFps: 30,         // 30 fps
       iFrameInterval: 5,  // 5秒
-      bounds: { width: 1920, height: 1920 },  // 最大边长 1920，适配各种设备
+      bounds: { width: deviceWidth, height: deviceHeight },  // 使用设备实际分辨率
       sendFrameMeta: false,
       lockedVideoOrientation: -1,
       displayId: 0

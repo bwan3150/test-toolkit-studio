@@ -50,6 +50,7 @@ const { registerFetcherHandlers } = require('./handlers/tke-integration/fetcher-
 const { registerRecognizerHandlers } = require('./handlers/tke-integration/recognizer-handlers');
 const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-handlers');
 const { registerOcrHandlers } = require('./handlers/tke-integration/ocr-handlers');
+const { registerFileHandlers } = require('./handlers/tke-integration/file-handlers');
 
 // Electron 核心模块 - Electron 应用的核心功能
 const { registerWindowHandlers } = require('./handlers/electron-core/window-handlers');
@@ -230,9 +231,16 @@ function createWindow() {
   });
   
   // 禁用右键菜单（防止通过右键菜单打开开发者工具）
-  mainWindow.webContents.on('context-menu', (event) => {
+  // 但允许自定义右键菜单（通过检查目标元素）
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    // 允许file-explorer的文件项右键菜单
+    const allowedClasses = ['file-item', 'file-item-name', 'file-column'];
+    const targetClass = params.selectionText || '';
+
+    // 如果不是在允许的元素上右键,则阻止
     event.preventDefault();
-    console.log('Right-click context menu blocked');
+
+    // 注意：自定义右键菜单由renderer进程处理，这里只是防止原生菜单
   });
   
   // 最后防线：即使开发者工具被意外打开，也立即关闭
@@ -317,6 +325,9 @@ function registerAllHandlers() {
 
     console.log('注册TKE OCR处理器...');
     registerOcrHandlers(app);
+
+    console.log('注册TKE File处理器...');
+    registerFileHandlers(app);
 
     // 项目管理模块
     console.log('注册项目处理器...');

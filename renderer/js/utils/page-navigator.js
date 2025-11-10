@@ -26,6 +26,11 @@
       label: 'Device',
       navSelector: '[data-page="device"]'
     },
+    'file-explorer': {
+      id: 'fileExplorerPage',
+      label: 'Device Browser',
+      navSelector: '[data-page="file-explorer"]'
+    },
     'log': {
       id: 'logPage',
       label: 'Log Viewer',

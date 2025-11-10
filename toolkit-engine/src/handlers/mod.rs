@@ -7,9 +7,11 @@ pub mod runner;
 pub mod ocr;
 pub mod adb;
 pub mod aapt;
+pub mod file;
 
 // 重新导出命令枚举，方便 main.rs 使用
 pub use controller::ControllerCommands;
 pub use fetcher::FetcherCommands;
 pub use recognizer::RecognizerCommands;
 pub use runner::RunCommands;
+pub use file::FileCommands;

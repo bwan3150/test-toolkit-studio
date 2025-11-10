@@ -81,11 +81,24 @@ function registerWindowHandlers(mainWindow) {
       properties: ['openFile'],
       filters: filters || [{ name: '所有文件', extensions: ['*'] }]
     });
-    
+
     if (!result.canceled) {
       return result.filePaths[0];
     }
     return null;
+  });
+
+  // 选择多个文件对话框
+  ipcMain.handle('select-files', async (event, filters) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections'],
+      filters: filters || [{ name: '所有文件', extensions: ['*'] }]
+    });
+
+    if (!result.canceled) {
+      return result.filePaths;
+    }
+    return [];
   });
 
   // 读取文件

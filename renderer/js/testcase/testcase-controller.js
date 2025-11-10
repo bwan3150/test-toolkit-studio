@@ -13,6 +13,7 @@ function initializeTestcasePage() {
     const clearConsoleBtn = document.getElementById('clearConsoleBtn');
     const toggleXmlBtn = document.getElementById('toggleXmlBtn');
     const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
+    const captureScreenshotBtn = document.getElementById('captureScreenshotBtn');
     const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
     const deviceSelect = document.getElementById('deviceSelect');
 
@@ -59,6 +60,59 @@ function initializeTestcasePage() {
         refreshDeviceBtn.addEventListener('click', () => {
             if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
                 window.ScreenCoordinator.refreshDeviceScreen();
+            }
+        });
+    }
+
+    // 绑定截图到剪贴板按钮
+    if (captureScreenshotBtn) {
+        captureScreenshotBtn.addEventListener('click', async () => {
+            try {
+                const scrcpyVideoCanvas = document.getElementById('scrcpyVideoCanvas');
+                const deviceScreenshot = document.getElementById('deviceScreenshot');
+
+                let imageData = null;
+
+                // 如果视频流激活，从视频流截图
+                if (window.ScrcpyVideoStream && window.ScrcpyVideoStream.isStreamActive()) {
+                    window.rLog('📸 从视频流捕获截图...');
+                    // 直接从canvas获取图片
+                    if (scrcpyVideoCanvas) {
+                        imageData = scrcpyVideoCanvas.toDataURL('image/png');
+                    }
+                }
+                // 否则使用当前显示的截图
+                else if (deviceScreenshot && deviceScreenshot.src && deviceScreenshot.style.display !== 'none') {
+                    window.rLog('📸 使用当前截图...');
+                    // 将图片转换为canvas再转为dataURL
+                    const canvas = document.createElement('canvas');
+                    canvas.width = deviceScreenshot.naturalWidth;
+                    canvas.height = deviceScreenshot.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(deviceScreenshot, 0, 0);
+                    imageData = canvas.toDataURL('image/png');
+                } else {
+                    window.AppNotifications?.warn('没有可用的截图，请先获取设备屏幕');
+                    return;
+                }
+
+                // 将 dataURL 转换为 Blob
+                const response = await fetch(imageData);
+                const blob = await response.blob();
+
+                // 复制到剪贴板
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'image/png': blob
+                    })
+                ]);
+
+                window.rLog('✅ 截图已复制到剪贴板');
+                window.AppNotifications?.success('截图已复制到剪贴板');
+
+            } catch (error) {
+                window.rError('复制截图到剪贴板失败:', error);
+                window.AppNotifications?.error(`复制失败: ${error.message}`);
             }
         });
     }

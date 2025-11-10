@@ -82,6 +82,11 @@ enum Commands {
         #[arg(long, default_value = "eng")]
         lang: String,
     },
+    /// File - Android 设备文件系统管理
+    File {
+        #[command(subcommand)]
+        action: FileCommands,
+    },
 }
 
 #[tokio::main]
@@ -100,7 +105,8 @@ async fn main() -> tke::Result<()> {
             Commands::Ocr { .. } |
             Commands::Controller { .. } |
             Commands::Recognizer { .. } |
-            Commands::Run { .. }
+            Commands::Run { .. } |
+            Commands::File { .. }
         );
 
         // 初始化日志
@@ -174,6 +180,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Ocr { image, online, url, lang } => {
             ocr::handle(image, online, url, lang).await
+        }
+        Commands::File { action } => {
+            file::handle(action, cli.device).await
         }
     }
 }
