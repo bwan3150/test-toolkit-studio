@@ -86,8 +86,23 @@ brew install tesseract tesseract-lang
 
 ```bash
 ❯ tke controller devices
-
-{"devices":["c9dc8614"]}
+{
+  "android": {
+    "saved_connected": [],
+    "saved_disconnected": [
+      "127.0.0.1:26656",
+      "c9dc8614"
+    ],
+    "unsaved_connected": [
+      "f64b3b4d"
+    ]
+  },
+  "ios": {
+    "saved_connected": [],
+    "saved_disconnected": [],
+    "unsaved_connected": []
+  }
+}
 ```
 
 ### 截图和获取 UI 树
@@ -101,6 +116,12 @@ brew install tesseract tesseract-lang
 覆盖生成文件：
 - `workarea/current_screenshot.png`
 - `workarea/current_ui_tree.xml`
+
+此外有一个可以仅获取xml的方法
+```bash
+❯ tke controller capture-xml
+{"success":true,"xml":"/Users/eric_konec/Documents/GitHub/tke-projects/project_2/workarea/current_ui_tree.xml"}
+```
 
 ### 点击和滑动
 
