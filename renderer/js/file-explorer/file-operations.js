@@ -9,25 +9,49 @@ window.FileOperations = {
    * @returns {Promise<Object>} {success, newPath}
    */
   async createFolder(currentPath, deviceId) {
-    const name = prompt('Enter folder name:');
-    if (!name) return { success: false };
+    window.rLog('开始创建新文件夹');
 
     try {
-      const newPath = `${currentPath}${name}`;
+      // 自动生成文件夹名称
+      let folderName = 'new_folder';
+      let folderPath = `${currentPath}${folderName}`;
+
+      // 检查文件夹是否存在,如果存在则添加序号
+      let counter = 1;
+      while (true) {
+        const checkResult = await window.api.tkeFileLs({
+          path: folderPath,
+          level: 1,
+          deviceId: deviceId
+        });
+
+        // 如果返回错误(路径不存在),则可以使用这个名称
+        if (!checkResult.success) {
+          break;
+        }
+
+        // 如果存在,则添加序号
+        folderName = `new_folder(${counter})`;
+        folderPath = `${currentPath}${folderName}`;
+        counter++;
+      }
+
+      window.rLog(`准备创建文件夹: ${folderPath}`);
+
       const result = await window.api.tkeFileMkdir({
-        path: newPath,
+        path: folderPath,
         deviceId: deviceId
       });
 
       if (result.success) {
-        window.rLog(`新建文件夹成功: ${newPath}`);
-        return { success: true, newPath };
+        window.rLog(`✅ 新建文件夹成功: ${folderName}`);
+        return { success: true, newPath: folderPath, folderName };
       } else {
         throw new Error(result.error || '创建失败');
       }
     } catch (error) {
       window.rError('新建文件夹失败:', error);
-      alert('Failed to create folder: ' + error.message);
+      window.AppNotifications?.error('创建文件夹失败: ' + error.message);
       return { success: false };
     }
   },
@@ -83,21 +107,27 @@ window.FileOperations = {
   },
 
   /**
-   * 重命名文件或文件夹
+   * 重命名文件或文件夹 (执行重命名操作)
    * @param {string} oldPath - 旧路径
+   * @param {string} newName - 新名称
    * @param {string} deviceId - 设备ID
    * @returns {Promise<Object>} {success, newPath}
    */
-  async renameFile(oldPath, deviceId) {
-    const oldName = oldPath.split('/').pop();
-    const newName = prompt('Enter new name:', oldName);
+  async renameFile(oldPath, newName, deviceId) {
+    const oldName = oldPath.split('/').filter(p => p).pop();
 
     if (!newName || newName === oldName) {
       return { success: false };
     }
 
     try {
-      const newPath = oldPath.replace(oldName, newName);
+      // 构建新路径
+      const pathParts = oldPath.split('/').filter(p => p);
+      pathParts[pathParts.length - 1] = newName;
+      const newPath = '/' + pathParts.join('/') + (oldPath.endsWith('/') ? '/' : '');
+
+      window.rLog(`准备重命名: ${oldPath} -> ${newPath}`);
+
       const result = await window.api.tkeFileMv({
         source: oldPath,
         dest: newPath,
@@ -105,14 +135,15 @@ window.FileOperations = {
       });
 
       if (result.success) {
-        window.rLog(`重命名成功: ${oldPath} -> ${newPath}`);
+        window.rLog(`✅ 重命名成功: ${oldName} -> ${newName}`);
+        window.AppNotifications?.success(`已重命名: ${newName}`);
         return { success: true, newPath };
       } else {
         throw new Error(result.error);
       }
     } catch (error) {
       window.rError('重命名失败:', error);
-      alert('Failed to rename: ' + error.message);
+      window.AppNotifications?.error('重命名失败: ' + error.message);
       return { success: false };
     }
   },

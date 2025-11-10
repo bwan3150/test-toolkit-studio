@@ -35,6 +35,11 @@ class FileExplorerController {
     this.searchInput = document.getElementById('searchInput');
     this.searchBtn = document.getElementById('searchBtn');
 
+    // 调试: 检查按钮是否存在
+    if (!this.newFolderBtn) {
+      window.rError('newFolderBtn 未找到!');
+    }
+
     // 文件列表
     this.fileListContent = document.getElementById('fileListContent');
 
@@ -57,13 +62,27 @@ class FileExplorerController {
       }
     });
 
-    window.ContextMenuManager.registerHandler('rename', async (selection) => {
+    window.ContextMenuManager.registerHandler('rename', (selection) => {
       const path = Array.from(this.selectedFiles)[0];
       if (path) {
-        const result = await window.FileOperations.renameFile(path, this.currentDevice);
-        if (result.success) {
-          this.clearSelection();
-          this.loadDirectory(this.currentPath);
+        // 找到对应的文件项元素,启动内联重命名
+        const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
+        if (fileItem) {
+          this.startInlineRename(fileItem, path);
+        }
+      }
+    });
+
+    window.ContextMenuManager.registerHandler('newfolder', async (selection) => {
+      const result = await window.FileOperations.createFolder(this.currentPath, this.currentDevice);
+      if (result.success) {
+        // 重新加载目录
+        await this.loadDirectory(this.currentPath);
+        // 找到新创建的文件夹并进入重命名模式
+        const newFolderPath = result.newPath;
+        const fileItem = document.querySelector(`.file-item[data-path="${newFolderPath}"]`);
+        if (fileItem) {
+          this.startInlineRename(fileItem, newFolderPath);
         }
       }
     });
@@ -126,7 +145,12 @@ class FileExplorerController {
     this.forwardBtn.addEventListener('click', () => this.navigateForward());
     this.refreshBtn.addEventListener('click', () => this.loadDirectory(this.currentPath));
     if (this.newFolderBtn) {
-      this.newFolderBtn.addEventListener('click', () => this.createFolder());
+      this.newFolderBtn.addEventListener('click', () => {
+        window.rLog('新建文件夹按钮被点击');
+        this.createFolder();
+      });
+    } else {
+      window.rError('无法绑定新建文件夹按钮事件: 按钮不存在');
     }
 
     // 搜索 - 回车或点击按钮触发
@@ -333,15 +357,113 @@ class FileExplorerController {
   // ============ 文件操作 ============
 
   async createFolder() {
+    window.rLog('createFolder 方法被调用');
+    if (!this.currentDevice) {
+      window.rWarn('请先选择设备');
+      return;
+    }
     const result = await window.FileOperations.createFolder(this.currentPath, this.currentDevice);
     if (result.success) {
-      this.loadDirectory(this.currentPath);
+      // 重新加载目录
+      await this.loadDirectory(this.currentPath);
+      // 找到新创建的文件夹并进入重命名模式
+      const newFolderPath = result.newPath;
+      const fileItem = document.querySelector(`.file-item[data-path="${newFolderPath}"]`);
+      if (fileItem) {
+        this.startInlineRename(fileItem, newFolderPath);
+      }
     }
   }
 
   openFile(filePath) {
     // TODO: 实现文件预览功能
     window.rLog(`打开文件: ${filePath}`);
+  }
+
+  /**
+   * 启动内联重命名
+   * @param {HTMLElement} fileItem - 文件项元素
+   * @param {string} filePath - 文件路径
+   */
+  startInlineRename(fileItem, filePath) {
+    const fileName = filePath.split('/').filter(p => p).pop();
+    const nameElement = fileItem.querySelector('.file-item-name span');
+
+    if (!nameElement) {
+      window.rError('未找到文件名元素');
+      return;
+    }
+
+    // 创建输入框
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'file-name-input';
+    input.value = fileName;
+    input.style.cssText = `
+      background: var(--input-bg, #3c3c3c);
+      border: 1px solid var(--accent-primary, #f9a825);
+      border-radius: 2px;
+      color: var(--text-primary, #cccccc);
+      font-size: 13px;
+      padding: 2px 4px;
+      outline: none;
+      width: 100%;
+      font-family: inherit;
+    `;
+
+    // 替换名称元素为输入框
+    nameElement.style.display = 'none';
+    nameElement.parentNode.insertBefore(input, nameElement);
+
+    // 聚焦并选择文本
+    input.focus();
+    input.select();
+
+    // 完成重命名
+    const finishRename = async () => {
+      const newName = input.value.trim();
+
+      // 移除输入框,恢复名称显示
+      input.remove();
+      nameElement.style.display = '';
+
+      if (!newName || newName === fileName) {
+        window.rLog('用户取消重命名或未修改');
+        return;
+      }
+
+      // 执行重命名
+      const result = await window.FileOperations.renameFile(filePath, newName, this.currentDevice);
+      if (result.success) {
+        // 刷新目录
+        this.clearSelection();
+        this.loadDirectory(this.currentPath);
+      } else {
+        // 重命名失败,恢复原名称
+        nameElement.textContent = fileName;
+      }
+    };
+
+    // 取消重命名
+    const cancelRename = () => {
+      window.rLog('取消重命名');
+      input.remove();
+      nameElement.style.display = '';
+    };
+
+    // 回车确认
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishRename();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelRename();
+      }
+    });
+
+    // 失去焦点时确认
+    input.addEventListener('blur', finishRename);
   }
 
   // ============ 搜索 ============

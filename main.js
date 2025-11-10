@@ -231,9 +231,16 @@ function createWindow() {
   });
   
   // 禁用右键菜单（防止通过右键菜单打开开发者工具）
-  mainWindow.webContents.on('context-menu', (event) => {
+  // 但允许自定义右键菜单（通过检查目标元素）
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    // 允许file-explorer的文件项右键菜单
+    const allowedClasses = ['file-item', 'file-item-name', 'file-column'];
+    const targetClass = params.selectionText || '';
+
+    // 如果不是在允许的元素上右键,则阻止
     event.preventDefault();
-    console.log('Right-click context menu blocked');
+
+    // 注意：自定义右键菜单由renderer进程处理，这里只是防止原生菜单
   });
   
   // 最后防线：即使开发者工具被意外打开，也立即关闭
