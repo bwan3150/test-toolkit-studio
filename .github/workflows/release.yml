@@ -267,6 +267,26 @@ jobs:
 
           echo "✅ 所有二进制文件验证完成"
 
+      # 下载 FFmpeg 依赖（macOS）
+      - name: 下载 FFmpeg
+        run: |
+          echo "=== 下载 macOS FFmpeg ==="
+
+          FFMPEG_URL="https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/dependency/darwin/ffmpeg"
+          TARGET_DIR="resources/darwin/toolkit-engine"
+          TARGET_FILE="$TARGET_DIR/ffmpeg"
+
+          # 确保目标目录存在
+          mkdir -p "$TARGET_DIR"
+
+          # 下载 ffmpeg
+          echo "下载 ffmpeg 从: $FFMPEG_URL"
+          curl -L "$FFMPEG_URL" -o "$TARGET_FILE"
+          chmod +x "$TARGET_FILE"
+
+          echo "✅ ffmpeg 下载成功"
+          ls -lh "$TARGET_FILE"
+
       # 配置 macOS 代码签名
       - name: 配置 macOS 代码签名
         env:
@@ -430,36 +450,6 @@ jobs:
           npm install
           npm audit fix
 
-      # 下载 Windows 平台的 ffmpeg.exe（从 S3）
-      - name: 下载 ffmpeg.exe
-        shell: pwsh
-        run: |
-          Write-Host "=== 下载 Windows ffmpeg.exe ==="
-
-          $ffmpegUrl = "https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/dependency/win32/ffmpeg.exe"
-          $targetDir = "toolkit-engine\resources\win32"
-          $targetFile = "$targetDir\ffmpeg.exe"
-
-          # 确保目标目录存在
-          if (-not (Test-Path $targetDir)) {
-            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          }
-
-          # 下载 ffmpeg.exe
-          Write-Host "下载 ffmpeg.exe 从: $ffmpegUrl"
-          try {
-            Invoke-WebRequest -Uri $ffmpegUrl -OutFile $targetFile -ErrorAction Stop
-            Write-Host "✅ ffmpeg.exe 下载成功"
-
-            # 验证文件
-            $fileInfo = Get-Item $targetFile
-            Write-Host "文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
-
-          } catch {
-            Write-Host "❌ 下载失败: $_"
-            exit 1
-          }
-
       # 构建 toolkit-engine (TKE)
       - name: 构建 Toolkit Engine (Rust)
         shell: cmd
@@ -613,6 +603,36 @@ jobs:
           dir resources\win32\scrcpy-server\scrcpy-server.jar
 
           echo ✅ 所有二进制文件验证完成
+
+      # 下载 FFmpeg 依赖（Windows）
+      - name: 下载 FFmpeg
+        shell: pwsh
+        run: |
+          Write-Host "=== 下载 Windows FFmpeg ==="
+
+          $ffmpegUrl = "https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/dependency/win32/ffmpeg.exe"
+          $targetDir = "resources\win32\toolkit-engine"
+          $targetFile = "$targetDir\ffmpeg.exe"
+
+          # 确保目标目录存在
+          if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          }
+
+          # 下载 ffmpeg.exe
+          Write-Host "下载 ffmpeg.exe 从: $ffmpegUrl"
+          try {
+            Invoke-WebRequest -Uri $ffmpegUrl -OutFile $targetFile -ErrorAction Stop
+            Write-Host "✅ ffmpeg.exe 下载成功"
+
+            # 验证文件
+            $fileInfo = Get-Item $targetFile
+            Write-Host "文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+
+          } catch {
+            Write-Host "❌ 下载失败: $_"
+            exit 1
+          }
 
       # 构建 Electron 应用 (Windows)
       - name: 构建 Electron 应用

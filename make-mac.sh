@@ -38,7 +38,25 @@ echo ""
 echo ">>> [6/6] Building Scrcpy Server (Rust)..."
 ./scrcpy-server/build-mac.sh
 
-# 7. 构建 Electron 应用（macOS）
+# 7. 检查并下载 FFmpeg（如果不存在）
+echo ""
+echo ">>> [7/7] Checking FFmpeg dependency..."
+FFMPEG_PATH="./resources/darwin/toolkit-engine/ffmpeg"
+if [ ! -f "$FFMPEG_PATH" ]; then
+    echo "FFmpeg not found locally, downloading from S3..."
+    mkdir -p "./resources/darwin/toolkit-engine"
+    curl -L "https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/dependency/darwin/ffmpeg" \
+         -o "$FFMPEG_PATH"
+
+    # 添加执行权限
+    chmod +x "$FFMPEG_PATH"
+
+    echo "✓ FFmpeg downloaded successfully"
+else
+    echo "✓ FFmpeg already exists, skipping download"
+fi
+
+# 8. 构建 Electron 应用（macOS）
 echo ""
 echo ">>> Building Electron app for macOS..."
 # 使用 unsigned 版本，本地开发无需签名
