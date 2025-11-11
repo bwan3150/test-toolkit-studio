@@ -68,45 +68,58 @@ window.FileOperations = {
   async deleteFiles(paths, deviceId) {
     if (paths.length === 0) return { success: false, successCount: 0, failCount: 0 };
 
-    const confirmMsg = `确定要删除选中的 ${paths.length} 个项目吗?`;
-    if (!confirm(confirmMsg)) {
-      return { success: false, successCount: 0, failCount: 0 };
-    }
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const path of paths) {
-      try {
-        const result = await window.api.tkeFileRm({
-          path: path,
-          deviceId: deviceId
-        });
-
-        if (result.success) {
-          window.rLog(`✅ 删除成功: ${path}`);
-          successCount++;
-        } else {
-          throw new Error(result.error || '删除失败');
-        }
-      } catch (error) {
-        window.rError(`❌ 删除失败 ${path}:`, error);
-        failCount++;
+    // 使用 Promise 包装确认对话框
+    return new Promise((resolve) => {
+      if (!window.ModalManager) {
+        window.rError('ModalManager 未加载');
+        resolve({ success: false, successCount: 0, failCount: 0 });
+        return;
       }
-    }
 
-    if (successCount > 0) {
-      window.rLog(`✅ 成功删除 ${successCount} 个项目`);
-    }
-    if (failCount > 0) {
-      window.rError(`❌ ${failCount} 个项目删除失败`);
-    }
+      window.ModalManager.showConfirm({
+        title: '删除确认',
+        message: `确定要删除选中的 ${paths.length} 个项目吗？`,
+        confirmText: '删除',
+        cancelText: '取消',
+        onConfirm: async () => {
+          let successCount = 0;
+          let failCount = 0;
 
-    if (failCount > 0) {
-      alert(`Deleted ${successCount} item(s), ${failCount} failed`);
-    }
+          for (const path of paths) {
+            try {
+              const result = await window.api.tkeFileRm({
+                path: path,
+                deviceId: deviceId
+              });
 
-    return { success: successCount > 0, successCount, failCount };
+              if (result.success) {
+                window.rLog(`✅ 删除成功: ${path}`);
+                successCount++;
+              } else {
+                throw new Error(result.error || '删除失败');
+              }
+            } catch (error) {
+              window.rError(`❌ 删除失败 ${path}:`, error);
+              failCount++;
+            }
+          }
+
+          if (successCount > 0) {
+            window.rLog(`✅ 成功删除 ${successCount} 个项目`);
+            window.AppNotifications?.success(`已删除 ${successCount} 个项目`);
+          }
+          if (failCount > 0) {
+            window.rError(`❌ ${failCount} 个项目删除失败`);
+            window.AppNotifications?.error(`${failCount} 个项目删除失败`);
+          }
+
+          resolve({ success: successCount > 0, successCount, failCount });
+        },
+        onCancel: () => {
+          resolve({ success: false, successCount: 0, failCount: 0 });
+        }
+      });
+    });
   },
 
   /**
@@ -179,14 +192,14 @@ window.FileOperations = {
 
       if (pullResult.success) {
         window.rLog(`✅ 取出成功: ${fileName}`);
-        alert(`Successfully pulled ${fileName}`);
+        window.AppNotifications?.success(`已取出: ${fileName}`);
         return { success: true };
       } else {
         throw new Error(pullResult.error || '取出失败');
       }
     } catch (error) {
       window.rError(`❌ 取出失败 ${fileName}:`, error);
-      alert(`Failed to pull ${fileName}: ${error.message}`);
+      window.AppNotifications?.error(`取出失败: ${fileName}`);
       return { success: false };
     }
   },
@@ -239,12 +252,18 @@ window.FileOperations = {
       }
 
       window.rLog(`✅ 文件取出完成`);
-      alert(`Successfully pulled ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+
+      if (successCount > 0) {
+        window.AppNotifications?.success(`已取出 ${successCount} 个文件`);
+      }
+      if (failCount > 0) {
+        window.AppNotifications?.error(`${failCount} 个文件取出失败`);
+      }
 
       return { success: successCount > 0, successCount, failCount };
     } catch (error) {
       window.rError('取出文件失败:', error);
-      alert('Failed to pull files: ' + error.message);
+      window.AppNotifications?.error('取出文件失败');
       return { success: false, successCount: 0, failCount: 0 };
     }
   },
@@ -257,7 +276,7 @@ window.FileOperations = {
    */
   async pushFiles(remotePath, deviceId) {
     if (!deviceId) {
-      alert('Please select a device first');
+      window.AppNotifications?.warning('请先选择设备');
       return { success: false, successCount: 0, failCount: 0 };
     }
 
@@ -298,12 +317,18 @@ window.FileOperations = {
       }
 
       window.rLog(`✅ 文件放入完成`);
-      alert(`Successfully pushed ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+
+      if (successCount > 0) {
+        window.AppNotifications?.success(`已放入 ${successCount} 个文件`);
+      }
+      if (failCount > 0) {
+        window.AppNotifications?.error(`${failCount} 个文件放入失败`);
+      }
 
       return { success: successCount > 0, successCount, failCount };
     } catch (error) {
       window.rError('放入文件失败:', error);
-      alert('Failed to push files: ' + error.message);
+      window.AppNotifications?.error('放入文件失败');
       return { success: false, successCount: 0, failCount: 0 };
     }
   },
@@ -344,13 +369,11 @@ window.FileOperations = {
     // 显示结果
     if (successCount > 0) {
       window.rLog(`✅ 成功放入 ${successCount} 个文件`);
+      window.AppNotifications?.success(`已放入 ${successCount} 个文件`);
     }
     if (failCount > 0) {
       window.rError(`❌ ${failCount} 个文件放入失败`);
-    }
-
-    if (successCount > 0 || failCount > 0) {
-      alert(`Pushed ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+      window.AppNotifications?.error(`${failCount} 个文件放入失败`);
     }
 
     return { success: successCount > 0, successCount, failCount };
