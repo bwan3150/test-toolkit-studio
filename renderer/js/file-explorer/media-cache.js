@@ -364,15 +364,35 @@
           const deviceDirs = fs.readdirSync(this.cacheDir);
 
           deviceDirs.forEach(deviceId => {
-            devices.push(deviceId);
+            // 跳过隐藏文件和非目录项 (如 .DS_Store)
+            if (deviceId.startsWith('.')) {
+              return;
+            }
+
             const deviceDir = path.join(this.cacheDir, deviceId);
+
+            // 确保是目录
+            if (!fs.statSync(deviceDir).isDirectory()) {
+              return;
+            }
+
+            devices.push(deviceId);
             const files = fs.readdirSync(deviceDir);
 
             files.forEach(file => {
+              // 跳过隐藏文件
+              if (file.startsWith('.')) {
+                return;
+              }
+
               const filePath = path.join(deviceDir, file);
               const stats = fs.statSync(filePath);
-              totalSize += stats.size;
-              fileCount++;
+
+              // 只统计文件，不统计目录
+              if (stats.isFile()) {
+                totalSize += stats.size;
+                fileCount++;
+              }
             });
           });
         }
