@@ -49,7 +49,8 @@ window.ContextMenuManager = {
     if (selection.paths && selection.paths.length > 0) {
       // 选中了文件/文件夹
       if (openItem) openItem.style.display = selection.isDir ? 'block' : 'none'; // 只对文件夹显示Open
-      if (renameItem) renameItem.style.display = 'block';
+      // 如果是 media 文件(photos view),隐藏 rename 选项
+      if (renameItem) renameItem.style.display = selection.isMedia ? 'none' : 'block';
       if (downloadItem) downloadItem.style.display = 'block';
       if (newfolderItem) newfolderItem.style.display = 'none';
       if (deleteItem) deleteItem.style.display = 'block';

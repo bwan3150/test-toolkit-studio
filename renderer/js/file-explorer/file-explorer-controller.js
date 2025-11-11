@@ -132,7 +132,10 @@ class FileExplorerController {
       let paths = selection?.paths || Array.from(this.selectedFiles);
 
       if (paths.length > 0) {
-        await window.FileOperations.pullMultipleFiles(paths, this.currentDevice);
+        // 根据视图类型选择正确的设备 ID
+        const deviceId = selection?.isMedia ? window.PhotosView.currentDeviceId : this.currentDevice;
+
+        await window.FileOperations.pullMultipleFiles(paths, deviceId);
 
         // 只在文件系统视图中清空选择
         if (!selection?.isMedia) {
@@ -146,7 +149,10 @@ class FileExplorerController {
       const paths = selection?.paths || Array.from(this.selectedFiles);
 
       if (paths.length > 0) {
-        const result = await window.FileOperations.deleteFiles(paths, this.currentDevice);
+        // 根据视图类型选择正确的设备 ID
+        const deviceId = selection?.isMedia ? window.PhotosView.currentDeviceId : this.currentDevice;
+
+        const result = await window.FileOperations.deleteFiles(paths, deviceId);
         if (result.success) {
           // 根据视图类型刷新
           if (selection?.isMedia) {
