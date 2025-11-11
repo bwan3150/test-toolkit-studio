@@ -90,7 +90,15 @@
     width: 20px;
     height: 20px;
     min-width: 20px;
-    fill: currentColor;
+    /* 使用 filter 将 SVG 改为白色 */
+    filter: brightness(0) invert(1);
+    transition: filter 0.2s;
+}
+
+/* 选中状态下的图标显示橙色（主题色） */
+.nav-item.active .nav-icon {
+    /* 移除白色滤镜，显示原始颜色或通过 CSS 变量设置橙色 */
+    filter: brightness(0) saturate(100%) invert(64%) sepia(92%) saturate(2594%) hue-rotate(356deg) brightness(103%) contrast(97%);
 }
 
 .nav-label {

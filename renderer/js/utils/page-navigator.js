@@ -28,7 +28,7 @@
     },
     'file-explorer': {
       id: 'fileExplorerPage',
-      label: 'Device Browser',
+      label: 'Tunnel',
       navSelector: '[data-page="file-explorer"]'
     },
     'log': {
