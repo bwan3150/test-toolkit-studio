@@ -18,6 +18,7 @@ window.PhotosView = {
       '/storage/emulated/0/DCIM/'
     ],
     screenshots: [
+      '/sdcard/DCIM/Screenshots/',
       '/sdcard/Pictures/Screenshots/',
       '/sdcard/Screenshots/',
       '/storage/emulated/0/Pictures/Screenshots/',
@@ -81,8 +82,8 @@ window.PhotosView = {
           return path;
         }
       } catch (error) {
-        // 继续尝试下一个路径
-        window.rLog(`❌ 路径不可用: ${path}`);
+        // 静默处理，继续尝试下一个路径（不输出错误日志）
+        continue;
       }
     }
 
@@ -135,8 +136,9 @@ window.PhotosView = {
       const detectedPath = await this.detectAvailableFolder(this.currentFolder);
 
       if (!detectedPath) {
-        window.rError(`未找到 ${this.currentFolder} 的可用路径`);
-        this.showError(`未找到${this.currentFolder === 'camera' ? '相机' : '截图'}文件夹`);
+        // 未找到路径，显示空状态（不报错）
+        window.rLog(`未找到 ${this.currentFolder} 的可用路径，显示空状态`);
+        this.showEmptyState();
         return;
       }
 
@@ -543,7 +545,7 @@ window.PhotosView = {
   },
 
   /**
-   * 加载缩略图 (使用 MediaCache 管理本地缓存和 FFmpeg 生成视频缩略图)
+   * 加载缩略图 (使用 MediaCache 管理缩略图缓存)
    * @param {Object} file - 文件对象
    * @param {HTMLElement} photoItem - 照片项元素
    */
@@ -554,20 +556,18 @@ window.PhotosView = {
 
       if (!thumbnail) return;
 
-      // 显示加载状态 - 使用 media.svg 图标
+      // 显示加载状态 - 使用旋转的 spinner
       if (placeholder) {
         placeholder.innerHTML = `
-          <svg viewBox="0 0 24 24" width="32" height="32" fill="var(--text-tertiary)">
-            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
-          </svg>
+          <div class="photo-loading-spinner"></div>
         `;
       }
 
       const isVideo = this.isVideo(file.name);
       const fileType = isVideo ? 'video' : 'image';
 
-      // 使用 MediaCache 获取媒体 URL
-      const localPath = await window.MediaCache.getMediaUrl(
+      // 使用 MediaCache 获取缩略图 URL（只缓存缩略图）
+      const thumbPath = await window.MediaCache.getThumbnailUrl(
         file.path,
         this.currentDeviceId,
         fileType
@@ -578,9 +578,9 @@ window.PhotosView = {
         placeholder.remove();
       }
 
-      // 显示缩略图/图片
+      // 显示缩略图
       const img = document.createElement('img');
-      img.src = localPath;
+      img.src = thumbPath;
       img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
       img.alt = file.name;
       thumbnail.appendChild(img);
@@ -699,7 +699,7 @@ window.PhotosView = {
   },
 
   /**
-   * 打开预览
+   * 打开预览（加载完整图片/视频）
    * @param {number} index - 文件索引
    */
   async openPreview(index) {
@@ -718,7 +718,11 @@ window.PhotosView = {
     }
 
     if (content) {
-      content.innerHTML = '<p style="color: white;">加载中...</p>';
+      content.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+          <div class="photo-loading-spinner"></div>
+        </div>
+      `;
     }
 
     if (modal) {
@@ -726,29 +730,17 @@ window.PhotosView = {
     }
 
     try {
-      // 创建临时目录来存放预览文件
-      const { ipcRenderer } = window.AppGlobals;
-      const tempDir = await ipcRenderer.invoke('get-temp-dir');
       const isVideo = this.isVideo(file.name);
 
-      window.rLog(`正在从设备拉取文件: ${file.path}`);
+      window.rLog(`正在加载完整媒体文件: ${file.path}`);
 
-      // 从设备拉取文件到临时目录
-      const pullResult = await window.api.tkeFilePull({
-        remote: file.path,
-        local: tempDir,
-        deviceId: this.currentDeviceId
-      });
+      // 使用 MediaCache 获取完整媒体文件（不缓存）
+      const localPath = await window.MediaCache.getFullMediaUrl(
+        file.path,
+        this.currentDeviceId
+      );
 
-      if (!pullResult.success) {
-        throw new Error(pullResult.error || '拉取文件失败');
-      }
-
-      // 构建本地文件路径
-      const path = window.nodeRequire ? window.nodeRequire('path') : require('path');
-      const localPath = path.join(tempDir, file.name);
-
-      window.rLog(`文件已拉取到: ${localPath}`);
+      window.rLog(`完整媒体文件已加载: ${localPath}`);
 
       // 显示预览
       if (content) {
@@ -813,13 +805,30 @@ window.PhotosView = {
   },
 
   /**
+   * 显示空状态
+   */
+  showEmptyState() {
+    this.photosGrid.innerHTML = `
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="white">
+          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+        <p>No media files found</p>
+      </div>
+    `;
+  },
+
+  /**
    * 显示错误信息
    * @param {string} message - 错误信息
    */
   showError(message) {
     this.photosGrid.innerHTML = `
       <div class="empty-state" style="grid-column: 1 / -1;">
-        <p style="color: var(--accent-danger);">${message}</p>
+        <svg viewBox="0 0 24 24" width="64" height="64" fill="white">
+          <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+        </svg>
+        <p style="color: var(--text-secondary);">${message}</p>
       </div>
     `;
   }

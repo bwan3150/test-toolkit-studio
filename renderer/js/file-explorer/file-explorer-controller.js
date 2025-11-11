@@ -367,11 +367,32 @@ class FileExplorerController {
       // 恢复之前选择的设备
       const savedSelection = await ipcRenderer.invoke('store-get', 'selected_device');
       if (savedSelection && Array.from(this.deviceSelect.options).some(opt => opt.value === savedSelection)) {
+        window.rLog(`✓ 恢复已保存的设备: ${savedSelection}`);
         this.deviceSelect.value = savedSelection;
         this.currentDevice = savedSelection;
         window.DragUploadManager.setDeviceId(savedSelection);
         // 自动加载默认目录
-        this.loadDirectory(this.currentPath);
+        if (this.currentView === 'filesystem') {
+          window.rLog(`自动加载目录: ${this.currentPath}`);
+          await this.loadDirectory(this.currentPath);
+        }
+      } else if (devices.length > 0) {
+        // 如果没有保存的设备但有可用设备，自动选择第一个
+        const firstDevice = devices.find(d => d.status === 'device');
+        if (firstDevice) {
+          window.rLog(`✓ 自动选择第一个设备: ${firstDevice.id}`);
+          this.deviceSelect.value = firstDevice.id;
+          this.currentDevice = firstDevice.id;
+          window.DragUploadManager.setDeviceId(firstDevice.id);
+          await ipcRenderer.invoke('store-set', 'selected_device', firstDevice.id);
+          // 自动加载默认目录
+          if (this.currentView === 'filesystem') {
+            window.rLog(`自动加载目录: ${this.currentPath}`);
+            await this.loadDirectory(this.currentPath);
+          }
+        }
+      } else {
+        window.rLog('没有可用设备');
       }
     } catch (error) {
       window.rError('加载设备列表失败:', error);
@@ -433,7 +454,17 @@ class FileExplorerController {
 
     } catch (error) {
       window.rError('加载目录失败:', error);
-      window.FileRenderer.showError(this.fileListContent, 'Failed to load directory: ' + error.message);
+
+      // 检查是否是权限错误
+      const errorMsg = error.message || '';
+      if (errorMsg.includes('Permission denied') || errorMsg.includes('权限')) {
+        window.FileRenderer.showError(
+          this.fileListContent,
+          '无访问权限\n\n此目录需要 root 权限或更高级别的访问权限。'
+        );
+      } else {
+        window.FileRenderer.showError(this.fileListContent, '加载目录失败: ' + errorMsg);
+      }
     }
   }
 

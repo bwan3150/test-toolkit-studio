@@ -152,6 +152,30 @@ window.FileRenderer = {
     const parts = currentPath.split('/').filter(p => p);
     breadcrumbElement.innerHTML = '';
 
+    // 添加根目录 / 链接
+    const rootSpan = document.createElement('span');
+    rootSpan.className = 'path-item';
+    rootSpan.dataset.path = '/';
+    rootSpan.textContent = '/';
+
+    if (onPathClick) {
+      rootSpan.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.rLog('点击面包屑: / -> /');
+        onPathClick('/');
+      });
+    }
+
+    breadcrumbElement.appendChild(rootSpan);
+
+    // 如果有子路径，添加分隔符
+    if (parts.length > 0) {
+      const separator = document.createElement('span');
+      separator.className = 'path-separator';
+      separator.textContent = ' / ';
+      breadcrumbElement.appendChild(separator);
+    }
+
     let currentPath_build = '/';
     parts.forEach((part, index) => {
       currentPath_build += part + '/';
@@ -204,9 +228,15 @@ window.FileRenderer = {
    * @param {string} message - 错误信息
    */
   showError(container, message) {
+    // 将 \n 转换为 <br>，支持多行显示
+    const formattedMessage = message.replace(/\n/g, '<br>');
+
     container.innerHTML = `
       <div class="empty-state">
-        <p style="color: var(--accent-danger);">${message}</p>
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="var(--accent-danger)" style="margin-bottom: 12px;">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+        <p style="color: var(--text-secondary); white-space: pre-line; text-align: center; line-height: 1.6;">${formattedMessage}</p>
       </div>
     `;
   }

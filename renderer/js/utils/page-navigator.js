@@ -204,6 +204,14 @@
           }
         }
         break;
+
+      case 'file-explorer':
+        // 刷新文件浏览器
+        if (window.fileExplorerController) {
+          // 刷新设备列表并自动加载
+          window.fileExplorerController.loadDevices();
+        }
+        break;
     }
   }
 
