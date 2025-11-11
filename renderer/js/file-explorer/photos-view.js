@@ -434,8 +434,28 @@ window.PhotosView = {
     }
 
     // 点击预览
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (e) => {
+      // 如果点击的是复选框，不触发预览
+      if (e.target.closest('.photo-item-checkbox')) {
+        return;
+      }
       this.openPreview(index);
+    });
+
+    // 右键菜单
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 显示右键菜单
+      if (window.ContextMenuManager) {
+        window.ContextMenuManager.show(e.clientX, e.clientY, {
+          paths: [file.path],
+          isDir: false,
+          isMedia: true,
+          fileName: file.name
+        });
+      }
     });
 
     // 拖拽功能 - 拖出到本地文件系统

@@ -81,13 +81,34 @@ class FileExplorerController {
       }
     });
 
-    window.ContextMenuManager.registerHandler('rename', (selection) => {
-      const path = Array.from(this.selectedFiles)[0];
+    window.ContextMenuManager.registerHandler('rename', async (selection) => {
+      // 优先使用 selection 中的路径
+      const path = selection?.paths?.[0] || Array.from(this.selectedFiles)[0];
+
       if (path) {
-        // 找到对应的文件项元素,启动内联重命名
-        const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
-        if (fileItem) {
-          this.startInlineRename(fileItem, path);
+        // 对于 Photos 视图，使用模态框重命名
+        if (selection?.isMedia) {
+          const fileName = selection?.fileName || path.split('/').pop();
+          const newName = await window.AppModals?.prompt('重命名', '请输入新文件名:', fileName);
+
+          if (newName && newName !== fileName) {
+            const dirPath = path.substring(0, path.lastIndexOf('/'));
+            const newPath = `${dirPath}/${newName}`;
+
+            const result = await window.FileOperations.renameFile(path, newPath, this.currentDevice);
+            if (result.success) {
+              // 刷新 Photos 视图
+              if (window.PhotosView && window.PhotosView.currentDeviceId) {
+                await window.PhotosView.loadMedia();
+              }
+            }
+          }
+        } else {
+          // 文件系统视图使用内联重命名
+          const fileItem = document.querySelector(`.file-item[data-path="${path}"]`);
+          if (fileItem) {
+            this.startInlineRename(fileItem, path);
+          }
         }
       }
     });
@@ -107,20 +128,37 @@ class FileExplorerController {
     });
 
     window.ContextMenuManager.registerHandler('download', async (selection) => {
-      const paths = Array.from(this.selectedFiles);
+      // 优先使用 selection 中的路径（用于 Photos 视图单个文件右键下载）
+      let paths = selection?.paths || Array.from(this.selectedFiles);
+
       if (paths.length > 0) {
         await window.FileOperations.pullMultipleFiles(paths, this.currentDevice);
-        this.clearSelection();
+
+        // 只在文件系统视图中清空选择
+        if (!selection?.isMedia) {
+          this.clearSelection();
+        }
       }
     });
 
     window.ContextMenuManager.registerHandler('delete', async (selection) => {
-      const paths = Array.from(this.selectedFiles);
+      // 优先使用 selection 中的路径（用于 Photos 视图）
+      const paths = selection?.paths || Array.from(this.selectedFiles);
+
       if (paths.length > 0) {
         const result = await window.FileOperations.deleteFiles(paths, this.currentDevice);
         if (result.success) {
-          this.clearSelection();
-          this.loadDirectory(this.currentPath);
+          // 根据视图类型刷新
+          if (selection?.isMedia) {
+            // 刷新 Photos 视图
+            if (window.PhotosView && window.PhotosView.currentDeviceId) {
+              await window.PhotosView.loadMedia();
+            }
+          } else {
+            // 刷新文件系统视图
+            this.clearSelection();
+            this.loadDirectory(this.currentPath);
+          }
         }
       }
     });
