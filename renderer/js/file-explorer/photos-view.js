@@ -770,6 +770,20 @@ window.PhotosView = {
    */
   closePreview() {
     const modal = document.getElementById('mediaPreviewModal');
+    const content = document.getElementById('previewContent');
+
+    // 停止视频播放
+    if (content) {
+      const video = content.querySelector('video');
+      if (video) {
+        video.pause();
+        video.currentTime = 0;
+        video.src = ''; // 清空视频源
+      }
+      // 清空内容
+      content.innerHTML = '';
+    }
+
     if (modal) {
       modal.style.display = 'none';
     }
