@@ -22,7 +22,7 @@ window.FileOperations = {
       // 检查文件夹是否存在,如果存在则添加序号
       let counter = 1;
       while (true) {
-        const checkResult = await window.api.tkeFileLs({
+        const checkResult = await window.api.tkeFileTree({
           path: folderPath,
           level: 1,
           deviceId: deviceId

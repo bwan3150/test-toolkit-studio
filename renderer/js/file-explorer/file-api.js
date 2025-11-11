@@ -7,10 +7,16 @@
   // TKE File API 封装
   window.api = window.api || {};
 
-  // 列出目录内容 (树形结构)
-  window.api.tkeFileLs = async ({ path, level, deviceId }) => {
+  // 列出目录详细信息 (包含日期时间) - tke file ls
+  window.api.tkeFileLs = async ({ path, deviceId }) => {
     const ipcRenderer = getIpcRenderer();
-    return await ipcRenderer.invoke('tke-file-ls', { path, level, deviceId });
+    return await ipcRenderer.invoke('tke-file-ls', { path, deviceId });
+  };
+
+  // 列出目录内容 (树形结构) - tke file tree
+  window.api.tkeFileTree = async ({ path, level, deviceId }) => {
+    const ipcRenderer = getIpcRenderer();
+    return await ipcRenderer.invoke('tke-file-tree', { path, level, deviceId });
   };
 
   // 搜索文件

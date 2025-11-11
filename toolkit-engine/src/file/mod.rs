@@ -239,6 +239,12 @@ impl FileManager {
         self.exec_shell(&cmd)
     }
 
+    /// 列出目录详细信息 (包含日期时间,类似 ls -l)
+    pub fn list(&self, path: &str) -> Result<String> {
+        let cmd = format!("ls -lA {}", path);
+        self.exec_shell(&cmd)
+    }
+
     // ========== 修改操作 ==========
 
     /// 创建目录(自动创建父目录)

@@ -7,11 +7,22 @@ window.PhotosView = {
   mediaFiles: [], // 当前文件夹的媒体文件列表
   selectedMedia: new Set(), // 选中的媒体文件路径
   currentPreviewIndex: -1, // 当前预览的文件索引
+  availableFolders: {}, // 实际可用的文件夹路径
 
-  // 文件夹路径映射
-  folderPaths: {
-    camera: '/sdcard/DCIM/Camera/',
-    screenshots: '/sdcard/Pictures/Screenshots/'
+  // 文件夹路径映射(候选路径)
+  folderPathCandidates: {
+    camera: [
+      '/sdcard/DCIM/Camera/',
+      '/sdcard/DCIM/',
+      '/storage/emulated/0/DCIM/Camera/',
+      '/storage/emulated/0/DCIM/'
+    ],
+    screenshots: [
+      '/sdcard/Pictures/Screenshots/',
+      '/sdcard/Screenshots/',
+      '/storage/emulated/0/Pictures/Screenshots/',
+      '/storage/emulated/0/Screenshots/'
+    ]
   },
 
   // 支持的图片和视频格式
@@ -47,6 +58,35 @@ window.PhotosView = {
     });
 
     window.rLog('PhotosView 模块已初始化');
+  },
+
+  /**
+   * 检测可用的文件夹路径
+   * @param {string} folderType - 文件夹类型 ('camera' 或 'screenshots')
+   * @returns {Promise<string|null>} 第一个存在的路径,或 null
+   */
+  async detectAvailableFolder(folderType) {
+    const candidates = this.folderPathCandidates[folderType];
+    if (!candidates) return null;
+
+    for (const path of candidates) {
+      try {
+        const result = await window.api.tkeFileLs({
+          path: path,
+          deviceId: this.currentDeviceId
+        });
+
+        if (result.success) {
+          window.rLog(`✅ 找到可用路径: ${path}`);
+          return path;
+        }
+      } catch (error) {
+        // 继续尝试下一个路径
+        window.rLog(`❌ 路径不可用: ${path}`);
+      }
+    }
+
+    return null;
   },
 
   /**
@@ -89,14 +129,27 @@ window.PhotosView = {
       return;
     }
 
-    const path = this.folderPaths[this.currentFolder];
+    // 检测可用的文件夹路径 (如果还没有检测过)
+    if (!this.availableFolders[this.currentFolder]) {
+      window.rLog(`正在检测 ${this.currentFolder} 的可用路径...`);
+      const detectedPath = await this.detectAvailableFolder(this.currentFolder);
+
+      if (!detectedPath) {
+        window.rError(`未找到 ${this.currentFolder} 的可用路径`);
+        this.showError(`未找到${this.currentFolder === 'camera' ? '相机' : '截图'}文件夹`);
+        return;
+      }
+
+      this.availableFolders[this.currentFolder] = detectedPath;
+    }
+
+    const path = this.availableFolders[this.currentFolder];
     window.rLog(`加载媒体文件: ${path}`);
 
     try {
-      // 使用 tkeFileLs 列出目录
+      // 使用 tke file ls 获取详细文件列表(包括日期时间)
       const result = await window.api.tkeFileLs({
         path: path,
-        level: 1,
         deviceId: this.currentDeviceId
       });
 
@@ -104,7 +157,7 @@ window.PhotosView = {
         throw new Error(result.error || '加载失败');
       }
 
-      // 解析文件列表 (假设返回格式和 FileRenderer.parseTreeOutput 类似)
+      // 解析文件列表
       const files = this.parseMediaFiles(result.output, path);
 
       // 过滤出图片和视频文件
@@ -123,13 +176,14 @@ window.PhotosView = {
       this.renderGrid();
     } catch (error) {
       window.rError('加载媒体文件失败:', error);
-      this.showError('加载失败: ' + error.message);
+      const errorMsg = error?.message || '未知错误';
+      this.showError('加载失败: ' + errorMsg);
     }
   },
 
   /**
-   * 解析媒体文件列表
-   * @param {string} output - tree 命令输出
+   * 解析媒体文件列表(使用 ls -l 获取详细信息包括日期)
+   * @param {string} output - ls 命令输出
    * @param {string} basePath - 基础路径
    * @returns {Array} 文件列表
    */
@@ -139,28 +193,55 @@ window.PhotosView = {
     const lines = output.trim().split('\n');
     const files = [];
 
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line || line.includes('directories,') || line.includes('files')) {
-        continue;
-      }
+    // ls -l 输出格式: -rw-rw---- 1 u0_a123 u0_a123 1234567 2024-01-15 10:30 IMG_20240115_103045.jpg
+    for (let line of lines) {
+      line = line.trim();
+      if (!line || line.startsWith('total')) continue;
 
-      const match = line.match(/[├└]── (.+?)(?:\s+\((.+?)\))?$/);
-      if (match) {
-        const name = match[1].trim();
-        const size = match[2] || '';
-        const isDir = !size;
+      const parts = line.split(/\s+/);
+      if (parts.length < 8) continue;
 
-        files.push({
-          name: name,
-          size: size,
-          isDir: isDir,
-          path: `${basePath.replace(/\/$/, '')}/${name}`
-        });
-      }
+      const permissions = parts[0];
+      const isDir = permissions.startsWith('d');
+
+      // 跳过目录和 . ..
+      if (isDir) continue;
+
+      const size = parts[4];
+      const date = parts[5]; // 日期 YYYY-MM-DD
+      const time = parts[6]; // 时间 HH:MM
+      const name = parts.slice(7).join(' ');
+
+      // 跳过 . 和 ..
+      if (name === '.' || name === '..') continue;
+
+      files.push({
+        name: name,
+        size: size,
+        date: date,
+        time: time,
+        timestamp: this.parseTimestamp(date, time),
+        isDir: false,
+        path: `${basePath.replace(/\/$/, '')}/${name}`
+      });
     }
 
     return files;
+  },
+
+  /**
+   * 解析时间戳
+   * @param {string} date - 日期字符串 YYYY-MM-DD
+   * @param {string} time - 时间字符串 HH:MM
+   * @returns {number} Unix 时间戳
+   */
+  parseTimestamp(date, time) {
+    try {
+      const dateTime = `${date} ${time}:00`;
+      return new Date(dateTime).getTime();
+    } catch {
+      return 0;
+    }
   },
 
   /**
@@ -187,7 +268,7 @@ window.PhotosView = {
   },
 
   /**
-   * 渲染照片网格
+   * 渲染照片网格(按日期分组)
    */
   renderGrid() {
     if (this.mediaFiles.length === 0) {
@@ -204,10 +285,91 @@ window.PhotosView = {
 
     this.photosGrid.innerHTML = '';
 
-    this.mediaFiles.forEach((file, index) => {
-      const item = this.createPhotoItem(file, index);
-      this.photosGrid.appendChild(item);
+    // 按日期分组
+    const groupedByDate = this.groupFilesByDate(this.mediaFiles);
+
+    // 渲染每个日期组
+    groupedByDate.forEach(group => {
+      // 创建日期分隔符
+      const dateSeparator = document.createElement('div');
+      dateSeparator.className = 'date-separator';
+      dateSeparator.textContent = this.formatDateLabel(group.date);
+      this.photosGrid.appendChild(dateSeparator);
+
+      // 渲染该日期的所有文件
+      group.files.forEach((file, indexInGroup) => {
+        const globalIndex = this.mediaFiles.indexOf(file);
+        const item = this.createPhotoItem(file, globalIndex);
+        this.photosGrid.appendChild(item);
+      });
     });
+  },
+
+  /**
+   * 按日期分组文件
+   * @param {Array} files - 文件列表
+   * @returns {Array} 分组后的数组 [{date, files}, ...]
+   */
+  groupFilesByDate(files) {
+    const groups = new Map();
+
+    files.forEach(file => {
+      const date = file.date || 'Unknown';
+      if (!groups.has(date)) {
+        groups.set(date, []);
+      }
+      groups.get(date).push(file);
+    });
+
+    // 转换为数组并按日期倒序排序
+    const result = Array.from(groups.entries()).map(([date, files]) => ({
+      date,
+      files
+    }));
+
+    result.sort((a, b) => b.date.localeCompare(a.date));
+
+    return result;
+  },
+
+  /**
+   * 格式化日期标签
+   * @param {string} date - 日期字符串 YYYY-MM-DD
+   * @returns {string} 格式化后的日期
+   */
+  formatDateLabel(date) {
+    if (!date || date === 'Unknown') return 'Unknown Date';
+
+    try {
+      const d = new Date(date);
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      // 判断是否是今天
+      if (d.toDateString() === today.toDateString()) {
+        return '今天';
+      }
+
+      // 判断是否是昨天
+      if (d.toDateString() === yesterday.toDateString()) {
+        return '昨天';
+      }
+
+      // 其他日期显示具体日期
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1;
+      const day = d.getDate();
+
+      // 如果是今年,不显示年份
+      if (year === today.getFullYear()) {
+        return `${month}月${day}日`;
+      }
+
+      return `${year}年${month}月${day}日`;
+    } catch {
+      return date;
+    }
   },
 
   /**
@@ -238,12 +400,22 @@ window.PhotosView = {
     });
     item.appendChild(checkbox);
 
-    // 缩略图 (暂时使用占位符)
-    // TODO: 实际实现需要从设备拉取缩略图
+    // 缩略图容器
     const thumbnail = document.createElement('div');
-    thumbnail.style.cssText = 'width: 100%; height: 100%; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 12px;';
-    thumbnail.textContent = isVideo ? '视频' : '图片';
+    thumbnail.className = 'photo-thumbnail';
+    thumbnail.style.cssText = 'width: 100%; height: 100%; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;';
+
+    // 占位符
+    const placeholder = document.createElement('div');
+    placeholder.className = 'thumbnail-placeholder';
+    placeholder.style.cssText = 'color: var(--text-tertiary); font-size: 12px;';
+    placeholder.textContent = isVideo ? '视频' : '图片';
+    thumbnail.appendChild(placeholder);
+
     item.appendChild(thumbnail);
+
+    // 使用 Intersection Observer 懒加载缩略图
+    this.observeThumbnail(item, file, thumbnail, placeholder);
 
     // 视频指示器
     if (isVideo) {
@@ -308,6 +480,140 @@ window.PhotosView = {
     });
 
     return item;
+  },
+
+  /**
+   * 使用 Intersection Observer 懒加载缩略图
+   * @param {HTMLElement} item - 照片项元素
+   * @param {Object} file - 文件对象
+   * @param {HTMLElement} thumbnail - 缩略图容器
+   * @param {HTMLElement} placeholder - 占位符元素
+   */
+  observeThumbnail(item, file, thumbnail, placeholder) {
+    // 创建 Intersection Observer (如果还没有)
+    if (!this.thumbnailObserver) {
+      this.thumbnailObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              const photoItem = entry.target;
+              const filePath = photoItem.dataset.path;
+              const fileObj = this.mediaFiles.find(f => f.path === filePath);
+
+              if (fileObj && !photoItem.dataset.loaded) {
+                photoItem.dataset.loaded = 'true';
+                this.loadThumbnail(fileObj, photoItem);
+                this.thumbnailObserver.unobserve(photoItem);
+              }
+            }
+          });
+        },
+        {
+          root: this.photosGrid,
+          rootMargin: '200px', // 提前加载视口外200px的图片
+          threshold: 0.01
+        }
+      );
+    }
+
+    this.thumbnailObserver.observe(item);
+  },
+
+  /**
+   * 加载缩略图
+   * @param {Object} file - 文件对象
+   * @param {HTMLElement} photoItem - 照片项元素
+   */
+  async loadThumbnail(file, photoItem) {
+    try {
+      const thumbnail = photoItem.querySelector('.photo-thumbnail');
+      const placeholder = photoItem.querySelector('.thumbnail-placeholder');
+
+      if (!thumbnail) return;
+
+      // 显示加载状态
+      if (placeholder) {
+        placeholder.textContent = '加载中...';
+      }
+
+      const isVideo = this.isVideo(file.name);
+
+      // 拉取文件到临时目录 (使用小尺寸)
+      const { ipcRenderer } = window.AppGlobals;
+      const tempDir = await ipcRenderer.invoke('get-temp-dir');
+      const path = window.nodeRequire ? window.nodeRequire('path') : require('path');
+      const localPath = path.join(tempDir, file.name);
+
+      // 检查是否已缓存
+      const fs = window.nodeRequire ? window.nodeRequire('fs') : require('fs');
+      if (!fs.existsSync(localPath)) {
+        // 如果文件很大 (>5MB), 只拉取缩略图或者跳过
+        const fileSizeBytes = parseInt(file.size);
+        if (fileSizeBytes > 5 * 1024 * 1024) {
+          // 对于大文件,使用占位符图标
+          if (placeholder) {
+            placeholder.textContent = this.formatFileSize(fileSizeBytes);
+          }
+          return;
+        }
+
+        // 拉取文件
+        const pullResult = await window.api.tkeFilePull({
+          remote: file.path,
+          local: tempDir,
+          deviceId: this.currentDeviceId
+        });
+
+        if (!pullResult.success) {
+          throw new Error(pullResult.error || '拉取失败');
+        }
+      }
+
+      // 移除占位符
+      if (placeholder) {
+        placeholder.remove();
+      }
+
+      // 显示缩略图
+      if (isVideo) {
+        // 视频使用 video 元素的第一帧
+        const video = document.createElement('video');
+        video.src = localPath;
+        video.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+        video.preload = 'metadata';
+        thumbnail.appendChild(video);
+      } else {
+        // 图片直接显示
+        const img = document.createElement('img');
+        img.src = localPath;
+        img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+        img.alt = file.name;
+        thumbnail.appendChild(img);
+      }
+    } catch (error) {
+      window.rError(`加载缩略图失败 ${file.name}:`, error);
+      const placeholder = photoItem.querySelector('.thumbnail-placeholder');
+      if (placeholder) {
+        placeholder.textContent = '✖';
+        placeholder.style.color = 'var(--accent-danger)';
+      }
+    }
+  },
+
+  /**
+   * 格式化文件大小
+   * @param {number} bytes - 字节数
+   * @returns {string} 格式化后的大小
+   */
+  formatFileSize(bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+    } else if (bytes >= 1024 * 1024) {
+      return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+    } else if (bytes >= 1024) {
+      return `${(bytes / 1024).toFixed(1)}KB`;
+    }
+    return `${bytes}B`;
   },
 
   /**

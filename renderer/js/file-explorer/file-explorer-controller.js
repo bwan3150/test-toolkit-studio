@@ -361,7 +361,7 @@ class FileExplorerController {
       // 显示加载状态
       window.FileRenderer.showEmptyState(this.fileListContent, 'Loading...');
 
-      const result = await window.api.tkeFileLs({
+      const result = await window.api.tkeFileTree({
         path: path,
         level: level,
         deviceId: this.currentDevice
@@ -613,7 +613,7 @@ class FileExplorerController {
       window.rLog(`在当前目录 ${this.currentPath} 搜索: ${query}`);
 
       // 先加载当前目录的文件列表
-      const result = await window.api.tkeFileLs({
+      const result = await window.api.tkeFileTree({
         path: this.currentPath,
         level: 1,
         deviceId: this.currentDevice

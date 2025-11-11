@@ -5,8 +5,15 @@ use tke::{Result, FileManager, JsonOutput};
 /// File 命令枚举
 #[derive(clap::Subcommand)]
 pub enum FileCommands {
-    /// 以树形结构列出目录内容 (类似 tree 命令)
+    /// 列出目录详细信息 (包含日期时间,类似 ls -l)
     Ls {
+        /// 设备上的路径 (默认: /sdcard/)
+        #[arg(default_value = "/sdcard/")]
+        path: String,
+    },
+
+    /// 以树形结构列出目录内容 (类似 tree 命令)
+    Tree {
         /// 设备上的路径 (默认: /sdcard/)
         #[arg(default_value = "/sdcard/")]
         path: String,
@@ -100,7 +107,11 @@ pub async fn handle(action: FileCommands, device_id: Option<String>) -> Result<(
     let file_manager = FileManager::new(device_id)?;
 
     match action {
-        FileCommands::Ls { path, level } => {
+        FileCommands::Ls { path } => {
+            let output = file_manager.list(&path)?;
+            print!("{}", output);
+        }
+        FileCommands::Tree { path, level } => {
             let output = file_manager.tree(&path, level)?;
             print!("{}", output);
         }

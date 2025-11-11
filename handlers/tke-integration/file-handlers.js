@@ -54,10 +54,36 @@ async function execTkeFileCommand(app, args) {
 
 // 注册 TKE File 相关的 IPC 处理器
 function registerFileHandlers(app) {
-  // 列出目录内容 (树形结构) - tke file ls <path> -L <level>
-  ipcMain.handle('tke-file-ls', async (event, { path: filePath, level = 1, deviceId = null }) => {
+  // 列出目录详细信息 (包含日期时间) - tke file ls <path>
+  ipcMain.handle('tke-file-ls', async (event, { path: filePath, deviceId = null }) => {
     try {
       const args = ['file', 'ls'];
+
+      if (deviceId) {
+        args.unshift('--device', deviceId);
+      }
+
+      args.push(filePath || '/sdcard/');
+
+      const output = await execTkeFileCommand(app, args);
+
+      return {
+        success: true,
+        output: output
+      };
+    } catch (error) {
+      console.error('TKE file ls 失败:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
+  // 列出目录内容 (树形结构) - tke file tree <path> -L <level>
+  ipcMain.handle('tke-file-tree', async (event, { path: filePath, level = 1, deviceId = null }) => {
+    try {
+      const args = ['file', 'tree'];
 
       if (deviceId) {
         args.unshift('--device', deviceId);
@@ -73,7 +99,7 @@ function registerFileHandlers(app) {
         output: output
       };
     } catch (error) {
-      console.error('TKE file ls 失败:', error);
+      console.error('TKE file tree 失败:', error);
       return {
         success: false,
         error: error.message
