@@ -87,12 +87,17 @@
 }
 
 .nav-icon {
-    width: 20px;
-    height: 20px;
-    min-width: 20px;
-    /* 使用 filter 将 SVG 改为白色 */
-    filter: brightness(0) invert(1);
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    /* 使用 filter 将 SVG 改为柔和的灰白色 */
+    filter: brightness(0) invert(1) opacity(0.7);
     transition: filter 0.2s;
+}
+
+/* 悬停时稍微提亮 */
+.nav-item:hover .nav-icon {
+    filter: brightness(0) invert(1) opacity(0.9);
 }
 
 /* 选中状态下的图标显示橙色（主题色） */
