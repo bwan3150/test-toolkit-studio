@@ -3,6 +3,7 @@
 use crate::{Result, TkeError, AdbManager};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use image::GenericImageView;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileInfo {
@@ -143,7 +144,7 @@ impl FileManager {
     }
 
     /// 打印树形结构
-    fn print_tree(&self, nodes: &[TreeNode], prefix: &str, is_last: bool, output: &mut String) {
+    fn print_tree(&self, nodes: &[TreeNode], prefix: &str, _is_last: bool, output: &mut String) {
         for (i, node) in nodes.iter().enumerate() {
             let is_last_child = i == nodes.len() - 1;
 
@@ -243,6 +244,28 @@ impl FileManager {
     pub fn list(&self, path: &str) -> Result<String> {
         let cmd = format!("ls -lA {}", path);
         self.exec_shell(&cmd)
+    }
+
+    /// 执行 ADB 命令并获取原始二进制输出 (用于pull文件等操作)
+    fn run_adb_command_raw(&self, args: &[&str]) -> Result<Vec<u8>> {
+        let mut cmd = Command::new(self.adb_manager.adb_path());
+
+        // 如果指定了设备ID,添加-s参数
+        if let Some(ref device_id) = self.device_id {
+            cmd.arg("-s").arg(device_id);
+        }
+
+        cmd.args(args);
+
+        let output = cmd.output()
+            .map_err(|e| TkeError::AdbError(format!("执行ADB命令失败: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
+        }
+
+        Ok(output.stdout)
     }
 
     // ========== 修改操作 ==========

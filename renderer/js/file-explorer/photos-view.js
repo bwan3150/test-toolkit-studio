@@ -274,7 +274,7 @@ window.PhotosView = {
     if (this.mediaFiles.length === 0) {
       this.photosGrid.innerHTML = `
         <div class="empty-state" style="grid-column: 1 / -1;">
-          <svg viewBox="0 0 24 24" width="64" height="64">
+          <svg viewBox="0 0 24 24" width="64" height="64" fill="white">
             <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
           </svg>
           <p>No media files found</p>
@@ -405,11 +405,14 @@ window.PhotosView = {
     thumbnail.className = 'photo-thumbnail';
     thumbnail.style.cssText = 'width: 100%; height: 100%; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;';
 
-    // 占位符
+    // 占位符 - 使用 media.svg 图标
     const placeholder = document.createElement('div');
     placeholder.className = 'thumbnail-placeholder';
-    placeholder.style.cssText = 'color: var(--text-tertiary); font-size: 12px;';
-    placeholder.textContent = isVideo ? '视频' : '图片';
+    placeholder.innerHTML = `
+      <svg viewBox="0 0 24 24" width="32" height="32" fill="var(--text-tertiary)">
+        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+      </svg>
+    `;
     thumbnail.appendChild(placeholder);
 
     item.appendChild(thumbnail);
@@ -520,7 +523,7 @@ window.PhotosView = {
   },
 
   /**
-   * 加载缩略图
+   * 加载缩略图 (使用 MediaCache 管理本地缓存和 FFmpeg 生成视频缩略图)
    * @param {Object} file - 文件对象
    * @param {HTMLElement} photoItem - 照片项元素
    */
@@ -531,71 +534,47 @@ window.PhotosView = {
 
       if (!thumbnail) return;
 
-      // 显示加载状态
+      // 显示加载状态 - 使用 media.svg 图标
       if (placeholder) {
-        placeholder.textContent = '加载中...';
+        placeholder.innerHTML = `
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="var(--text-tertiary)">
+            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+          </svg>
+        `;
       }
 
       const isVideo = this.isVideo(file.name);
+      const fileType = isVideo ? 'video' : 'image';
 
-      // 拉取文件到临时目录 (使用小尺寸)
-      const { ipcRenderer } = window.AppGlobals;
-      const tempDir = await ipcRenderer.invoke('get-temp-dir');
-      const path = window.nodeRequire ? window.nodeRequire('path') : require('path');
-      const localPath = path.join(tempDir, file.name);
-
-      // 检查是否已缓存
-      const fs = window.nodeRequire ? window.nodeRequire('fs') : require('fs');
-      if (!fs.existsSync(localPath)) {
-        // 如果文件很大 (>5MB), 只拉取缩略图或者跳过
-        const fileSizeBytes = parseInt(file.size);
-        if (fileSizeBytes > 5 * 1024 * 1024) {
-          // 对于大文件,使用占位符图标
-          if (placeholder) {
-            placeholder.textContent = this.formatFileSize(fileSizeBytes);
-          }
-          return;
-        }
-
-        // 拉取文件
-        const pullResult = await window.api.tkeFilePull({
-          remote: file.path,
-          local: tempDir,
-          deviceId: this.currentDeviceId
-        });
-
-        if (!pullResult.success) {
-          throw new Error(pullResult.error || '拉取失败');
-        }
-      }
+      // 使用 MediaCache 获取媒体 URL
+      const localPath = await window.MediaCache.getMediaUrl(
+        file.path,
+        this.currentDeviceId,
+        fileType
+      );
 
       // 移除占位符
       if (placeholder) {
         placeholder.remove();
       }
 
-      // 显示缩略图
-      if (isVideo) {
-        // 视频使用 video 元素的第一帧
-        const video = document.createElement('video');
-        video.src = localPath;
-        video.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-        video.preload = 'metadata';
-        thumbnail.appendChild(video);
-      } else {
-        // 图片直接显示
-        const img = document.createElement('img');
-        img.src = localPath;
-        img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-        img.alt = file.name;
-        thumbnail.appendChild(img);
-      }
+      // 显示缩略图/图片
+      const img = document.createElement('img');
+      img.src = localPath;
+      img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+      img.alt = file.name;
+      thumbnail.appendChild(img);
+
     } catch (error) {
       window.rError(`加载缩略图失败 ${file.name}:`, error);
       const placeholder = photoItem.querySelector('.thumbnail-placeholder');
       if (placeholder) {
-        placeholder.textContent = '✖';
-        placeholder.style.color = 'var(--accent-danger)';
+        // 显示错误状态的 media.svg 图标
+        placeholder.innerHTML = `
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="var(--accent-danger)">
+            <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+          </svg>
+        `;
       }
     }
   },
@@ -615,6 +594,7 @@ window.PhotosView = {
     }
     return `${bytes}B`;
   },
+
 
   /**
    * 切换选择状态

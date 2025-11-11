@@ -8,6 +8,7 @@ pub mod models;
 // 功能模块（对应 tke 命令）
 pub mod adb;
 pub mod aapt;
+pub mod ffmpeg;
 pub mod ocr;
 pub mod controller;
 pub mod fetcher;
@@ -16,7 +17,7 @@ pub mod runner;
 pub mod file;
 
 // 导出工具类
-pub use utils::{JsonOutput, AdbManager, AaptManager};
+pub use utils::{JsonOutput, AdbManager, AaptManager, FfmpegManager};
 
 // 导出功能模块
 pub use controller::Controller;

@@ -7,6 +7,7 @@ pub mod runner;
 pub mod ocr;
 pub mod adb;
 pub mod aapt;
+pub mod ffmpeg;
 pub mod file;
 
 // 重新导出命令枚举，方便 main.rs 使用
