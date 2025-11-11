@@ -430,6 +430,36 @@ jobs:
           npm install
           npm audit fix
 
+      # 下载 Windows 平台的 ffmpeg.exe（从 S3）
+      - name: 下载 ffmpeg.exe
+        shell: pwsh
+        run: |
+          Write-Host "=== 下载 Windows ffmpeg.exe ==="
+
+          $ffmpegUrl = "https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/dependency/win32/ffmpeg.exe"
+          $targetDir = "toolkit-engine\resources\win32"
+          $targetFile = "$targetDir\ffmpeg.exe"
+
+          # 确保目标目录存在
+          if (-not (Test-Path $targetDir)) {
+            New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          }
+
+          # 下载 ffmpeg.exe
+          Write-Host "下载 ffmpeg.exe 从: $ffmpegUrl"
+          try {
+            Invoke-WebRequest -Uri $ffmpegUrl -OutFile $targetFile -ErrorAction Stop
+            Write-Host "✅ ffmpeg.exe 下载成功"
+
+            # 验证文件
+            $fileInfo = Get-Item $targetFile
+            Write-Host "文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+
+          } catch {
+            Write-Host "❌ 下载失败: $_"
+            exit 1
+          }
+
       # 构建 toolkit-engine (TKE)
       - name: 构建 Toolkit Engine (Rust)
         shell: cmd
