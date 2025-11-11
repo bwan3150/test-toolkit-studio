@@ -168,6 +168,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await window.ComponentLoader.loadComponents(components);
         }
         await loadScript('../js/settings/settings.js');
+        await loadScript('../js/settings/cache-manager.js');
         await loadScript('../js/components/resizable-panels.js');
         await loadScript('../js/components/status-bar.js');
         await loadScript('../js/components/modal-manager.js');

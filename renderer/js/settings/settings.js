@@ -9,7 +9,6 @@ function initializeSettingsPage() {
     const settingsBaseUrl = document.getElementById('settingsBaseUrl');
     const aboutVersion = document.getElementById('about-version');
     const exportLogsBtn = document.getElementById('exportLogsBtn');
-    const exportLogStatus = document.getElementById('exportLogStatus');
     const betaUpdatesToggle = document.getElementById('betaUpdatesToggle');
 
     // 编辑器字体设置
@@ -78,48 +77,91 @@ function initializeSettingsPage() {
             try {
                 // 禁用按钮防止重复点击
                 exportLogsBtn.disabled = true;
-                
-                // 显示正在上传状态
-                if (exportLogStatus) {
-                    exportLogStatus.textContent = 'Uploading...';
-                    exportLogStatus.style.display = 'inline';
-                }
-                
+                exportLogsBtn.classList.add('btn-loading');
+                exportLogsBtn.innerHTML = `
+                    <svg class="btn-icon btn-spinner" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                        <path fill="currentColor" d="M12,4V2A10,10 0 0,0 2,12H4A8,8 0 0,1 12,4Z"/>
+                    </svg>
+                    上传中
+                `;
+
                 // 调用日志上传功能
                 const result = await window.RendererLogger.uploadLogs();
-                
+
                 if (result.success) {
-                    if (exportLogStatus) {
-                        exportLogStatus.textContent = 'Succeed';
-                        exportLogStatus.style.color = '#4ec9b0';
-                    }
-                    window.AppNotifications?.success('Log Upload Successfully');
+                    window.rLog('✅ 日志上传成功');
+
+                    // 显示成功状态
+                    exportLogsBtn.classList.remove('btn-loading');
+                    exportLogsBtn.classList.add('btn-success');
+                    exportLogsBtn.innerHTML = `
+                        <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                            <path fill="currentColor" d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"/>
+                        </svg>
+                        已上传
+                    `;
+
+                    // 2秒后恢复按钮
+                    setTimeout(() => {
+                        exportLogsBtn.classList.remove('btn-success');
+                        exportLogsBtn.disabled = false;
+                        exportLogsBtn.innerHTML = `
+                            <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                                <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,11L8,15H10.5V18H13.5V15H16L12,11Z"/>
+                            </svg>
+                            上传
+                        `;
+                    }, 2000);
                 } else {
-                    if (exportLogStatus) {
-                        exportLogStatus.textContent = result.message || 'Failed';
-                        exportLogStatus.style.color = '#f48771';
-                    }
-                    window.AppNotifications?.error(result.message || 'Failed');
+                    window.rError('日志上传失败:', result.message);
+
+                    // 显示失败状态
+                    exportLogsBtn.classList.remove('btn-loading');
+                    exportLogsBtn.classList.add('btn-error');
+                    exportLogsBtn.innerHTML = `
+                        <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                            <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                        </svg>
+                        失败
+                    `;
+
+                    // 2秒后恢复按钮
+                    setTimeout(() => {
+                        exportLogsBtn.classList.remove('btn-error');
+                        exportLogsBtn.disabled = false;
+                        exportLogsBtn.innerHTML = `
+                            <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                                <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,11L8,15H10.5V18H13.5V15H16L12,11Z"/>
+                            </svg>
+                            上传
+                        `;
+                    }, 2000);
                 }
-                
-                // 3秒后隐藏状态
-                setTimeout(() => {
-                    if (exportLogStatus) {
-                        exportLogStatus.style.display = 'none';
-                    }
-                }, 3000);
-                
+
             } catch (error) {
                 window.rError('上传日志失败:', error);
-                window.AppNotifications?.error(`Failed: ${error.message}`);
-                if (exportLogStatus) {
-                    exportLogStatus.textContent = 'Failed';
-                    exportLogStatus.style.color = '#f48771';
-                    exportLogStatus.style.display = 'inline';
-                }
-            } finally {
-                // 重新启用按钮
-                exportLogsBtn.disabled = false;
+
+                // 显示错误状态
+                exportLogsBtn.classList.remove('btn-loading');
+                exportLogsBtn.classList.add('btn-error');
+                exportLogsBtn.innerHTML = `
+                    <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                        <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/>
+                    </svg>
+                    失败
+                `;
+
+                // 2秒后恢复按钮
+                setTimeout(() => {
+                    exportLogsBtn.classList.remove('btn-error');
+                    exportLogsBtn.disabled = false;
+                    exportLogsBtn.innerHTML = `
+                        <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                            <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,11L8,15H10.5V18H13.5V15H16L12,11Z"/>
+                        </svg>
+                        上传
+                    `;
+                }, 2000);
             }
         });
     }
@@ -148,6 +190,11 @@ function initializeSettingsPage() {
     
     // 加载已保存的字体设置
     loadEditorFontSettings();
+
+    // 初始化缓存管理模块
+    if (window.CacheManager) {
+        window.CacheManager.init();
+    }
 }
 
 // 加载编辑器字体设置

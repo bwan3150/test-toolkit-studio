@@ -75,9 +75,14 @@ class FileExplorerController {
 
     // 注册右键菜单操作处理器
     window.ContextMenuManager.registerHandler('open', (selection) => {
-      const path = Array.from(this.selectedFiles)[0];
+      const path = selection?.paths?.[0] || Array.from(this.selectedFiles)[0];
       if (path) {
-        this.openFile(path);
+        // 如果是文件夹,进入该文件夹;否则打开文件
+        if (selection?.isDir) {
+          this.loadDirectory(path);
+        } else {
+          this.openFile(path);
+        }
       }
     });
 

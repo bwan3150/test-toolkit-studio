@@ -148,14 +148,34 @@
 
     <div class="settings-section">
       <h3>Dev Tools</h3>
-      <div class="debug-tools">
+
+      <!-- 上传日志模块 -->
+      <div class="dev-tool-item">
+        <div class="dev-tool-info">
+          <div class="dev-tool-title">上传日志</div>
+        </div>
         <button class="btn btn-secondary" id="exportLogsBtn">
           <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
             <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,11L8,15H10.5V18H13.5V15H16L12,11Z"/>
           </svg>
-          Upload Log
+          上传
         </button>
-        <span id="exportLogStatus" style="margin-left: 10px; color: #569cd6; display: none;"></span>
+      </div>
+
+      <!-- 清理缓存模块 -->
+      <div class="dev-tool-item">
+        <div class="dev-tool-info">
+          <div class="dev-tool-title">媒体缓存</div>
+          <div class="dev-tool-desc">
+            <span id="cacheSize">-</span> · <span id="cacheFileCount">-</span> 文件
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="clearCacheBtn">
+          <svg class="btn-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+            <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+          </svg>
+          清空
+        </button>
       </div>
     </div>
 

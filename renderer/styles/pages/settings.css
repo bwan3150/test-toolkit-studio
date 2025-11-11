@@ -176,3 +176,76 @@
 .toggle-switch input:focus + .toggle-slider {
     box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.3);
 }
+
+/* Dev Tools Item */
+.dev-tool-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dev-tool-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.dev-tool-item:first-of-type {
+    padding-top: 0;
+}
+
+.dev-tool-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dev-tool-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.dev-tool-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.dev-tool-item .btn {
+    min-width: 110px;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+/* 按钮加载状态 */
+.btn-loading {
+    pointer-events: none;
+}
+
+.btn-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 按钮成功状态 */
+.btn-success {
+    background: var(--accent-success, #00BFA5) !important;
+    border-color: var(--accent-success, #00BFA5) !important;
+}
+
+/* 按钮错误状态 */
+.btn-error {
+    background: var(--accent-danger, #F44336) !important;
+    border-color: var(--accent-danger, #F44336) !important;
+}

@@ -95,11 +95,13 @@
       return false;
     }
 
-    // 如果已经在目标页面，直接返回
+    // 如果已经在目标页面，触发刷新动作后返回
     if (currentPage === pageName && !silent) {
       if (window.rLog) {
-        window.rLog(`ℹ️  已在页面 ${pageName}，无需切换`);
+        window.rLog(`ℹ️  已在页面 ${pageName}，触发页面刷新`);
       }
+      // 触发内置刷新动作
+      triggerBuiltInActions(pageName);
       return true;
     }
 
@@ -163,6 +165,10 @@
       case 'settings':
         if (window.SettingsModule && window.SettingsModule.checkSDKStatus) {
           window.SettingsModule.checkSDKStatus();
+        }
+        // 刷新缓存统计信息
+        if (window.CacheManager && window.CacheManager.updateCacheStats) {
+          window.CacheManager.updateCacheStats();
         }
         break;
 
