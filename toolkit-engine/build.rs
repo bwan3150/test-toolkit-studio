@@ -113,48 +113,7 @@ fn main() {
         create_empty_aapt_binary();
     }
 
-    // 4. 处理 FFmpeg 嵌入
-    let ffmpeg_name = "ffmpeg";
-    let ffmpeg_source_path = format!("resources/{}/{}", platform_dir, ffmpeg_name);
-
-    // 检查对应平台的 FFmpeg 文件是否存在
-    if Path::new(&ffmpeg_source_path).exists() {
-        // 设置环境变量，告诉运行时有内置 FFmpeg
-        println!("cargo:rustc-env=TKE_HAS_BUNDLED_FFMPEG=true");
-        println!("cargo:rustc-env=TKE_FFMPEG_BINARY_NAME={}", ffmpeg_name);
-
-        // 读取 FFmpeg 二进制文件
-        let ffmpeg_bytes = fs::read(&ffmpeg_source_path)
-            .unwrap_or_else(|e| panic!("无法读取 FFmpeg 二进制文件 {}: {}", ffmpeg_source_path, e));
-
-        // 生成包含 FFmpeg 二进制数据的 Rust 代码
-        let out_dir = env::var("OUT_DIR").unwrap();
-        let ffmpeg_rs_path = Path::new(&out_dir).join("embedded_ffmpeg.rs");
-
-        let ffmpeg_const = format!(
-            "// 自动生成的嵌入式 FFmpeg 二进制数据\n\
-             pub const EMBEDDED_FFMPEG_BINARY: &[u8] = &{:?};\n\
-             pub const FFMPEG_BINARY_NAME: &str = \"{}\";\n\
-             pub const HAS_BUNDLED_FFMPEG: bool = true;",
-            ffmpeg_bytes,
-            ffmpeg_name
-        );
-
-        fs::write(&ffmpeg_rs_path, ffmpeg_const)
-            .unwrap_or_else(|e| panic!("无法写入 FFmpeg 常量文件: {}", e));
-
-        println!("✓ FFmpeg 已嵌入: {} -> {} ({} KB)",
-                 ffmpeg_source_path,
-                 ffmpeg_name,
-                 ffmpeg_bytes.len() / 1024);
-    } else {
-        // 没有找到对应平台的 FFmpeg，将回退到系统 FFmpeg
-        println!("cargo:rustc-env=TKE_HAS_BUNDLED_FFMPEG=false");
-        println!("cargo:warning=平台 {} 的 FFmpeg 未找到: {}，将使用系统 FFmpeg",
-                 platform_dir, ffmpeg_source_path);
-
-        create_empty_ffmpeg_binary();
-    }
+    // 注意: FFmpeg 功能已移除，现在由 Electron 应用直接管理 ffmpeg 二进制文件
 }
 
 fn create_empty_adb_binary() {
@@ -185,19 +144,6 @@ fn create_empty_aapt_binary() {
         .expect("无法写入空 AAPT 常量文件");
 }
 
-fn create_empty_ffmpeg_binary() {
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let ffmpeg_rs_path = Path::new(&out_dir).join("embedded_ffmpeg.rs");
-
-    let empty_ffmpeg_const =
-        "// 空的 FFmpeg 二进制数据 - 将使用系统 FFmpeg\n\
-         pub const EMBEDDED_FFMPEG_BINARY: &[u8] = &[];\n\
-         pub const FFMPEG_BINARY_NAME: &str = \"ffmpeg\";\n\
-         pub const HAS_BUNDLED_FFMPEG: bool = false;";
-
-    fs::write(&ffmpeg_rs_path, empty_ffmpeg_const)
-        .expect("无法写入空 FFmpeg 常量文件");
-}
 
 /// 注入版本号到编译时环境变量
 /// 如果 BUILD_VERSION 环境变量不存在，使用 "unknown" 暴露配置问题

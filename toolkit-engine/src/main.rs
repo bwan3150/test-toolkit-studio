@@ -64,12 +64,6 @@ enum Commands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// FFmpeg - THIS IS JUST FFmpeg!!!!! directly ffmpeg
-    Ffmpeg {
-        /// forward ffmpeg command to inner ffmpeg
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
     /// OCR - extract words from image
     Ocr {
         /// image path
@@ -99,8 +93,8 @@ enum Commands {
 async fn main() -> tke::Result<()> {
     let cli = Cli::parse();
 
-    // 检查是否是 ADB/AAPT/FFmpeg 直通命令
-    let is_passthrough_command = matches!(cli.command, Commands::Adb { .. } | Commands::Aapt { .. } | Commands::Ffmpeg { .. });
+    // 检查是否是 ADB/AAPT 直通命令
+    let is_passthrough_command = matches!(cli.command, Commands::Adb { .. } | Commands::Aapt { .. });
 
     // 对于 ADB/AAPT 直通命令，完全跳过日志初始化和项目信息输出
     let project_path = if !is_passthrough_command {
@@ -183,9 +177,6 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Aapt { args } => {
             aapt::handle(args).await
-        }
-        Commands::Ffmpeg { args } => {
-            ffmpeg::handle(args).await
         }
         Commands::Ocr { image, online, url, lang } => {
             ocr::handle(image, online, url, lang).await

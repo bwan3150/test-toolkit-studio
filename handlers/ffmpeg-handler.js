@@ -1,24 +1,30 @@
 // FFmpeg Handler - 处理 FFmpeg 相关操作
 // 提供视频处理、帧提取等功能
+// 注意: 现在直接使用 Electron 应用内置的 ffmpeg，不再通过 tke
 
 const { ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 /**
  * 注册 FFmpeg 相关的 IPC handlers
  * @param {Electron.App} app - Electron app实例
  */
 function registerFfmpegHandlers(app) {
-  // 执行 tke ffmpeg 命令
+  // 执行 ffmpeg 命令 (使用 Electron 内置的 ffmpeg)
   ipcMain.handle('tke-ffmpeg', async (event, { args }) => {
     return new Promise((resolve, reject) => {
-      const tkeExecPath = getTkeExecutablePath(app);
+      const ffmpegPath = getFfmpegExecutablePath(app);
 
-      // 构建完整命令: tke ffmpeg [args...]
-      const fullArgs = ['ffmpeg', ...args];
+      // 检查 ffmpeg 是否存在
+      if (!fs.existsSync(ffmpegPath)) {
+        reject(new Error(`FFmpeg 未找到: ${ffmpegPath}`));
+        return;
+      }
 
-      const tkeProcess = spawn(tkeExecPath, fullArgs, {
+      // 直接使用 ffmpeg 命令和参数
+      const ffmpegProcess = spawn(ffmpegPath, args, {
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -27,22 +33,22 @@ function registerFfmpegHandlers(app) {
       const stdoutChunks = [];
       const stderrChunks = [];
 
-      tkeProcess.stdout.on('data', (data) => {
+      ffmpegProcess.stdout.on('data', (data) => {
         stdoutChunks.push(data);
         stdout += data.toString();
       });
 
-      tkeProcess.stderr.on('data', (data) => {
+      ffmpegProcess.stderr.on('data', (data) => {
         stderrChunks.push(data);
         stderr += data.toString();
       });
 
-      tkeProcess.on('error', (error) => {
-        console.error('TKE FFmpeg 执行失败:', error);
+      ffmpegProcess.on('error', (error) => {
+        console.error('FFmpeg 执行失败:', error);
         reject(new Error(`执行FFmpeg失败: ${error.message}`));
       });
 
-      tkeProcess.on('close', (code) => {
+      ffmpegProcess.on('close', (code) => {
         if (code === 0) {
           resolve({
             success: true,
@@ -61,24 +67,28 @@ function registerFfmpegHandlers(app) {
 }
 
 /**
- * 获取 tke 可执行文件路径
+ * 获取 ffmpeg 可执行文件路径
  * @param {Electron.App} app
  * @returns {string}
  */
-function getTkeExecutablePath(app) {
+function getFfmpegExecutablePath(app) {
   const platform = process.platform;
   let platformName;
+  let execName;
 
   if (platform === 'darwin') {
     platformName = 'darwin';
+    execName = 'ffmpeg';
   } else if (platform === 'win32') {
     platformName = 'win32';
+    execName = 'ffmpeg.exe';
   } else {
     platformName = 'linux';
+    execName = 'ffmpeg';
   }
 
-  const execName = platform === 'win32' ? 'tke.exe' : 'tke';
-  const tkeExecPath = path.join(
+  // ffmpeg 现在存放在 resources/{platform}/toolkit-engine/ 目录下
+  const ffmpegPath = path.join(
     app.getAppPath(),
     'resources',
     platformName,
@@ -86,7 +96,7 @@ function getTkeExecutablePath(app) {
     execName
   );
 
-  return tkeExecPath;
+  return ffmpegPath;
 }
 
 module.exports = {
