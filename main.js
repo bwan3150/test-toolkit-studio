@@ -51,7 +51,7 @@ const { registerRecognizerHandlers } = require('./handlers/tke-integration/recog
 const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-handlers');
 const { registerOcrHandlers } = require('./handlers/tke-integration/ocr-handlers');
 const { registerFileHandlers } = require('./handlers/tke-integration/file-handlers');
-const { registerFfmpegHandlers } = require('./handlers/ffmpeg-handler');
+const { registerFfmpegHandlers } = require('./handlers/dependencies/ffmpeg-handler');
 
 // Electron 核心模块 - Electron 应用的核心功能
 const { registerWindowHandlers } = require('./handlers/electron-core/window-handlers');

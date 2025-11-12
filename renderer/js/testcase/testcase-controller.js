@@ -92,7 +92,7 @@ function initializeTestcasePage() {
                     ctx.drawImage(deviceScreenshot, 0, 0);
                     imageData = canvas.toDataURL('image/png');
                 } else {
-                    window.AppNotifications?.warn('没有可用的截图，请先获取设备屏幕');
+                    window.AppNotifications?.warn('请先开启设备投屏');
                     return;
                 }
 

@@ -148,9 +148,9 @@
 
         const ipcRenderer = getIpcRenderer();
 
-        // 使用 tke ffmpeg 提取视频首帧
+        // 使用 dep ffmpeg 提取视频首帧
         // ffmpeg -i input.mp4 -vframes 1 -vf scale=200:-1 output.jpg
-        const result = await ipcRenderer.invoke('tke-ffmpeg', {
+        const result = await ipcRenderer.invoke('dep-ffmpeg', {
           args: [
             '-i', localVideoPath,
             '-vframes', '1',
@@ -193,9 +193,9 @@
 
         const ipcRenderer = getIpcRenderer();
 
-        // 使用 tke ffmpeg 生成图片缩略图
+        // 使用 dep ffmpeg 生成图片缩略图
         // ffmpeg -i input.jpg -vf scale=200:-1 output.jpg
-        const result = await ipcRenderer.invoke('tke-ffmpeg', {
+        const result = await ipcRenderer.invoke('dep-ffmpeg', {
           args: [
             '-i', localImagePath,
             '-vf', 'scale=200:-1',

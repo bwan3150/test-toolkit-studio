@@ -59,7 +59,10 @@ function registerSystemHandlers(app) {
       }
 
       const { stdout } = await execPromise(`"${tkePath}" --version`);
-      const version = stdout.trim().split('\n')[0].trim();
+      // 输出格式: "tke 0.6.5-beta"
+      // 提取版本号部分
+      const match = stdout.trim().match(/tke\s+(.+)/);
+      const version = match ? match[1].trim() : stdout.trim();
 
       return {
         success: true,
@@ -81,7 +84,10 @@ function registerSystemHandlers(app) {
       }
 
       const { stdout } = await execPromise(`"${tkePath}" adb --version`);
-      const version = stdout.trim().split('\n')[0].trim();
+      // 输出格式: "Android Debug Bridge version 1.0.41\nVersion 36.0.0-13206524\n..."
+      // 提取版本号部分
+      const match = stdout.trim().match(/Android Debug Bridge version\s+(.+)/);
+      const version = match ? match[1].trim() : stdout.trim().split('\n')[0].trim();
 
       return {
         success: true,
@@ -103,7 +109,10 @@ function registerSystemHandlers(app) {
       }
 
       const { stdout } = await execPromise(`"${tkePath}" aapt version`);
-      const version = stdout.trim().split('\n')[0].trim();
+      // 输出格式: "Android Asset Packaging Tool, v0.2-9420752"
+      // 提取版本号部分
+      const match = stdout.trim().match(/,\s*v(.+)/);
+      const version = match ? match[1].trim() : stdout.trim().split('\n')[0].trim();
 
       return {
         success: true,
@@ -125,7 +134,10 @@ function registerSystemHandlers(app) {
       }
 
       const { stdout } = await execPromise(`"${opencvPath}" --version`);
-      const version = stdout.trim().split('\n')[0].trim();
+      // 输出格式: "tke-opencv 0.6.5-beta"
+      // 提取版本号部分
+      const match = stdout.trim().match(/tke-opencv\s+(.+)/);
+      const version = match ? match[1].trim() : stdout.trim();
 
       return {
         success: true,
@@ -147,7 +159,10 @@ function registerSystemHandlers(app) {
       }
 
       const { stdout } = await execPromise(`"${testerAiPath}" --version`);
-      const version = stdout.trim().split('\n')[0].trim();
+      // 输出格式: "tester-ai 0.6.5-beta"
+      // 提取版本号部分
+      const match = stdout.trim().match(/tester-ai\s+(.+)/);
+      const version = match ? match[1].trim() : stdout.trim();
 
       return {
         success: true,
@@ -155,6 +170,31 @@ function registerSystemHandlers(app) {
       };
     } catch (error) {
       console.error('获取 Tester-AI 版本失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 获取 TKE-Scrcpy 版本
+  ipcMain.handle('get-tke-scrcpy-version', async () => {
+    try {
+      const scrcpyPath = getBinaryPath('tke-scrcpy', 'scrcpy-server', app);
+
+      if (!fs.existsSync(scrcpyPath)) {
+        return { success: false, error: '可执行文件不存在' };
+      }
+
+      const { stdout } = await execPromise(`"${scrcpyPath}" --version`);
+      // 输出格式: "tke-scrcpy 0.6.5-beta"
+      // 提取版本号部分
+      const match = stdout.trim().match(/tke-scrcpy\s+(.+)/);
+      const version = match ? match[1].trim() : stdout.trim();
+
+      return {
+        success: true,
+        version: version
+      };
+    } catch (error) {
+      console.error('获取 TKE-Scrcpy 版本失败:', error);
       return { success: false, error: error.message };
     }
   });

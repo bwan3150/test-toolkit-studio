@@ -291,6 +291,8 @@ async function checkAllToolsStatus() {
     const tkeAaptVersionStatus = document.getElementById('tkeAaptVersionStatus');
     const opencvVersionStatus = document.getElementById('opencvVersionStatus');
     const testerAiVersionStatus = document.getElementById('testerAiVersionStatus');
+    const ffmpegVersionStatus = document.getElementById('ffmpegVersionStatus');
+    const scrcpyVersionStatus = document.getElementById('scrcpyVersionStatus');
 
     // 设置所有状态为检查中
     if (tkeVersionStatus) {
@@ -312,6 +314,14 @@ async function checkAllToolsStatus() {
     if (testerAiVersionStatus) {
         testerAiVersionStatus.textContent = 'Checking...';
         testerAiVersionStatus.className = 'status-indicator checking';
+    }
+    if (ffmpegVersionStatus) {
+        ffmpegVersionStatus.textContent = 'Checking...';
+        ffmpegVersionStatus.className = 'status-indicator checking';
+    }
+    if (scrcpyVersionStatus) {
+        scrcpyVersionStatus.textContent = 'Checking...';
+        scrcpyVersionStatus.className = 'status-indicator checking';
     }
 
     // 检查 TKE 引擎版本
@@ -387,6 +397,44 @@ async function checkAllToolsStatus() {
         if (testerAiVersionStatus) {
             testerAiVersionStatus.textContent = `Error: ${error.message}`;
             testerAiVersionStatus.className = 'status-indicator error';
+        }
+    }
+
+    // 检查 FFmpeg 版本
+    try {
+        const ffmpegResult = await ipcRenderer.invoke('get-ffmpeg-version');
+        if (ffmpegVersionStatus) {
+            if (ffmpegResult.success) {
+                ffmpegVersionStatus.textContent = `${ffmpegResult.version}`;
+                ffmpegVersionStatus.className = 'status-indicator success';
+            } else {
+                ffmpegVersionStatus.textContent = ffmpegResult.error || 'Not Available';
+                ffmpegVersionStatus.className = 'status-indicator error';
+            }
+        }
+    } catch (error) {
+        if (ffmpegVersionStatus) {
+            ffmpegVersionStatus.textContent = `Error: ${error.message}`;
+            ffmpegVersionStatus.className = 'status-indicator error';
+        }
+    }
+
+    // 检查 TKE-Scrcpy 版本
+    try {
+        const scrcpyResult = await ipcRenderer.invoke('get-tke-scrcpy-version');
+        if (scrcpyVersionStatus) {
+            if (scrcpyResult.success) {
+                scrcpyVersionStatus.textContent = `${scrcpyResult.version}`;
+                scrcpyVersionStatus.className = 'status-indicator success';
+            } else {
+                scrcpyVersionStatus.textContent = scrcpyResult.error || 'Not Available';
+                scrcpyVersionStatus.className = 'status-indicator error';
+            }
+        }
+    } catch (error) {
+        if (scrcpyVersionStatus) {
+            scrcpyVersionStatus.textContent = `Error: ${error.message}`;
+            scrcpyVersionStatus.className = 'status-indicator error';
         }
     }
 
