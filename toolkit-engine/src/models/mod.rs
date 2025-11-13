@@ -320,3 +320,19 @@ pub struct StepResult {
     pub error: Option<String>,
     pub duration_ms: u64,
 }
+
+// App 信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppInfo {
+    /// 包名
+    pub package_name: String,
+    /// 版本名称 (如 8.8.76.667)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_name: Option<String>,
+    /// 版本号 (如 105910845)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_code: Option<i64>,
+    /// APK 路径
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub apk_path: Option<String>,
+}

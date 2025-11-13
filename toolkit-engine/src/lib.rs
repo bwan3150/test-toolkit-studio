@@ -14,6 +14,7 @@ pub mod fetcher;
 pub mod recognizer;
 pub mod runner;
 pub mod file;
+pub mod app;
 
 // 导出工具类
 pub use utils::{JsonOutput, AdbManager, AaptManager};
@@ -24,6 +25,7 @@ pub use fetcher::Fetcher;
 pub use recognizer::Recognizer;
 pub use runner::{Runner, ScriptParser, ScriptInterpreter};
 pub use file::FileManager;
+pub use app::AppManager;
 
 // 导出 OCR 功能
 pub use ocr::{ocr, OcrResult, OcrText};
@@ -42,6 +44,7 @@ pub use models::{
     Bounds,
     ExecutionResult,
     StepResult,
+    AppInfo,
 };
 
 // 错误类型

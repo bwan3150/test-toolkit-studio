@@ -87,6 +87,11 @@ enum Commands {
         #[command(subcommand)]
         action: FileCommands,
     },
+    /// App - 管理设备上的应用信息
+    App {
+        #[command(subcommand)]
+        action: AppCommands,
+    },
 }
 
 #[tokio::main]
@@ -106,7 +111,8 @@ async fn main() -> tke::Result<()> {
             Commands::Controller { .. } |
             Commands::Recognizer { .. } |
             Commands::Run { .. } |
-            Commands::File { .. }
+            Commands::File { .. } |
+            Commands::App { .. }
         );
 
         // 初始化日志
@@ -183,6 +189,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::File { action } => {
             file::handle(action, cli.device).await
+        }
+        Commands::App { action } => {
+            app::handle(action, cli.device).await
         }
     }
 }
