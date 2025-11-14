@@ -12,6 +12,8 @@ pub enum AppCommands {
         /// 应用包名 (如: com.example.app)
         package: String,
     },
+    /// 获取当前聚焦的应用信息 (包名和Activity)
+    Focus,
 }
 
 /// 处理 App 相关命令
@@ -33,6 +35,15 @@ pub async fn handle(action: AppCommands, device_id: Option<String>) -> Result<()
                 "success": success,
                 "message": message,
                 "package": package
+            }));
+        }
+        AppCommands::Focus => {
+            let focus_info = app_manager.get_current_focus().await?;
+            JsonOutput::print(serde_json::json!({
+                "success": true,
+                "package_name": focus_info.package_name,
+                "activity_name": focus_info.activity_name,
+                "window_info": focus_info.window_info
             }));
         }
     }

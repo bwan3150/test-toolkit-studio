@@ -336,3 +336,15 @@ pub struct AppInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub apk_path: Option<String>,
 }
+
+// 当前聚焦的应用信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrentFocus {
+    /// 包名
+    pub package_name: String,
+    /// Activity 名称
+    pub activity_name: String,
+    /// 完整的窗口信息 (原始输出)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_info: Option<String>,
+}

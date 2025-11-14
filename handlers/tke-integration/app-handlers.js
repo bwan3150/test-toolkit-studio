@@ -158,6 +158,45 @@ function registerAppHandlers(app) {
     }
   });
 
+  /**
+   * 获取当前聚焦的应用信息
+   * IPC 通道: tke-app-focus
+   * 参数: { deviceId?: string }
+   * 返回: { success: boolean, output?: string, error?: string }
+   *
+   * 命令: tke --device <deviceId> app focus
+   * 输出格式:
+   * {
+   *   "success": true,
+   *   "package_name": "com.example.app",
+   *   "activity_name": "com.example.app.MainActivity",
+   *   "window_info": "mCurrentFocus=Window{...}"
+   * }
+   */
+  ipcMain.handle('tke-app-focus', async (event, { deviceId = null } = {}) => {
+    try {
+      const args = ['app', 'focus'];
+
+      // 如果指定了设备ID，添加 --device 参数
+      if (deviceId) {
+        args.unshift('--device', deviceId);
+      }
+
+      const output = await execTkeAppCommand(app, args);
+
+      return {
+        success: true,
+        output: output // 返回 JSON 字符串
+      };
+    } catch (error) {
+      console.error('TKE app focus 失败:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   console.log('TKE App handlers 已注册');
 }
 

@@ -1,7 +1,7 @@
 // App 管理模块 - 管理设备上的应用信息
 
 use crate::Result;
-use crate::models::AppInfo;
+use crate::models::{AppInfo, CurrentFocus};
 use crate::utils::AdbManager;
 use crate::TkeError;
 use std::process::Command;
@@ -170,5 +170,61 @@ impl AppManager {
             // 未知情况
             Ok((false, format!("卸载结果未知: stdout={}, stderr={}", stdout, stderr)))
         }
+    }
+
+    /// 获取当前聚焦的应用信息
+    /// 返回当前显示在前台的应用的包名和 Activity 名称
+    pub async fn get_current_focus(&self) -> Result<CurrentFocus> {
+        // 构建 adb 命令
+        let mut cmd = Command::new(self.adb_manager.adb_path());
+
+        // 如果指定了设备ID，添加 -s 参数
+        if let Some(ref device) = self.device_id {
+            cmd.arg("-s").arg(device);
+        }
+
+        // 执行 dumpsys window 并查找 mCurrentFocus
+        let output = cmd
+            .args(&["shell", "dumpsys", "window"])
+            .output()
+            .map_err(|e| TkeError::AdbError(format!("执行 dumpsys window 命令失败: {}", e)))?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            return Err(TkeError::AdbError(format!("获取窗口信息失败: {}", error)));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // 查找 mCurrentFocus 行
+        // 格式示例: mCurrentFocus=Window{1bc3577 u0 com.konec.smarthome/com.konec.smarthome.test.ui.activity.MainActivity}
+        for line in stdout.lines() {
+            if line.contains("mCurrentFocus") {
+                let trimmed = line.trim();
+
+                // 提取包名和 Activity
+                // 查找 u0 后面的部分
+                if let Some(start) = trimmed.find("u0 ") {
+                    let info_part = &trimmed[start + 3..]; // 跳过 "u0 "
+
+                    // 去掉末尾的 }
+                    let info_part = info_part.trim_end_matches('}').trim();
+
+                    // 分割包名和 Activity (格式: package/activity)
+                    if let Some(slash_pos) = info_part.find('/') {
+                        let package_name = info_part[..slash_pos].to_string();
+                        let activity_name = info_part[slash_pos + 1..].to_string();
+
+                        return Ok(CurrentFocus {
+                            package_name,
+                            activity_name,
+                            window_info: Some(trimmed.to_string()),
+                        });
+                    }
+                }
+            }
+        }
+
+        Err(TkeError::AdbError("未找到当前聚焦的窗口信息".to_string()))
     }
 }

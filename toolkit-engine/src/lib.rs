@@ -45,6 +45,7 @@ pub use models::{
     ExecutionResult,
     StepResult,
     AppInfo,
+    CurrentFocus,
 };
 
 // 错误类型
