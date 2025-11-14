@@ -273,4 +273,27 @@ impl AppManager {
             Ok((false, format!("启动失败: {}", stdout)))
         }
     }
+
+    /// 关闭应用
+    /// 使用 am force-stop 命令强制停止应用
+    pub async fn stop_app(&self, package_name: &str) -> Result<(bool, String)> {
+        let mut cmd = Command::new(self.adb_manager.adb_path());
+
+        if let Some(ref device) = self.device_id {
+            cmd.arg("-s").arg(device);
+        }
+
+        let output = cmd
+            .args(&["shell", "am", "force-stop", package_name])
+            .output()
+            .map_err(|e| TkeError::AdbError(format!("执行 am force-stop 命令失败: {}", e)))?;
+
+        // am force-stop 成功时不会有输出,只需检查退出码
+        if output.status.success() {
+            Ok((true, format!("应用 {} 已关闭", package_name)))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Ok((false, format!("关闭失败: {}", stderr)))
+        }
+    }
 }

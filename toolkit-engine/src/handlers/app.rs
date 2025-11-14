@@ -21,6 +21,11 @@ pub enum AppCommands {
         /// Activity名称 (如: .MainActivity 或 com.example.app.MainActivity)
         activity: String,
     },
+    /// 关闭应用
+    Stop {
+        /// 应用包名 (如: com.example.app)
+        package: String,
+    },
 }
 
 /// 处理 App 相关命令
@@ -60,6 +65,14 @@ pub async fn handle(action: AppCommands, device_id: Option<String>) -> Result<()
                 "message": message,
                 "package": package,
                 "activity": activity
+            }));
+        }
+        AppCommands::Stop { package } => {
+            let (success, message) = app_manager.stop_app(&package).await?;
+            JsonOutput::print(serde_json::json!({
+                "success": success,
+                "message": message,
+                "package": package
             }));
         }
     }

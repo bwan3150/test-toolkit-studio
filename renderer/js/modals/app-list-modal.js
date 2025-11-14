@@ -121,21 +121,18 @@
                         <span class="app-version">${versionText}</span>
                     </div>
                     <div class="app-list-cell app-actions-cell">
-                        <button class="btn btn-outline btn-small btn-app-launch"
+                        <button class="btn-icon btn-icon-launch"
                                 data-package="${packageName}"
                                 data-activity="${launchActivity}"
                                 title="${canLaunch ? '启动应用' : '未找到启动Activity'}"
                                 ${canLaunch ? '' : 'disabled'}>
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                                <path d="M8 5v14l11-7z"/>
-                            </svg>
-                            启动
+                            <img src="../../assets/icons/device-page/start.svg" width="18" height="18" />
                         </button>
-                        <button class="btn btn-danger btn-small btn-app-uninstall" data-package="${packageName}" title="卸载应用">
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                            </svg>
-                            卸载
+                        <button class="btn-icon btn-icon-stop" data-package="${packageName}" title="关闭应用">
+                            <img src="../../assets/icons/device-page/stop.svg" width="18" height="18" />
+                        </button>
+                        <button class="btn-icon btn-icon-uninstall" data-package="${packageName}" title="卸载应用">
+                            <img src="../../assets/icons/device-page/uninstall.svg" width="18" height="18" />
                         </button>
                     </div>
                 </div>
@@ -145,22 +142,31 @@
         html += '</div>';
         contentDiv.innerHTML = html;
 
-        // 绑定卸载按钮事件
-        const uninstallBtns = contentDiv.querySelectorAll('.btn-app-uninstall');
-        uninstallBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const packageName = btn.getAttribute('data-package');
-                uninstallApp(packageName);
-            });
-        });
-
         // 绑定启动按钮事件
-        const launchBtns = contentDiv.querySelectorAll('.btn-app-launch');
+        const launchBtns = contentDiv.querySelectorAll('.btn-icon-launch');
         launchBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const packageName = btn.getAttribute('data-package');
                 const activity = btn.getAttribute('data-activity');
                 launchApp(packageName, activity);
+            });
+        });
+
+        // 绑定关闭按钮事件
+        const stopBtns = contentDiv.querySelectorAll('.btn-icon-stop');
+        stopBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const packageName = btn.getAttribute('data-package');
+                stopApp(packageName);
+            });
+        });
+
+        // 绑定卸载按钮事件
+        const uninstallBtns = contentDiv.querySelectorAll('.btn-icon-uninstall');
+        uninstallBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const packageName = btn.getAttribute('data-package');
+                uninstallApp(packageName);
             });
         });
     }
@@ -242,6 +248,44 @@
             window.rError('启动应用异常:', error);
             if (window.AppNotifications) {
                 window.AppNotifications.error('启动失败: ' + error.message);
+            }
+        }
+    }
+
+    // 关闭应用
+    async function stopApp(packageName) {
+        try {
+            const { ipcRenderer } = getGlobals();
+            window.rLog('关闭应用:', packageName);
+
+            const result = await ipcRenderer.invoke('tke-app-stop', {
+                package: packageName,
+                deviceId: currentDeviceId
+            });
+
+            if (result.success) {
+                const data = JSON.parse(result.output);
+                if (data.success) {
+                    window.rLog('关闭成功:', data.message);
+                    if (window.AppNotifications) {
+                        window.AppNotifications.success(data.message);
+                    }
+                } else {
+                    window.rError('关闭失败:', data.message);
+                    if (window.AppNotifications) {
+                        window.AppNotifications.error(data.message);
+                    }
+                }
+            } else {
+                window.rError('关闭失败:', result.error);
+                if (window.AppNotifications) {
+                    window.AppNotifications.error(result.error || '关闭失败');
+                }
+            }
+        } catch (error) {
+            window.rError('关闭应用异常:', error);
+            if (window.AppNotifications) {
+                window.AppNotifications.error('关闭失败: ' + error.message);
             }
         }
     }
