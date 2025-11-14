@@ -39,10 +39,9 @@ async function deleteDevice(filename) {
             await fs.unlink(devicePath);
             window.AppNotifications?.success('Device configuration deleted');
 
-            // 重新加载设备列表
-            if (window.DeviceLoader) {
-                await window.DeviceLoader.loadSavedDevices();
-                await window.DeviceLoader.refreshDeviceList();
+            // 刷新设备页面
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                await window.DeviceScanner.refreshConnectedDevices();
             }
         } catch (error) {
             window.AppNotifications?.error(`Failed to delete device: ${error.message}`);

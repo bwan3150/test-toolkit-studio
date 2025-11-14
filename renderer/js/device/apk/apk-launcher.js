@@ -10,14 +10,12 @@ async function autoLaunchAppAfterInstall(deviceId, packageName) {
     }
 
     try {
-        window.AppNotifications?.info('正在启动应用...');
-
         // 首先尝试获取应用的主Activity
         const mainActivity = await getMainActivity(deviceId, packageName);
 
         if (mainActivity) {
-            // 使用TKE ADB启动应用
-            await launchAppWithTKE(deviceId, packageName, mainActivity);
+            // 使用TKE app launch指令启动应用
+            await launchAppWithTKECommand(deviceId, packageName, mainActivity);
         } else {
             // 如果无法获取主Activity，使用monkey方式启动
             await launchAppWithMonkey(deviceId, packageName);
@@ -98,7 +96,36 @@ async function getMainActivity(deviceId, packageName) {
     }
 }
 
-// 使用TKE ADB启动应用
+// 使用TKE app launch命令启动应用
+async function launchAppWithTKECommand(deviceId, packageName, activityName) {
+    const { ipcRenderer } = window.AppGlobals;
+
+    try {
+        window.rLog('使用TKE app launch启动应用:', packageName, activityName);
+
+        const result = await ipcRenderer.invoke('tke-app-launch', {
+            package: packageName,
+            activity: activityName,
+            deviceId: deviceId
+        });
+
+        if (result.success) {
+            window.rLog('应用启动成功');
+            // 不再显示启动成功的弹窗
+        } else {
+            window.rError('TKE app launch失败:', result.error);
+            // 尝试备用方案
+            await launchAppWithMonkey(deviceId, packageName);
+        }
+
+    } catch (error) {
+        window.rError('TKE app launch失败:', error);
+        // 尝试备用方案
+        await launchAppWithMonkey(deviceId, packageName);
+    }
+}
+
+// 使用TKE ADB启动应用（保留作为备用）
 async function launchAppWithTKE(deviceId, packageName, activityName) {
     try {
         const componentName = `${packageName}/${activityName}`;
@@ -110,7 +137,7 @@ async function launchAppWithTKE(deviceId, packageName, activityName) {
 
         if (result.success) {
             window.rLog('应用启动成功');
-            window.AppNotifications?.success(`应用 ${packageName} 已启动`);
+            // 不再显示启动成功的弹窗
         } else {
             window.rError('TKE ADB启动失败:', result.error);
             // 尝试备用方案
@@ -135,7 +162,7 @@ async function launchAppWithMonkey(deviceId, packageName) {
 
         if (result.success) {
             window.rLog('应用启动成功（monkey方式）');
-            window.AppNotifications?.success(`应用 ${packageName} 已启动`);
+            // 不再显示启动成功的弹窗
         } else {
             window.rError('Monkey启动失败:', result.error);
         }
@@ -150,6 +177,7 @@ window.ApkLauncher = {
     autoLaunchAppAfterInstall,
     executeTkeAdbCommand,
     getMainActivity,
+    launchAppWithTKECommand,
     launchAppWithTKE,
     launchAppWithMonkey
 };

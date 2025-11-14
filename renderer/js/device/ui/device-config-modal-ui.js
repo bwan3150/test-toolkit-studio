@@ -411,14 +411,9 @@ async function saveDeviceConfig() {
         // 隐藏模态窗口
         hideDeviceConfigModal();
 
-        // 重新加载设备列表
-        if (window.DeviceLoader) {
-            if (window.DeviceLoader.loadSavedDevices) {
-                await window.DeviceLoader.loadSavedDevices();
-            }
-            if (window.DeviceLoader.refreshDeviceList) {
-                await window.DeviceLoader.refreshDeviceList();
-            }
+        // 刷新设备页面
+        if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+            await window.DeviceScanner.refreshConnectedDevices();
         }
     } catch (error) {
         window.AppNotifications?.error(`Failed to save device: ${error.message}`);
