@@ -263,39 +263,25 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
 
     // 获取并显示当前App信息（仅已连接的Android设备）
     if (isConnected && platform === 'android') {
-        try {
-            const appResult = await ipcRenderer.invoke('get-current-app', deviceId);
-            if (appResult.success) {
-                const deviceIdClean = deviceId.replace(/[^a-zA-Z0-9]/g, '_');
-                cardContent += `
-                    <div class="device-app-info">
-                        <div class="device-app-info-title">当前运行应用</div>
-                        <div class="device-app-field">
-                            <span class="device-app-label">包名</span>
-                            <span class="device-app-value" title="${appResult.packageName}">${appResult.packageName}</span>
-                            <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_package')" title="复制包名">
-                                <svg viewBox="0 0 24 24">
-                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                </svg>
-                            </button>
-                            <span id="${deviceIdClean}_package" style="display: none;">${appResult.packageName}</span>
-                        </div>
-                        <div class="device-app-field">
-                            <span class="device-app-label">Activity</span>
-                            <span class="device-app-value" title="${appResult.activityName}">${appResult.activityName}</span>
-                            <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_activity')" title="复制Activity">
-                                <svg viewBox="0 0 24 24">
-                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                </svg>
-                            </button>
-                            <span id="${deviceIdClean}_activity" style="display: none;">${appResult.activityName}</span>
-                        </div>
+        const deviceIdClean = deviceId.replace(/[^a-zA-Z0-9]/g, '_');
+        // 添加一个空的浮层容器,在hover时动态加载
+        cardContent += `
+            <div class="device-app-info" id="device-app-info-${deviceIdClean}" data-device-id="${deviceId}">
+                <div class="device-app-info-title">
+                    <span>当前运行应用</span>
+                    <button class="btn-view-all-apps" onclick="openAppListModal('${deviceId}')" title="查看所有App">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="device-app-info-content">
+                    <div class="device-app-loading">
+                        <div class="device-app-spinner"></div>
                     </div>
-                `;
-            }
-        } catch (error) {
-            window.rError('获取应用信息失败:', error);
-        }
+                </div>
+            </div>
+        `;
     }
 
     // 添加操作按钮
@@ -324,6 +310,63 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
     }
 
     item.innerHTML = cardContent;
+
+    // 为已连接的Android设备添加hover加载当前App信息的功能
+    if (isConnected && platform === 'android') {
+        item.addEventListener('mouseenter', async function() {
+            const appInfoDiv = item.querySelector('.device-app-info');
+            if (!appInfoDiv) return;
+
+            const contentDiv = appInfoDiv.querySelector('.device-app-info-content');
+            if (!contentDiv) return;
+
+            // 每次hover都重新加载,显示spinner
+            contentDiv.innerHTML = '<div class="device-app-loading"><div class="device-app-spinner"></div></div>';
+
+            try {
+                const { ipcRenderer } = getGlobals();
+                window.rLog('开始加载设备当前App信息:', deviceId);
+                const result = await ipcRenderer.invoke('tke-app-focus', { deviceId });
+                window.rLog('tke-app-focus 返回结果:', result);
+
+                if (result.success) {
+                    const data = JSON.parse(result.output);
+                    window.rLog('解析的数据:', data);
+                    const deviceIdClean = deviceId.replace(/[^a-zA-Z0-9]/g, '_');
+
+                    const fieldsHtml = `
+                        <div class="device-app-field">
+                            <span class="device-app-label">包名</span>
+                            <span class="device-app-value" title="${data.package_name}">${data.package_name}</span>
+                            <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_package')" title="复制包名">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                </svg>
+                            </button>
+                            <span id="${deviceIdClean}_package" style="display: none;">${data.package_name}</span>
+                        </div>
+                        <div class="device-app-field">
+                            <span class="device-app-label">Activity</span>
+                            <span class="device-app-value" title="${data.activity_name}">${data.activity_name}</span>
+                            <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_activity')" title="复制Activity">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                </svg>
+                            </button>
+                            <span id="${deviceIdClean}_activity" style="display: none;">${data.activity_name}</span>
+                        </div>
+                    `;
+                    contentDiv.innerHTML = fieldsHtml;
+                } else {
+                    window.rError('加载失败:', result.error);
+                    contentDiv.innerHTML = '<div class="device-app-error">加载失败: ' + (result.error || '未知错误') + '</div>';
+                }
+            } catch (error) {
+                window.rError('加载当前App信息异常:', error);
+                contentDiv.innerHTML = '<div class="device-app-error">加载失败: ' + error.message + '</div>';
+            }
+        });
+    }
 
     // 添加拖拽功能（Android设备）
     if (platform === 'android' && window.setupDragAndDropForDevice) {

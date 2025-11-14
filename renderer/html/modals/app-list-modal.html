@@ -1,0 +1,31 @@
+<!-- App 列表模态窗 -->
+<div class="modal" id="appListModal" style="display: none">
+  <div class="modal-content modal-large">
+    <div class="modal-header">
+      <h3>设备应用列表</h3>
+      <button class="modal-close" id="closeAppListModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="app-list-header">
+        <button class="btn btn-secondary btn-small" id="refreshAppListBtn">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          刷新
+        </button>
+      </div>
+
+      <div id="appListLoading" class="app-list-loading" style="display: none;">
+        <div class="loading-spinner"></div>
+      </div>
+
+      <div id="appListContent" class="app-list-content">
+        <!-- App 列表将在这里动态生成 -->
+      </div>
+
+      <div id="appListEmpty" class="app-list-empty" style="display: none;">
+        <p>没有找到第三方应用</p>
+      </div>
+    </div>
+  </div>
+</div>
