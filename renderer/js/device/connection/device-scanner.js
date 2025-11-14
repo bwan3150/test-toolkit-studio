@@ -45,6 +45,8 @@ async function refreshConnectedDevices() {
                     if (file.endsWith('.yaml')) {
                         const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
                         const config = yaml.load(content);
+                        // 添加文件名到配置对象中
+                        config._filename = file;
                         // Android 用 deviceId, iOS 用 udid
                         if (config.deviceId) {
                             savedDeviceConfigs[config.deviceId] = config;
@@ -284,19 +286,35 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
 
     // 添加操作按钮
     const actionButtons = [];
+    const hasProject = !!window.AppGlobals.currentProject;
 
     if (!isSaved) {
-        actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存配置</button>`);
+        // 未保存的设备
+        if (isWifi && isConnected) {
+            // WiFi已连接/未保存: 断开 + (有项目时显示保存)
+            const port = deviceId.split(':')[1] || 5555;
+            const host = deviceId.split(':')[0];
+            actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
+        }
+        // 只有打开项目时才显示保存按钮
+        if (hasProject) {
+            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存</button>`);
+        }
+    } else {
+        // 已保存的设备
+        if (isWifi && isConnected) {
+            // WiFi已连接/已保存: 断开 + 编辑 + 删除
+            const port = deviceId.split(':')[1] || 5555;
+            const host = deviceId.split(':')[0];
+            actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
+        }
+        // 已保存的设备都显示编辑和删除按钮
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?._filename || ''}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?._filename || ''}')" title="删除">删除</button>`);
     }
 
-    if (platform === 'ios' && !isConnected) {
+    if (platform === 'ios' && !isConnected && !isSaved && hasProject) {
         actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="showWdaSetupGuide('${deviceId}')">WDA设置</button>`);
-    }
-
-    if (isWifi && isConnected) {
-        const port = deviceId.split(':')[1] || 5555;
-        const host = deviceId.split(':')[0];
-        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
     }
 
     if (actionButtons.length > 0) {

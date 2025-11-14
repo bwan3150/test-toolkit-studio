@@ -276,17 +276,19 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
             }
         }
 
-        // 添加操作按钮
+        // 添加操作按钮（已保存的设备）
         const actionButtons = [];
 
-        if (isWifi && !isConnected) {
-            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">连接</button>`);
-        }
-
         if (isWifi && isConnected) {
+            // WiFi已连接/已保存: 断开 + 编辑 + 删除
             actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>`);
         }
 
+        // 已保存的设备都显示编辑和删除按钮
+        // USB已连接/已保存: 编辑 + 删除
+        // WiFi已连接/已保存: 断开 + 编辑 + 删除
+        // USB未连接/已保存: 编辑 + 删除
+        // WiFi未连接/已保存: 编辑 + 删除
         actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">编辑</button>`);
         actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${file}')" title="删除">删除</button>`);
 
