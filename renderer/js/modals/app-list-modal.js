@@ -92,15 +92,6 @@
 
         let html = '<div class="app-list-table">';
 
-        // 表头
-        html += `
-            <div class="app-list-row app-list-header-row">
-                <div class="app-list-cell app-name-cell">应用包名</div>
-                <div class="app-list-cell app-version-cell">版本</div>
-                <div class="app-list-cell app-actions-cell">操作</div>
-            </div>
-        `;
-
         // 应用行
         apps.forEach(app => {
             const packageName = app.package_name || '';

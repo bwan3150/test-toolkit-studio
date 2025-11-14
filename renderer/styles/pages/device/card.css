@@ -245,13 +245,12 @@
     transition: all 0.3s ease;
     z-index: 100;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    pointer-events: none; /* 防止浮层阻挡鼠标事件 */
+    pointer-events: auto; /* 始终允许交互，避免阻挡鼠标事件 */
 }
 
 .device-phone-mockup:hover .device-app-info {
     opacity: 1;
     visibility: visible;
-    pointer-events: auto; /* hover时允许交互 */
 }
 
 .device-app-info-title {
@@ -265,28 +264,23 @@
 }
 
 .btn-view-all-apps {
-    padding: 4px 6px;
-    background: rgba(59, 130, 246, 0.2);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
     border-radius: 4px;
-    color: #60a5fa;
+    color: #f9a825;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 10px;
+    font-size: 11px;
+    font-weight: 600;
 }
 
 .btn-view-all-apps:hover {
-    background: rgba(59, 130, 246, 0.3);
-    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(249, 168, 37, 0.15);
     transform: scale(1.05);
-}
-
-.btn-view-all-apps svg {
-    width: 12px;
-    height: 12px;
 }
 
 /* App加载状态容器 */

@@ -263,9 +263,7 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
                         <div class="device-app-info-title">
                             <span>当前运行应用</span>
                             <button class="btn-view-all-apps" onclick="openAppListModal('${deviceId}')" title="查看所有App">
-                                <svg viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/>
-                                </svg>
+                                全部应用
                             </button>
                         </div>
                         <div class="device-app-info-content">
