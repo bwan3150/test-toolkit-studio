@@ -12,7 +12,8 @@
     -webkit-app-region: no-drag; /* Ensure sidebar is interactive */
 }
 
-.sidebar:hover {
+/* 使用class控制展开，而不是:hover */
+.sidebar.expanded {
     width: 200px;
 }
 
@@ -44,11 +45,11 @@
     pointer-events: none;
 }
 
-.sidebar:hover .logo-small {
+.sidebar.expanded .logo-small {
     opacity: 0;
 }
 
-.sidebar:hover .logo-large {
+.sidebar.expanded .logo-large {
     opacity: 1;
 }
 
@@ -114,7 +115,7 @@
     transition: opacity 0.3s;
 }
 
-.sidebar:hover .nav-label {
+.sidebar.expanded .nav-label {
     opacity: 1;
 }
 
@@ -153,7 +154,7 @@
     transition: opacity 0.3s;
 }
 
-.sidebar:hover .user-name {
+.sidebar.expanded .user-name {
     opacity: 1;
 }
 

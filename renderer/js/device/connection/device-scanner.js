@@ -45,6 +45,8 @@ async function refreshConnectedDevices() {
                     if (file.endsWith('.yaml')) {
                         const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
                         const config = yaml.load(content);
+                        // 添加文件名到配置对象中
+                        config._filename = file;
                         // Android 用 deviceId, iOS 用 udid
                         if (config.deviceId) {
                             savedDeviceConfigs[config.deviceId] = config;
@@ -284,19 +286,35 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
 
     // 添加操作按钮
     const actionButtons = [];
+    const hasProject = !!window.AppGlobals.currentProject;
 
     if (!isSaved) {
-        actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存配置</button>`);
+        // 未保存的设备
+        if (isWifi && isConnected) {
+            // WiFi已连接/未保存: 断开 + (有项目时显示保存)
+            const port = deviceId.split(':')[1] || 5555;
+            const host = deviceId.split(':')[0];
+            actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
+        }
+        // 只有打开项目时才显示保存按钮
+        if (hasProject) {
+            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存</button>`);
+        }
+    } else {
+        // 已保存的设备
+        if (isWifi && isConnected) {
+            // WiFi已连接/已保存: 断开 + 编辑 + 删除
+            const port = deviceId.split(':')[1] || 5555;
+            const host = deviceId.split(':')[0];
+            actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
+        }
+        // 已保存的设备都显示编辑和删除按钮
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?._filename || ''}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?._filename || ''}')" title="删除">删除</button>`);
     }
 
-    if (platform === 'ios' && !isConnected) {
+    if (platform === 'ios' && !isConnected && !isSaved && hasProject) {
         actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="showWdaSetupGuide('${deviceId}')">WDA设置</button>`);
-    }
-
-    if (isWifi && isConnected) {
-        const port = deviceId.split(':')[1] || 5555;
-        const host = deviceId.split(':')[0];
-        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
     }
 
     if (actionButtons.length > 0) {
@@ -311,14 +329,24 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
 
     // 为已连接的Android设备添加hover加载当前App信息的功能
     if (isConnected && platform === 'android') {
-        item.addEventListener('mouseenter', async function() {
+        item.addEventListener('mouseover', async function(e) {
+            // 检查事件是否来自浮层内部，避免DOM更新时触发无限循环
+            const isFromAppInfo = e.target.closest('.device-app-info');
+            if (isFromAppInfo) return;
+
             const appInfoDiv = item.querySelector('.device-app-info');
             if (!appInfoDiv) return;
+
+            // 防止重复请求
+            if (item.dataset.appLoading === 'true') return;
 
             const contentDiv = appInfoDiv.querySelector('.device-app-info-content');
             if (!contentDiv) return;
 
-            // 每次hover都重新加载,显示spinner
+            // 标记为加载中
+            item.dataset.appLoading = 'true';
+
+            // 显示加载动画
             contentDiv.innerHTML = '<div class="device-app-loading"><div class="device-app-spinner"></div></div>';
 
             try {
@@ -362,6 +390,9 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
             } catch (error) {
                 window.rError('加载当前App信息异常:', error);
                 contentDiv.innerHTML = '<div class="device-app-error">加载失败: ' + error.message + '</div>';
+            } finally {
+                // 清除loading标记
+                item.dataset.appLoading = 'false';
             }
         });
     }

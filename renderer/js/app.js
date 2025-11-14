@@ -12,7 +12,7 @@
 // 5. ui/resizable-panels.js - 可调整面板
 // 6. modules/project-manager.js - 项目管理
 // 7. testcase/testcase-controller.js - 测试用例控制器
-// 8. device/* - 设备管理（已模块化拆分为16个子模块，按依赖顺序加载）
+// 8. device/* - 设备管理（已模块化拆分为17个子模块，按依赖顺序加载）
 //    - utils/device-utils.js - 工具函数
 //    - core/device-globals.js - 全局辅助函数
 //    - core/device-ui-fields.js - UI字段控制
@@ -27,6 +27,7 @@
 //    - connection/pairing-code.js - 配对码
 //    - connection/device-scanner.js - 设备扫描
 //    - guide/connection-guide-ui.js - 连接向导UI
+//    - ui/device-config-modal-ui.js - 设备配置模态窗口UI
 //    - apk/apk-installer.js - APK安装
 //    - core/device-initializer.js - 设备初始化
 //    - device-manager.js - 主入口（组织和导出所有模块）
@@ -169,6 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         await loadScript('../js/settings/settings.js');
         await loadScript('../js/settings/cache-manager.js');
+        await loadScript('../js/components/sidebar-controller.js');
         await loadScript('../js/components/resizable-panels.js');
         await loadScript('../js/components/status-bar.js');
         await loadScript('../js/components/modal-manager.js');
@@ -232,6 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 第五批：UI和集成模块
         await loadScript('../js/device/guide/connection-guide-ui.js');
+        await loadScript('../js/device/ui/device-config-modal-ui.js');
         await loadScript('../js/device/apk/apk-installer.js');
         await loadScript('../js/device/core/device-initializer.js');
 

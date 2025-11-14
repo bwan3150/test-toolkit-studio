@@ -26,18 +26,37 @@ async function loadConnectionGuideModal() {
     }
 }
 
+// 动态加载设备配置模态框
+async function loadDeviceConfigModal() {
+    const container = document.getElementById('deviceConfigModalContainer');
+    if (!container) return;
+
+    try {
+        const response = await fetch('modals/device-config-modal.html');
+        if (response.ok) {
+            const html = await response.text();
+            container.innerHTML = html;
+
+            // 加载完成后初始化模态窗口事件
+            if (window.DeviceConfigModalUI && window.DeviceConfigModalUI.initializeDeviceConfigModal) {
+                window.DeviceConfigModalUI.initializeDeviceConfigModal();
+            }
+        }
+    } catch (error) {
+        window.rError('Failed to load device config modal:', error);
+    }
+}
+
 // 初始化设备页面
 async function initializeDevicePage() {
     const { fs, yaml } = getGlobals();
 
-    // 动态加载连接向导模态框
+    // 动态加载模态框
     await loadConnectionGuideModal();
+    await loadDeviceConfigModal();
 
     const addDeviceBtn = document.getElementById('addDeviceBtn');
     const scanDevicesBtn = document.getElementById('scanDevicesBtn');
-    const deviceForm = document.getElementById('deviceForm');
-    const newDeviceForm = document.getElementById('newDeviceForm');
-    const cancelDeviceBtn = document.getElementById('cancelDeviceBtn');
 
     // 连接向导相关元素（加载后才能获取）
     const connectDeviceBtn = document.getElementById('connectDeviceBtn');
@@ -51,32 +70,16 @@ async function initializeDevicePage() {
     const showPairingCodeBtn = document.getElementById('showPairingCodeBtn');
     const showQrCodeBtn = document.getElementById('showQrCodeBtn');
 
+    // 添加设备按钮 - 打开设备配置模态窗口
     if (addDeviceBtn) {
         addDeviceBtn.addEventListener('click', () => {
-            const isHidden = deviceForm.style.display === 'none' || deviceForm.style.display === '';
-            deviceForm.style.display = isHidden ? 'block' : 'none';
-            // 重置表单并设置默认值
-            if (isHidden) {
-                newDeviceForm.reset();
-                delete deviceForm.dataset.mode;
-                delete deviceForm.dataset.filename;
-                deviceForm.querySelector('h3').textContent = 'Add New Device';
-                if (window.DeviceFormModule && window.DeviceFormModule.updatePlatformFields) {
-                    window.DeviceFormModule.updatePlatformFields();
-                }
-                // 滚动到表单顶部
-                deviceForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.DeviceConfigModalUI && window.DeviceConfigModalUI.showDeviceConfigModal) {
+                window.DeviceConfigModalUI.showDeviceConfigModal();
             }
         });
     }
 
-    if (cancelDeviceBtn) {
-        cancelDeviceBtn.addEventListener('click', () => {
-            deviceForm.style.display = 'none';
-            newDeviceForm.reset();
-        });
-    }
-
+    // 刷新设备列表按钮
     if (scanDevicesBtn) {
         scanDevicesBtn.addEventListener('click', () => {
             if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
@@ -84,27 +87,6 @@ async function initializeDevicePage() {
             }
         });
     }
-
-
-    // 平台选择事件
-    const platformRadios = document.querySelectorAll('input[name="platform"]');
-    platformRadios.forEach(radio => {
-        radio.addEventListener('change', () => {
-            if (window.DeviceFormModule && window.DeviceFormModule.updatePlatformFields) {
-                window.DeviceFormModule.updatePlatformFields();
-            }
-        });
-    });
-
-    // 连接类型选择事件
-    const connectionRadios = document.querySelectorAll('input[name="connectionType"]');
-    connectionRadios.forEach(radio => {
-        radio.addEventListener('change', () => {
-            if (window.DeviceFormModule && window.DeviceFormModule.updatePlatformFields) {
-                window.DeviceFormModule.updatePlatformFields();
-            }
-        });
-    });
 
     // 连接设备向导
     if (connectDeviceBtn) {
@@ -192,104 +174,9 @@ async function initializeDevicePage() {
         window.ConnectionGuideUI.initializeIpSync();
     }
 
-    if (newDeviceForm) {
-        newDeviceForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            window.rLog('表单提交事件触发');
-
-            if (!window.AppGlobals.currentProject) {
-                window.AppNotifications?.warn('Please open a project first');
-                return;
-            }
-
-            const formData = new FormData(newDeviceForm);
-            const deviceConfig = {};
-
-            for (const [key, value] of formData.entries()) {
-                deviceConfig[key] = value === 'true' ? true : value === 'false' ? false : value;
-            }
-
-            window.rLog('收集到的表单数据:', deviceConfig);
-
-            // 根据平台处理连接信息
-            if (deviceConfig.connectionType === 'wifi') {
-                if (deviceConfig.platform === 'ios') {
-                    // iOS WiFi: 使用 wdaIpAddress 和 wdaPort
-                    if (deviceConfig.wdaIpAddress) {
-                        deviceConfig.ipAddress = deviceConfig.wdaIpAddress;
-                        deviceConfig.port = deviceConfig.wdaPort;
-                        const port = deviceConfig.wdaPort || '';
-                        if (port) {
-                            deviceConfig.deviceId = `${deviceConfig.wdaIpAddress}:${port}`;
-                        } else {
-                            deviceConfig.deviceId = deviceConfig.wdaIpAddress;
-                        }
-                    }
-                } else {
-                    // Android WiFi: 使用 ipAddress 和 port
-                    if (deviceConfig.ipAddress) {
-                        const port = deviceConfig.port || '';
-                        if (port) {
-                            deviceConfig.deviceId = `${deviceConfig.ipAddress}:${port}`;
-                        } else {
-                            deviceConfig.deviceId = deviceConfig.ipAddress;
-                        }
-                    }
-                }
-            }
-
-            // 根据平台自动设置platformName
-            deviceConfig.platformName = deviceConfig.platform === 'ios' ? 'iOS' : 'Android';
-
-            // 检查是否在编辑模式
-            const deviceForm = document.getElementById('deviceForm');
-            const mode = deviceForm.dataset.mode;
-            let devicePath;
-
-            if (mode === 'edit' && deviceForm.dataset.filename) {
-                // 编辑模式 - 使用现有文件名
-                devicePath = path.join(window.AppGlobals.currentProject, 'devices', deviceForm.dataset.filename);
-            } else {
-                // 创建模式 - 生成新文件名
-                const timestamp = Date.now();
-                const deviceFileName = `device_${timestamp}.yaml`;
-                devicePath = path.join(window.AppGlobals.currentProject, 'devices', deviceFileName);
-            }
-
-            try {
-                await fs.writeFile(devicePath, yaml.dump(deviceConfig));
-                window.AppNotifications?.success(
-                    mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully'
-                );
-
-                deviceForm.style.display = 'none';
-                newDeviceForm.reset();
-                delete deviceForm.dataset.mode;
-                delete deviceForm.dataset.filename;
-
-                // 重新加载设备列表
-                if (window.DeviceLoader) {
-                    if (window.DeviceLoader.loadSavedDevices) {
-                        await window.DeviceLoader.loadSavedDevices();
-                    }
-                    if (window.DeviceLoader.refreshDeviceList) {
-                        await window.DeviceLoader.refreshDeviceList();
-                    }
-                }
-            } catch (error) {
-                window.AppNotifications?.error(`Failed to save device: ${error.message}`);
-            }
-        });
-    }
-
     // 加载保存的设备
     if (window.DeviceLoader && window.DeviceLoader.loadSavedDevices) {
         window.DeviceLoader.loadSavedDevices();
-    }
-
-    // 确保页面加载时字段显示正确
-    if (window.DeviceFormModule && window.DeviceFormModule.updatePlatformFields) {
-        window.DeviceFormModule.updatePlatformFields();
     }
 
     // 监听配对成功事件
@@ -313,9 +200,11 @@ async function initializeDevicePage() {
 // 导出模块
 window.DeviceInitializer = {
     loadConnectionGuideModal,
+    loadDeviceConfigModal,
     initializeDevicePage
 };
 
 // 注册全局函数
 window.loadConnectionGuideModal = loadConnectionGuideModal;
+window.loadDeviceConfigModal = loadDeviceConfigModal;
 window.initializeDevicePage = initializeDevicePage;

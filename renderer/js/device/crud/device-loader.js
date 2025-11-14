@@ -276,17 +276,19 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
             }
         }
 
-        // 添加操作按钮
+        // 添加操作按钮（已保存的设备）
         const actionButtons = [];
 
-        if (isWifi && !isConnected) {
-            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="connectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">连接</button>`);
-        }
-
         if (isWifi && isConnected) {
+            // WiFi已连接/已保存: 断开 + 编辑 + 删除
             actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>`);
         }
 
+        // 已保存的设备都显示编辑和删除按钮
+        // USB已连接/已保存: 编辑 + 删除
+        // WiFi已连接/已保存: 断开 + 编辑 + 删除
+        // USB未连接/已保存: 编辑 + 删除
+        // WiFi未连接/已保存: 编辑 + 删除
         actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">编辑</button>`);
         actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${file}')" title="删除">删除</button>`);
 
@@ -413,81 +415,3 @@ window.openAppListModal = function(deviceId) {
         window.AppListModal.open(deviceId);
     }
 };
-
-// 加载设备当前App信息的函数
-async function loadDeviceCurrentApp(card) {
-    // 查找App信息容器
-    const appInfoDiv = card.querySelector('.device-app-info');
-    if (!appInfoDiv) return;
-
-    const deviceId = appInfoDiv.getAttribute('data-device-id');
-    if (!deviceId) return;
-
-    // 查找内容容器
-    const contentDiv = appInfoDiv.querySelector('.device-app-info-content');
-    if (!contentDiv) return;
-
-    // 每次hover都重新加载,显示spinner
-    contentDiv.innerHTML = '<div class="device-app-loading"><div class="device-app-spinner"></div></div>';
-
-    try {
-        const { ipcRenderer } = getGlobals();
-        window.rLog('开始加载设备当前App信息:', deviceId);
-        const result = await ipcRenderer.invoke('tke-app-focus', { deviceId });
-        window.rLog('tke-app-focus 返回结果:', result);
-
-        if (result.success) {
-            const data = JSON.parse(result.output);
-            window.rLog('解析的数据:', data);
-            const deviceIdClean = deviceId.replace(/[^a-zA-Z0-9]/g, '_');
-
-            // 替换spinner为实际数据
-            const fieldsHtml = `
-                <div class="device-app-field">
-                    <span class="device-app-label">包名</span>
-                    <span class="device-app-value" title="${data.package_name}">${data.package_name}</span>
-                    <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_package')" title="复制包名">
-                        <svg viewBox="0 0 24 24">
-                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                    </button>
-                    <span id="${deviceIdClean}_package" style="display: none;">${data.package_name}</span>
-                </div>
-                <div class="device-app-field">
-                    <span class="device-app-label">Activity</span>
-                    <span class="device-app-value" title="${data.activity_name}">${data.activity_name}</span>
-                    <button class="device-app-copy-btn" onclick="copyToClipboard('${deviceIdClean}_activity')" title="复制Activity">
-                        <svg viewBox="0 0 24 24">
-                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                    </button>
-                    <span id="${deviceIdClean}_activity" style="display: none;">${data.activity_name}</span>
-                </div>
-            `;
-            contentDiv.innerHTML = fieldsHtml;
-        } else {
-            window.rError('加载失败:', result.error);
-            contentDiv.innerHTML = '<div class="device-app-error">加载失败: ' + (result.error || '未知错误') + '</div>';
-        }
-    } catch (error) {
-        window.rError('加载当前App信息异常:', error);
-        contentDiv.innerHTML = '<div class="device-app-error">加载失败: ' + error.message + '</div>';
-    }
-}
-
-// 当鼠标悬停在设备卡片上时,加载当前App信息
-document.addEventListener('DOMContentLoaded', function() {
-    // 使用事件委托监听所有设备卡片的hover事件
-    const androidGrid = document.getElementById('androidDevicesGrid');
-    if (androidGrid) {
-        // 使用 mouseover 而不是 mouseenter,因为 mouseenter 不会冒泡
-        androidGrid.addEventListener('mouseover', function(e) {
-            // 查找最近的设备卡片
-            const card = e.target.closest('.device-phone-mockup');
-            if (!card) return;
-
-            // 每次hover都重新加载,移除一次性加载的限制
-            loadDeviceCurrentApp(card);
-        });
-    }
-});
