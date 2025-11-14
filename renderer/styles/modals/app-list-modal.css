@@ -1,0 +1,266 @@
+/* App List Modal 样式 */
+
+/* 大尺寸模态窗 */
+.modal-large {
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+}
+
+/* Modal头部按钮组 */
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Modal操作按钮 */
+.modal-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.modal-action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.modal-action-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+
+/* 加载状态 */
+.app-list-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    min-height: 500px; /* 与app-list-content保持一致 */
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(249, 168, 37, 0.2);
+    border-top-color: #f9a825;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+
+/* 空状态 */
+.app-list-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+/* App列表内容 */
+.app-list-content {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+/* App列表表格 */
+.app-list-table {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.app-list-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr auto;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    transition: background 0.2s;
+}
+
+.app-list-row:hover {
+    background: var(--bg-secondary);
+}
+
+.app-list-cell {
+    display: flex;
+    align-items: center;
+}
+
+/* 应用名称单元格 */
+.app-name-cell {
+    overflow: hidden;
+}
+
+.app-name {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 版本单元格 */
+.app-version-cell {
+    justify-content: flex-start;
+}
+
+.app-version {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+/* 操作单元格 */
+.app-actions-cell {
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* 应用操作按钮 */
+.btn-app-launch,
+.btn-app-uninstall {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-app-launch {
+    background: rgba(249, 168, 37, 0.15);
+    border: 1px solid rgba(249, 168, 37, 0.3);
+    color: #f9a825;
+}
+
+.btn-app-launch:hover:not(:disabled) {
+    background: rgba(249, 168, 37, 0.25);
+    border-color: rgba(249, 168, 37, 0.5);
+}
+
+.btn-app-launch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-app-uninstall {
+    background: rgba(249, 168, 37, 0.15);
+    border: 1px solid rgba(249, 168, 37, 0.3);
+    color: #f9a825;
+}
+
+.btn-app-uninstall:hover {
+    background: rgba(249, 168, 37, 0.25);
+    border-color: rgba(249, 168, 37, 0.5);
+}
+
+/* 图标按钮样式 - 仅用于App列表 */
+.app-list-table .btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: transparent;
+}
+
+.app-list-table .btn-icon img {
+    width: 16px;
+    height: 16px;
+    transition: filter 0.2s;
+}
+
+/* 启动按钮 - 绿色实心背景 */
+.app-list-table .btn-icon-launch {
+    background: #22c55e;
+}
+
+.app-list-table .btn-icon-launch img {
+    filter: brightness(0) invert(1);
+}
+
+.app-list-table .btn-icon-launch:hover:not(:disabled) {
+    background: #16a34a;
+    transform: scale(1.05);
+}
+
+.app-list-table .btn-icon-launch:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* 关闭按钮 - 黄色实心背景 */
+.app-list-table .btn-icon-stop {
+    background: #fbbf24;
+}
+
+.app-list-table .btn-icon-stop img {
+    filter: brightness(0) invert(1);
+}
+
+.app-list-table .btn-icon-stop:hover {
+    background: #f59e0b;
+    transform: scale(1.05);
+}
+
+/* 卸载按钮 - 红色实心背景 */
+.app-list-table .btn-icon-uninstall {
+    background: #ef4444;
+}
+
+.app-list-table .btn-icon-uninstall img {
+    filter: brightness(0) invert(1);
+}
+
+.app-list-table .btn-icon-uninstall:hover {
+    background: #dc2626;
+    transform: scale(1.05);
+}
+
+/* 滚动条样式 */
+.app-list-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.app-list-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.app-list-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.app-list-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
