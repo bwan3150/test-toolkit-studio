@@ -335,6 +335,9 @@ pub struct AppInfo {
     /// APK 路径
     #[serde(skip_serializing_if = "Option::is_none")]
     pub apk_path: Option<String>,
+    /// 启动 Activity (用于启动应用)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub launch_activity: Option<String>,
 }
 
 // 当前聚焦的应用信息

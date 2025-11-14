@@ -107,6 +107,10 @@
             const versionName = app.version_name || '-';
             const versionCode = app.version_code || '-';
             const versionText = versionName !== '-' ? `${versionName} (${versionCode})` : '-';
+            const launchActivity = app.launch_activity || '';
+
+            // 只有有 launch_activity 的应用才能启动
+            const canLaunch = !!launchActivity;
 
             html += `
                 <div class="app-list-row" data-package="${packageName}">
@@ -117,7 +121,11 @@
                         <span class="app-version">${versionText}</span>
                     </div>
                     <div class="app-list-cell app-actions-cell">
-                        <button class="btn btn-outline btn-small btn-app-launch" data-package="${packageName}" title="启动应用" disabled>
+                        <button class="btn btn-outline btn-small btn-app-launch"
+                                data-package="${packageName}"
+                                data-activity="${launchActivity}"
+                                title="${canLaunch ? '启动应用' : '未找到启动Activity'}"
+                                ${canLaunch ? '' : 'disabled'}>
                             <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                                 <path d="M8 5v14l11-7z"/>
                             </svg>
@@ -146,14 +154,15 @@
             });
         });
 
-        // 启动按钮暂时禁用(未实现)
-        // const launchBtns = contentDiv.querySelectorAll('.btn-app-launch');
-        // launchBtns.forEach(btn => {
-        //     btn.addEventListener('click', () => {
-        //         const packageName = btn.getAttribute('data-package');
-        //         launchApp(packageName);
-        //     });
-        // });
+        // 绑定启动按钮事件
+        const launchBtns = contentDiv.querySelectorAll('.btn-app-launch');
+        launchBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const packageName = btn.getAttribute('data-package');
+                const activity = btn.getAttribute('data-activity');
+                launchApp(packageName, activity);
+            });
+        });
     }
 
     // 卸载应用
@@ -198,11 +207,44 @@
         }
     }
 
-    // 启动应用 (TODO: 未实现)
-    // async function launchApp(packageName) {
-    //     window.rLog('启动应用:', packageName);
-    //     // TODO: 实现启动应用逻辑
-    // }
+    // 启动应用
+    async function launchApp(packageName, activity) {
+        try {
+            const { ipcRenderer } = getGlobals();
+            window.rLog('启动应用:', packageName, activity);
+
+            const result = await ipcRenderer.invoke('tke-app-launch', {
+                package: packageName,
+                activity: activity,
+                deviceId: currentDeviceId
+            });
+
+            if (result.success) {
+                const data = JSON.parse(result.output);
+                if (data.success) {
+                    window.rLog('启动成功:', data.message);
+                    if (window.AppNotifications) {
+                        window.AppNotifications.success(data.message);
+                    }
+                } else {
+                    window.rError('启动失败:', data.message);
+                    if (window.AppNotifications) {
+                        window.AppNotifications.error(data.message);
+                    }
+                }
+            } else {
+                window.rError('启动失败:', result.error);
+                if (window.AppNotifications) {
+                    window.AppNotifications.error(result.error || '启动失败');
+                }
+            }
+        } catch (error) {
+            window.rError('启动应用异常:', error);
+            if (window.AppNotifications) {
+                window.AppNotifications.error('启动失败: ' + error.message);
+            }
+        }
+    }
 
     // 初始化事件监听
     document.addEventListener('DOMContentLoaded', function() {

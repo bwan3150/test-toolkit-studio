@@ -197,6 +197,59 @@ function registerAppHandlers(app) {
     }
   });
 
+  /**
+   * 启动应用
+   * IPC 通道: tke-app-launch
+   * 参数: { package: string, activity: string, deviceId?: string }
+   * 返回: { success: boolean, output?: string, error?: string }
+   *
+   * 命令: tke --device <deviceId> app launch <package> <activity>
+   * 输出格式:
+   * {
+   *   "success": true,
+   *   "message": "应用 com.example.app 启动成功",
+   *   "package": "com.example.app",
+   *   "activity": ".MainActivity"
+   * }
+   */
+  ipcMain.handle('tke-app-launch', async (event, { package: packageName, activity, deviceId = null }) => {
+    try {
+      if (!packageName) {
+        return {
+          success: false,
+          error: '请提供应用包名'
+        };
+      }
+
+      if (!activity) {
+        return {
+          success: false,
+          error: '请提供Activity名称'
+        };
+      }
+
+      const args = ['app', 'launch', packageName, activity];
+
+      // 如果指定了设备ID，添加 --device 参数
+      if (deviceId) {
+        args.unshift('--device', deviceId);
+      }
+
+      const output = await execTkeAppCommand(app, args);
+
+      return {
+        success: true,
+        output: output // 返回 JSON 字符串
+      };
+    } catch (error) {
+      console.error('TKE app launch 失败:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   console.log('TKE App handlers 已注册');
 }
 

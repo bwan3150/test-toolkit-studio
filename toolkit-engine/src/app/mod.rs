@@ -62,6 +62,7 @@ impl AppManager {
                     version_name: None,
                     version_code: None,
                     apk_path: None,
+                    launch_activity: None,
                 });
             }
         }
@@ -94,6 +95,7 @@ impl AppManager {
         let mut version_name = None;
         let mut version_code = None;
         let mut apk_path = None;
+        let mut launch_activity = None;
 
         for line in stdout.lines() {
             let line = line.trim();
@@ -124,6 +126,22 @@ impl AppManager {
             if line.starts_with("codePath=") {
                 apk_path = Some(line.trim_start_matches("codePath=").to_string());
             }
+
+            // 解析启动 Activity (查找 MAIN Activity)
+            // 格式示例: 1234567 com.example.app/.MainActivity filter abcdef
+            if line.contains(package_name) && line.contains("/") && launch_activity.is_none() {
+                if let Some(slash_pos) = line.find('/') {
+                    let after_slash = &line[slash_pos + 1..];
+                    // 提取到空格或行尾
+                    let end = after_slash.find(|c: char| c.is_whitespace())
+                        .unwrap_or(after_slash.len());
+                    let activity = after_slash[..end].trim();
+
+                    if !activity.is_empty() {
+                        launch_activity = Some(activity.to_string());
+                    }
+                }
+            }
         }
 
         Ok(AppInfo {
@@ -131,6 +149,7 @@ impl AppManager {
             version_name,
             version_code,
             apk_path,
+            launch_activity,
         })
     }
 
@@ -226,5 +245,32 @@ impl AppManager {
         }
 
         Err(TkeError::AdbError("未找到当前聚焦的窗口信息".to_string()))
+    }
+
+    /// 启动应用
+    /// 使用 am start 命令启动应用
+    pub async fn launch_app(&self, package_name: &str, activity_name: &str) -> Result<(bool, String)> {
+        let mut cmd = Command::new(self.adb_manager.adb_path());
+
+        if let Some(ref device) = self.device_id {
+            cmd.arg("-s").arg(device);
+        }
+
+        // 构建完整的组件名称: package_name/activity_name
+        let component = format!("{}/{}", package_name, activity_name);
+
+        let output = cmd
+            .args(&["shell", "am", "start", "-n", &component])
+            .output()
+            .map_err(|e| TkeError::AdbError(format!("执行 am start 命令失败: {}", e)))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // am start 成功时会输出 "Starting: Intent"
+        if stdout.contains("Starting: Intent") || output.status.success() {
+            Ok((true, format!("应用 {} 启动成功", package_name)))
+        } else {
+            Ok((false, format!("启动失败: {}", stdout)))
+        }
     }
 }
