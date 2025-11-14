@@ -423,9 +423,17 @@ async function loadDeviceCurrentApp(card) {
     const deviceId = appInfoDiv.getAttribute('data-device-id');
     if (!deviceId) return;
 
+    // 检查是否正在加载，防止重复请求
+    if (card.dataset.appLoading === 'true') {
+        return;
+    }
+
     // 查找内容容器
     const contentDiv = appInfoDiv.querySelector('.device-app-info-content');
     if (!contentDiv) return;
+
+    // 标记为加载中
+    card.dataset.appLoading = 'true';
 
     // 每次hover都重新加载,显示spinner
     contentDiv.innerHTML = '<div class="device-app-loading"><div class="device-app-spinner"></div></div>';
@@ -472,6 +480,9 @@ async function loadDeviceCurrentApp(card) {
     } catch (error) {
         window.rError('加载当前App信息异常:', error);
         contentDiv.innerHTML = '<div class="device-app-error">加载失败: ' + error.message + '</div>';
+    } finally {
+        // 清除loading标记
+        card.dataset.appLoading = 'false';
     }
 }
 
@@ -486,7 +497,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const card = e.target.closest('.device-phone-mockup');
             if (!card) return;
 
-            // 每次hover都重新加载,移除一次性加载的限制
+            // 🔑 关键修复：检查事件是否来自浮层内部（.device-app-info）
+            // 如果鼠标在浮层内部移动，不重新加载，避免无限循环
+            const isFromAppInfo = e.target.closest('.device-app-info');
+            if (isFromAppInfo) {
+                return; // 浮层内部的mouseover事件不触发重新加载
+            }
+
+            // 只有当鼠标从外部进入卡片时才加载
             loadDeviceCurrentApp(card);
         });
     }
