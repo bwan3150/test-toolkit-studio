@@ -47,6 +47,27 @@ async function loadDeviceConfigModal() {
     }
 }
 
+// 动态加载设备详细信息模态框
+async function loadDeviceInfoModal() {
+    const container = document.getElementById('deviceInfoModalContainer');
+    if (!container) return;
+
+    try {
+        const response = await fetch('modals/device-info-modal.html');
+        if (response.ok) {
+            const html = await response.text();
+            container.innerHTML = html;
+
+            // 加载完成后初始化模态窗口事件
+            if (window.DeviceInfoModalUI && window.DeviceInfoModalUI.initializeDeviceInfoModal) {
+                window.DeviceInfoModalUI.initializeDeviceInfoModal();
+            }
+        }
+    } catch (error) {
+        window.rError('Failed to load device info modal:', error);
+    }
+}
+
 // 初始化设备页面
 async function initializeDevicePage() {
     const { fs, yaml } = getGlobals();
@@ -54,6 +75,7 @@ async function initializeDevicePage() {
     // 动态加载模态框
     await loadConnectionGuideModal();
     await loadDeviceConfigModal();
+    await loadDeviceInfoModal();
 
     const addDeviceBtn = document.getElementById('addDeviceBtn');
     const scanDevicesBtn = document.getElementById('scanDevicesBtn');
@@ -201,10 +223,12 @@ async function initializeDevicePage() {
 window.DeviceInitializer = {
     loadConnectionGuideModal,
     loadDeviceConfigModal,
+    loadDeviceInfoModal,
     initializeDevicePage
 };
 
 // 注册全局函数
 window.loadConnectionGuideModal = loadConnectionGuideModal;
 window.loadDeviceConfigModal = loadDeviceConfigModal;
+window.loadDeviceInfoModal = loadDeviceInfoModal;
 window.initializeDevicePage = initializeDevicePage;
