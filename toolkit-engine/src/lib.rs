@@ -15,6 +15,7 @@ pub mod recognizer;
 pub mod runner;
 pub mod file;
 pub mod app;
+pub mod device;
 
 // 导出工具类
 pub use utils::{JsonOutput, AdbManager, AaptManager};
@@ -26,6 +27,7 @@ pub use recognizer::Recognizer;
 pub use runner::{Runner, ScriptParser, ScriptInterpreter};
 pub use file::FileManager;
 pub use app::AppManager;
+pub use device::DeviceManager;
 
 // 导出 OCR 功能
 pub use ocr::{ocr, OcrResult, OcrText};
@@ -40,6 +42,9 @@ pub use models::{
     TksCommand,
     TksParam,
     DeviceInfo,
+    HardwareInfo,
+    BatteryInfo,
+    NetworkInfo,
     Point,
     Bounds,
     ExecutionResult,
@@ -85,6 +90,9 @@ pub enum TkeError {
 
     #[error("设备未连接")]
     DeviceNotConnected,
+
+    #[error("设备错误: {0}")]
+    DeviceError(String),
 
     #[error("项目路径无效: {0}")]
     InvalidProjectPath(String),
