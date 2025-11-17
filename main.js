@@ -52,6 +52,7 @@ const { registerRunnerHandlers } = require('./handlers/tke-integration/runner-ha
 const { registerOcrHandlers } = require('./handlers/tke-integration/ocr-handlers');
 const { registerFileHandlers } = require('./handlers/tke-integration/file-handlers');
 const { registerAppHandlers } = require('./handlers/tke-integration/app-handlers');
+const { registerTkeDeviceHandlers } = require('./handlers/tke-integration/tke-device-handlers');
 const { registerFfmpegHandlers } = require('./handlers/dependencies/ffmpeg-handler');
 
 // Electron 核心模块 - Electron 应用的核心功能
@@ -333,6 +334,9 @@ function registerAllHandlers() {
 
     console.log('注册TKE App处理器...');
     registerAppHandlers(app);
+
+    console.log('注册TKE Device处理器...');
+    registerTkeDeviceHandlers(app);
 
     console.log('注册FFmpeg处理器...');
     registerFfmpegHandlers(app);

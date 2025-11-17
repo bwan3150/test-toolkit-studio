@@ -183,7 +183,7 @@ function hideDeviceConfigModal() {
 }
 
 // 从连接的设备预填充表单
-function prefillDeviceConfigForm(deviceId) {
+async function prefillDeviceConfigForm(deviceId) {
     const form = document.getElementById('deviceConfigForm');
     if (!form) return;
 
@@ -210,8 +210,44 @@ function prefillDeviceConfigForm(deviceId) {
         form.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
     }
 
-    // 设置平台版本默认值
-    form.querySelector('input[name="platformVersion"]').value = '14';
+    // 自动获取设备的 Android 版本
+    const platformVersionInput = form.querySelector('input[name="platformVersion"]');
+    if (platformVersionInput) {
+        try {
+            const { ipcRenderer } = window.AppGlobals;
+            if (!ipcRenderer) {
+                window.rError('ipcRenderer 未定义');
+                platformVersionInput.value = '';
+                return;
+            }
+
+            window.rLog('正在获取设备 Android 版本...', { deviceId });
+            const result = await ipcRenderer.invoke('tke-device-prop', {
+                propName: 'version',
+                deviceId: deviceId
+            });
+
+            if (result.success && result.output) {
+                const data = JSON.parse(result.output);
+                if (data.value) {
+                    platformVersionInput.value = data.value;
+                    window.rLog('成功获取 Android 版本:', data.value);
+                } else {
+                    // 获取失败，留空
+                    platformVersionInput.value = '';
+                    window.rLog('获取 Android 版本失败：返回数据无效');
+                }
+            } else {
+                // 获取失败，留空
+                platformVersionInput.value = '';
+                window.rLog('获取 Android 版本失败:', result.error || '未知错误');
+            }
+        } catch (error) {
+            // 获取失败，留空
+            platformVersionInput.value = '';
+            window.rError('获取 Android 版本时出错:', error);
+        }
+    }
 
     // 填充高级设置
     const automationNameInput = form.querySelector('input[name="automationName"]');
