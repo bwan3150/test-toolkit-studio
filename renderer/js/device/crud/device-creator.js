@@ -18,9 +18,9 @@ async function createDeviceFromConnected(deviceId) {
     if (window.DeviceConfigModalUI && window.DeviceConfigModalUI.showDeviceConfigModal) {
         window.DeviceConfigModalUI.showDeviceConfigModal();
 
-        // 预填充设备ID到表单
+        // 预填充设备ID到表单（包括自动获取 Android 版本）
         if (window.DeviceConfigModalUI.prefillDeviceConfigForm) {
-            window.DeviceConfigModalUI.prefillDeviceConfigForm(deviceId);
+            await window.DeviceConfigModalUI.prefillDeviceConfigForm(deviceId);
         }
     } else {
         window.rError('设备配置模态窗口UI控制器未加载');

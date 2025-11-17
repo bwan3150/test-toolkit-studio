@@ -92,6 +92,11 @@ enum Commands {
         #[command(subcommand)]
         action: AppCommands,
     },
+    /// Device - 获取设备详细信息
+    Device {
+        #[command(subcommand)]
+        action: DeviceCommands,
+    },
 }
 
 #[tokio::main]
@@ -112,7 +117,8 @@ async fn main() -> tke::Result<()> {
             Commands::Recognizer { .. } |
             Commands::Run { .. } |
             Commands::File { .. } |
-            Commands::App { .. }
+            Commands::App { .. } |
+            Commands::Device { .. }
         );
 
         // 初始化日志
@@ -192,6 +198,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::App { action } => {
             app::handle(action, cli.device).await
+        }
+        Commands::Device { action } => {
+            device::handle(action, cli.device)
         }
     }
 }

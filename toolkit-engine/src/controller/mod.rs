@@ -368,6 +368,9 @@ impl Controller {
             android_version: Some(android_version),
             screen_width: width,
             screen_height: height,
+            hardware: None,
+            battery: None,
+            network: None,
         })
     }
     

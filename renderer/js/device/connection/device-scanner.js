@@ -300,6 +300,10 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
         if (hasProject) {
             actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存</button>`);
         }
+        // 已连接的设备显示"信息"按钮
+        if (isConnected && platform === 'android') {
+            actionButtons.push(`<button class="btn btn-default btn-small" onclick="showDeviceInfoModal('${deviceId}')" title="查看详细信息">信息</button>`);
+        }
     } else {
         // 已保存的设备
         if (isWifi && isConnected) {
@@ -311,6 +315,10 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
         // 已保存的设备都显示编辑和删除按钮
         actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?._filename || ''}')">编辑</button>`);
         actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?._filename || ''}')" title="删除">删除</button>`);
+        // 已连接的设备显示"信息"按钮
+        if (isConnected && platform === 'android') {
+            actionButtons.push(`<button class="btn btn-default btn-small" onclick="showDeviceInfoModal('${deviceId}')" title="查看详细信息">信息</button>`);
+        }
     }
 
     if (platform === 'ios' && !isConnected && !isSaved && hasProject) {

@@ -235,6 +235,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 第五批：UI和集成模块
         await loadScript('../js/device/guide/connection-guide-ui.js');
         await loadScript('../js/device/ui/device-config-modal-ui.js');
+        await loadScript('../js/device/ui/device-info-modal-ui.js');
         await loadScript('../js/device/apk/apk-installer.js');
         await loadScript('../js/device/core/device-initializer.js');
 
