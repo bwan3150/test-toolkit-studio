@@ -14,6 +14,7 @@ function initializeTestcasePage() {
     const toggleXmlBtn = document.getElementById('toggleXmlBtn');
     const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
     const captureScreenshotBtn = document.getElementById('captureScreenshotBtn');
+    const syncClipboardBtn = document.getElementById('syncClipboardBtn');
     const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
     const deviceSelect = document.getElementById('deviceSelect');
 
@@ -113,6 +114,123 @@ function initializeTestcasePage() {
             } catch (error) {
                 window.rError('复制截图到剪贴板失败:', error);
                 window.AppNotifications?.error(`复制失败: ${error.message}`);
+            }
+        });
+    }
+
+    // 绑定剪切板同步按钮
+    if (syncClipboardBtn) {
+        syncClipboardBtn.addEventListener('click', async () => {
+            try {
+                // 检查视频流是否激活
+                if (!window.ScrcpyVideoStream || !window.ScrcpyVideoStream.isStreamActive()) {
+                    window.rWarn('⚠️ 请先开启视频流投影');
+                    window.AppNotifications?.warning('请先开启视频流投影');
+                    return;
+                }
+
+                // 检查 WebSocket 连接
+                const ws = window.ScrcpyVideoStream.streamReceiver;
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    window.rError('❌ WebSocket 未连接');
+                    window.AppNotifications?.error('WebSocket 未连接');
+                    return;
+                }
+
+                window.rLog('📋 请求获取设备剪切板...');
+                window.AppNotifications?.info('正在获取设备剪切板...');
+
+                // 设置剪切板消息监听器
+                const handleClipboardMessage = async (event) => {
+                    if (!(event.data instanceof ArrayBuffer)) {
+                        return;
+                    }
+
+                    const data = new Uint8Array(event.data);
+
+                    // 🔍 调试：显示收到的消息前20字节
+                    const preview = Array.from(data.slice(0, Math.min(20, data.length)))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    window.rLog(`🔍 [剪切板监听器] 收到消息 ${data.length} 字节，前20字节: ${preview}`);
+
+                    // 检查是否是剪切板消息 (magic bytes: 'scrcpy_message')
+                    const MAGIC_BYTES = new Uint8Array([115, 99, 114, 99, 112, 121, 95, 109, 101, 115, 115, 97, 103, 101]);
+
+                    if (data.length >= MAGIC_BYTES.length) {
+                        let isMessage = true;
+                        for (let i = 0; i < MAGIC_BYTES.length; i++) {
+                            if (data[i] !== MAGIC_BYTES[i]) {
+                                isMessage = false;
+                                break;
+                            }
+                        }
+
+                        if (isMessage) {
+                            // 解析消息类型 (1字节，在 magic bytes 之后)
+                            const messageType = data[MAGIC_BYTES.length];
+
+                            // TYPE_CLIPBOARD = 0
+                            if (messageType === 0) {
+                                window.rLog('📩 收到剪切板消息');
+
+                                // 解析文本长度 (4字节 Big Endian)
+                                const view = new DataView(data.buffer, data.byteOffset);
+                                const textLength = view.getInt32(MAGIC_BYTES.length + 1, false); // false = Big Endian
+
+                                // 解析文本内容
+                                const textBytes = data.slice(MAGIC_BYTES.length + 5, MAGIC_BYTES.length + 5 + textLength);
+                                const clipboardText = new TextDecoder().decode(textBytes);
+
+                                window.rLog(`📋 设备剪切板内容: ${clipboardText}`);
+
+                                // 写入电脑剪切板
+                                try {
+                                    await navigator.clipboard.writeText(clipboardText);
+                                    window.rLog('✅ 已同步到电脑剪切板');
+                                    window.AppNotifications?.success(`已同步剪切板: ${clipboardText.substring(0, 50)}${clipboardText.length > 50 ? '...' : ''}`);
+                                } catch (clipboardError) {
+                                    window.rError('写入电脑剪切板失败:', clipboardError);
+                                    window.AppNotifications?.error('写入电脑剪切板失败');
+                                }
+
+                                // 移除监听器
+                                ws.removeEventListener('message', handleClipboardMessage);
+                            }
+                        }
+                    }
+                };
+
+                // 添加临时消息监听器
+                ws.addEventListener('message', handleClipboardMessage);
+
+                // 3秒后自动移除监听器（超时保护）
+                setTimeout(() => {
+                    ws.removeEventListener('message', handleClipboardMessage);
+                }, 3000);
+
+                // 发送获取剪切板命令
+                const ControlMessage = window.ScrcpyControlMessage;
+                if (!ControlMessage) {
+                    throw new Error('ControlMessage 未加载');
+                }
+
+                const getClipboardMsg = ControlMessage.createGetClipboardCommand();
+
+                // 🔍 调试：显示发送的命令内容
+                const cmdHex = Array.from(getClipboardMsg)
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join(' ');
+                window.rLog(`🔍 [发送命令] GetClipboard: ${getClipboardMsg.length} 字节 = ${cmdHex}`);
+                window.rLog(`🔍 [发送命令] TYPE_GET_CLIPBOARD = ${ControlMessage.TYPE_GET_CLIPBOARD}`);
+
+                ws.send(getClipboardMsg);
+
+                window.rLog('📤 已发送获取剪切板命令');
+
+            } catch (error) {
+                window.rError('❌ 同步剪切板失败:', error);
+                window.AppNotifications?.error(`同步剪切板失败: ${error.message}`);
             }
         });
     }
