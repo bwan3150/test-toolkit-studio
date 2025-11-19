@@ -14,6 +14,7 @@ function initializeTestcasePage() {
     const toggleXmlBtn = document.getElementById('toggleXmlBtn');
     const refreshDeviceBtn = document.getElementById('refreshDeviceBtn');
     const captureScreenshotBtn = document.getElementById('captureScreenshotBtn');
+    const syncClipboardBtn = document.getElementById('syncClipboardBtn');
     const toggleVideoStreamBtn = document.getElementById('toggleVideoStreamBtn');
     const deviceSelect = document.getElementById('deviceSelect');
 
@@ -117,6 +118,99 @@ function initializeTestcasePage() {
         });
     }
 
+    // 绑定剪切板同步按钮
+    if (syncClipboardBtn) {
+        syncClipboardBtn.addEventListener('click', async () => {
+            try {
+                // 检查视频流是否激活
+                if (!window.ScrcpyVideoStream || !window.ScrcpyVideoStream.isStreamActive()) {
+                    window.rWarn('⚠️ 请先开启视频流投影');
+                    window.AppNotifications?.warning('请先开启视频流投影');
+                    return;
+                }
+
+                // 检查 WebSocket 连接
+                const ws = window.ScrcpyVideoStream.streamReceiver;
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    window.rError('❌ WebSocket 未连接');
+                    window.AppNotifications?.error('WebSocket 未连接');
+                    return;
+                }
+
+                // 设置剪切板消息监听器
+                const handleClipboardMessage = async (event) => {
+                    if (!(event.data instanceof ArrayBuffer)) {
+                        return;
+                    }
+
+                    const data = new Uint8Array(event.data);
+
+                    // 检查是否是剪切板消息 (magic bytes: 'scrcpy_message')
+                    const MAGIC_BYTES = new Uint8Array([115, 99, 114, 99, 112, 121, 95, 109, 101, 115, 115, 97, 103, 101]);
+
+                    if (data.length >= MAGIC_BYTES.length) {
+                        let isMessage = true;
+                        for (let i = 0; i < MAGIC_BYTES.length; i++) {
+                            if (data[i] !== MAGIC_BYTES[i]) {
+                                isMessage = false;
+                                break;
+                            }
+                        }
+
+                        if (isMessage) {
+                            // 解析消息类型 (1字节，在 magic bytes 之后)
+                            const messageType = data[MAGIC_BYTES.length];
+
+                            // TYPE_CLIPBOARD = 0
+                            if (messageType === 0) {
+                                // 解析文本长度 (4字节 Big Endian)
+                                const view = new DataView(data.buffer, data.byteOffset);
+                                const textLength = view.getInt32(MAGIC_BYTES.length + 1, false);
+
+                                // 解析文本内容
+                                const textBytes = data.slice(MAGIC_BYTES.length + 5, MAGIC_BYTES.length + 5 + textLength);
+                                const clipboardText = new TextDecoder().decode(textBytes);
+
+                                // 写入电脑剪切板
+                                try {
+                                    await navigator.clipboard.writeText(clipboardText);
+                                    window.AppNotifications?.success('已将设备剪贴板内容复制到本机');
+                                } catch (clipboardError) {
+                                    window.rError('写入电脑剪切板失败:', clipboardError);
+                                    window.AppNotifications?.error('写入电脑剪切板失败');
+                                }
+
+                                // 移除监听器
+                                ws.removeEventListener('message', handleClipboardMessage);
+                            }
+                        }
+                    }
+                };
+
+                // 添加临时消息监听器
+                ws.addEventListener('message', handleClipboardMessage);
+
+                // 3秒后自动移除监听器（超时保护）
+                setTimeout(() => {
+                    ws.removeEventListener('message', handleClipboardMessage);
+                }, 3000);
+
+                // 发送获取剪切板命令
+                const ControlMessage = window.ScrcpyControlMessage;
+                if (!ControlMessage) {
+                    throw new Error('ControlMessage 未加载');
+                }
+
+                const getClipboardMsg = ControlMessage.createGetClipboardCommand();
+                ws.send(getClipboardMsg);
+
+            } catch (error) {
+                window.rError('❌ 同步剪切板失败:', error);
+                window.AppNotifications?.error(`同步剪切板失败: ${error.message}`);
+            }
+        });
+    }
+
     // 绑定视频流控制按钮
     if (toggleVideoStreamBtn) {
         toggleVideoStreamBtn.addEventListener('click', async () => {
@@ -168,11 +262,40 @@ function initializeTestcasePage() {
         }
     }, 100);
     
-    // 设备选择变化时存储选中设备
+    // 设备选择变化时存储选中设备并检查 Android 版本
     if (deviceSelect) {
-        deviceSelect.addEventListener('change', (e) => {
+        deviceSelect.addEventListener('change', async (e) => {
             if (e.target.value) {
                 ipcRenderer.invoke('store-set', 'selected_device', e.target.value);
+
+                // 获取设备信息，检查 Android 版本以决定是否显示剪切板按钮
+                try {
+                    const result = await ipcRenderer.invoke('tke-device-info', {
+                        deviceId: e.target.value
+                    });
+
+                    if (result.success && result.output) {
+                        const deviceInfo = JSON.parse(result.output);
+                        const androidVersion = parseInt(deviceInfo.android_version);
+
+                        // Android 12+ 隐藏剪切板按钮（ws-scrcpy 暂不支持）
+                        if (syncClipboardBtn) {
+                            if (androidVersion >= 12) {
+                                syncClipboardBtn.style.display = 'none';
+                                window.rLog(`设备 Android 版本: ${androidVersion}，隐藏剪切板按钮（暂不支持 Android 12+）`);
+                            } else {
+                                syncClipboardBtn.style.display = '';
+                                window.rLog(`设备 Android 版本: ${androidVersion}，显示剪切板按钮`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    window.rError('获取设备信息失败:', error);
+                    // 出错时默认显示按钮
+                    if (syncClipboardBtn) {
+                        syncClipboardBtn.style.display = '';
+                    }
+                }
             }
         });
     }
@@ -180,6 +303,35 @@ function initializeTestcasePage() {
     // 加载设备列表
     if (window.DeviceManagerModule) {
         window.DeviceManagerModule.refreshDeviceList();
+
+        // 页面加载后，如果有已选中的设备，检查其 Android 版本
+        setTimeout(async () => {
+            const selectedDevice = deviceSelect?.value;
+            if (selectedDevice && syncClipboardBtn) {
+                try {
+                    const result = await ipcRenderer.invoke('tke-device-info', {
+                        deviceId: selectedDevice
+                    });
+
+                    if (result.success && result.output) {
+                        const deviceInfo = JSON.parse(result.output);
+                        const androidVersion = parseInt(deviceInfo.android_version);
+
+                        // Android 12+ 隐藏剪切板按钮
+                        if (androidVersion >= 12) {
+                            syncClipboardBtn.style.display = 'none';
+                            window.rLog(`当前设备 Android 版本: ${androidVersion}，隐藏剪切板按钮`);
+                        } else {
+                            syncClipboardBtn.style.display = '';
+                            window.rLog(`当前设备 Android 版本: ${androidVersion}，显示剪切板按钮`);
+                        }
+                    }
+                } catch (error) {
+                    // 获取设备信息失败时默认显示按钮
+                    window.rLog('获取设备信息失败，默认显示剪切板按钮');
+                }
+            }
+        }, 500);
     }
     
     // 初始化输入焦点保护
