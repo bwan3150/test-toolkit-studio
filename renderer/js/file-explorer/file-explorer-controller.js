@@ -83,13 +83,18 @@ class FileExplorerController {
         this.currentDevice = deviceId;
         window.rLog('设备已切换:', deviceId);
 
-        // 如果在Photos视图，刷新照片
-        if (this.currentView === 'photos' && deviceId) {
+        // 如果在Photos视图，刷新照片（包括清空状态）
+        if (this.currentView === 'photos') {
           window.PhotosView.loadMedia(deviceId);
         }
-        // 如果在File System视图且有路径，刷新目录
-        else if (this.currentView === 'filesystem' && deviceId && this.currentPath) {
-          this.loadDirectory(this.currentPath);
+        // 如果在File System视图，刷新目录（包括清空状态）
+        else if (this.currentView === 'filesystem') {
+          if (deviceId && this.currentPath) {
+            this.loadDirectory(this.currentPath);
+          } else if (!deviceId) {
+            // 没有设备时显示空状态
+            window.FileRenderer.showEmptyState(this.fileListContent, 'Select a device to browse files');
+          }
         }
       });
     }
@@ -348,20 +353,18 @@ class FileExplorerController {
       this.fileExplorerContainer.style.display = 'flex';
       this.photosContainer.style.display = 'none';
 
-      // 如果有设备,加载目录
+      // 如果有设备,加载目录；否则显示空状态
       if (this.currentDevice) {
         this.loadDirectory(this.currentPath);
+      } else {
+        window.FileRenderer.showEmptyState(this.fileListContent, 'Select a device to browse files');
       }
     } else if (view === 'photos') {
       this.fileExplorerContainer.style.display = 'none';
       this.photosContainer.style.display = 'flex';
 
-      // 如果有设备,加载照片
-      if (this.currentDevice) {
-        window.PhotosView.loadMedia(this.currentDevice);
-      } else {
-        window.PhotosView.showError('请先选择设备');
-      }
+      // 加载照片（如果没有设备会显示提示）
+      window.PhotosView.loadMedia(this.currentDevice);
     }
   }
 
