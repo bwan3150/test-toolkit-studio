@@ -263,6 +263,14 @@ function initializeTestcasePage() {
     // 绑定视频流控制按钮
     if (toggleVideoStreamBtn) {
         toggleVideoStreamBtn.addEventListener('click', async () => {
+            // 首次点击时初始化 ScreenCoordinator（懒加载）
+            if (!window.ScreenCoordinator?.initialized && window.initializeScreenCoordinator) {
+                window.rLog('🎬 首次启动视频流，初始化 ScreenCoordinator...');
+                window.initializeScreenCoordinator();
+                // 等待初始化完成
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
             const currentState = toggleVideoStreamBtn.getAttribute('data-state');
 
             if (currentState === 'stopped') {
@@ -302,28 +310,25 @@ function initializeTestcasePage() {
             }
         });
     }
-    
-    // 初始化屏幕协调器
-    setTimeout(() => {
-        window.rLog('延迟初始化 ScreenCoordinator');
-        if (window.initializeScreenCoordinator) {
-            window.initializeScreenCoordinator();
-        }
-    }, 100);
+
+    // ScreenCoordinator 初始化已移除 - 现在只在用户主动操作时初始化
+    // 用户需要手动点击视频流按钮来启动投屏
 
     // 设备选择和设备列表加载已由DeviceSelector组件和PageStateManager处理
 
     // 初始化输入焦点保护
     initializeInputFocusProtection();
-    
+
     // 初始化UI元素面板
     initializeUIElementsPanel();
-    
+
     // 初始化文件树资源管理器
     if (window.TestcaseExplorerModule) {
         // loadFileTree 会在项目加载时由 project-manager 调用
         window.rLog('文件树资源管理器已准备就绪');
     }
+
+    // 注意：ScreenCoordinator 不再自动初始化，将在用户主动操作（如切换视频流按钮）时初始化
 }
 
 // 初始化输入焦点保护
@@ -618,21 +623,18 @@ window.TestcaseController = {
 };
 
 // 注册Testcase页面到PageStateManager
-// 页面激活时刷新设备列表和屏幕显示
+// 页面激活时只刷新设备列表，不自动启动视频流
 if (window.PageStateManager) {
     window.PageStateManager.registerPage('testcase', {
         onActivate: async () => {
-            window.rLog('🔄 Testcase页面激活，刷新设备列表和屏幕...');
+            window.rLog('🔄 Testcase页面激活，刷新设备列表...');
 
             // 刷新设备列表
             if (window.TestcaseController && window.TestcaseController.refreshDeviceList) {
                 await window.TestcaseController.refreshDeviceList();
             }
 
-            // 刷新设备屏幕（如果ScreenCoordinator已初始化）
-            if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
-                window.ScreenCoordinator.refreshDeviceScreen();
-            }
+            // 不自动刷新设备屏幕 - 需要用户手动点击视频流按钮
 
             window.rLog('✅ Testcase页面数据加载完成');
         },
@@ -644,10 +646,7 @@ if (window.PageStateManager) {
                 await window.TestcaseController.refreshDeviceList();
             }
 
-            // 刷新设备屏幕
-            if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
-                window.ScreenCoordinator.refreshDeviceScreen();
-            }
+            // 不自动刷新设备屏幕 - 需要用户手动操作
 
             window.rLog('✅ Testcase页面刷新完成');
         },
