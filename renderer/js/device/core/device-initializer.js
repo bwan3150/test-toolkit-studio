@@ -101,11 +101,11 @@ async function initializeDevicePage() {
         });
     }
 
-    // 刷新设备列表按钮
+    // 刷新设备列表按钮 - 改为整页刷新
     if (scanDevicesBtn) {
         scanDevicesBtn.addEventListener('click', () => {
-            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
-                window.DeviceScanner.refreshConnectedDevices();
+            if (window.PageStateManager) {
+                window.PageStateManager.refreshPage('device');
             }
         });
     }
@@ -196,11 +196,6 @@ async function initializeDevicePage() {
         window.ConnectionGuideUI.initializeIpSync();
     }
 
-    // 加载保存的设备
-    if (window.DeviceLoader && window.DeviceLoader.loadSavedDevices) {
-        window.DeviceLoader.loadSavedDevices();
-    }
-
     // 监听配对成功事件
     const { ipcRenderer } = getGlobals();
     ipcRenderer.on('pairing-success', (event, data) => {
@@ -232,3 +227,40 @@ window.loadConnectionGuideModal = loadConnectionGuideModal;
 window.loadDeviceConfigModal = loadDeviceConfigModal;
 window.loadDeviceInfoModal = loadDeviceInfoModal;
 window.initializeDevicePage = initializeDevicePage;
+
+// 注册Device页面到PageStateManager
+// 页面激活时加载已保存的设备和刷新连接的设备
+if (window.PageStateManager) {
+    window.PageStateManager.registerPage('device', {
+        onActivate: async () => {
+            window.rLog('🔄 Device页面激活，加载设备数据...');
+
+            // 加载保存的设备
+            if (window.DeviceLoader && window.DeviceLoader.loadSavedDevices) {
+                await window.DeviceLoader.loadSavedDevices();
+            }
+
+            // 刷新连接的设备
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                await window.DeviceScanner.refreshConnectedDevices();
+            }
+
+            window.rLog('✅ Device页面数据加载完成');
+        },
+        onRefresh: async () => {
+            window.rLog('🔄 Device页面刷新...');
+
+            // 刷新保存的设备和连接的设备
+            if (window.DeviceLoader && window.DeviceLoader.loadSavedDevices) {
+                await window.DeviceLoader.loadSavedDevices();
+            }
+
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                await window.DeviceScanner.refreshConnectedDevices();
+            }
+
+            window.rLog('✅ Device页面刷新完成');
+        },
+        ttl: 30000 // 30秒缓存（设备状态变化较快）
+    });
+}

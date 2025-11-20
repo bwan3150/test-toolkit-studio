@@ -14,7 +14,7 @@ class FileExplorerController {
     this.initElements();
     this.initModules();
     this.initEventListeners();
-    this.loadDevices();
+    // 不在constructor中加载设备，等待页面激活时由PageStateManager触发
   }
 
   // ============ 初始化相关 ============
@@ -70,6 +70,30 @@ class FileExplorerController {
   }
 
   initModules() {
+    // 初始化设备选择器组件
+    if (window.DeviceSelector) {
+      this.deviceSelector = new window.DeviceSelector(this.deviceSelect, {
+        emptyText: 'Select Device',
+        autoRestore: true,
+        storageKey: 'selected_device'
+      });
+
+      // 监听设备变更
+      this.deviceSelector.onChange((deviceId) => {
+        this.currentDevice = deviceId;
+        window.rLog('设备已切换:', deviceId);
+
+        // 如果在Photos视图，刷新照片
+        if (this.currentView === 'photos' && deviceId) {
+          window.PhotosView.loadMedia(deviceId);
+        }
+        // 如果在File System视图且有路径，刷新目录
+        else if (this.currentView === 'filesystem' && deviceId && this.currentPath) {
+          this.loadDirectory(this.currentPath);
+        }
+      });
+    }
+
     // 初始化右键菜单模块
     window.ContextMenuManager.init(this.contextMenu);
 
@@ -238,7 +262,12 @@ class FileExplorerController {
       }
     });
 
-    this.refreshDeviceBtn.addEventListener('click', () => this.loadDevices());
+    // 修改为整页刷新
+    this.refreshDeviceBtn.addEventListener('click', () => {
+      if (window.PageStateManager) {
+        window.PageStateManager.refreshPage('file-explorer');
+      }
+    });
 
     // 工具栏按钮
     this.backBtn.addEventListener('click', () => this.navigateBack());
@@ -341,58 +370,24 @@ class FileExplorerController {
   async loadDevices() {
     try {
       window.rLog('加载设备列表...');
-      const { ipcRenderer } = window.AppGlobals;
-      const result = await ipcRenderer.invoke('adb-devices');
 
-      if (!result || !result.success) {
-        throw new Error(result?.error || '获取设备列表失败');
-      }
+      // 使用DeviceSelector组件刷新设备列表
+      if (this.deviceSelector) {
+        await this.deviceSelector.refresh();
+        this.currentDevice = this.deviceSelector.getSelectedDevice();
 
-      const devices = result.devices || [];
-
-      // 更新设备选择器
-      this.deviceSelect.innerHTML = '<option value="">Select Device</option>';
-
-      devices.forEach(device => {
-        if (device.status === 'device') {
-          const option = document.createElement('option');
-          option.value = device.id;
-          option.textContent = device.id;
-          this.deviceSelect.appendChild(option);
+        // 更新DragUploadManager的设备ID
+        if (this.currentDevice && window.DragUploadManager) {
+          window.DragUploadManager.setDeviceId(this.currentDevice);
         }
-      });
 
-      window.rLog(`找到 ${devices.length} 个设备`);
-
-      // 恢复之前选择的设备
-      const savedSelection = await ipcRenderer.invoke('store-get', 'selected_device');
-      if (savedSelection && Array.from(this.deviceSelect.options).some(opt => opt.value === savedSelection)) {
-        window.rLog(`✓ 恢复已保存的设备: ${savedSelection}`);
-        this.deviceSelect.value = savedSelection;
-        this.currentDevice = savedSelection;
-        window.DragUploadManager.setDeviceId(savedSelection);
-        // 自动加载默认目录
-        if (this.currentView === 'filesystem') {
+        // 如果有选中的设备，自动加载目录
+        if (this.currentDevice && this.currentView === 'filesystem') {
           window.rLog(`自动加载目录: ${this.currentPath}`);
           await this.loadDirectory(this.currentPath);
         }
-      } else if (devices.length > 0) {
-        // 如果没有保存的设备但有可用设备，自动选择第一个
-        const firstDevice = devices.find(d => d.status === 'device');
-        if (firstDevice) {
-          window.rLog(`✓ 自动选择第一个设备: ${firstDevice.id}`);
-          this.deviceSelect.value = firstDevice.id;
-          this.currentDevice = firstDevice.id;
-          window.DragUploadManager.setDeviceId(firstDevice.id);
-          await ipcRenderer.invoke('store-set', 'selected_device', firstDevice.id);
-          // 自动加载默认目录
-          if (this.currentView === 'filesystem') {
-            window.rLog(`自动加载目录: ${this.currentPath}`);
-            await this.loadDirectory(this.currentPath);
-          }
-        }
       } else {
-        window.rLog('没有可用设备');
+        window.rWarn('DeviceSelector组件未初始化');
       }
     } catch (error) {
       window.rError('加载设备列表失败:', error);
@@ -740,3 +735,6 @@ class FileExplorerController {
 
 // 初始化控制器(在app.js中调用)
 window.FileExplorerController = FileExplorerController;
+
+// 注册PageStateManager的代码已移至app.js
+// 因为需要在PageStateManager加载后且实例创建后才能注册

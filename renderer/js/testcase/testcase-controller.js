@@ -56,11 +56,11 @@ function initializeTestcasePage() {
         });
     }
     
-    // 绑定刷新设备屏幕按钮
+    // 绑定刷新按钮 - 改为整页刷新
     if (refreshDeviceBtn) {
         refreshDeviceBtn.addEventListener('click', () => {
-            if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
-                window.ScreenCoordinator.refreshDeviceScreen();
+            if (window.PageStateManager) {
+                window.PageStateManager.refreshPage('testcase');
             }
         });
     }
@@ -625,3 +625,41 @@ window.TestcaseController = {
         }
     }
 };
+
+// 注册Testcase页面到PageStateManager
+// 页面激活时刷新设备列表和屏幕显示
+if (window.PageStateManager) {
+    window.PageStateManager.registerPage('testcase', {
+        onActivate: async () => {
+            window.rLog('🔄 Testcase页面激活，刷新设备列表和屏幕...');
+
+            // 刷新设备列表
+            if (window.TestcaseController && window.TestcaseController.refreshDeviceList) {
+                await window.TestcaseController.refreshDeviceList();
+            }
+
+            // 刷新设备屏幕（如果ScreenCoordinator已初始化）
+            if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
+                window.ScreenCoordinator.refreshDeviceScreen();
+            }
+
+            window.rLog('✅ Testcase页面数据加载完成');
+        },
+        onRefresh: async () => {
+            window.rLog('🔄 Testcase页面刷新...');
+
+            // 刷新设备列表
+            if (window.TestcaseController && window.TestcaseController.refreshDeviceList) {
+                await window.TestcaseController.refreshDeviceList();
+            }
+
+            // 刷新设备屏幕
+            if (window.ScreenCoordinator && window.ScreenCoordinator.refreshDeviceScreen) {
+                window.ScreenCoordinator.refreshDeviceScreen();
+            }
+
+            window.rLog('✅ Testcase页面刷新完成');
+        },
+        ttl: 60000 // 60秒缓存
+    });
+}

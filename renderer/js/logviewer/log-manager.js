@@ -52,8 +52,23 @@ class LogManager {
 
     // 初始化Log页面
     async initializeLogPage() {
+        // 初始化设备选择器组件
+        const deviceSelect = document.getElementById('logDeviceSelect');
+        if (deviceSelect && window.DeviceSelector) {
+            this.deviceSelector = new window.DeviceSelector(deviceSelect, {
+                emptyText: 'Select a device',
+                autoRestore: true,
+                storageKey: 'selected_device'
+            });
+
+            // 监听设备变更
+            this.deviceSelector.onChange((deviceId) => {
+                this.selectDevice(deviceId);
+            });
+        }
+
         this.setupEventListeners();
-        await this.refreshDeviceList();
+        // 不在初始化时加载设备列表，等待页面激活时由PageStateManager触发
     }
 
     // 解析快速过滤语法
@@ -94,13 +109,7 @@ class LogManager {
 
     // 设置事件监听器 - 支持双模式
     setupEventListeners() {
-        // 设备选择
-        const deviceSelect = document.getElementById('logDeviceSelect');
-        if (deviceSelect) {
-            deviceSelect.addEventListener('change', (e) => {
-                this.selectDevice(e.target.value);
-            });
-        }
+        // 设备选择已通过DeviceSelector组件处理，不需要在这里添加监听器
 
         // 模式切换
         const simpleModeRadio = document.getElementById('simpleModeRadio');
@@ -330,66 +339,21 @@ class LogManager {
         this.applyFilters();
     }
 
-    // 刷新设备列表 - 优先显示用户保存的设备配置名称
+    // 刷新设备列表 - 使用DeviceSelector组件
     async refreshDeviceList() {
         try {
-            const { ipcRenderer } = getGlobals();
-            const result = await ipcRenderer.invoke('get-connected-devices');
-            const deviceSelect = document.getElementById('logDeviceSelect');
-            
-            if (deviceSelect) {
-                deviceSelect.innerHTML = '<option value="">Select a device</option>';
-                
-                // 检查返回结果格式
-                let devices = [];
-                if (result && result.success && Array.isArray(result.devices)) {
-                    devices = result.devices;
-                } else if (Array.isArray(result)) {
-                    devices = result;
-                } else {
-                    console.warn('Unexpected device list format:', result);
-                    return;
-                }
-                
-                // 尝试获取用户保存的设备配置
-                let savedDevices = [];
-                try {
-                    const savedResult = await ipcRenderer.invoke('get-saved-devices');
-                    if (savedResult && savedResult.success && Array.isArray(savedResult.devices)) {
-                        savedDevices = savedResult.devices;
-                    } else if (Array.isArray(savedResult)) {
-                        savedDevices = savedResult;
-                    }
-                } catch (e) {
-                    console.log('无法获取保存的设备配置，使用默认显示方式');
-                    savedDevices = [];
-                }
-                
-                devices.forEach(device => {
-                    const option = document.createElement('option');
-                    option.value = device.id;
-                    
-                    // 简化的设备匹配逻辑
-                    let displayName = device.model || 'Unknown Device';
-                    let foundSavedDevice = false;
-                    
-                    // 查找匹配的保存配置
-                    for (const saved of savedDevices) {
-                        // 直接匹配设备ID，或者匹配IP地址（无线设备）
-                        if (saved.deviceId === device.id || 
-                            (saved.ipAddress && device.id.includes(saved.ipAddress))) {
-                            displayName = saved.deviceName;
-                            foundSavedDevice = true;
-                            break;
-                        }
-                    }
-                    
-                    option.textContent = `${displayName} (${device.id})`;
-                    deviceSelect.appendChild(option);
-                });
+            window.rLog('刷新Log Viewer设备列表...');
+
+            // 使用DeviceSelector组件刷新设备列表
+            if (this.deviceSelector) {
+                await this.deviceSelector.refresh();
+                this.currentDevice = this.deviceSelector.getSelectedDevice();
+                window.rLog('✅ 设备列表已刷新，当前设备:', this.currentDevice);
+            } else {
+                window.rWarn('DeviceSelector组件未初始化');
             }
         } catch (error) {
-            console.error('Failed to refresh device list:', error);
+            window.rError('刷新设备列表失败:', error);
             this.showNotification('Failed to get device list', 'error');
         }
     }
@@ -1365,3 +1329,27 @@ window.LogManagerModule = {
     clearLogs: () => logManager.clearLogs(),
     exportLogs: () => logManager.exportLogs()
 };
+
+// 注册Log页面到PageStateManager
+// 页面激活时刷新设备列表
+if (window.PageStateManager) {
+    window.PageStateManager.registerPage('log', {
+        onActivate: async () => {
+            window.rLog('🔄 Log页面激活，刷新设备列表...');
+
+            // 刷新设备列表
+            await logManager.refreshDeviceList();
+
+            window.rLog('✅ Log页面数据加载完成');
+        },
+        onRefresh: async () => {
+            window.rLog('🔄 Log页面刷新...');
+
+            // 刷新设备列表
+            await logManager.refreshDeviceList();
+
+            window.rLog('✅ Log页面刷新完成');
+        },
+        ttl: 30000 // 30秒缓存（设备状态变化较快）
+    });
+}
