@@ -141,9 +141,11 @@ async fn bidirectional_forward_ws(
                     msg_count += 1;
                     if msg_count <= 3 {
                         info!("scrcpy-server -> 客户端 [消息 {}]: {:?}", msg_count, msg);
-                    } else if msg_count % 100 == 0 {
-                        info!("scrcpy-server -> 客户端: 已转发 {} 条消息", msg_count);
                     }
+                    // 注释掉频繁的日志输出
+                    // else if msg_count % 100 == 0 {
+                    //     info!("scrcpy-server -> 客户端: 已转发 {} 条消息", msg_count);
+                    // }
                     let mut writer = client_write_clone.lock().await;
                     if let Err(e) = writer.send(msg).await {
                         error!("发送到客户端失败: {}", e);

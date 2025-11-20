@@ -62,8 +62,13 @@ class LogManager {
             });
 
             // 监听设备变更
-            this.deviceSelector.onChange((deviceId) => {
+            this.deviceSelector.onChange(async (deviceId) => {
                 this.selectDevice(deviceId);
+
+                // 加载该设备的应用包名列表
+                if (deviceId) {
+                    await this.loadPackageList(deviceId);
+                }
             });
         }
 
@@ -190,24 +195,13 @@ class LogManager {
             });
         }
 
-        // Simple模式：Package过滤
+        // Simple模式：Package过滤（现在是select下拉框）
         const simplePackageFilter = document.getElementById('simplePackageFilter');
         if (simplePackageFilter) {
-            let debounceTimer = null;
-            simplePackageFilter.addEventListener('input', (e) => {
-                // 显示输入框filtering状态
-                this.setInputFilteringState(simplePackageFilter, true);
-                
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(() => {
-                    this.filters.package = e.target.value;
-                    this.applyFilters();
-                    
-                    // 移除输入框filtering状态
-                    setTimeout(() => {
-                        this.setInputFilteringState(simplePackageFilter, false);
-                    }, 500);
-                }, 300);
+            simplePackageFilter.addEventListener('change', (e) => {
+                this.filters.package = e.target.value;
+                this.applyFilters();
+                window.rLog('Package过滤器已更新:', e.target.value || '全部');
             });
         }
 
@@ -349,12 +343,74 @@ class LogManager {
                 await this.deviceSelector.refresh();
                 this.currentDevice = this.deviceSelector.getSelectedDevice();
                 window.rLog('✅ 设备列表已刷新，当前设备:', this.currentDevice);
+
+                // 如果有选中的设备，加载应用包名列表
+                if (this.currentDevice) {
+                    await this.loadPackageList(this.currentDevice);
+                }
             } else {
                 window.rWarn('DeviceSelector组件未初始化');
             }
         } catch (error) {
             window.rError('刷新设备列表失败:', error);
             this.showNotification('Failed to get device list', 'error');
+        }
+    }
+
+    // 加载设备的应用包名列表
+    async loadPackageList(deviceId) {
+        try {
+            window.rLog('加载设备应用包名列表:', deviceId);
+
+            const { ipcRenderer } = getGlobals();
+            const packageSelect = document.getElementById('simplePackageFilter');
+
+            if (!packageSelect) {
+                window.rWarn('Package选择器未找到');
+                return;
+            }
+
+            // 显示加载中
+            packageSelect.innerHTML = '<option value="">Loading...</option>';
+            packageSelect.disabled = true;
+
+            // 调用tke-app-list获取应用列表
+            const result = await ipcRenderer.invoke('tke-app-list', { deviceId });
+
+            if (result && result.success) {
+                const appsData = JSON.parse(result.output);
+
+                // 清空选择器
+                packageSelect.innerHTML = '<option value="">All packages</option>';
+
+                // 添加应用包名选项
+                if (appsData.apps && Array.isArray(appsData.apps)) {
+                    appsData.apps.forEach(app => {
+                        const option = document.createElement('option');
+                        option.value = app.package_name;
+                        option.textContent = app.package_name;
+                        packageSelect.appendChild(option);
+                    });
+
+                    window.rLog(`✅ 已加载 ${appsData.apps.length} 个应用包名`);
+                } else {
+                    window.rLog('未找到应用');
+                }
+            } else {
+                window.rError('获取应用列表失败:', result?.error);
+                packageSelect.innerHTML = '<option value="">All packages</option>';
+            }
+
+            packageSelect.disabled = false;
+
+        } catch (error) {
+            window.rError('加载应用包名列表失败:', error);
+            const packageSelect = document.getElementById('simplePackageFilter');
+            if (packageSelect) {
+                packageSelect.innerHTML = '<option value="">All packages</option>';
+                packageSelect.disabled = false;
+            }
+            this.showNotification('Failed to load app list', 'error');
         }
     }
 
