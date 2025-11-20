@@ -20,6 +20,55 @@ function initializeTestcasePage() {
 
     window.rLog('初始化测试用例页面');
 
+    // 初始化设备选择器组件
+    let deviceSelector = null;
+    if (deviceSelect && window.DeviceSelector) {
+        deviceSelector = new window.DeviceSelector(deviceSelect, {
+            emptyText: 'Select Device',
+            autoRestore: true,
+            storageKey: 'selected_device'
+        });
+
+        // 监听设备变更
+        deviceSelector.onChange(async (deviceId) => {
+            window.rLog('Testcase页面设备已切换:', deviceId);
+
+            if (deviceId) {
+                // 获取设备信息，检查 Android 版本以决定是否显示剪切板按钮
+                try {
+                    const result = await ipcRenderer.invoke('tke-device-info', {
+                        deviceId: deviceId
+                    });
+
+                    if (result.success && result.output) {
+                        const deviceInfo = JSON.parse(result.output);
+                        const androidVersion = parseInt(deviceInfo.android_version);
+
+                        // Android 12+ 隐藏剪切板按钮（ws-scrcpy 暂不支持）
+                        if (syncClipboardBtn) {
+                            if (androidVersion >= 12) {
+                                syncClipboardBtn.style.display = 'none';
+                                window.rLog(`设备 Android 版本: ${androidVersion}，隐藏剪切板按钮（暂不支持 Android 12+）`);
+                            } else {
+                                syncClipboardBtn.style.display = '';
+                                window.rLog(`设备 Android 版本: ${androidVersion}，显示剪切板按钮`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    window.rError('获取设备信息失败:', error);
+                    // 出错时默认显示按钮
+                    if (syncClipboardBtn) {
+                        syncClipboardBtn.style.display = '';
+                    }
+                }
+            }
+        });
+
+        // 将deviceSelector保存到TestcaseController供其他地方使用
+        window.TestcaseController.deviceSelector = deviceSelector;
+    }
+
     // 绑定 Run Test 按钮
     if (runTestBtn) {
         runTestBtn.addEventListener('click', async () => {
@@ -261,79 +310,9 @@ function initializeTestcasePage() {
             window.initializeScreenCoordinator();
         }
     }, 100);
-    
-    // 设备选择变化时存储选中设备并检查 Android 版本
-    if (deviceSelect) {
-        deviceSelect.addEventListener('change', async (e) => {
-            if (e.target.value) {
-                ipcRenderer.invoke('store-set', 'selected_device', e.target.value);
 
-                // 获取设备信息，检查 Android 版本以决定是否显示剪切板按钮
-                try {
-                    const result = await ipcRenderer.invoke('tke-device-info', {
-                        deviceId: e.target.value
-                    });
+    // 设备选择和设备列表加载已由DeviceSelector组件和PageStateManager处理
 
-                    if (result.success && result.output) {
-                        const deviceInfo = JSON.parse(result.output);
-                        const androidVersion = parseInt(deviceInfo.android_version);
-
-                        // Android 12+ 隐藏剪切板按钮（ws-scrcpy 暂不支持）
-                        if (syncClipboardBtn) {
-                            if (androidVersion >= 12) {
-                                syncClipboardBtn.style.display = 'none';
-                                window.rLog(`设备 Android 版本: ${androidVersion}，隐藏剪切板按钮（暂不支持 Android 12+）`);
-                            } else {
-                                syncClipboardBtn.style.display = '';
-                                window.rLog(`设备 Android 版本: ${androidVersion}，显示剪切板按钮`);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    window.rError('获取设备信息失败:', error);
-                    // 出错时默认显示按钮
-                    if (syncClipboardBtn) {
-                        syncClipboardBtn.style.display = '';
-                    }
-                }
-            }
-        });
-    }
-    
-    // 加载设备列表
-    if (window.DeviceManagerModule) {
-        window.DeviceManagerModule.refreshDeviceList();
-
-        // 页面加载后，如果有已选中的设备，检查其 Android 版本
-        setTimeout(async () => {
-            const selectedDevice = deviceSelect?.value;
-            if (selectedDevice && syncClipboardBtn) {
-                try {
-                    const result = await ipcRenderer.invoke('tke-device-info', {
-                        deviceId: selectedDevice
-                    });
-
-                    if (result.success && result.output) {
-                        const deviceInfo = JSON.parse(result.output);
-                        const androidVersion = parseInt(deviceInfo.android_version);
-
-                        // Android 12+ 隐藏剪切板按钮
-                        if (androidVersion >= 12) {
-                            syncClipboardBtn.style.display = 'none';
-                            window.rLog(`当前设备 Android 版本: ${androidVersion}，隐藏剪切板按钮`);
-                        } else {
-                            syncClipboardBtn.style.display = '';
-                            window.rLog(`当前设备 Android 版本: ${androidVersion}，显示剪切板按钮`);
-                        }
-                    }
-                } catch (error) {
-                    // 获取设备信息失败时默认显示按钮
-                    window.rLog('获取设备信息失败，默认显示剪切板按钮');
-                }
-            }
-        }, 500);
-    }
-    
     // 初始化输入焦点保护
     initializeInputFocusProtection();
     
@@ -597,6 +576,18 @@ window.TestcaseController = {
     displayUIElementList: (elements) => {
         if (window.UIExtractor && window.UIExtractor.displayUIElementList) {
             return window.UIExtractor.displayUIElementList(elements);
+        }
+    },
+
+    // 设备列表刷新 - 使用DeviceSelector组件
+    refreshDeviceList: async () => {
+        window.rLog('刷新Testcase页面设备列表...');
+
+        if (window.TestcaseController.deviceSelector) {
+            await window.TestcaseController.deviceSelector.refresh();
+            window.rLog('✅ Testcase设备列表已刷新');
+        } else {
+            window.rWarn('DeviceSelector组件未初始化');
         }
     },
 
