@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Toolkit Studio 自动化测试集成开发运行环境</title>
+    <title>Toolkit Studio 一站式自动化测试脚本开发与执行平台</title>
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -552,29 +552,44 @@
         .glow-effect::after {
             content: '';
             position: absolute;
-            inset: -3px;
+            inset: calc(-1 * var(--border-width, 3px));
             border-radius: 20px;
-            padding: 3px;
-            background: conic-gradient(
-                from calc(var(--start, 0) * 1deg) at 50% 50%,
-                transparent 0deg,
-                rgba(221, 123, 187, 0.3) 10deg,
-                rgba(221, 123, 187, 0.8) 20deg,
-                #dd7bbb 30deg,
-                #d79f1e 45deg,
-                #5a922c 60deg,
-                #4c7894 75deg,
-                rgba(76, 120, 148, 0.8) 85deg,
-                rgba(76, 120, 148, 0.3) 95deg,
-                transparent 105deg,
-                transparent 360deg
-            );
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            mask-composite: exclude;
+            border: var(--border-width, 3px) solid transparent;
+            /* 背景渐变色 - 固定在视口上 */
+            background: radial-gradient(circle, #dd7bbb 10%, #dd7bbb00 20%),
+                        radial-gradient(circle at 40% 40%, #d79f1e 5%, #d79f1e00 15%),
+                        radial-gradient(circle at 60% 60%, #5a922c 10%, #5a922c00 20%),
+                        radial-gradient(circle at 40% 60%, #4c7894 10%, #4c789400 20%),
+                        repeating-conic-gradient(
+                            from 236.84deg at 50% 50%,
+                            #dd7bbb 0%,
+                            #d79f1e calc(25% / 5),
+                            #5a922c calc(50% / 5),
+                            #4c7894 calc(75% / 5),
+                            #dd7bbb calc(100% / 5)
+                        );
+            background-attachment: fixed;
             opacity: var(--active, 0);
             transition: opacity 0.3s;
+            /* 遮罩 - 创建扇形效果 */
+            -webkit-mask-clip: padding-box, border-box;
+            -webkit-mask-composite: source-in;
+            mask-clip: padding-box, border-box;
+            mask-composite: intersect;
+            -webkit-mask-image: linear-gradient(transparent, transparent),
+                                conic-gradient(
+                                    from calc((var(--start, 0) - var(--spread, 40)) * 1deg),
+                                    transparent 0deg,
+                                    #fff,
+                                    transparent calc(var(--spread, 40) * 2deg)
+                                );
+            mask-image: linear-gradient(transparent, transparent),
+                        conic-gradient(
+                            from calc((var(--start, 0) - var(--spread, 40)) * 1deg),
+                            transparent 0deg,
+                            #fff,
+                            transparent calc(var(--spread, 40) * 2deg)
+                        );
         }
 
         .card-inner {
@@ -590,11 +605,19 @@
             -webkit-backdrop-filter: blur(12px);
             padding: 24px 24px 16px 24px;
             box-shadow:
+                /* 外部阴影 */
                 0 0 8px rgba(0, 0, 0, 0.08),
                 0 4px 12px rgba(0, 0, 0, 0.15),
-                inset 2px 2px 1px -1px rgba(255, 255, 255, 0.08),
-                inset -2px -2px 1px -1px rgba(255, 255, 255, 0.08),
-                inset 0 0 8px 2px rgba(255, 255, 255, 0.03);
+                /* 边缘高光 - 增大范围和强度 */
+                inset 4px 4px 3px -1px rgba(255, 255, 255, 0.12),
+                inset -4px -4px 3px -1px rgba(255, 255, 255, 0.12),
+                /* 中等范围内发光 */
+                inset 0 0 16px 4px rgba(255, 255, 255, 0.06),
+                /* 大范围内发光 - 增加整体液态玻璃感 */
+                inset 0 0 32px 8px rgba(255, 255, 255, 0.04),
+                /* 细微边缘光 */
+                inset 1px 1px 1px rgba(255, 255, 255, 0.15),
+                inset -1px -1px 1px rgba(255, 255, 255, 0.15);
         }
 
         .card-content {
@@ -607,7 +630,7 @@
             z-index: 10;
         }
 
-        .card-outer:hover .card-content {
+        .card-outer.hovering .card-content {
             transform: translateY(-16px);
         }
 
@@ -630,7 +653,7 @@
             flex-shrink: 0;
         }
 
-        .card-outer:hover .core-feature-icon {
+        .card-outer.hovering .core-feature-icon {
             transform: scale(0.75);
         }
 
@@ -655,7 +678,7 @@
             transition: left 0.5s;
         }
 
-        .card-outer:hover .core-feature-icon::before {
+        .card-outer.hovering .core-feature-icon::before {
             left: 100%;
         }
 
@@ -737,11 +760,11 @@
             -webkit-backdrop-filter: blur(6px);
         }
 
-        .card-outer:hover .future-badge {
+        .card-outer.hovering .future-badge {
             transform: scale(1.05);
         }
 
-        .card-outer:hover .future-badge::before {
+        .card-outer.hovering .future-badge::before {
             box-shadow:
                 0 0 8px rgba(0, 0, 0, 0.04),
                 0 3px 8px rgba(0, 0, 0, 0.1),
@@ -764,7 +787,7 @@
             pointer-events: none;
         }
 
-        .card-outer:hover .core-feature-desc {
+        .card-outer.hovering .core-feature-desc {
             opacity: 1;
             transform: translateY(0);
         }
@@ -1761,106 +1784,169 @@
         // 核心功能卡片鼠标追踪光晕效果 - 基于 shadcn GlowingEffect
         document.addEventListener('DOMContentLoaded', () => {
             const cards = document.querySelectorAll('.card-outer');
-            const proximity = 32; // 鼠标接近触发距离（减小以降低敏感度）
-            const inactiveZone = 0.01; // 中心非活跃区域
+            const proximity = 64; // 鼠标接近触发距离（匹配参考代码）
+            const spread = 40; // 炫光扇形角度范围
+            const inactiveZone = 0.01; // 中心非活跃区域（极小值，几乎总是激活）
             const movementDuration = 600; // 动画持续时间(ms)
+            const borderWidth = 3; // 边框宽度
+
+            // 为每个卡片存储动画状态
+            const cardStates = new Map();
 
             cards.forEach(cardOuter => {
                 const glowEffect = cardOuter.querySelector('.glow-effect');
                 if (!glowEffect) return;
 
-                let animationFrameId = null;
-                let currentAngle = 0;
-                let targetAngle = 0;
-                let animationStart = null;
+                // 初始化 CSS 变量
+                glowEffect.style.setProperty('--spread', spread.toString());
+                glowEffect.style.setProperty('--border-width', `${borderWidth}px`);
+                glowEffect.style.setProperty('--start', '0');
+                glowEffect.style.setProperty('--active', '0');
 
-                // 平滑动画函数
-                const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+                cardStates.set(cardOuter, {
+                    glowEffect,
+                    animationFrameId: null,
+                    currentAngle: 0,
+                    targetAngle: 0,
+                    animationStart: null
+                });
+            });
 
-                const animate = (timestamp) => {
-                    if (!animationStart) animationStart = timestamp;
-                    const elapsed = timestamp - animationStart;
-                    const progress = Math.min(elapsed / movementDuration, 1);
+            // 平滑动画函数
+            const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
-                    const easedProgress = easeOutCubic(progress);
-                    const newAngle = currentAngle + (targetAngle - currentAngle) * easedProgress;
+            // 单个卡片的动画函数
+            const animateCard = (cardOuter, timestamp) => {
+                const state = cardStates.get(cardOuter);
+                if (!state) return;
 
-                    glowEffect.style.setProperty('--start', newAngle.toString());
+                if (!state.animationStart) state.animationStart = timestamp;
+                const elapsed = timestamp - state.animationStart;
+                const progress = Math.min(elapsed / movementDuration, 1);
 
-                    if (progress < 1) {
-                        animationFrameId = requestAnimationFrame(animate);
-                    } else {
-                        currentAngle = targetAngle;
-                        animationFrameId = null;
-                        animationStart = null;
+                const easedProgress = easeOutCubic(progress);
+                const newAngle = state.currentAngle + (state.targetAngle - state.currentAngle) * easedProgress;
+
+                state.glowEffect.style.setProperty('--start', newAngle.toString());
+
+                if (progress < 1) {
+                    state.animationFrameId = requestAnimationFrame((ts) => animateCard(cardOuter, ts));
+                } else {
+                    state.currentAngle = state.targetAngle;
+                    state.animationFrameId = null;
+                    state.animationStart = null;
+                }
+            };
+
+            // 处理单个卡片的鼠标移动
+            const handleCardMouseMove = (cardOuter, mouseX, mouseY) => {
+                const state = cardStates.get(cardOuter);
+                if (!state) return;
+
+                const rect = cardOuter.getBoundingClientRect();
+                const left = rect.left;
+                const top = rect.top;
+                const width = rect.width;
+                const height = rect.height;
+
+                // 计算中心点
+                const centerX = left + width * 0.5;
+                const centerY = top + height * 0.5;
+
+                // 计算距离中心的距离
+                const distanceFromCenter = Math.hypot(mouseX - centerX, mouseY - centerY);
+                const inactiveRadius = 0.5 * Math.min(width, height) * inactiveZone;
+
+                // 如果在非活跃区域内，隐藏光晕
+                if (distanceFromCenter < inactiveRadius) {
+                    state.glowEffect.style.setProperty('--active', '0');
+                    return;
+                }
+
+                // 检查鼠标是否在接近范围内（扩展卡片边界）
+                const isActive =
+                    mouseX > left - proximity &&
+                    mouseX < left + width + proximity &&
+                    mouseY > top - proximity &&
+                    mouseY < top + height + proximity;
+
+                state.glowEffect.style.setProperty('--active', isActive ? '1' : '0');
+
+                if (!isActive) return;
+
+                // 计算从卡片中心指向鼠标的角度
+                let angle = (180 * Math.atan2(mouseY - centerY, mouseX - centerX)) / Math.PI + 90;
+
+                // 处理角度差异，选择最短路径
+                const angleDiff = ((angle - state.currentAngle + 180) % 360) - 180;
+                state.targetAngle = state.currentAngle + angleDiff;
+
+                // 启动动画
+                if (!state.animationFrameId) {
+                    state.animationStart = null;
+                    state.animationFrameId = requestAnimationFrame((ts) => animateCard(cardOuter, ts));
+                }
+            };
+
+            // 全局鼠标位置
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+
+            // 全局鼠标移动事件监听器（只添加一次）
+            document.addEventListener('mousemove', (e) => {
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+
+                // 遍历所有卡片并更新炫光
+                cards.forEach(cardOuter => {
+                    handleCardMouseMove(cardOuter, lastMouseX, lastMouseY);
+                });
+            });
+
+            // 滚动时更新所有卡片（因为卡片位置可能变化）
+            window.addEventListener('scroll', () => {
+                cards.forEach(cardOuter => {
+                    handleCardMouseMove(cardOuter, lastMouseX, lastMouseY);
+                });
+            }, { passive: true });
+
+            // Hover 延迟控制 - 避免快速划过时的闪烁
+            const hoverDelay = 150; // 延迟时间（毫秒）
+            const hoverTimers = new Map();
+
+            cards.forEach(cardOuter => {
+                let enterTimer = null;
+                let leaveTimer = null;
+
+                // 鼠标进入
+                cardOuter.addEventListener('mouseenter', () => {
+                    // 取消离开的延迟（如果有）
+                    if (leaveTimer) {
+                        clearTimeout(leaveTimer);
+                        leaveTimer = null;
                     }
-                };
 
-                // 鼠标移动事件处理
-                const handleMouseMove = (e) => {
-                    const rect = cardOuter.getBoundingClientRect();
-                    const left = rect.left;
-                    const top = rect.top;
-                    const width = rect.width;
-                    const height = rect.height;
-                    const mouseX = e.clientX;
-                    const mouseY = e.clientY;
-
-                    // 计算中心点
-                    const centerX = left + width * 0.5;
-                    const centerY = top + height * 0.5;
-
-                    // 计算距离中心的距离
-                    const distanceFromCenter = Math.hypot(mouseX - centerX, mouseY - centerY);
-                    const inactiveRadius = 0.5 * Math.min(width, height) * inactiveZone;
-
-                    // 如果在非活跃区域内，隐藏光晕
-                    if (distanceFromCenter < inactiveRadius) {
-                        glowEffect.style.setProperty('--active', '0');
-                        return;
-                    }
-
-                    // 检查鼠标是否在接近范围内
-                    const isActive =
-                        mouseX > left - proximity &&
-                        mouseX < left + width + proximity &&
-                        mouseY > top - proximity &&
-                        mouseY < top + height + proximity;
-
-                    glowEffect.style.setProperty('--active', isActive ? '1' : '0');
-
-                    if (!isActive) return;
-
-                    // 计算角度
-                    let angle = (180 * Math.atan2(mouseY - centerY, mouseX - centerX)) / Math.PI + 90;
-
-                    // 处理角度差异，选择最短路径
-                    const angleDiff = ((angle - currentAngle + 180) % 360) - 180;
-                    targetAngle = currentAngle + angleDiff;
-
-                    // 启动动画
-                    if (!animationFrameId) {
-                        animationStart = null;
-                        animationFrameId = requestAnimationFrame(animate);
-                    }
-                };
-
-                const handleScroll = () => {
-                    // 滚动时更新位置
-                    handleMouseMove({ clientX: lastMouseX, clientY: lastMouseY });
-                };
-
-                let lastMouseX = 0;
-                let lastMouseY = 0;
-
-                // 监听鼠标移动和滚动
-                document.addEventListener('mousemove', (e) => {
-                    lastMouseX = e.clientX;
-                    lastMouseY = e.clientY;
-                    handleMouseMove(e);
+                    // 延迟添加 hovering class
+                    enterTimer = setTimeout(() => {
+                        cardOuter.classList.add('hovering');
+                        enterTimer = null;
+                    }, hoverDelay);
                 });
 
-                window.addEventListener('scroll', handleScroll, { passive: true });
+                // 鼠标离开
+                cardOuter.addEventListener('mouseleave', () => {
+                    // 取消进入的延迟（如果有）
+                    if (enterTimer) {
+                        clearTimeout(enterTimer);
+                        enterTimer = null;
+                    }
+
+                    // 延迟移除 hovering class
+                    leaveTimer = setTimeout(() => {
+                        cardOuter.classList.remove('hovering');
+                        leaveTimer = null;
+                    }, hoverDelay);
+                });
             });
         });
     </script>
