@@ -149,69 +149,42 @@
    * @param {string} pageName - 页面名称
    */
   function triggerBuiltInActions(pageName) {
-    switch (pageName) {
-      case 'device':
-        if (window.DeviceManagerModule && window.DeviceManagerModule.refreshConnectedDevices) {
-          window.DeviceManagerModule.refreshConnectedDevices();
+    // 使用PageStateManager统一管理页面数据加载
+    if (window.PageStateManager) {
+      // 异步激活页面数据加载（不阻塞UI）
+      window.PageStateManager.activatePage(pageName).catch(error => {
+        if (window.rError) {
+          window.rError(`页面 ${pageName} 激活失败:`, error);
         }
-        break;
+      });
+    }
 
-      case 'log':
-        if (window.LogManagerModule && window.LogManagerModule.refreshDeviceList) {
-          window.LogManagerModule.refreshDeviceList();
+    // testcase页面的特殊处理：检查是否已打开项目
+    if (pageName === 'testcase') {
+      if (!window.AppGlobals || !window.AppGlobals.currentProject) {
+        if (window.rLog) {
+          window.rLog('⚠️ testcase 页面需要项目，显示提示');
         }
-        break;
-
-      case 'settings':
-        if (window.SettingsModule && window.SettingsModule.checkSDKStatus) {
-          window.SettingsModule.checkSDKStatus();
+        if (window.ModalManager) {
+          window.ModalManager.showAlert({
+            title: '',
+            message: '请先打开一个项目',
+            confirmText: '确定',
+            blockPage: true,
+            onConfirm: () => {
+              navigateTo('project');
+            }
+          });
         }
-        // 刷新缓存统计信息
-        if (window.CacheManager && window.CacheManager.updateCacheStats) {
-          window.CacheManager.updateCacheStats();
+        return; // 不继续激活testcase页面
+      } else {
+        // 确保底部面板正确初始化和显示
+        if (window.TestcaseController && window.TestcaseController.initializeBottomPanelDisplay) {
+          setTimeout(() => {
+            window.TestcaseController.initializeBottomPanelDisplay();
+          }, 100);
         }
-        break;
-
-      case 'report':
-        if (window.TestReportModule && window.TestReportModule.onPageActivated) {
-          window.TestReportModule.onPageActivated();
-        }
-        break;
-
-      case 'testcase':
-        // 检查是否已打开项目
-        if (!window.AppGlobals || !window.AppGlobals.currentProject) {
-          if (window.rLog) {
-            window.rLog('⚠️ testcase 页面需要项目，显示提示');
-          }
-          if (window.ModalManager) {
-            window.ModalManager.showAlert({
-              title: '',
-              message: '请先打开一个项目',
-              confirmText: '确定',
-              blockPage: true,
-              onConfirm: () => {
-                navigateTo('project');
-              }
-            });
-          }
-        } else {
-          // 确保底部面板正确初始化和显示
-          if (window.TestcaseController && window.TestcaseController.initializeBottomPanelDisplay) {
-            setTimeout(() => {
-              window.TestcaseController.initializeBottomPanelDisplay();
-            }, 100);
-          }
-        }
-        break;
-
-      case 'file-explorer':
-        // 刷新文件浏览器
-        if (window.fileExplorerController) {
-          // 刷新设备列表并自动加载
-          window.fileExplorerController.loadDevices();
-        }
-        break;
+      }
     }
   }
 

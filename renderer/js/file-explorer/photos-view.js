@@ -121,12 +121,15 @@ window.PhotosView = {
    * @param {string} deviceId - 设备ID
    */
   async loadMedia(deviceId) {
-    if (deviceId) {
+    // 更新当前设备ID（包括清空的情况）
+    if (deviceId !== undefined) {
       this.currentDeviceId = deviceId;
     }
 
+    // 如果没有设备或设备为空，显示提示
     if (!this.currentDeviceId) {
-      window.rError('没有选择设备');
+      window.rLog('Photos view: 没有选择设备，显示提示');
+      this.showError('Select a device to browse files');
       return;
     }
 
@@ -823,8 +826,8 @@ window.PhotosView = {
    */
   showEmptyState() {
     this.photosGrid.innerHTML = `
-      <div class="empty-state" style="grid-column: 1 / -1;">
-        <svg viewBox="0 0 24 24" width="64" height="64" fill="white">
+      <div class="empty-state" style="grid-column: 1 / -1; min-height: calc(100vh - 200px); pointer-events: none;">
+        <svg viewBox="0 0 24 24" width="64" height="64">
           <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
         </svg>
         <p>No media files found</p>
@@ -838,11 +841,11 @@ window.PhotosView = {
    */
   showError(message) {
     this.photosGrid.innerHTML = `
-      <div class="empty-state" style="grid-column: 1 / -1;">
-        <svg viewBox="0 0 24 24" width="64" height="64" fill="white">
+      <div class="empty-state" style="grid-column: 1 / -1; min-height: calc(100vh - 200px); pointer-events: none;">
+        <svg viewBox="0 0 24 24" width="64" height="64">
           <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
         </svg>
-        <p style="color: var(--text-secondary);">${message}</p>
+        <p>${message}</p>
       </div>
     `;
   }

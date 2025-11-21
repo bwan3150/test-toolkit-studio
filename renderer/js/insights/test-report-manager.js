@@ -37,15 +37,9 @@ const TIMELINE_COLORS = {
     // Initialize report page
     async function initializeReportPage() {
         bindEventListeners();
-        
-        // 尝试加载真实数据，但不阻塞初始化
-        try {
-            await loadRealData(); // 加载真实数据
-        } catch (error) {
-            console.error('加载API数据失败，但继续初始化:', error);
-            // 即使API失败，也继续初始化图表（会显示无数据状态）
-        }
-        
+
+        // 不在初始化时加载数据，等待页面激活时由PageStateManager触发
+        // 只初始化图表框架
         initializeCharts();
     }
     
@@ -254,6 +248,16 @@ const TIMELINE_COLORS = {
         const moreFiltersBtn = document.getElementById('moreFiltersBtn');
         const severityFilterBtn = document.getElementById('severityFilterBtn');
         const timelineFilterBtn = document.getElementById('timelineFilterBtn');
+        const refreshInsightsBtn = document.getElementById('refreshInsightsBtn');
+
+        // 刷新按钮 - 调用PageStateManager刷新整个页面
+        if (refreshInsightsBtn) {
+            refreshInsightsBtn.addEventListener('click', () => {
+                if (window.PageStateManager) {
+                    window.PageStateManager.refreshPage('report');
+                }
+            });
+        }
         
         if (projectSelect) {
             projectSelect.addEventListener('change', (e) => {
@@ -1397,4 +1401,31 @@ const TIMELINE_COLORS = {
         refreshReportData,
         onPageActivated
     };
+
+    // 注册Report页面到PageStateManager
+    // 页面激活时加载真实数据
+    if (window.PageStateManager) {
+        window.PageStateManager.registerPage('report', {
+            onActivate: async () => {
+                window.rLog('🔄 Insights页面激活，加载数据...');
+
+                // 加载真实数据
+                await loadRealData();
+
+                // 重新初始化图表
+                initializeCharts();
+
+                window.rLog('✅ Insights页面数据加载完成');
+            },
+            onRefresh: async () => {
+                window.rLog('🔄 Insights页面刷新...');
+
+                // 刷新数据
+                await refreshReportData();
+
+                window.rLog('✅ Insights页面刷新完成');
+            },
+            ttl: 120000 // 120秒缓存（数据统计不需要频繁刷新）
+        });
+    }
 })();

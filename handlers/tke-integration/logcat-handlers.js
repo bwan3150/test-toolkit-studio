@@ -117,7 +117,10 @@ function registerLogcatHandlers(app, mainWindow) {
         // 发送完整的行
         if (lines.length > 0) {
           const completeOutput = lines.join('\n') + '\n';
-          mainWindow.webContents.send('logcat-data', completeOutput);
+          // 检查window是否已销毁，避免"Object has been destroyed"错误
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('logcat-data', completeOutput);
+          }
         }
       });
       
@@ -128,14 +131,17 @@ function registerLogcatHandlers(app, mainWindow) {
       
       logcatProcess.on('close', (code) => {
         console.log(`Logcat process exited with code ${code}`);
-        
+
         // 清理缓冲区中残留的不完整行
         const remainingBuffer = logcatBuffers.get(device);
         if (remainingBuffer && remainingBuffer.trim()) {
           console.log('Sending last line from buffer:', remainingBuffer);
-          mainWindow.webContents.send('logcat-data', remainingBuffer + '\n');
+          // 检查window是否已销毁，避免"Object has been destroyed"错误
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('logcat-data', remainingBuffer + '\n');
+          }
         }
-        
+
         logcatProcesses.delete(device);
         logcatBuffers.delete(device);
       });

@@ -53,9 +53,8 @@ function initializeSettingsPage() {
     if (checkToolsBtn) {
         checkToolsBtn.addEventListener('click', checkAllToolsStatus);
     }
-    
-    // 自动检查工具状态
-    checkAllToolsStatus();
+
+    // 不在初始化时检查工具状态，等待页面激活时由PageStateManager触发
     
     if (updateBaseUrlBtn) {
         updateBaseUrlBtn.addEventListener('click', async () => {
@@ -195,6 +194,79 @@ function initializeSettingsPage() {
     if (window.CacheManager) {
         window.CacheManager.init();
     }
+
+    // PageStateManager调试工具
+    const viewPageCacheBtn = document.getElementById('viewPageCacheBtn');
+    const clearPageCacheBtn = document.getElementById('clearPageCacheBtn');
+    const pageCacheModal = document.getElementById('pageCacheModal');
+    const closePageCacheModal = document.getElementById('closePageCacheModal');
+    const pageCacheContent = document.getElementById('pageCacheContent');
+    const pagesCachedCount = document.getElementById('pagesCachedCount');
+
+    // 更新缓存计数
+    function updatePageCacheCount() {
+        if (window.PageStateManager && pagesCachedCount) {
+            const cacheInfo = window.PageStateManager.getCacheInfo();
+            const cachedPages = Object.values(cacheInfo).filter(page => page.state !== 'inactive').length;
+            pagesCachedCount.textContent = cachedPages;
+        }
+    }
+
+    // 查看缓存详情
+    if (viewPageCacheBtn) {
+        viewPageCacheBtn.addEventListener('click', () => {
+            if (!window.PageStateManager) {
+                window.AppNotifications?.error('PageStateManager未加载');
+                return;
+            }
+
+            const cacheInfo = window.PageStateManager.getCacheInfo();
+            const formattedInfo = JSON.stringify(cacheInfo, null, 2);
+
+            if (pageCacheContent && pageCacheModal) {
+                pageCacheContent.textContent = formattedInfo;
+                pageCacheModal.style.display = 'flex';
+            }
+        });
+    }
+
+    // 清空页面缓存
+    if (clearPageCacheBtn) {
+        clearPageCacheBtn.addEventListener('click', () => {
+            if (!window.PageStateManager) {
+                window.AppNotifications?.error('PageStateManager未加载');
+                return;
+            }
+
+            window.PageStateManager.clearPageCache();
+            window.AppNotifications?.success('页面缓存已清空');
+            updatePageCacheCount();
+        });
+    }
+
+    // 关闭模态框
+    if (closePageCacheModal) {
+        closePageCacheModal.addEventListener('click', () => {
+            if (pageCacheModal) {
+                pageCacheModal.style.display = 'none';
+            }
+        });
+    }
+
+    // 点击模态框外部关闭
+    if (pageCacheModal) {
+        pageCacheModal.addEventListener('click', (e) => {
+            if (e.target === pageCacheModal) {
+                pageCacheModal.style.display = 'none';
+            }
+        });
+    }
+
+    // 初始化计数
+    updatePageCacheCount();
+
+    // 导出updatePageCacheCount函数，供PageStateManager钩子使用
+    window.updatePageCacheCount = updatePageCacheCount;
 }
 
 // 加载编辑器字体设置
@@ -466,3 +538,47 @@ window.SettingsModule = {
     loadEditorFontSettings,
     applyEditorFontSettings
 };
+
+// 注册Settings页面到PageStateManager
+// 页面激活时检查工具状态和缓存统计
+if (window.PageStateManager) {
+    window.PageStateManager.registerPage('settings', {
+        onActivate: async () => {
+            window.rLog('🔄 Settings页面激活，检查工具状态...');
+
+            // 检查所有工具状态
+            await checkAllToolsStatus();
+
+            // 更新媒体缓存统计
+            if (window.CacheManager && window.CacheManager.updateCacheStats) {
+                await window.CacheManager.updateCacheStats();
+            }
+
+            // 更新页面缓存计数
+            if (window.updatePageCacheCount) {
+                window.updatePageCacheCount();
+            }
+
+            window.rLog('✅ Settings页面数据加载完成');
+        },
+        onRefresh: async () => {
+            window.rLog('🔄 Settings页面刷新...');
+
+            // 重新检查工具状态
+            await checkAllToolsStatus();
+
+            // 更新媒体缓存统计
+            if (window.CacheManager && window.CacheManager.updateCacheStats) {
+                await window.CacheManager.updateCacheStats();
+            }
+
+            // 更新页面缓存计数
+            if (window.updatePageCacheCount) {
+                window.updatePageCacheCount();
+            }
+
+            window.rLog('✅ Settings页面刷新完成');
+        },
+        ttl: 300000 // 300秒（5分钟）缓存（工具版本不会频繁变化）
+    });
+}

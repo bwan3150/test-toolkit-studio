@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 2. 加载UI模块
         // notifications 已迁移到 utils/app-notifications.js,在 index.html 中静态加载
+        await loadScript('../js/utils/page-state-manager.js'); // 页面状态管理器（必须在page-navigator之前）
         await loadScript('../js/utils/page-navigator.js'); // 页面导航工具
 
         // 加载CodeJar编辑器模块
@@ -308,6 +309,39 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (window.FileExplorerController) {
                 window.fileExplorerController = new window.FileExplorerController();
                 window.rLog('✓ 文件浏览器模块已初始化');
+
+                // 注册File-Explorer页面到PageStateManager
+                // 页面激活时加载设备列表
+                if (window.PageStateManager) {
+                    window.PageStateManager.registerPage('file-explorer', {
+                        onActivate: async () => {
+                            window.rLog('🔄 File Explorer页面激活，加载设备列表...');
+
+                            // 加载设备列表（通过全局实例）
+                            if (window.fileExplorerController && window.fileExplorerController.loadDevices) {
+                                await window.fileExplorerController.loadDevices();
+                            }
+
+                            window.rLog('✅ File Explorer页面数据加载完成');
+                        },
+                        onRefresh: async () => {
+                            window.rLog('🔄 File Explorer页面刷新...');
+
+                            // 刷新设备列表和当前目录
+                            if (window.fileExplorerController) {
+                                await window.fileExplorerController.loadDevices();
+
+                                // 如果有当前目录，也刷新目录内容
+                                if (window.fileExplorerController.currentDevice && window.fileExplorerController.currentPath) {
+                                    await window.fileExplorerController.loadDirectory(window.fileExplorerController.currentPath);
+                                }
+                            }
+
+                            window.rLog('✅ File Explorer页面刷新完成');
+                        },
+                        ttl: 30000 // 30秒缓存（设备状态变化较快）
+                    });
+                }
             }
 
             try {
