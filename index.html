@@ -105,10 +105,6 @@
             color: #f0f0f0;
         }
 
-        .nav-link.active {
-            color: #f0f0f0;
-        }
-
         /* 汉堡菜单按钮 */
         .hamburger {
             display: none;
@@ -153,18 +149,6 @@
             padding: 80px 40px 200px;
         }
 
-        /* Hero section 底部渐变遮罩 */
-        .hero-section::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 400px;
-            background: linear-gradient(to bottom, transparent 0%, #0d0d0d 100%);
-            pointer-events: none;
-            z-index: 5;
-        }
 
         /* Shader 动画背景 */
         .shader-background {
@@ -172,6 +156,18 @@
             inset: 0;
             pointer-events: none;
             overflow: hidden;
+            z-index: 1;
+            /* 使用 mask 实现底部渐变淡出效果 */
+            -webkit-mask-image: linear-gradient(to bottom,
+                rgba(0, 0, 0, 1) 0%,
+                rgba(0, 0, 0, 1) 40%,
+                rgba(0, 0, 0, 0.6) 70%,
+                rgba(0, 0, 0, 0) 100%);
+            mask-image: linear-gradient(to bottom,
+                rgba(0, 0, 0, 1) 0%,
+                rgba(0, 0, 0, 1) 40%,
+                rgba(0, 0, 0, 0.6) 70%,
+                rgba(0, 0, 0, 0) 100%);
         }
 
         .shader-background canvas {
@@ -492,6 +488,7 @@
             margin-top: 60px;
             opacity: 0;
             animation: fadeInUp 1s ease-out 0.7s forwards;
+            z-index: 10; /* 确保产品展示图在渐变遮罩上方 */
         }
 
         .product-image-container {
@@ -538,14 +535,14 @@
         .card-outer {
             position: relative;
             height: 100%;
-            border-radius: 20px;
+            border-radius: 12px;
         }
 
         /* 光晕效果层 */
         .glow-effect {
             position: absolute;
             inset: 0;
-            border-radius: 20px;
+            border-radius: 12px;
             pointer-events: none;
         }
 
@@ -553,7 +550,7 @@
             content: '';
             position: absolute;
             inset: calc(-1 * var(--border-width, 3px));
-            border-radius: 20px;
+            border-radius: calc(12px + var(--border-width, 3px));
             border: var(--border-width, 3px) solid transparent;
             /* 背景渐变色 - 固定在视口上 */
             background: radial-gradient(circle, #dd7bbb 10%, #dd7bbb00 20%),
@@ -599,10 +596,10 @@
             height: 100%;
             overflow: hidden;
             border-radius: 12px;
-            border: 0.75px solid rgba(255, 255, 255, 0.1);
-            background: rgba(20, 20, 20, 0.6);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            border: 0.75px solid rgba(255, 255, 255, 0.08);
+            background: rgba(20, 20, 20, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             padding: 24px 24px 16px 24px;
             box-shadow:
                 /* 外部阴影 */
@@ -854,36 +851,54 @@
             /* 移动端导航链接样式 */
             .nav-links {
                 position: fixed;
-                top: 72px;
-                left: 0;
-                right: 0;
-                background: rgba(13, 13, 13, 0.98);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
+                top: 84px;
+                left: 16px;
+                right: 16px;
+                background: rgba(13, 13, 13, 0.85);
+                backdrop-filter: blur(24px) saturate(180%);
+                -webkit-backdrop-filter: blur(24px) saturate(180%);
                 flex-direction: column;
                 gap: 0;
                 padding: 0;
                 max-height: 0;
                 overflow: hidden;
-                transition: max-height 0.3s ease, padding 0.3s ease;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                           padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                           opacity 0.3s ease,
+                           transform 0.3s ease;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                opacity: 0;
+                transform: translateY(-8px);
             }
 
             .nav-links.active {
                 max-height: 300px;
-                padding: 20px 0;
+                padding: 0;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                opacity: 1;
+                transform: translateY(0);
             }
 
             .nav-link {
-                padding: 16px 32px;
-                font-size: 16px;
+                padding: 14px 32px;
+                font-size: 15px;
                 width: 100%;
                 text-align: left;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                border-bottom: none;
+                transition: all 0.2s ease;
+            }
+
+            .nav-link:first-child {
+                border-radius: 16px 16px 0 0;
             }
 
             .nav-link:last-child {
-                border-bottom: none;
+                border-radius: 0 0 16px 16px;
+            }
+
+            .nav-link:hover {
+                background: rgba(255, 255, 255, 0.05);
             }
 
             .download-section {
@@ -921,7 +936,7 @@
                 <span></span>
             </button>
             <div class="nav-links" id="navLinks">
-                <a href="index.html" class="nav-link active">首页</a>
+                <a href="index.html" class="nav-link">首页</a>
                 <a href="#core-features" class="nav-link">核心特性</a>
                 <a href="#feature-showcase" class="nav-link">功能展示</a>
                 <a href="release-notes.html" class="nav-link">更新日志</a>
@@ -1349,8 +1364,14 @@
                 uniforms.resolution.value.y = renderer.domElement.height;
             };
 
-            // 初始化大小
-            onWindowResize();
+            // 初始化大小 - 使用 requestAnimationFrame 确保 DOM 完全渲染后再设置大小
+            requestAnimationFrame(() => {
+                onWindowResize();
+                // 再次确保渲染正确
+                requestAnimationFrame(() => {
+                    renderer.render(scene, camera);
+                });
+            });
             window.addEventListener('resize', onWindowResize, false);
 
             // 动画循环
@@ -1378,9 +1399,22 @@
         }
 
         // 页面加载完成后初始化 Shader
-        document.addEventListener('DOMContentLoaded', () => {
-            initShaderAnimation();
-        });
+        // 使用更可靠的初始化方式，确保刷新时也能正常工作
+        function startShader() {
+            // 等待下一帧确保 DOM 完全渲染
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    initShaderAnimation();
+                });
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startShader);
+        } else {
+            // 如果 DOM 已经加载完成（刷新时可能出现），直接执行
+            startShader();
+        }
 
         // S3 配置
         const S3_BASE_URL = 'https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com/app';
