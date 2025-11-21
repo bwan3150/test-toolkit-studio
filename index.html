@@ -488,6 +488,7 @@
             margin-top: 60px;
             opacity: 0;
             animation: fadeInUp 1s ease-out 0.7s forwards;
+            z-index: 2; /* 确保在 shader 背景(z-index: 1)上方，但低于下载菜单 */
         }
 
         .product-image-container {
