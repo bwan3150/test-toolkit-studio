@@ -1129,22 +1129,34 @@
     <section class="feature-section" id="feature-showcase">
         <div class="feature-item">
             <h2 class="feature-title">海量测试用例，一键导入</h2>
-            <video src="create_proj.webm" class="feature-media" width="1502" height="876" autoplay loop muted playsinline></video>
+            <video class="feature-media lazy-video" width="1502" height="876" loop muted playsinline preload="metadata">
+                <source src="create_proj.webm" type="video/webm">
+                <source src="create_proj.mp4" type="video/mp4">
+            </video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">XML、截图、坐标点，三种识别模式随心搭配</h2>
-            <video src="detect_modes.webm" class="feature-media" width="1604" height="1110" autoplay loop muted playsinline></video>
+            <video class="feature-media lazy-video" width="1604" height="1110" loop muted playsinline preload="metadata">
+                <source src="detect_modes.webm" type="video/webm">
+                <source src="detect_modes.mp4" type="video/mp4">
+            </video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">拖拽交互，轻松生成自动化脚本</h2>
-            <video src="block_editor.webm" class="feature-media" width="1796" height="1036" autoplay loop muted playsinline></video>
+            <video class="feature-media lazy-video" width="1796" height="1036" loop muted playsinline preload="metadata">
+                <source src="block_editor.webm" type="video/webm">
+                <source src="block_editor.mp4" type="video/mp4">
+            </video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">块编辑器 or 文本编辑器，一键切换</h2>
-            <video src="editor_switch.webm" class="feature-media" width="1602" height="1072" autoplay loop muted playsinline></video>
+            <video class="feature-media lazy-video" width="1602" height="1072" loop muted playsinline preload="metadata">
+                <source src="editor_switch.webm" type="video/webm">
+                <source src="editor_switch.mp4" type="video/mp4">
+            </video>
         </div>
 
         <div class="feature-item">
@@ -1158,7 +1170,10 @@
 
         <div class="feature-item">
             <h2 class="feature-title">运行用例，逐行高亮追踪</h2>
-            <video src="script_operation.webm" class="feature-media" width="1600" height="902" autoplay loop muted playsinline></video>
+            <video class="feature-media lazy-video" width="1600" height="902" loop muted playsinline preload="metadata">
+                <source src="script_operation.webm" type="video/webm">
+                <source src="script_operation.mp4" type="video/mp4">
+            </video>
         </div>
 
         <div class="feature-item">
@@ -1172,7 +1187,10 @@
 
         <div class="feature-item">
             <h2 class="feature-title">流式日志抓取，辅助测试排查</h2>
-            <video src="logviewer.webm" class="feature-media" width="1712" height="1130" autoplay loop muted playsinline></video>
+            <video class="feature-media lazy-video" width="1712" height="1130" loop muted playsinline preload="metadata">
+                <source src="logviewer.webm" type="video/webm">
+                <source src="logviewer.mp4" type="video/mp4">
+            </video>
         </div>
 
         <div class="feature-item">
@@ -1468,6 +1486,49 @@
         } else {
             // 如果 DOM 已经加载完成（刷新时可能出现），直接执行
             startShader();
+        }
+
+        // 视频懒加载 - 使用 Intersection Observer 实现视口内播放
+        function initLazyVideos() {
+            const lazyVideos = document.querySelectorAll('.lazy-video');
+
+            if ('IntersectionObserver' in window) {
+                const videoObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        const video = entry.target;
+
+                        if (entry.isIntersecting) {
+                            // 视频进入视口，尝试播放
+                            video.play().catch(err => {
+                                // 静默处理播放失败（移动端可能需要用户交互）
+                                console.log('视频自动播放失败，等待用户交互:', err);
+                            });
+                        } else {
+                            // 视频离开视口，暂停播放以节省资源
+                            video.pause();
+                        }
+                    });
+                }, {
+                    threshold: 0.25, // 当25%的视频可见时触发
+                    rootMargin: '50px' // 提前50px开始加载
+                });
+
+                lazyVideos.forEach(video => {
+                    videoObserver.observe(video);
+                });
+            } else {
+                // 不支持 Intersection Observer 的浏览器，直接播放所有视频
+                lazyVideos.forEach(video => {
+                    video.play().catch(err => console.log('视频播放失败:', err));
+                });
+            }
+        }
+
+        // 初始化视频懒加载
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initLazyVideos);
+        } else {
+            initLazyVideos();
         }
 
         // S3 配置
