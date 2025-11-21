@@ -7,10 +7,16 @@
     <meta name="keywords" content="自动化测试,Android测试,测试工具,脚本编辑器,UI测试,移动端测试,测试平台">
     <title>Toolkit Studio 一站式自动化测试脚本开发与执行平台</title>
 
+    <!-- DNS 预解析和预连接 - 提前建立第三方域连接 -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com" crossorigin>
+    <link rel="dns-prefetch" href="https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com">
+
     <!-- 资源预加载 - 优先加载关键资源 -->
     <link rel="preload" href="toolkit_studio_logo.webp" as="image" type="image/webp">
     <link rel="preload" href="display_image.webp" as="image" type="image/webp">
-    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" as="script">
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" as="script" crossorigin>
 
     <!-- Three.js - 使用 defer 避免阻塞渲染 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
@@ -348,11 +354,13 @@
             content: '';
             position: absolute;
             top: 0;
-            left: -100%;
+            left: 0;
             width: 100%;
             height: 100%;
             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
             animation: loading 1.5s infinite;
+            transform: translateX(-100%);
+            will-change: transform;
         }
 
         .dropdown-toggle {
@@ -458,8 +466,8 @@
         }
 
         @keyframes loading {
-            0% { left: -100%; }
-            100% { left: 100%; }
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
         }
 
         /* 功能展示区 */
@@ -947,7 +955,7 @@
                 <span></span>
             </button>
             <div class="nav-links" id="navLinks">
-                <a href="index.html" class="nav-link">首页</a>
+                <a href="#top" class="nav-link">首页</a>
                 <a href="#core-features" class="nav-link">核心特性</a>
                 <a href="#feature-showcase" class="nav-link">功能展示</a>
                 <a href="release-notes.html" class="nav-link">更新日志</a>
@@ -1727,10 +1735,11 @@
                 const disabled = !data ? 'disabled' : '';
 
                 return `
-                    <a href="javascript:void(0);"
+                    <a href="${data ? data.downloadUrl : '#'}"
                        class="dropdown-item ${disabled}"
                        data-platform="${platform.key}"
-                       data-url="${data ? data.downloadUrl : ''}">
+                       data-url="${data ? data.downloadUrl : ''}"
+                       ${!data ? 'onclick="return false;"' : ''}>
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             ${PLATFORM_ICONS[platform.iconKey]}
                         </svg>
