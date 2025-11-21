@@ -24,11 +24,11 @@
             position: fixed;
             top: 0;
             width: 100%;
-            background: rgba(13, 13, 13, 0.95);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: rgba(13, 13, 13, 0.7);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
             z-index: 1000;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .nav-container {
@@ -53,9 +53,32 @@
 
         .logo-text {
             font-size: 20px;
-            font-weight: 600;
-            color: #f0f0f0;
+            font-weight: 700;
             letter-spacing: -0.5px;
+            background: linear-gradient(180deg, #ffffff 0%, #999999 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            transition: opacity 0.3s;
+        }
+
+        .nav-left a {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            gap: 16px;
+        }
+
+        .nav-left a:hover .logo-text {
+            opacity: 0.8;
+        }
+
+        .nav-left a:hover .logo {
+            opacity: 0.8;
+        }
+
+        .logo {
+            transition: opacity 0.3s;
         }
 
         .nav-links {
@@ -372,8 +395,10 @@
     <nav>
         <div class="nav-container">
             <div class="nav-left">
-                <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
-                <span class="logo-text">Toolkit</span>
+                <a href="index.html">
+                    <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
+                    <span class="logo-text">Toolkit Studio</span>
+                </a>
             </div>
             <button class="hamburger" id="hamburger" aria-label="菜单">
                 <span></span>
