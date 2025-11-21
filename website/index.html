@@ -1374,11 +1374,14 @@
             });
             window.addEventListener('resize', onWindowResize, false);
 
-            // 动画循环
+            // 动画循环 - 使用实际时间确保所有设备速度一致
             let animationId;
+            let startTime = Date.now();
             const animate = () => {
                 animationId = requestAnimationFrame(animate);
-                uniforms.time.value += 0.05;
+                // 使用实际流逝的时间（毫秒转秒），确保在所有刷新率设备上速度一致
+                const currentTime = Date.now();
+                uniforms.time.value = (currentTime - startTime) * 0.003; // 速度因子调整
                 renderer.render(scene, camera);
             };
 
