@@ -103,10 +103,6 @@
             color: #f0f0f0;
         }
 
-        .nav-link.active {
-            color: #f0f0f0;
-        }
-
         /* 汉堡菜单按钮 */
         .hamburger {
             display: none;
@@ -397,36 +393,54 @@
             /* 移动端导航链接样式 */
             .nav-links {
                 position: fixed;
-                top: 72px;
-                left: 0;
-                right: 0;
-                background: rgba(13, 13, 13, 0.98);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
+                top: 84px;
+                left: 16px;
+                right: 16px;
+                background: rgba(13, 13, 13, 0.85);
+                backdrop-filter: blur(24px) saturate(180%);
+                -webkit-backdrop-filter: blur(24px) saturate(180%);
                 flex-direction: column;
                 gap: 0;
                 padding: 0;
                 max-height: 0;
                 overflow: hidden;
-                transition: max-height 0.3s ease, padding 0.3s ease;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                           padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                           opacity 0.3s ease,
+                           transform 0.3s ease;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 16px;
+                opacity: 0;
+                transform: translateY(-8px);
             }
 
             .nav-links.active {
                 max-height: 300px;
-                padding: 20px 0;
+                padding: 0;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                opacity: 1;
+                transform: translateY(0);
             }
 
             .nav-link {
-                padding: 16px 32px;
-                font-size: 16px;
+                padding: 14px 32px;
+                font-size: 15px;
                 width: 100%;
                 text-align: left;
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                border-bottom: none;
+                transition: all 0.2s ease;
+            }
+
+            .nav-link:first-child {
+                border-radius: 16px 16px 0 0;
             }
 
             .nav-link:last-child {
-                border-bottom: none;
+                border-radius: 0 0 16px 16px;
+            }
+
+            .nav-link:hover {
+                background: rgba(255, 255, 255, 0.05);
             }
 
             /* 时间线移动端调整 */
@@ -476,7 +490,7 @@
                 <a href="index.html" class="nav-link">首页</a>
                 <a href="index.html#core-features" class="nav-link">核心特性</a>
                 <a href="index.html#feature-showcase" class="nav-link">功能展示</a>
-                <a href="release-notes.html" class="nav-link active">更新日志</a>
+                <a href="release-notes.html" class="nav-link">更新日志</a>
             </div>
         </div>
     </nav>
