@@ -23,12 +23,16 @@
         nav {
             position: fixed;
             top: 0;
+            left: 50%;
+            transform: translateX(-50%);
             width: 100%;
-            background: rgba(13, 13, 13, 0.7);
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            max-width: none;
+            background: rgba(13, 13, 13, 0.5);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
             z-index: 1000;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0;
         }
 
         .nav-container {
@@ -655,6 +659,78 @@
             window.addEventListener('scroll', updateTimelineProgress);
             updateTimelineProgress(); // 初始调用
         }
+
+        // 导航栏灵动岛效果 - 跟随滚动进度
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('nav');
+            const scrollY = window.scrollY;
+
+            // 定义各阶段的滚动范围
+            const phase1End = 150;      // 圆角变化完成
+            const phase2End = 180;      // 宽度收缩完成
+            const phase3End = 260;      // 向下移动完成
+
+            // 阶段1: 圆角变化 (0-150px)
+            let borderRadius = 0;
+            if (scrollY <= phase1End) {
+                borderRadius = (scrollY / phase1End) * 50;
+            } else {
+                borderRadius = 50;
+            }
+
+            // 阶段2: 宽度收缩 (60-180px) - 渐进式收缩，与圆角同步
+            const widthStart = 60;
+            const viewportWidth = window.innerWidth;
+            const targetMaxWidth = Math.max(viewportWidth * 0.75, 600); // 屏幕宽度的75%，最小600px
+            const startMaxWidth = Math.min(viewportWidth, 1920); // 限制起始最大宽度
+
+            if (scrollY >= widthStart && scrollY <= phase2End) {
+                const progress = (scrollY - widthStart) / (phase2End - widthStart);
+                // 从视口宽度渐变到目标宽度
+                const currentMaxWidth = startMaxWidth - progress * (startMaxWidth - targetMaxWidth);
+                nav.style.width = '100%';
+                nav.style.maxWidth = `${currentMaxWidth}px`;
+            } else if (scrollY > phase2End) {
+                nav.style.width = '100%';
+                nav.style.maxWidth = `${targetMaxWidth}px`;
+            } else {
+                nav.style.width = '100%';
+                nav.style.maxWidth = 'none';
+            }
+
+            // 阶段3: 向下移动 (200-260px)
+            let top = 0;
+            const topStart = 200;
+            if (scrollY >= topStart && scrollY <= phase3End) {
+                const progress = (scrollY - topStart) / (phase3End - topStart);
+                top = progress * 12;
+            } else if (scrollY > phase3End) {
+                top = 12;
+            }
+
+            // 应用样式
+            nav.style.borderRadius = `${borderRadius}px`;
+            nav.style.top = `${top}px`;
+
+            // 边框、背景和阴影
+            if (scrollY > 60) {
+                nav.style.borderBottom = 'none';
+                nav.style.border = '1px solid rgba(255, 255, 255, 0.15)';
+                // 保持背景透明度一致，稍微增强一点但不超过 0.6
+                const bgOpacity = Math.min(0.5 + (scrollY - 60) / 240 * 0.1, 0.6);
+                nav.style.background = `rgba(13, 13, 13, ${bgOpacity})`;
+
+                if (scrollY > topStart) {
+                    const shadowOpacity = Math.min((scrollY - topStart) / (phase3End - topStart), 1);
+                    nav.style.boxShadow = `0 8px 32px rgba(0, 0, 0, ${0.5 * shadowOpacity}), 0 0 0 1px rgba(255, 255, 255, ${0.05 * shadowOpacity})`;
+                }
+            } else {
+                nav.style.border = '';
+                nav.style.borderBottom = '1px solid rgba(255, 255, 255, 0.08)';
+                nav.style.background = 'rgba(13, 13, 13, 0.5)';
+                nav.style.boxShadow = '';
+            }
+        }, { passive: true });
 
         // 页面加载完成后初始化
         document.addEventListener('DOMContentLoaded', loadReleaseNotes);
