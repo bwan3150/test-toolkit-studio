@@ -3,9 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Toolkit Studio 是一款功能强大的自动化测试工具，支持Android设备测试、可视化脚本编辑、AI仿生测试，内置AndroidSDK，提供项目管理、设备连接、元素定位等全方位测试解决方案。">
+    <meta name="keywords" content="自动化测试,Android测试,测试工具,脚本编辑器,UI测试,移动端测试,测试平台">
     <title>Toolkit Studio 一站式自动化测试脚本开发与执行平台</title>
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- 资源预加载 - 优先加载关键资源 -->
+    <link rel="preload" href="toolkit_studio_logo.webp" as="image" type="image/webp">
+    <link rel="preload" href="display_image.webp" as="image" type="image/webp">
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" as="script">
+
+    <!-- Three.js - 使用 defer 避免阻塞渲染 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
     <style>
         * {
             margin: 0;
@@ -35,6 +43,7 @@
             z-index: 1000;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .nav-container {
@@ -54,6 +63,7 @@
 
         .logo {
             height: 40px;
+            width: auto; /* 保持宽高比 */
             margin-right: 16px;
         }
 
@@ -473,6 +483,7 @@
 
         .feature-media {
             width: 100%;
+            height: auto; /* 保持宽高比 */
             max-width: 1000px;
             margin: 0 auto;
             display: block;
@@ -926,7 +937,7 @@
         <div class="nav-container">
             <div class="nav-left">
                 <a href="#top">
-                    <img src="toolkit_studio_logo.png" alt="Toolkit Studio" class="logo">
+                    <img src="toolkit_studio_logo.webp" alt="" class="logo" width="506" height="493">
                     <span class="logo-text">Toolkit Studio</span>
                 </a>
             </div>
@@ -968,7 +979,7 @@
                         <span class="platform-details" id="mainPlatformDetails">macOS Apple Silicon · 加载中...</span>
                     </div>
                 </button>
-                <button class="dropdown-toggle" id="dropdownToggle">
+                <button class="dropdown-toggle" id="dropdownToggle" aria-label="选择其他平台">
                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                         <path d="M7 10l5 5 5-5z"/>
                     </svg>
@@ -987,7 +998,11 @@
         <!-- 产品展示 -->
         <div class="product-showcase">
             <div class="product-image-container">
-                <img src="display_image.webp" alt="Toolkit Studio 产品展示" loading="lazy">
+                <picture>
+                    <source media="(max-width: 768px)" srcset="display_image_mobile.webp" type="image/webp">
+                    <source media="(min-width: 769px)" srcset="display_image.webp" type="image/webp">
+                    <img src="display_image.webp" alt="Toolkit Studio 产品展示" loading="lazy" width="1400" height="688">
+                </picture>
             </div>
         </div>
     </section>
@@ -1114,52 +1129,68 @@
     <section class="feature-section" id="feature-showcase">
         <div class="feature-item">
             <h2 class="feature-title">海量测试用例，一键导入</h2>
-            <img src="create_proj.gif" alt="创建项目" class="feature-media">
+            <video src="create_proj.webm" class="feature-media" width="1502" height="876" autoplay loop muted playsinline></video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">XML、截图、坐标点，三种识别模式随心搭配</h2>
-            <img src="detect_modes.gif" alt="检测模式" class="feature-media">
+            <video src="detect_modes.webm" class="feature-media" width="1604" height="1110" autoplay loop muted playsinline></video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">拖拽交互，轻松生成自动化脚本</h2>
-            <img src="block_editor.gif" alt="块编辑器" class="feature-media">
+            <video src="block_editor.webm" class="feature-media" width="1796" height="1036" autoplay loop muted playsinline></video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">块编辑器 or 文本编辑器，一键切换</h2>
-            <img src="editor_switch.gif" alt="编辑器切换" class="feature-media">
+            <video src="editor_switch.webm" class="feature-media" width="1602" height="1072" autoplay loop muted playsinline></video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">ToolkitScript 自创脚本语言，简单易懂</h2>
-            <img src="tks_language.png" alt="TKS语言" class="feature-media">
+            <picture>
+                <source media="(max-width: 768px)" srcset="tks_language_mobile.webp" type="image/webp">
+                <source media="(min-width: 769px)" srcset="tks_language.webp" type="image/webp">
+                <img src="tks_language.webp" alt="TKS语言" class="feature-media" width="847" height="493" loading="lazy">
+            </picture>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">运行用例，逐行高亮追踪</h2>
-            <img src="script_operation.gif" alt="脚本运行" class="feature-media">
+            <video src="script_operation.webm" class="feature-media" width="1600" height="902" autoplay loop muted playsinline></video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">设备无线连接，消除USB接口焦虑</h2>
-            <img src="wireless_device.png" alt="无线设备" class="feature-media">
+            <picture>
+                <source media="(max-width: 768px)" srcset="wireless_device_mobile.webp" type="image/webp">
+                <source media="(min-width: 769px)" srcset="wireless_device.webp" type="image/webp">
+                <img src="wireless_device.webp" alt="无线设备" class="feature-media" width="1708" height="1206" loading="lazy">
+            </picture>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">流式日志抓取，辅助测试排查</h2>
-            <img src="logviewer.gif" alt="日志查看器" class="feature-media">
+            <video src="logviewer.webm" class="feature-media" width="1712" height="1130" autoplay loop muted playsinline></video>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">内置全套AndroidSDK，即装即用</h2>
-            <img src="android_sdk.png" alt="Android SDK" class="feature-media">
+            <picture>
+                <source media="(max-width: 768px)" srcset="android_sdk_mobile.webp" type="image/webp">
+                <source media="(min-width: 769px)" srcset="android_sdk.webp" type="image/webp">
+                <img src="android_sdk.webp" alt="Android SDK" class="feature-media" width="1593" height="255" loading="lazy">
+            </picture>
         </div>
 
         <div class="feature-item">
             <h2 class="feature-title">.tks引擎，效率翻倍</h2>
-            <img src="vs.png" alt="性能对比" class="feature-media">
+            <picture>
+                <source media="(max-width: 768px)" srcset="vs_mobile.webp" type="image/webp">
+                <source media="(min-width: 769px)" srcset="vs.webp" type="image/webp">
+                <img src="vs.webp" alt="性能对比" class="feature-media" width="964" height="1010" loading="lazy">
+            </picture>
         </div>
     </section>
 
@@ -1173,6 +1204,12 @@
         function initShaderAnimation() {
             const container = document.getElementById('shaderBackground');
             if (!container) return;
+
+            // 等待 THREE.js 加载完成
+            if (typeof THREE === 'undefined') {
+                setTimeout(initShaderAnimation, 100);
+                return;
+            }
 
             // 顶点着色器
             const vertexShader = `
@@ -1401,15 +1438,29 @@
             };
         }
 
-        // 页面加载完成后初始化 Shader
-        // 使用更可靠的初始化方式，确保刷新时也能正常工作
+        // 使用 Intersection Observer 延迟初始化 Shader，减少初始加载时的主线程阻塞
         function startShader() {
-            // 等待下一帧确保 DOM 完全渲染
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    initShaderAnimation();
+            const container = document.getElementById('shaderBackground');
+            if (!container) return;
+
+            // 使用 Intersection Observer 只在 shader 进入视口时才初始化
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        // 延迟一小段时间，让页面先完成初始渲染
+                        setTimeout(() => {
+                            requestAnimationFrame(() => {
+                                initShaderAnimation();
+                            });
+                        }, 200);
+                        observer.disconnect(); // 只初始化一次
+                    }
                 });
+            }, {
+                threshold: 0.1 // 当 10% 可见时触发
             });
+
+            observer.observe(container);
         }
 
         if (document.readyState === 'loading') {
