@@ -591,16 +591,22 @@
         }
 
         .core-feature-icon {
-            width: fit-content;
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             border-radius: 8px;
             border: 0.75px solid rgba(255, 255, 255, 0.1);
             background: rgba(255, 255, 255, 0.05);
-            padding: 12px;
             position: relative;
             overflow: hidden;
             transform: scale(1);
             transform-origin: left;
             transition: transform 0.3s ease;
+            flex-shrink: 0;
         }
 
         .card-outer:hover .core-feature-icon {
@@ -613,6 +619,7 @@
             fill: white;
             position: relative;
             z-index: 1;
+            flex-shrink: 0;
         }
 
         .core-feature-icon::before {
@@ -645,25 +652,85 @@
         }
 
         .core-feature-title {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 600;
-            line-height: 1.5rem;
+            line-height: 1.6rem;
             letter-spacing: -0.02em;
             color: #f0f0f0;
         }
 
         .future-badge {
             display: inline-block;
-            background: rgba(254, 118, 0, 0.2);
-            border: 1px solid #fe7600;
-            color: #fe7600;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 10px;
+            position: relative;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.9);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 8px;
             font-weight: 600;
-            margin-left: 8px;
+            margin-left: 6px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1;
+            vertical-align: middle;
+            top: -2px;
+        }
+
+        /* 液体玻璃效果层 */
+        .future-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            height: 100%;
+            width: 100%;
+            border-radius: 12px;
+            box-shadow:
+                0 0 4px rgba(0, 0, 0, 0.03),
+                0 1px 4px rgba(0, 0, 0, 0.08),
+                inset 2px 2px 0.5px -2px rgba(255, 255, 255, 0.09),
+                inset -2px -2px 0.5px -2px rgba(255, 255, 255, 0.85),
+                inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.6),
+                inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.6),
+                inset 0 0 4px 4px rgba(255, 255, 255, 0.12),
+                inset 0 0 1px 1px rgba(255, 255, 255, 0.06),
+                0 0 8px rgba(0, 0, 0, 0.12);
+            transition: all 0.3s ease;
+        }
+
+        /* 背景模糊层 */
+        .future-badge::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: -2;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 12px;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+
+        .card-outer:hover .future-badge {
+            transform: scale(1.05);
+        }
+
+        .card-outer:hover .future-badge::before {
+            box-shadow:
+                0 0 8px rgba(0, 0, 0, 0.04),
+                0 3px 8px rgba(0, 0, 0, 0.1),
+                inset 3px 3px 0.5px -3px rgba(255, 255, 255, 0.12),
+                inset -3px -3px 0.5px -3.5px rgba(255, 255, 255, 0.9),
+                inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.7),
+                inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.7),
+                inset 0 0 8px 8px rgba(255, 255, 255, 0.15),
+                inset 0 0 3px 3px rgba(255, 255, 255, 0.08),
+                0 0 16px rgba(0, 0, 0, 0.2);
         }
 
         .core-feature-desc {

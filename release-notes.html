@@ -183,49 +183,100 @@
             to { transform: rotate(360deg); }
         }
 
-        /* 版本列表 */
+        /* 时间线列表 */
         .release-list {
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
+            position: relative;
+            padding-left: 60px;
+            margin-top: 40px;
         }
 
+        /* 时间线主线条 */
+        .timeline-line {
+            position: absolute;
+            left: 23px;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .timeline-line-progress {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(180deg, #fe7600 0%, rgba(254, 118, 0, 0.5) 100%);
+            transition: height 0.3s ease-out;
+        }
+
+        /* 版本项 */
         .release-item {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 32px;
-            transition: all 0.3s;
+            position: relative;
+            margin-bottom: 60px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
         }
 
-        .release-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(255, 255, 255, 0.12);
+        .release-item.visible {
+            opacity: 1;
+            transform: translateY(0);
         }
 
+        /* 时间线圆点 */
+        .timeline-dot {
+            position: absolute;
+            left: -46px;
+            top: 16px;
+            width: 20px;
+            height: 20px;
+            background: #0d0d0d;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transition: all 0.4s ease;
+            z-index: 2;
+            /* 使用 box-shadow 创建圆点周围的空缺 */
+            box-shadow: 0 0 0 6px #0d0d0d;
+        }
+
+        .release-item.visible .timeline-dot {
+            border-color: #fe7600;
+        }
+
+        /* 版本标题区域 */
         .release-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .release-version {
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 32px;
+            font-weight: 700;
             color: #f0f0f0;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
         }
 
         .release-date {
-            font-size: 14px;
+            font-size: 15px;
             color: #666;
+            font-weight: 400;
         }
 
+        /* 版本内容 */
         .release-content {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 28px;
             color: #ccc;
             line-height: 1.8;
+            transition: all 0.3s;
+        }
+
+        .release-item.visible .release-content {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.12);
         }
 
         /* Markdown 样式 */
@@ -374,18 +425,30 @@
                 border-bottom: none;
             }
 
-            .release-item {
-                padding: 24px;
+            /* 时间线移动端调整 */
+            .release-list {
+                padding-left: 40px;
             }
 
-            .release-header {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 8px;
+            .timeline-line {
+                left: 15px;
+            }
+
+            .timeline-dot {
+                left: -31px;
+                top: 12px;
+                width: 14px;
+                height: 14px;
+                border-width: 2px;
+                box-shadow: 0 0 0 4px #0d0d0d;
             }
 
             .release-version {
-                font-size: 20px;
+                font-size: 24px;
+            }
+
+            .release-content {
+                padding: 20px;
             }
         }
     </style>
@@ -508,31 +571,89 @@
                     throw new Error('No release notes found');
                 }
 
-                // 渲染版本列表
-                releaseList.innerHTML = validReleases.map(release => {
-                    const html = marked.parse(release.content);
-                    return `
-                        <div class="release-item">
-                            <div class="release-header">
-                                <div class="release-version">v${release.version}</div>
-                                <div class="release-date">${formatDate(release.date)}</div>
+                // 渲染时间线
+                releaseList.innerHTML = `
+                    <div class="timeline-line">
+                        <div class="timeline-line-progress"></div>
+                    </div>
+                    ${validReleases.map(release => {
+                        const html = marked.parse(release.content);
+                        return `
+                            <div class="release-item">
+                                <div class="timeline-dot"></div>
+                                <div class="release-header">
+                                    <div class="release-version">v${release.version}</div>
+                                    <div class="release-date">${formatDate(release.date)}</div>
+                                </div>
+                                <div class="release-content">
+                                    ${html}
+                                </div>
                             </div>
-                            <div class="release-content">
-                                ${html}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
+                        `;
+                    }).join('')}
+                `;
 
                 // 显示内容
                 loading.style.display = 'none';
-                releaseList.style.display = 'flex';
+                releaseList.style.display = 'block';
+
+                // 初始化滚动动画
+                initScrollAnimations();
 
             } catch (err) {
                 console.error('加载 Release Notes 失败:', err);
                 loading.style.display = 'none';
                 error.style.display = 'block';
             }
+        }
+
+        // 初始化滚动动画
+        function initScrollAnimations() {
+            const releaseItems = document.querySelectorAll('.release-item');
+            const timelineProgress = document.querySelector('.timeline-line-progress');
+            const releaseList = document.getElementById('releaseList');
+
+            // Intersection Observer 用于检测元素进入视口
+            const observerOptions = {
+                threshold: 0.2,
+                rootMargin: '-50px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, observerOptions);
+
+            // 观察所有版本项
+            releaseItems.forEach(item => observer.observe(item));
+
+            // 更新时间线进度条
+            function updateTimelineProgress() {
+                if (!releaseList) return;
+
+                const listRect = releaseList.getBoundingClientRect();
+                const listTop = listRect.top;
+                const listHeight = listRect.height;
+                const windowHeight = window.innerHeight;
+
+                // 计算滚动进度
+                let progress = 0;
+                if (listTop < windowHeight) {
+                    const scrolled = windowHeight - listTop;
+                    progress = Math.min(scrolled / listHeight, 1);
+                }
+
+                if (timelineProgress) {
+                    timelineProgress.style.height = `${progress * 100}%`;
+                }
+            }
+
+            // 监听滚动
+            window.addEventListener('scroll', updateTimelineProgress);
+            updateTimelineProgress(); // 初始调用
         }
 
         // 页面加载完成后初始化
