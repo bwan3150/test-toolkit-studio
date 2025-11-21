@@ -506,45 +506,113 @@
         /* 核心功能网格 */
         .core-features {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 40px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
             padding: 80px 40px;
             max-width: 1200px;
             margin: 0 auto;
         }
 
         .core-feature-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 32px;
-            transition: transform 0.3s, background 0.3s;
+            list-style: none;
+            height: 200px;
         }
 
-        .core-feature-card:hover {
-            transform: translateY(-4px);
-            background: rgba(255, 255, 255, 0.08);
+        .card-outer {
+            position: relative;
+            height: 100%;
+            border-radius: 20px;
+            border: 0.75px solid rgba(255, 255, 255, 0.1);
+            padding: 12px;
+        }
+
+        /* 光晕效果层 */
+        .glow-effect {
+            position: absolute;
+            inset: 0;
+            border-radius: 20px;
+            pointer-events: none;
+        }
+
+        .glow-effect::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 20px;
+            padding: 3px;
+            background: conic-gradient(
+                from calc(var(--start, 0) * 1deg) at 50% 50%,
+                transparent 0deg,
+                rgba(221, 123, 187, 0.3) 10deg,
+                rgba(221, 123, 187, 0.8) 20deg,
+                #dd7bbb 30deg,
+                #d79f1e 45deg,
+                #5a922c 60deg,
+                #4c7894 75deg,
+                rgba(76, 120, 148, 0.8) 85deg,
+                rgba(76, 120, 148, 0.3) 95deg,
+                transparent 105deg,
+                transparent 360deg
+            );
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            opacity: var(--active, 0);
+            transition: opacity 0.3s;
+        }
+
+        .card-inner {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            border-radius: 12px;
+            border: 0.75px solid rgba(255, 255, 255, 0.05);
+            background: rgba(13, 13, 13, 0.8);
+            padding: 24px;
+            box-shadow: 0px 0px 27px 0px rgba(45, 45, 45, 0.3);
+        }
+
+        .card-content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 12px;
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .card-outer:hover .card-content {
+            transform: translateY(-16px);
         }
 
         .core-feature-icon {
-            width: 48px;
-            height: 48px;
-            background: linear-gradient(135deg, #fe7600 0%, #ff9a00 100%);
-            border-radius: 12px;
-            margin-bottom: 20px;
+            width: fit-content;
+            border-radius: 8px;
+            border: 0.75px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px;
             position: relative;
             overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            transform: scale(1);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+
+        .card-outer:hover .core-feature-icon {
+            transform: scale(0.75);
         }
 
         .core-feature-icon svg {
             width: 24px;
             height: 24px;
             fill: white;
-            z-index: 1;
             position: relative;
+            z-index: 1;
         }
 
         .core-feature-icon::before {
@@ -552,49 +620,65 @@
             position: absolute;
             width: 100%;
             height: 100%;
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
             top: 0;
             left: -100%;
             transform: skewX(-20deg);
             transition: left 0.5s;
         }
 
-        .core-feature-card:hover .core-feature-icon::before {
+        .card-outer:hover .core-feature-icon::before {
             left: 100%;
         }
 
-        .icon-project { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .icon-ai { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-        .icon-script { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-        .icon-device { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-        .icon-element { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-        .icon-fix { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
+        .icon-project { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; }
+        .icon-ai { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); border: none; }
+        .icon-script { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); border: none; }
+        .icon-device { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); border: none; }
+        .icon-element { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); border: none; }
+        .icon-fix { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); border: none; }
+
+        .feature-text {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .core-feature-title {
+            font-size: 18px;
+            font-weight: 600;
+            line-height: 1.5rem;
+            letter-spacing: -0.02em;
+            color: #f0f0f0;
+        }
 
         .future-badge {
             display: inline-block;
             background: rgba(254, 118, 0, 0.2);
             border: 1px solid #fe7600;
             color: #fe7600;
-            padding: 4px 12px;
+            padding: 3px 10px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 600;
-            margin-left: 12px;
+            margin-left: 8px;
             text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .core-feature-title {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: #f0f0f0;
+            letter-spacing: 0.5px;
         }
 
         .core-feature-desc {
-            font-size: 15px;
+            font-size: 13px;
+            line-height: 1.3rem;
             color: #999;
-            line-height: 1.6;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+        }
+
+        .card-outer:hover .core-feature-desc {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         /* 底部 */
@@ -785,59 +869,118 @@
     <!-- 核心功能 -->
     <section class="core-features" id="core-features">
         <div class="core-feature-card">
-            <div class="core-feature-icon icon-project">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3 3h18v2H3V3zm0 4h10v2H3V7zm0 4h18v2H3v-2zm0 4h10v2H3v-2zm0 4h18v2H3v-2z"/>
-                </svg>
+            <div class="card-outer">
+                <div class="glow-effect"></div>
+                <div class="card-inner">
+                    <div class="card-content">
+                        <div class="core-feature-icon icon-project">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M3 3h18v2H3V3zm0 4h10v2H3V7zm0 4h18v2H3v-2zm0 4h10v2H3v-2zm0 4h18v2H3v-2z"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3 class="core-feature-title">项目管理</h3>
+                            <p class="core-feature-desc">自动创建结构化测试项目文件夹,从CSV导入测试用例</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <h3 class="core-feature-title">项目管理</h3>
-            <p class="core-feature-desc">自动创建结构化测试项目文件夹，从CSV导入测试用例</p>
         </div>
+
         <div class="core-feature-card">
-            <div class="core-feature-icon icon-ai">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                </svg>
+            <div class="card-outer">
+                <div class="glow-effect"></div>
+                <div class="card-inner">
+                    <div class="card-content">
+                        <div class="core-feature-icon icon-ai">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3 class="core-feature-title">AI仿生测试<span class="future-badge">Coming Soon</span></h3>
+                            <p class="core-feature-desc">AI观察App并与设备交互,自动记录为自动化脚本</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <h3 class="core-feature-title">AI仿生测试<span class="future-badge">Coming Soon</span></h3>
-            <p class="core-feature-desc">AI观察App并与设备交互，自动记录为自动化脚本</p>
         </div>
+
         <div class="core-feature-card">
-            <div class="core-feature-icon icon-script">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
-                </svg>
+            <div class="card-outer">
+                <div class="glow-effect"></div>
+                <div class="card-inner">
+                    <div class="card-content">
+                        <div class="core-feature-icon icon-script">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3 class="core-feature-title">脚本编辑</h3>
+                            <p class="core-feature-desc">语法高亮和多标签,运行时实时反馈步骤和失败位置</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <h3 class="core-feature-title">脚本编辑</h3>
-            <p class="core-feature-desc">语法高亮和多标签，运行时实时反馈步骤和失败位置</p>
         </div>
+
         <div class="core-feature-card">
-            <div class="core-feature-icon icon-device">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
-                </svg>
+            <div class="card-outer">
+                <div class="glow-effect"></div>
+                <div class="card-inner">
+                    <div class="card-content">
+                        <div class="core-feature-icon icon-device">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3 class="core-feature-title">设备连接</h3>
+                            <p class="core-feature-desc">多设备管理,实时状态检测和屏幕预览</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <h3 class="core-feature-title">设备连接</h3>
-            <p class="core-feature-desc">多设备管理，实时状态检测和屏幕预览</p>
         </div>
+
         <div class="core-feature-card">
-            <div class="core-feature-icon icon-element">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                </svg>
+            <div class="card-outer">
+                <div class="glow-effect"></div>
+                <div class="card-inner">
+                    <div class="card-content">
+                        <div class="core-feature-icon icon-element">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3 class="core-feature-title">元素定位</h3>
+                            <p class="core-feature-desc">点击屏幕获取元素,查看XML结构,直接创建脚本</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <h3 class="core-feature-title">元素定位</h3>
-            <p class="core-feature-desc">点击屏幕获取元素，查看XML结构，直接创建脚本</p>
         </div>
+
         <div class="core-feature-card">
-            <div class="core-feature-icon icon-fix">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
-                </svg>
+            <div class="card-outer">
+                <div class="glow-effect"></div>
+                <div class="card-inner">
+                    <div class="card-content">
+                        <div class="core-feature-icon icon-fix">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>
+                            </svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3 class="core-feature-title">AI修正<span class="future-badge">Coming Soon</span></h3>
+                            <p class="core-feature-desc">自动判断和修正脚本中的元素定位缺失/偏移问题</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <h3 class="core-feature-title">AI修正<span class="future-badge">Coming Soon</span></h3>
-            <p class="core-feature-desc">自动判断和修正脚本中的元素定位缺失/偏移问题</p>
         </div>
     </section>
 
@@ -1452,6 +1595,112 @@
                         });
                     }
                 });
+            });
+        });
+
+        // 核心功能卡片鼠标追踪光晕效果 - 基于 shadcn GlowingEffect
+        document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.card-outer');
+            const proximity = 32; // 鼠标接近触发距离（减小以降低敏感度）
+            const inactiveZone = 0.01; // 中心非活跃区域
+            const movementDuration = 600; // 动画持续时间(ms)
+
+            cards.forEach(cardOuter => {
+                const glowEffect = cardOuter.querySelector('.glow-effect');
+                if (!glowEffect) return;
+
+                let animationFrameId = null;
+                let currentAngle = 0;
+                let targetAngle = 0;
+                let animationStart = null;
+
+                // 平滑动画函数
+                const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+                const animate = (timestamp) => {
+                    if (!animationStart) animationStart = timestamp;
+                    const elapsed = timestamp - animationStart;
+                    const progress = Math.min(elapsed / movementDuration, 1);
+
+                    const easedProgress = easeOutCubic(progress);
+                    const newAngle = currentAngle + (targetAngle - currentAngle) * easedProgress;
+
+                    glowEffect.style.setProperty('--start', newAngle.toString());
+
+                    if (progress < 1) {
+                        animationFrameId = requestAnimationFrame(animate);
+                    } else {
+                        currentAngle = targetAngle;
+                        animationFrameId = null;
+                        animationStart = null;
+                    }
+                };
+
+                // 鼠标移动事件处理
+                const handleMouseMove = (e) => {
+                    const rect = cardOuter.getBoundingClientRect();
+                    const left = rect.left;
+                    const top = rect.top;
+                    const width = rect.width;
+                    const height = rect.height;
+                    const mouseX = e.clientX;
+                    const mouseY = e.clientY;
+
+                    // 计算中心点
+                    const centerX = left + width * 0.5;
+                    const centerY = top + height * 0.5;
+
+                    // 计算距离中心的距离
+                    const distanceFromCenter = Math.hypot(mouseX - centerX, mouseY - centerY);
+                    const inactiveRadius = 0.5 * Math.min(width, height) * inactiveZone;
+
+                    // 如果在非活跃区域内，隐藏光晕
+                    if (distanceFromCenter < inactiveRadius) {
+                        glowEffect.style.setProperty('--active', '0');
+                        return;
+                    }
+
+                    // 检查鼠标是否在接近范围内
+                    const isActive =
+                        mouseX > left - proximity &&
+                        mouseX < left + width + proximity &&
+                        mouseY > top - proximity &&
+                        mouseY < top + height + proximity;
+
+                    glowEffect.style.setProperty('--active', isActive ? '1' : '0');
+
+                    if (!isActive) return;
+
+                    // 计算角度
+                    let angle = (180 * Math.atan2(mouseY - centerY, mouseX - centerX)) / Math.PI + 90;
+
+                    // 处理角度差异，选择最短路径
+                    const angleDiff = ((angle - currentAngle + 180) % 360) - 180;
+                    targetAngle = currentAngle + angleDiff;
+
+                    // 启动动画
+                    if (!animationFrameId) {
+                        animationStart = null;
+                        animationFrameId = requestAnimationFrame(animate);
+                    }
+                };
+
+                const handleScroll = () => {
+                    // 滚动时更新位置
+                    handleMouseMove({ clientX: lastMouseX, clientY: lastMouseY });
+                };
+
+                let lastMouseX = 0;
+                let lastMouseY = 0;
+
+                // 监听鼠标移动和滚动
+                document.addEventListener('mousemove', (e) => {
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                    handleMouseMove(e);
+                });
+
+                window.addEventListener('scroll', handleScroll, { passive: true });
             });
         });
     </script>
