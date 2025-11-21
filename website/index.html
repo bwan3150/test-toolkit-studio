@@ -14,7 +14,7 @@
     <link rel="dns-prefetch" href="https://toolkit-studio-updates.s3.ap-southeast-2.amazonaws.com">
 
     <!-- 资源预加载 - 优先加载关键资源 -->
-    <link rel="preload" href="toolkit_studio_logo.webp" as="image" type="image/webp">
+    <link rel="preload" href="toolkit_studio_logo_small.webp" as="image" type="image/webp">
     <link rel="preload" href="display_image.webp" as="image" type="image/webp">
     <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" as="script" crossorigin>
 
@@ -33,6 +33,7 @@
             color: #f0f0f0;
             line-height: 1.6;
             overflow-x: hidden;
+            font-display: swap; /* 快速显示文字 */
         }
 
         /* 导航栏 */
@@ -76,6 +77,7 @@
         .logo-text {
             font-size: 20px;
             font-weight: 700;
+            contain: layout style; /* 优化渲染性能 */
             letter-spacing: -0.5px;
             background: linear-gradient(180deg, #ffffff 0%, #999999 100%);
             -webkit-background-clip: text;
@@ -945,7 +947,7 @@
         <div class="nav-container">
             <div class="nav-left">
                 <a href="#top">
-                    <img src="toolkit_studio_logo.webp" alt="" class="logo" width="506" height="493">
+                    <img src="toolkit_studio_logo_small.webp" alt="Toolkit Studio Logo" class="logo" width="144" height="140">
                     <span class="logo-text">Toolkit Studio</span>
                 </a>
             </div>
@@ -1801,8 +1803,44 @@
             });
         }
 
-        // 页面加载完成后初始化
-        document.addEventListener('DOMContentLoaded', initializeDownloadButtons);
+        // 延迟初始化下载按钮 - 只在需要时加载版本信息
+        let isDownloadInitialized = false;
+
+        function lazyInitializeDownload() {
+            if (isDownloadInitialized) return;
+            isDownloadInitialized = true;
+            initializeDownloadButtons();
+        }
+
+        // 页面加载完成后，使用 Intersection Observer 或用户交互触发初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            const downloadSection = document.querySelector('.download-section');
+            const downloadBtn = document.querySelector('.main-download-btn');
+
+            if (!downloadSection) return;
+
+            // 方案1: 当下载区域进入视口时初始化
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        lazyInitializeDownload();
+                        observer.disconnect();
+                    }
+                });
+            }, {
+                rootMargin: '100px' // 提前 100px 开始加载
+            });
+
+            observer.observe(downloadSection);
+
+            // 方案2: 鼠标悬停时也触发（更快响应）
+            if (downloadBtn) {
+                downloadBtn.addEventListener('mouseenter', lazyInitializeDownload, { once: true });
+            }
+
+            // 方案3: 如果用户很快滚动到底部，3秒后也自动加载
+            setTimeout(lazyInitializeDownload, 3000);
+        });
 
         // 导航栏灵动岛效果 - 跟随滚动进度
         window.addEventListener('scroll', () => {
