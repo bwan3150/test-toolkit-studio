@@ -93,63 +93,147 @@ const LocatorLibraryPanel = {
         if (window.ElementsListPanel && window.ElementsListPanel.currentElements) {
             element = window.ElementsListPanel.currentElements.find(el => el.index === elementIndex);
         }
-        
+
         if (!element) {
             window.rError(`无法找到index为${elementIndex}的元素`);
             window.AppNotifications?.error('元素不存在');
             return;
         }
-        
-        // 生成定位器名称和备注
-        const result = await this.promptForLocatorName(element);
-        if (!result) return;
 
-        const { name, note } = result;
-
-        // 创建定位器对象 - 统一格式（无 type 区分）
-        const locator = {
-            name: name,
-            note: note || '',
-            // XML 定位字段
+        // 准备元素数据
+        const elementData = {
             xpath: element.xpath || null,
             resource_id: element.resource_id || null,
             text: element.text || null,
             content_desc: element.content_desc || null,
             class_name: element.class_name || '',
-            // 通用字段
             bounds: element.bounds || null,
             clickable: element.clickable || false,
-            enabled: element.enabled || false,
+            enabled: element.enabled || false
+        };
+
+        // 生成默认名称
+        const defaultName = element.text || element.content_desc ||
+                          element.class_name?.split('.').pop() ||
+                          `element_${Date.now()}`;
+
+        // 检查 ElementSaveModal 是否可用
+        if (!window.ElementSaveModal) {
+            window.rError('ElementSaveModal 未加载，使用旧版对话框');
+            const result = await this.promptForLocatorNameLegacy(element);
+            if (!result) return;
+            await this._saveNewElement(result.name, result.note, elementData);
+            return;
+        }
+
+        try {
+            const result = await window.ElementSaveModal.show({
+                title: '保存 XML 元素',
+                saveType: 'xml',
+                elementData: elementData,
+                defaultName: defaultName
+            });
+
+            if (!result) {
+                window.rLog('用户取消了保存');
+                return;
+            }
+
+            if (result.action === 'new') {
+                // 新建元素
+                await this._saveNewElement(result.name, result.note, elementData);
+            } else if (result.action === 'merge') {
+                // 合并到已有元素
+                await this._mergeToElement(result.targetName, elementData);
+            }
+        } catch (error) {
+            window.rError('保存元素失败:', error);
+            window.AppNotifications?.error('保存失败: ' + error.message);
+        }
+    },
+
+    // 保存为新元素
+    async _saveNewElement(name, note, elementData) {
+        // 创建定位器对象 - 统一格式（无 type 区分）
+        const locator = {
+            name: name,
+            note: note || '',
+            // XML 定位字段
+            xpath: elementData.xpath,
+            resource_id: elementData.resource_id,
+            text: elementData.text,
+            content_desc: elementData.content_desc,
+            class_name: elementData.class_name,
+            // 通用字段
+            bounds: elementData.bounds,
+            clickable: elementData.clickable,
+            enabled: elementData.enabled,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
 
         // 保存到locators对象
         this.locators[name] = locator;
-        
+
         // 保存到文件
         await this.saveLocators();
-        
+
         // 重新渲染列表
         this.renderLocators();
-        
+
         // 切换到Locator库标签
         const locatorTab = document.getElementById('locatorLibTab');
         if (locatorTab) {
             locatorTab.click();
         }
-        
-        window.AppNotifications?.success(`定位器 "${name}" 已保存`);
+
+        window.AppNotifications?.success(`元素 "${name}" 已保存`);
     },
-    
-    // 提示输入定位器名称
-    async promptForLocatorName(element) {
+
+    // 合并到已有元素
+    async _mergeToElement(targetName, elementData) {
+        const existingLocator = this.locators[targetName];
+
+        if (!existingLocator) {
+            window.AppNotifications?.error('目标元素不存在');
+            return;
+        }
+
+        // 合并 XML 字段（覆盖非空值）
+        if (elementData.xpath) existingLocator.xpath = elementData.xpath;
+        if (elementData.resource_id) existingLocator.resource_id = elementData.resource_id;
+        if (elementData.text) existingLocator.text = elementData.text;
+        if (elementData.content_desc) existingLocator.content_desc = elementData.content_desc;
+        if (elementData.class_name) existingLocator.class_name = elementData.class_name;
+        if (elementData.bounds) existingLocator.bounds = elementData.bounds;
+        if (elementData.clickable !== undefined) existingLocator.clickable = elementData.clickable;
+        if (elementData.enabled !== undefined) existingLocator.enabled = elementData.enabled;
+
+        existingLocator.updated_at = new Date().toISOString();
+
+        // 保存到文件
+        await this.saveLocators();
+
+        // 重新渲染列表
+        this.renderLocators();
+
+        // 切换到Locator库标签
+        const locatorTab = document.getElementById('locatorLibTab');
+        if (locatorTab) {
+            locatorTab.click();
+        }
+
+        window.AppNotifications?.success(`XML 属性已合并到元素 "${targetName}"`);
+    },
+
+    // 旧版提示输入定位器名称（备用）
+    async promptForLocatorNameLegacy(element) {
         return new Promise((resolve) => {
             // 生成默认名称
-            const defaultName = element.text || element.contentDesc || 
-                              element.className?.split('.').pop() || 
+            const defaultName = element.text || element.contentDesc ||
+                              element.className?.split('.').pop() ||
                               `element_${Date.now()}`;
-            
+
             // 创建模态框
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
@@ -245,7 +329,7 @@ const LocatorLibraryPanel = {
 
             dialog.querySelector('#save-btn').addEventListener('click', handleSave);
             dialog.querySelector('#cancel-btn').addEventListener('click', handleCancel);
-            
+
             // 回车保存，ESC取消
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
@@ -254,7 +338,7 @@ const LocatorLibraryPanel = {
                     handleCancel();
                 }
             });
-            
+
             // 点击模态框外部取消
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {

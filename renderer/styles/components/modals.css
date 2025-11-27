@@ -102,3 +102,412 @@
     font-weight: 500;
 }
 
+/* ========== 元素保存模态框样式 ========== */
+
+.element-save-modal-content {
+    width: 480px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Tab 导航 */
+.element-save-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    padding: 0 16px;
+}
+
+.element-save-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.element-save-tab:hover {
+    color: var(--text-primary);
+}
+
+.element-save-tab.active {
+    color: var(--accent-primary);
+}
+
+.element-save-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-primary);
+}
+
+.element-save-tab svg {
+    flex-shrink: 0;
+}
+
+/* Tab 面板 */
+.element-save-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.element-save-panel {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.element-save-panel.active {
+    display: flex;
+}
+
+/* 表单样式 */
+.element-save-panel .form-group {
+    margin-bottom: 16px;
+}
+
+.element-save-panel .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.element-save-panel .form-group label .required {
+    color: #e74c3c;
+}
+
+.element-save-panel .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.element-save-panel .form-control:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+/* 元素预览 */
+.element-preview {
+    margin-top: 8px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.element-preview .preview-title,
+.merge-preview .preview-title {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.merge-preview .preview-target {
+    font-size: 12px;
+    color: var(--accent-primary);
+    font-weight: 500;
+    text-transform: none;
+}
+
+.preview-content .preview-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+}
+
+.preview-content .preview-label {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.preview-content .preview-value {
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.preview-content .preview-empty {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* 搜索框容器 */
+.element-search-container {
+    position: relative;
+    padding: 0 0 12px 0;
+}
+
+.element-search-container .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(calc(-50% - 6px));
+    color: var(--text-tertiary);
+    pointer-events: none;
+}
+
+.element-search-container .form-control {
+    padding-left: 36px;
+}
+
+/* 元素列表 */
+.element-list-container {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    min-height: 200px;
+    max-height: 280px;
+}
+
+.merge-list-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--text-tertiary);
+    gap: 12px;
+}
+
+.merge-list-empty p {
+    margin: 0;
+    font-size: 13px;
+}
+
+/* 元素项 */
+.merge-element-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.merge-element-item:last-child {
+    border-bottom: none;
+}
+
+.merge-element-item:hover {
+    background: var(--bg-hover);
+}
+
+.merge-element-item.selected {
+    background: rgba(var(--accent-primary-rgb), 0.15);
+}
+
+.merge-element-item .element-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.merge-element-item .element-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.merge-element-item .element-name {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.merge-element-item .element-desc {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.merge-element-item .element-tags {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.element-tag {
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.element-tag.tag-xml {
+    background: rgba(74, 144, 226, 0.2);
+    color: #4a90e2;
+}
+
+.element-tag.tag-img {
+    background: rgba(230, 126, 34, 0.2);
+    color: #e67e22;
+}
+
+/* 合并预览 */
+.merge-preview {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.merge-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border-color);
+    font-size: 12px;
+}
+
+.merge-field:last-child {
+    border-bottom: none;
+}
+
+.merge-field .field-label {
+    color: var(--text-secondary);
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    flex-shrink: 0;
+}
+
+.merge-field .field-value {
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+}
+
+.merge-field .field-status {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.merge-field.conflict .field-status {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+}
+
+.merge-field.new .field-status.add {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+}
+
+/* ========== 覆盖确认对话框样式 ========== */
+
+.overwrite-confirm-content {
+    width: 420px;
+}
+
+.overwrite-warning {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(243, 156, 18, 0.1);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.overwrite-fields {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.overwrite-field {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.overwrite-field .field-name {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    margin-bottom: 8px;
+}
+
+.overwrite-field .field-values {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.overwrite-field .old-value,
+.overwrite-field .new-value {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.overwrite-field .value-label {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    width: 50px;
+}
+
+.overwrite-field .old-value .value-content {
+    color: #e74c3c;
+    text-decoration: line-through;
+    word-break: break-all;
+}
+
+.overwrite-field .new-value .value-content {
+    color: #2ecc71;
+    word-break: break-all;
+}
+
+.btn-warning {
+    background: #f39c12;
+    color: white;
+    border: none;
+}
+
+.btn-warning:hover {
+    background: #e67e22;
+}
+

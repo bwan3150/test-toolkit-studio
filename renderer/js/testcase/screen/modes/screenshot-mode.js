@@ -311,15 +311,11 @@ const ScreenshotMode = {
       // 转换为Base64
       const base64Image = canvas.toDataURL('image/png');
 
-      // 弹出对话框让用户输入别名
-      let alias;
-      do {
-        alias = await this._promptForAlias();
-        if (!alias) {
-          document.getElementById('screenshotSelector').style.display = 'none';
-          return;
-        }
-      } while (!await this._saveImageLocator(alias, base64Image)); // 如果保存失败(重名)则重新输入
+      // 临时保存 base64 图片供后续使用
+      this._pendingBase64Image = base64Image;
+
+      // 使用新的元素保存模态框
+      await this._showSaveModal();
 
       // 隐藏选择器
       document.getElementById('screenshotSelector').style.display = 'none';
@@ -332,64 +328,57 @@ const ScreenshotMode = {
   },
 
   /**
-   * 提示用户输入别名
+   * 显示元素保存模态框
    */
-  async _promptForAlias() {
-    return new Promise((resolve) => {
-      const modal = document.createElement('div');
-      modal.className = 'modal-overlay';
-      modal.innerHTML = `
-        <div class="modal-dialog">
-          <h3>保存截图定位器</h3>
-          <input type="text" id="imageAliasInput" placeholder="请输入截图别名" autofocus>
-          <div style="display: flex; gap: 10px; justify-content: flex-end;">
-            <button class="btn btn-secondary" id="cancelAliasBtn">取消</button>
-            <button class="btn btn-primary" id="confirmAliasBtn">确定</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-
-      const input = modal.querySelector('#imageAliasInput');
-      const confirmBtn = modal.querySelector('#confirmAliasBtn');
-      const cancelBtn = modal.querySelector('#cancelAliasBtn');
-
-      const confirm = () => {
-        const value = input.value.trim();
-        if (value) {
-          document.body.removeChild(modal);
-          resolve(value);
-        } else {
-          window.AppNotifications?.warn('请输入别名');
-        }
-      };
-
-      const cancel = () => {
-        document.body.removeChild(modal);
-        resolve(null);
-      };
-
-      confirmBtn.addEventListener('click', confirm);
-      cancelBtn.addEventListener('click', cancel);
-      input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') confirm();
-        if (e.key === 'Escape') cancel();
-      });
-
-      input.focus();
-    });
-  },
-
-  /**
-   * 保存图片定位器
-   */
-  async _saveImageLocator(alias, base64Image) {
+  async _showSaveModal() {
     const { fs, path } = getGlobals();
     const projectPath = window.AppGlobals.currentProject;
 
-    if (!projectPath) {
-      window.AppNotifications?.error('请先打开项目');
-      return false;
+    if (!window.ElementSaveModal) {
+      window.rError('ElementSaveModal 未加载');
+      return;
+    }
+
+    // 准备元素数据（临时路径，实际路径在保存时确定）
+    const elementData = {
+      img_path: 'locator/img/pending.png' // 临时占位
+    };
+
+    try {
+      const result = await window.ElementSaveModal.show({
+        title: '保存截图元素',
+        saveType: 'img',
+        elementData: elementData,
+        defaultName: `screenshot_${Date.now()}`
+      });
+
+      if (!result) {
+        window.rLog('用户取消了保存');
+        return;
+      }
+
+      if (result.action === 'new') {
+        // 新建元素
+        await this._saveAsNewElement(result.name, result.note);
+      } else if (result.action === 'merge') {
+        // 合并到已有元素
+        await this._mergeToExistingElement(result.targetName);
+      }
+    } catch (error) {
+      window.rError('保存元素失败:', error);
+      window.AppNotifications?.error('保存失败: ' + error.message);
+    }
+  },
+
+  /**
+   * 保存为新元素
+   */
+  async _saveAsNewElement(name, note) {
+    const { fs, path } = getGlobals();
+    const projectPath = window.AppGlobals.currentProject;
+
+    if (!projectPath || !this._pendingBase64Image) {
+      return;
     }
 
     try {
@@ -398,36 +387,27 @@ const ScreenshotMode = {
       const imgDir = path.join(locatorDir, 'img');
       await fs.mkdir(imgDir, { recursive: true });
 
-      // 检查别名是否已经存在
-      if (window.LocatorLibraryPanel && window.LocatorLibraryPanel.locators[alias]) {
-        window.AppNotifications?.error(`定位器名称 "${alias}" 已存在,请使用其他名称`);
-        return false;
-      }
-
       // 生成图片文件名
-      const imageFileName = `${alias}.png`;
+      const imageFileName = `${name}.png`;
       const imagePath = path.join(imgDir, imageFileName);
 
       // 保存图片文件
-      const imageBuffer = Buffer.from(base64Image.split(',')[1], 'base64');
+      const imageBuffer = Buffer.from(this._pendingBase64Image.split(',')[1], 'base64');
       await fs.writeFile(imagePath, imageBuffer);
 
       // 创建图像定位器对象 - 统一格式
       const locator = {
-        name: alias,
-        // 图片定位字段
+        name: name,
+        note: note || '',
         img_path: `locator/img/${imageFileName}`,
-        // 通用字段
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
       // 添加到LocatorLibraryPanel并保存到element.json
       if (window.LocatorLibraryPanel) {
-        window.LocatorLibraryPanel.locators[alias] = locator;
+        window.LocatorLibraryPanel.locators[name] = locator;
         await window.LocatorLibraryPanel.saveLocators();
-
-        // 重新渲染定位器列表
         window.LocatorLibraryPanel.renderLocators();
 
         // 切换到Locator库标签
@@ -437,14 +417,87 @@ const ScreenshotMode = {
         }
       }
 
-      window.AppNotifications?.success(`图像定位器 "${alias}" 已保存`);
-      window.rLog(`图像定位器已保存: ${imagePath}`);
-      return true;
+      window.AppNotifications?.success(`图像元素 "${name}" 已保存`);
+      window.rLog(`图像元素已保存: ${imagePath}`);
+
+      // 清理临时数据
+      this._pendingBase64Image = null;
 
     } catch (error) {
-      window.rError('保存图片定位器失败:', error);
+      window.rError('保存图片元素失败:', error);
       window.AppNotifications?.error('保存失败: ' + error.message);
-      return false;
+    }
+  },
+
+  /**
+   * 合并到已有元素
+   */
+  async _mergeToExistingElement(targetName) {
+    const { fs, path } = getGlobals();
+    const projectPath = window.AppGlobals.currentProject;
+
+    if (!projectPath || !this._pendingBase64Image) {
+      return;
+    }
+
+    const locators = window.LocatorLibraryPanel?.locators || {};
+    const existingLocator = locators[targetName];
+
+    if (!existingLocator) {
+      window.AppNotifications?.error('目标元素不存在');
+      return;
+    }
+
+    try {
+      // 确保locator/img目录存在
+      const locatorDir = path.join(projectPath, 'locator');
+      const imgDir = path.join(locatorDir, 'img');
+      await fs.mkdir(imgDir, { recursive: true });
+
+      // 如果已有旧图片，先删除
+      if (existingLocator.img_path) {
+        const oldImgPath = path.join(projectPath, existingLocator.img_path);
+        try {
+          await fs.unlink(oldImgPath);
+          window.rLog(`已删除旧图片: ${oldImgPath}`);
+        } catch (e) {
+          // 旧文件可能不存在，忽略
+        }
+      }
+
+      // 生成新的图片文件名
+      const imageFileName = `${targetName}.png`;
+      const imagePath = path.join(imgDir, imageFileName);
+
+      // 保存图片文件
+      const imageBuffer = Buffer.from(this._pendingBase64Image.split(',')[1], 'base64');
+      await fs.writeFile(imagePath, imageBuffer);
+
+      // 更新元素的 img_path
+      existingLocator.img_path = `locator/img/${imageFileName}`;
+      existingLocator.updated_at = new Date().toISOString();
+
+      // 保存到 element.json
+      if (window.LocatorLibraryPanel) {
+        await window.LocatorLibraryPanel.saveLocators();
+        window.LocatorLibraryPanel.renderLocators();
+
+        // 切换到Locator库标签
+        const locatorTab = document.getElementById('locatorLibTab');
+        if (locatorTab) {
+          locatorTab.click();
+        }
+      }
+
+      window.AppNotifications?.success(`图片已合并到元素 "${targetName}"`);
+      window.rLog(`图片已合并到元素: ${targetName}`);
+
+      // 清理临时数据
+      this._pendingBase64Image = null;
+
+    } catch (error) {
+      window.rError('合并图片失败:', error);
+      window.AppNotifications?.error('合并失败: ' + error.message);
     }
   }
 };
