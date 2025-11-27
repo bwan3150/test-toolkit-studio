@@ -119,10 +119,8 @@ const LocatorLibraryPanel = {
 
         // 检查 ElementSaveModal 是否可用
         if (!window.ElementSaveModal) {
-            window.rError('ElementSaveModal 未加载，使用旧版对话框');
-            const result = await this.promptForLocatorNameLegacy(element);
-            if (!result) return;
-            await this._saveNewElement(result.name, result.note, elementData);
+            window.rError('ElementSaveModal 未加载');
+            window.AppNotifications?.error('保存模态框未加载，请刷新页面');
             return;
         }
 
@@ -226,128 +224,6 @@ const LocatorLibraryPanel = {
         window.AppNotifications?.success(`XML 属性已合并到元素 "${targetName}"`);
     },
 
-    // 旧版提示输入定位器名称（备用）
-    async promptForLocatorNameLegacy(element) {
-        return new Promise((resolve) => {
-            // 生成默认名称
-            const defaultName = element.text || element.contentDesc ||
-                              element.className?.split('.').pop() ||
-                              `element_${Date.now()}`;
-
-            // 创建模态框
-            const modal = document.createElement('div');
-            modal.className = 'modal-overlay';
-            modal.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0, 0, 0, 0.5);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 10000;
-            `;
-
-            const dialog = document.createElement('div');
-            dialog.className = 'modal-dialog';
-            dialog.style.cssText = `
-                background: var(--bg-secondary);
-                border-radius: 8px;
-                padding: 20px;
-                width: 400px;
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-            `;
-
-            dialog.innerHTML = `
-                <h3 style="margin: 0 0 15px 0; color: var(--text-primary);">保存元素到定位器库</h3>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">定位器名称：</label>
-                    <input type="text" id="locator-name-input" value="${this.escapeHtml(defaultName)}"
-                           style="width: 100%; padding: 8px; background: var(--bg-primary);
-                                  border: 1px solid var(--border-color); color: var(--text-primary);
-                                  border-radius: 4px; font-size: 13px;">
-                </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">备注 (可选)：</label>
-                    <input type="text" id="locator-note-input" placeholder="添加备注说明..."
-                           style="width: 100%; padding: 8px; background: var(--bg-primary);
-                                  border: 1px solid var(--border-color); color: var(--text-primary);
-                                  border-radius: 4px; font-size: 13px;">
-                </div>
-                ${element.text ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">文本: ${this.escapeHtml(element.text)}</div>` : ''}
-                ${element.contentDesc ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">描述: ${this.escapeHtml(element.contentDesc)}</div>` : ''}
-                ${element.className ? `<div style="margin-bottom: 15px; color: var(--text-secondary); font-size: 11px;">类型: ${this.escapeHtml(element.className)}</div>` : ''}
-                ${element.resourceId ? `<div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 11px;">资源ID: ${this.escapeHtml(element.resourceId)}</div>` : ''}
-                <div style="display: flex; gap: 10px; justify-content: flex-end;">
-                    <button id="cancel-btn" style="padding: 6px 16px; background: var(--bg-tertiary);
-                                                   border: 1px solid var(--border-color); color: var(--text-primary);
-                                                   border-radius: 4px; cursor: pointer;">取消</button>
-                    <button id="save-btn" style="padding: 6px 16px; background: var(--accent-primary);
-                                                border: none; color: white; border-radius: 4px; cursor: pointer;">保存</button>
-                </div>
-            `;
-
-            modal.appendChild(dialog);
-            document.body.appendChild(modal);
-
-            // 自动聚焦输入框并选中文本
-            const input = dialog.querySelector('#locator-name-input');
-            setTimeout(() => {
-                input.focus();
-                input.select();
-            }, 100);
-
-            // 事件处理
-            const handleSave = async () => {
-                const nameInput = dialog.querySelector('#locator-name-input');
-                const noteInput = dialog.querySelector('#locator-note-input');
-                const name = nameInput.value.trim();
-                const note = noteInput.value.trim();
-
-                if (!name) {
-                    window.AppNotifications?.warn('请输入定位器名称');
-                    return;
-                }
-
-                // 检查是否已存在
-                if (this.locators[name]) {
-                    if (!confirm(`定位器 "${name}" 已存在，是否覆盖？`)) {
-                        return;
-                    }
-                }
-
-                document.body.removeChild(modal);
-                resolve({ name, note });
-            };
-
-            const handleCancel = () => {
-                document.body.removeChild(modal);
-                resolve(null);
-            };
-
-            dialog.querySelector('#save-btn').addEventListener('click', handleSave);
-            dialog.querySelector('#cancel-btn').addEventListener('click', handleCancel);
-
-            // 回车保存，ESC取消
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    handleSave();
-                } else if (e.key === 'Escape') {
-                    handleCancel();
-                }
-            });
-
-            // 点击模态框外部取消
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    handleCancel();
-                }
-            });
-        });
-    },
-    
     // 渲染定位器列表 - 卡片布局
     renderLocators(filteredLocators = null) {
         const container = document.getElementById('locatorLibContent');
