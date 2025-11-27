@@ -36,7 +36,7 @@ pub use ocr::{ocr, OcrResult, OcrText};
 pub use models::{
     UIElement,
     Locator,
-    LocatorType,
+    LocatorStrategy,
     TksScript,
     TksStep,
     TksCommand,

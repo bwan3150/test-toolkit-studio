@@ -63,6 +63,45 @@ async function execTkeCommand(app, args) {
 
 // 注册 TKE Recognizer 相关的 IPC 处理器
 function registerRecognizerHandlers(app) {
+  // 统一元素查找 - tke recognizer find <locator_name> [--strategy <strategy>] [--threshold <value>]
+  ipcMain.handle('tke-recognizer-find', async (event, deviceId, projectPath, locatorName, strategy = 'auto', threshold = 0.6) => {
+    try {
+      if (!deviceId) {
+        return { success: false, error: '请提供设备ID' };
+      }
+
+      if (!projectPath || !path.isAbsolute(projectPath)) {
+        return { success: false, error: '请提供有效的项目路径（绝对路径）' };
+      }
+
+      if (!locatorName || typeof locatorName !== 'string') {
+        return { success: false, error: '请提供元素名称' };
+      }
+
+      const args = ['--device', deviceId, '--project', projectPath, 'recognizer', 'find', locatorName];
+
+      // 添加策略参数
+      if (strategy && strategy !== 'auto') {
+        args.push('--strategy', strategy);
+      }
+
+      // 添加阈值参数（用于图像匹配）
+      if (threshold !== 0.6) {
+        args.push('--threshold', threshold.toString());
+      }
+
+      const output = await execTkeCommand(app, args);
+
+      return {
+        success: true,
+        output: output
+      };
+    } catch (error) {
+      console.error('TKE recognizer find失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 通过文本查找元素 - tke recognizer find-text "text"
   ipcMain.handle('tke-recognizer-find-text', async (event, deviceId, projectPath, text) => {
     try {
@@ -91,7 +130,7 @@ function registerRecognizerHandlers(app) {
     }
   });
 
-  // 通过XML元素名查找 - tke recognizer find-xml <element_name>
+  // 向后兼容: 通过XML元素名查找 - 内部使用统一的 find 命令
   ipcMain.handle('tke-recognizer-find-xml', async (event, deviceId, projectPath, elementName) => {
     try {
       if (!deviceId) {
@@ -106,7 +145,8 @@ function registerRecognizerHandlers(app) {
         return { success: false, error: '请提供元素名称' };
       }
 
-      const args = ['--device', deviceId, '--project', projectPath, 'recognizer', 'find-xml', elementName];
+      // 使用新的统一命令，auto 策略
+      const args = ['--device', deviceId, '--project', projectPath, 'recognizer', 'find', elementName];
       const output = await execTkeCommand(app, args);
 
       return {
@@ -119,8 +159,8 @@ function registerRecognizerHandlers(app) {
     }
   });
 
-  // 通过图像查找元素 - tke recognizer find-image <image_name> [--threshold <value>]
-  ipcMain.handle('tke-recognizer-find-image', async (event, deviceId, projectPath, imageName, threshold = 0.5) => {
+  // 向后兼容: 通过图像查找元素 - 内部使用统一的 find 命令
+  ipcMain.handle('tke-recognizer-find-image', async (event, deviceId, projectPath, imageName, threshold = 0.6) => {
     try {
       if (!deviceId) {
         return { success: false, error: '请提供设备ID' };
@@ -134,10 +174,10 @@ function registerRecognizerHandlers(app) {
         return { success: false, error: '请提供图像名称' };
       }
 
-      const args = ['--device', deviceId, '--project', projectPath, 'recognizer', 'find-image', imageName];
+      // 使用新的统一命令，img 策略
+      const args = ['--device', deviceId, '--project', projectPath, 'recognizer', 'find', imageName, '--strategy', 'img'];
 
-      // 如果提供了阈值，添加到参数中
-      if (threshold !== 0.5) {
+      if (threshold !== 0.6) {
         args.push('--threshold', threshold.toString());
       }
 

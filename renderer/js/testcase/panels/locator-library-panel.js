@@ -106,22 +106,22 @@ const LocatorLibraryPanel = {
 
         const { name, note } = result;
 
-        // 创建定位器对象，兼容toolkit-engine格式
+        // 创建定位器对象 - 统一格式（无 type 区分）
         const locator = {
-            type: 'xml',
-            locator_type: 'XML',  // 兼容toolkit-engine
             name: name,
-            note: note || '',  // 添加备注字段
-            class_name: element.class_name || '',
+            note: note || '',
+            // XML 定位字段
+            xpath: element.xpath || null,
+            resource_id: element.resource_id || null,
             text: element.text || null,
             content_desc: element.content_desc || null,
-            resource_id: element.resource_id || null,
-            bounds: element.bounds || [],
+            class_name: element.class_name || '',
+            // 通用字段
+            bounds: element.bounds || null,
             clickable: element.clickable || false,
             enabled: element.enabled || false,
-            xpath: element.xpath || null,  // 添加xpath支持
-            match_strategy: null,  // 可选的匹配策略
-            createdAt: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
         };
 
         // 保存到locators对象
@@ -296,16 +296,17 @@ const LocatorLibraryPanel = {
 
         // 卡片布局
         const cardsHTML = locatorsToRender.map(([name, locator]) => {
-            const type = locator.type || 'xml';
+            // 根据字段判断类型：有 img_path 是图片类型，否则是 XML 类型
+            const isImageType = !!locator.img_path;
             const note = locator.note || '';
 
             // 图标HTML
             let iconHTML = '';
-            if (type === 'image') {
+            if (isImageType) {
                 // 如果是图片类型，显示图片
                 const { path: PathModule } = window.AppGlobals;
                 const projectPath = window.AppGlobals.currentProject;
-                const imagePath = locator.path ? (projectPath ? PathModule.join(projectPath, locator.path) : locator.path) : '';
+                const imagePath = locator.img_path ? (projectPath ? PathModule.join(projectPath, locator.img_path) : locator.img_path) : '';
 
                 if (imagePath) {
                     iconHTML = `<img src="${imagePath}" alt="${this.escapeHtml(name)}">`;
@@ -321,7 +322,7 @@ const LocatorLibraryPanel = {
                 <div class="locator-card"
                      draggable="true"
                      data-name="${this.escapeHtml(name)}"
-                     data-type="${type}"
+                     data-has-img="${isImageType}"
                      oncontextmenu="window.LocatorLibraryPanel.showContextMenu(event, '${this.escapeHtml(name)}'); return false;">
                     <div class="locator-card-icon">
                         ${iconHTML}
@@ -348,32 +349,32 @@ const LocatorLibraryPanel = {
     setupCardDragEvents(card) {
         card.addEventListener('dragstart', (e) => {
             const name = card.dataset.name;
-            const type = card.dataset.type || 'xml';
+            const hasImg = card.dataset.hasImg === 'true';
             e.dataTransfer.effectAllowed = 'copy';
 
-            // 设置拖拽数据，支持新TKS语法
-            if (type === 'image') {
-                // 图片元素：@{图片名称}
-                e.dataTransfer.setData('text/plain', `@{${name}}`);
-                // 设置专门的类型标识用于块编辑器识别
-                e.dataTransfer.setData('application/x-locator-image', name);
+            // 统一语法：{元素名}&策略
+            // 图片元素默认使用 img 策略，XML元素默认使用 auto 策略
+            if (hasImg) {
+                // 图片元素：{元素名}&img
+                e.dataTransfer.setData('text/plain', `{${name}}&img`);
             } else {
-                // XML元素：{元素名称}
+                // XML元素：{元素名} (auto 策略可省略)
                 e.dataTransfer.setData('text/plain', `{${name}}`);
-                // 设置专门的类型标识用于块编辑器识别
-                e.dataTransfer.setData('application/x-locator-xml', name);
             }
+
+            // 设置专门的类型标识用于块编辑器识别
+            e.dataTransfer.setData('application/x-locator', name);
 
             // 设置JSON格式数据供编辑器使用
             e.dataTransfer.setData('application/json', JSON.stringify({
                 type: 'locator',
                 name: name,
-                locatorType: type,
+                hasImgPath: hasImg,
                 data: this.locators[name]
             }));
 
             card.style.opacity = '0.5';
-            window.rLog(`开始拖拽${type === 'image' ? '图片' : 'XML'}元素: ${name}`);
+            window.rLog(`开始拖拽元素: ${name}${hasImg ? ' (图片)' : ''}`);
         });
 
         card.addEventListener('dragend', (e) => {
@@ -459,24 +460,15 @@ const LocatorLibraryPanel = {
     useLocator(name) {
         const locator = this.locators[name];
         if (!locator) return;
-        
-        // 生成定位器代码
+
+        // 生成定位器代码 - 使用统一语法
         let code = '';
-        if (locator.type === 'xml') {
-            const resourceId = locator.resource_id || locator.resourceId;
-            const contentDesc = locator.content_desc || locator.contentDesc;
-            
-            if (resourceId) {
-                code = `click_element_by_id("${resourceId}")`;
-            } else if (locator.text) {
-                code = `click_element_by_text("${locator.text}")`;
-            } else if (contentDesc) {
-                code = `click_element_by_desc("${contentDesc}")`;
-            } else {
-                code = `click_element_by_locator("${name}")`;
-            }
+        if (locator.img_path) {
+            // 有图片路径，使用 img 策略
+            code = `点击 {${name}}&img`;
         } else {
-            code = `click_image("${name}")`;
+            // 无图片路径，使用 auto 策略（可省略）
+            code = `点击 {${name}}`;
         }
         
         // 如果有活动的编辑器，插入代码
@@ -493,24 +485,18 @@ const LocatorLibraryPanel = {
     // 删除定位器
     async deleteLocator(name) {
         if (!confirm(`确定要删除定位器 "${name}" 吗？`)) return;
-        
+
         const locator = this.locators[name];
-        
-        // 如果是图像定位器，删除图像文件
-        if (locator && locator.type === 'image') {
+
+        // 如果有图像路径，删除图像文件
+        if (locator && locator.img_path) {
             try {
                 const fs = window.nodeRequire('fs');
                 const path = window.AppGlobals.path;
                 const projectPath = window.AppGlobals.currentProject;
-                
-                // 使用定位器中的路径信息，或者默认路径
-                let imgPath;
-                if (locator.path) {
-                    imgPath = path.join(projectPath, locator.path);
-                } else {
-                    imgPath = path.join(projectPath, 'locator', 'img', `${name}.png`);
-                }
-                
+
+                const imgPath = path.join(projectPath, locator.img_path);
+
                 if (fs.existsSync(imgPath)) {
                     fs.unlinkSync(imgPath);
                     window.rLog(`删除图像文件: ${imgPath}`);

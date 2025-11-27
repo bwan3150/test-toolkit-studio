@@ -1,37 +1,40 @@
-// 图像查找模块 - 使用OpenCV进行图像匹配
+// 图像查找模块 - 使用 OpenCV 进行图像模板匹配
 
-use crate::{Result, TkeError, Point, Locator, LocatorType, JsonOutput};
+use crate::{Result, TkeError, Point, Locator, JsonOutput};
 use std::path::PathBuf;
-use std::collections::HashMap;
 use std::process::Command;
 
-/// 根据图像locator查找元素（用于CLI，直接输出JSON）
-pub fn find_by_locator_json(
+/// 根据图像 locator 查找元素（用于脚本，返回 Point）
+pub fn find_by_image(
     project_path: &PathBuf,
-    locators: &HashMap<String, Locator>,
-    locator_name: &str,
-    threshold: f32
+    locator: &Locator,
+    threshold: f32,
+) -> Result<Point> {
+    let img_path = locator.img_path.as_ref()
+        .ok_or_else(|| TkeError::ElementNotFound(
+            format!("元素 '{}' 未定义 img_path 字段", locator.name)
+        ))?;
+
+    let template_path = project_path.join(img_path);
+    let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
+
+    // 调用 tke-opencv 可执行文件进行模板匹配
+    opencv_match(&screenshot_path, &template_path, threshold)
+}
+
+/// 根据图像 locator 查找元素（用于 CLI，直接输出 JSON）
+pub fn find_by_image_json(
+    project_path: &PathBuf,
+    locator: &Locator,
+    threshold: f32,
 ) -> Result<()> {
-    // 获取locator定义
-    let locator = locators.get(locator_name)
+    let img_path = locator.img_path.as_ref()
         .ok_or_else(|| {
-            JsonOutput::print_error(format!("Locator '{}' 未定义", locator_name));
-            TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name))
+            JsonOutput::print_error(format!("元素 '{}' 未定义 img_path 字段", locator.name));
+            TkeError::ElementNotFound(format!("元素 '{}' 未定义 img_path 字段", locator.name))
         })?;
 
-    // 确保是图像类型
-    if !matches!(locator.locator_type, LocatorType::Image) {
-        JsonOutput::print_error(format!("Locator '{}' 不是图像类型", locator_name));
-        return Err(TkeError::InvalidArgument(format!("Locator '{}' 不是图像类型", locator_name)));
-    }
-
-    let template_path = if let Some(ref path) = locator.path {
-        project_path.join(path)
-    } else {
-        JsonOutput::print_error("图像locator缺少path字段");
-        return Err(TkeError::InvalidArgument("图像locator缺少path字段".to_string()));
-    };
-
+    let template_path = project_path.join(img_path);
     let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
 
     // 调用 tke-opencv 可执行文件进行模板匹配
@@ -39,35 +42,7 @@ pub fn find_by_locator_json(
     Ok(())
 }
 
-/// 根据图像locator查找元素（用于脚本，返回Point）
-pub fn find_by_locator(
-    project_path: &PathBuf,
-    locators: &HashMap<String, Locator>,
-    locator_name: &str,
-    threshold: f32
-) -> Result<Point> {
-    // 获取locator定义
-    let locator = locators.get(locator_name)
-        .ok_or_else(|| TkeError::ElementNotFound(format!("Locator '{}' 未定义", locator_name)))?;
-
-    // 确保是图像类型
-    if !matches!(locator.locator_type, LocatorType::Image) {
-        return Err(TkeError::InvalidArgument(format!("Locator '{}' 不是图像类型", locator_name)));
-    }
-
-    let template_path = if let Some(ref path) = locator.path {
-        project_path.join(path)
-    } else {
-        return Err(TkeError::InvalidArgument("图像locator缺少path字段".to_string()));
-    };
-
-    let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
-
-    // 调用 tke-opencv 可执行文件进行模板匹配
-    opencv_match(&screenshot_path, &template_path, threshold)
-}
-
-/// 使用 OpenCV (Python 打包的可执行文件) 进行模板匹配（返回Point）
+/// 使用 OpenCV (Python 打包的可执行文件) 进行模板匹配（返回 Point）
 fn opencv_match(screenshot_path: &PathBuf, template_path: &PathBuf, threshold: f32) -> Result<Point> {
     // tke-opencv 可执行文件路径（与当前可执行文件同目录）
     let current_exe = std::env::current_exe()
@@ -110,7 +85,7 @@ fn opencv_match(screenshot_path: &PathBuf, template_path: &PathBuf, threshold: f
     }
 }
 
-/// 使用 OpenCV 进行模板匹配（直接输出JSON）
+/// 使用 OpenCV 进行模板匹配（直接输出 JSON）
 fn opencv_match_json(screenshot_path: &PathBuf, template_path: &PathBuf, threshold: f32) -> Result<()> {
     // tke-opencv 可执行文件路径（与当前可执行文件同目录）
     let current_exe = std::env::current_exe()
@@ -140,7 +115,7 @@ fn opencv_match_json(screenshot_path: &PathBuf, template_path: &PathBuf, thresho
     let stdout = String::from_utf8_lossy(&output.stdout);
     JsonOutput::print_raw(stdout.trim());
 
-    // 解析检查是否成功（用于返回Result）
+    // 解析检查是否成功（用于返回 Result）
     let result: serde_json::Value = serde_json::from_str(&stdout)
         .map_err(|e| TkeError::JsonError(e))?;
 

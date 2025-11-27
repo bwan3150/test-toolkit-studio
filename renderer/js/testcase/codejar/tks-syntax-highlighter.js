@@ -11,10 +11,9 @@ const TKSSyntaxHighlighter = {
     COMMENT: 'comment',
     SECTION: 'section',
     COMMAND: 'command',
-    IMAGE_LOCATOR: 'image-locator',
     COORDINATE: 'coordinate',
     LOCATOR: 'locator',
-    LOCATOR_STRATEGY: 'locator-strategy',  // 新增：定位器策略 (#resourceId, #text 等)
+    LOCATOR_STRATEGY: 'locator-strategy',  // 定位器策略 (&resourceId, &text, &ocr, &img 等)
     DIRECTION: 'direction',
     ASSERTION_STATE: 'assertion-state',
     OPERATOR: 'operator',
@@ -86,20 +85,8 @@ const TKSSyntaxHighlighter = {
     while (remaining.length > 0) {
       let matched = false;
 
-      // 检查图片定位器 @{...}
-      if (remaining.startsWith('@{')) {
-        const endIndex = remaining.indexOf('}', 2);
-        if (endIndex !== -1) {
-          const imageLocator = remaining.substring(0, endIndex + 1);
-          tokens.push({ type: this.TOKEN_TYPES.IMAGE_LOCATOR, value: imageLocator });
-          remaining = remaining.substring(endIndex + 1);
-          matched = true;
-          continue;
-        }
-      }
-
-      // 检查普通定位器 {...} (需要区分坐标和XML)
-      if (remaining.startsWith('{') && !remaining.startsWith('@{')) {
+      // 检查定位器 {...} (统一格式，不再区分 @{} 和 {})
+      if (remaining.startsWith('{')) {
         const endIndex = remaining.indexOf('}', 1);
         if (endIndex !== -1) {
           const content = remaining.substring(1, endIndex);
@@ -114,8 +101,8 @@ const TKSSyntaxHighlighter = {
 
           remaining = remaining.substring(endIndex + 1);
 
-          // 🔥 检查是否紧跟着策略标记 &resourceId, &text, &className, &contentDesc, &xpath
-          const strategyMatch = remaining.match(/^&(resourceId|text|className|contentDesc|xpath)(?=\s|,|\]|$)/);
+          // 检查是否紧跟着策略标记 &xpath, &resourceId, &text, &contentDesc, &className, &ocr, &img, &auto
+          const strategyMatch = remaining.match(/^&(xpath|resourceId|resource-id|text|contentDesc|content-desc|className|class-name|ocr|img|image|auto)(?=\s|,|\]|$)/i);
           if (strategyMatch) {
             tokens.push({ type: this.TOKEN_TYPES.LOCATOR_STRATEGY, value: strategyMatch[0] });
             remaining = remaining.substring(strategyMatch[0].length);
@@ -226,9 +213,6 @@ const TKSSyntaxHighlighter = {
           break;
         case this.TOKEN_TYPES.COMMAND:
           html += `<span class="tks-command">${escapedValue}</span>`;
-          break;
-        case this.TOKEN_TYPES.IMAGE_LOCATOR:
-          html += `<span class="tks-image-locator">${escapedValue}</span>`;
           break;
         case this.TOKEN_TYPES.COORDINATE:
           html += `<span class="tks-coordinate">${escapedValue}</span>`;

@@ -111,8 +111,8 @@ class LocatorManagerTKE {
         }
     }
 
-    // XML元素匹配（通过IPC）
-    async findXmlElement(locatorName) {
+    // 统一元素查找（通过IPC）
+    async findElement(locatorName, strategy = 'auto', threshold = 0.6) {
         try {
             const projectPath = window.AppGlobals.getCurrentProjectPath();
             if (!projectPath) throw new Error('无法获取项目路径');
@@ -121,37 +121,11 @@ class LocatorManagerTKE {
             if (!deviceId) throw new Error('无法获取设备ID');
 
             const result = await this.ipcRenderer.invoke(
-                'tke-recognizer-find-xml',
-                deviceId,
-                projectPath,
-                locatorName
-            );
-
-            if (!result.success) {
-                throw new Error(result.error);
-            }
-
-            return JSON.parse(result.output);
-        } catch (error) {
-            console.error('XML元素查找失败:', error);
-            throw error;
-        }
-    }
-
-    // 图像匹配（通过IPC）
-    async findImageElement(locatorName, threshold = 0.5) {
-        try {
-            const projectPath = window.AppGlobals.getCurrentProjectPath();
-            if (!projectPath) throw new Error('无法获取项目路径');
-
-            const deviceId = window.AppGlobals.getCurrentDeviceId();
-            if (!deviceId) throw new Error('无法获取设备ID');
-
-            const result = await this.ipcRenderer.invoke(
-                'tke-recognizer-find-image',
+                'tke-recognizer-find',
                 deviceId,
                 projectPath,
                 locatorName,
+                strategy,
                 threshold
             );
 
@@ -161,54 +135,74 @@ class LocatorManagerTKE {
 
             return JSON.parse(result.output);
         } catch (error) {
-            console.error('图像元素查找失败:', error);
+            console.error('元素查找失败:', error);
             throw error;
         }
     }
 
+    // 向后兼容：XML元素查找
+    async findXmlElement(locatorName) {
+        return this.findElement(locatorName, 'auto');
+    }
+
+    // 向后兼容：图像元素查找
+    async findImageElement(locatorName, threshold = 0.6) {
+        return this.findElement(locatorName, 'img', threshold);
+    }
+
     async addXmlLocator(name, elementData) {
         try {
+            // 统一格式 - 无 type 字段
             const locator = {
-                type: 'xml',
-                className: elementData.className || '',
+                name: name,
+                note: elementData.note || '',
+                // XML 定位字段
+                xpath: elementData.xpath || null,
+                resource_id: elementData.resourceId || elementData.resource_id || null,
+                text: elementData.text || null,
+                content_desc: elementData.contentDesc || elementData.content_desc || null,
+                class_name: elementData.className || elementData.class_name || '',
+                // 通用字段
                 bounds: elementData.bounds || null,
-                text: elementData.text || '',
-                contentDesc: elementData.contentDesc || '',
-                resourceId: elementData.resourceId || '',
-                hint: elementData.hint || '',
-                description: `XML元素: ${name}`,
-                addedAt: new Date().toISOString()
+                clickable: elementData.clickable || false,
+                enabled: elementData.enabled || false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
             };
 
             this.locators[name] = locator;
             await this.saveLocators();
             this.updateLocatorList();
 
-            console.log(`已添加XML locator: ${name}`);
+            console.log(`已添加 locator: ${name}`);
             return true;
         } catch (error) {
-            console.error('添加XML locator失败:', error);
+            console.error('添加 locator 失败:', error);
             return false;
         }
     }
 
     async addImageLocator(name, imagePath) {
         try {
+            // 统一格式 - 使用 img_path 字段
             const locator = {
-                type: 'image',
-                path: `locator/img/${name}.png`,
-                description: `图像元素: ${name}`,
-                addedAt: new Date().toISOString()
+                name: name,
+                note: '',
+                // 图片定位字段
+                img_path: `locator/img/${name}.png`,
+                // 通用字段
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
             };
 
             this.locators[name] = locator;
             await this.saveLocators();
             this.updateLocatorList();
 
-            console.log(`已添加图像locator: ${name}`);
+            console.log(`已添加图像 locator: ${name}`);
             return true;
         } catch (error) {
-            console.error('添加图像locator失败:', error);
+            console.error('添加图像 locator 失败:', error);
             return false;
         }
     }
@@ -233,12 +227,13 @@ class LocatorManagerTKE {
     async deleteLocator(name) {
         try {
             if (this.locators[name]) {
-                if (this.locators[name].type === 'image' && this.locators[name].path) {
+                // 如果有图像路径，删除图像文件
+                if (this.locators[name].img_path) {
                     const projectPath = window.AppGlobals.getCurrentProjectPath();
                     if (projectPath) {
                         const fs = require('fs');
                         const path = window.AppGlobals.path;
-                        const imagePath = path.join(projectPath, this.locators[name].path);
+                        const imagePath = path.join(projectPath, this.locators[name].img_path);
 
                         if (fs.existsSync(imagePath)) {
                             fs.unlinkSync(imagePath);
@@ -269,13 +264,15 @@ class LocatorManagerTKE {
             const locatorItem = document.createElement('div');
             locatorItem.className = 'locator-item';
 
-            const typeIcon = locator.type === 'image' ? '🖼️' : '📄';
+            // 根据 img_path 判断类型
+            const isImageType = !!locator.img_path;
+            const typeIcon = isImageType ? '🖼️' : '📄';
 
             locatorItem.innerHTML = `
                 <div class="locator-info">
                     <span class="locator-type">${typeIcon}</span>
                     <span class="locator-name">${name}</span>
-                    <span class="locator-desc">${locator.description || ''}</span>
+                    <span class="locator-desc">${locator.note || ''}</span>
                 </div>
                 <div class="locator-actions">
                     <button class="btn btn-sm btn-outline-primary" onclick="locatorManagerTKE.testLocator('${name}')">测试</button>
@@ -292,14 +289,9 @@ class LocatorManagerTKE {
             const locator = this.locators[name];
             if (!locator) throw new Error(`Locator '${name}' 不存在`);
 
-            let result;
-            if (locator.type === 'xml') {
-                result = await this.findXmlElement(name);
-            } else if (locator.type === 'image') {
-                result = await this.findImageElement(name);
-            } else {
-                throw new Error(`不支持的locator类型: ${locator.type}`);
-            }
+            // 根据 img_path 判断使用哪种策略
+            const strategy = locator.img_path ? 'img' : 'auto';
+            const result = await this.findElement(name, strategy);
 
             window.AppNotifications?.success(`Locator '${name}' 测试成功，位置: (${result.x}, ${result.y})`);
 

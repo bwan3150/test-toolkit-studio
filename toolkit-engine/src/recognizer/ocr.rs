@@ -1,0 +1,84 @@
+// OCR 在线识别模块 - 通过 OCR 服务识别屏幕文字并定位元素
+
+use crate::{Result, TkeError, Point, Locator};
+use crate::ocr::{ocr, OcrResult};
+use std::path::PathBuf;
+use tracing::debug;
+
+/// OCR 服务 URL
+const OCR_URL: &str = "https://ocr.test-toolkit.app/ocr";
+
+/// 通过 OCR 在线识别查找元素
+pub async fn find_by_ocr(
+    project_path: &PathBuf,
+    locator: &Locator,
+) -> Result<Point> {
+    let ocr_text = locator.ocr_text.as_ref()
+        .ok_or_else(|| TkeError::ElementNotFound(
+            format!("元素 '{}' 未定义 ocr_text 字段", locator.name)
+        ))?;
+
+    debug!("OCR 查找文字: {}", ocr_text);
+
+    // 读取当前截图
+    let screenshot_path = project_path.join("workarea").join("current_screenshot.png");
+    if !screenshot_path.exists() {
+        return Err(TkeError::ElementNotFound(
+            "截图文件不存在，请先执行截图".to_string()
+        ));
+    }
+
+    let image_data = std::fs::read(&screenshot_path)
+        .map_err(|e| TkeError::IoError(e))?;
+
+    // 调用在线 OCR
+    let result = ocr(&image_data, true, OCR_URL).await
+        .map_err(|e| TkeError::OcrError(format!("OCR 识别失败: {}", e)))?;
+
+    debug!("OCR 识别到 {} 个文字区域", result.texts.len());
+
+    // 查找匹配文本
+    find_matching_text(&result, ocr_text, &locator.name)
+}
+
+/// 在 OCR 结果中查找匹配的文本
+fn find_matching_text(result: &OcrResult, target: &str, locator_name: &str) -> Result<Point> {
+    let target_lower = target.to_lowercase();
+
+    // 优先精确匹配
+    for text_item in &result.texts {
+        if text_item.text.to_lowercase() == target_lower {
+            let point = calculate_center(&text_item.bbox);
+            debug!("OCR 精确匹配: '{}' -> ({}, {})", text_item.text, point.x, point.y);
+            return Ok(point);
+        }
+    }
+
+    // 其次包含匹配
+    for text_item in &result.texts {
+        let text_lower = text_item.text.to_lowercase();
+        if text_lower.contains(&target_lower) || target_lower.contains(&text_lower) {
+            let point = calculate_center(&text_item.bbox);
+            debug!("OCR 包含匹配: '{}' 包含 '{}' -> ({}, {})",
+                   text_item.text, target, point.x, point.y);
+            return Ok(point);
+        }
+    }
+
+    Err(TkeError::ElementNotFound(
+        format!("OCR 未找到文字 '{}' (元素: {})", target, locator_name)
+    ))
+}
+
+/// 计算边界框的中心点
+fn calculate_center(bbox: &Vec<[f32; 2]>) -> Point {
+    if bbox.len() < 4 {
+        return Point::new(0, 0);
+    }
+
+    // bbox 格式: [[x1,y1], [x2,y1], [x2,y2], [x1,y2]]
+    let center_x = (bbox[0][0] + bbox[2][0]) / 2.0;
+    let center_y = (bbox[0][1] + bbox[2][1]) / 2.0;
+
+    Point::new(center_x as i32, center_y as i32)
+}

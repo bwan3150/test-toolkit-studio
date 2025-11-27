@@ -412,13 +412,14 @@ const ScreenshotMode = {
       const imageBuffer = Buffer.from(base64Image.split(',')[1], 'base64');
       await fs.writeFile(imagePath, imageBuffer);
 
-      // 创建图像定位器对象
+      // 创建图像定位器对象 - 统一格式
       const locator = {
-        type: 'image',
-        locator_type: 'Image',
         name: alias,
-        path: `locator/img/${imageFileName}`,
-        createdAt: new Date().toISOString()
+        // 图片定位字段
+        img_path: `locator/img/${imageFileName}`,
+        // 通用字段
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       // 添加到LocatorLibraryPanel并保存到element.json
