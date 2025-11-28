@@ -32,10 +32,23 @@ const ElementSaveModal = {
         const noteInput = document.getElementById('newElementNote');
         if (noteInput) noteInput.value = '';
 
+        // 清空搜索框
+        const searchInput = document.getElementById('mergeElementSearch');
+        if (searchInput) searchInput.value = '';
+
+        // 隐藏合并预览
+        const mergePreview = document.getElementById('mergePreview');
+        if (mergePreview) mergePreview.style.display = 'none';
+
         // 渲染
         this._renderPreview();
         this._renderList();
         this._switchTab('new');
+
+        // 清除列表选中状态
+        document.querySelectorAll('#mergeElementList .esm-item').forEach(item => {
+            item.classList.remove('selected');
+        });
 
         modal.style.display = 'flex';
         setTimeout(() => nameInput?.focus(), 100);
@@ -114,9 +127,16 @@ const ElementSaveModal = {
 
         if (this._saveType === 'img') {
             // 图片类型 - 显示图片预览
-            const imgHtml = data.img_path
-                ? `<img class="esm-img-preview" src="file://${this._esc(data.img_path)}" alt="截图">`
-                : '<span class="esm-empty">(待保存)</span>';
+            // 优先使用 img_data (base64)，其次使用 img_path (文件路径)
+            let imgHtml;
+            if (data.img_data) {
+                imgHtml = `<img class="esm-img-preview" src="${data.img_data}" alt="截图">`;
+            } else if (data.img_path) {
+                const imgSrc = data.img_path.startsWith('file://') ? data.img_path : `file://${data.img_path}`;
+                imgHtml = `<img class="esm-img-preview" src="${imgSrc}" alt="截图">`;
+            } else {
+                imgHtml = '<span class="esm-empty">(无图片)</span>';
+            }
             rows = `<tr><td>截图</td><td>${imgHtml}</td></tr>`;
         } else {
             const fields = ['text', 'content_desc', 'resource_id', 'class_name', 'xpath', 'bounds'];
@@ -192,12 +212,27 @@ const ElementSaveModal = {
             // 图片类型 - 显示图片预览
             const hasOld = !!existing.img_path;
             const status = hasOld ? '<span class="esm-status overwrite">覆盖</span>' : '<span class="esm-status new">新增</span>';
-            const newImgHtml = newData.img_path
-                ? `<img class="esm-img-preview" src="file://${this._esc(newData.img_path)}" alt="新截图">`
-                : '<span class="esm-empty">(待保存)</span>';
-            const oldImgHtml = hasOld
-                ? `<img class="esm-img-preview" src="file://${this._esc(existing.img_path)}" alt="原截图">`
-                : '<span class="esm-empty">无</span>';
+
+            // 新图片：优先使用 img_data (base64)
+            let newImgHtml;
+            if (newData.img_data) {
+                newImgHtml = `<img class="esm-img-preview" src="${newData.img_data}" alt="新截图">`;
+            } else if (newData.img_path) {
+                newImgHtml = `<img class="esm-img-preview" src="file://${this._esc(newData.img_path)}" alt="新截图">`;
+            } else {
+                newImgHtml = '<span class="esm-empty">(无图片)</span>';
+            }
+
+            // 旧图片：使用项目路径 + img_path
+            let oldImgHtml;
+            if (hasOld) {
+                const projectPath = window.AppGlobals?.currentProject || '';
+                const fullPath = projectPath ? `${projectPath}/${existing.img_path}` : existing.img_path;
+                oldImgHtml = `<img class="esm-img-preview" src="file://${this._esc(fullPath)}" alt="原截图">`;
+            } else {
+                oldImgHtml = '<span class="esm-empty">无</span>';
+            }
+
             rows = `<tr><td>截图</td><td>${status}</td><td>${newImgHtml}</td><td>${oldImgHtml}</td></tr>`;
             // 图片模式始终显示4列
             container.innerHTML = `<table class="esm-table"><thead><tr><th>字段</th><th>状态</th><th>新值</th><th>原值</th></tr></thead><tbody>${rows}</tbody></table>`;

@@ -339,9 +339,9 @@ const ScreenshotMode = {
       return;
     }
 
-    // 准备元素数据（临时路径，实际路径在保存时确定）
+    // 准备元素数据，传递 base64 图片数据用于预览
     const elementData = {
-      img_path: 'locator/img/pending.png' // 临时占位
+      img_data: this._pendingBase64Image // base64 图片数据用于预览
     };
 
     try {
