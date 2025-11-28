@@ -1,101 +1,61 @@
-<!-- 元素保存模态框 - 支持新建元素和合并到已有元素 -->
+<!-- 元素保存模态框 -->
 <div class="modal" id="elementSaveModal" style="display: none;">
-  <div class="modal-content element-save-modal-content">
-    <div class="modal-header">
-      <h3 id="elementSaveModalTitle">保存元素</h3>
-      <button class="modal-close" id="closeElementSaveModal">&times;</button>
+  <div class="esm-dialog">
+    <div class="esm-header">
+      <span id="elementSaveModalTitle">保存元素</span>
+      <button class="esm-close" id="closeElementSaveModal">&times;</button>
     </div>
-
-    <!-- Tab 导航 -->
-    <div class="element-save-tabs">
-      <button class="element-save-tab active" data-tab="new">
-        <svg viewBox="0 0 24 24" width="16" height="16">
-          <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-        </svg>
-        新建元素
-      </button>
-      <button class="element-save-tab" data-tab="merge">
-        <svg viewBox="0 0 24 24" width="16" height="16">
-          <path fill="currentColor" d="M17 20.41L18.41 19 15 15.59 13.59 17 17 20.41zM7.5 8H11v5.59L5.59 19 7 20.41l6-6V8h3.5L12 3.5 7.5 8z"/>
-        </svg>
-        合并入元素
-      </button>
+    <div class="esm-tabs">
+      <button class="esm-tab active" data-tab="new">新建元素</button>
+      <button class="esm-tab" data-tab="merge">合并入元素</button>
     </div>
-
-    <div class="modal-body element-save-body">
-      <!-- Tab 1: 新建元素 -->
-      <div class="element-save-panel active" data-panel="new">
-        <div class="form-group">
+    <div class="esm-body">
+      <!-- 新建元素面板 -->
+      <div class="esm-panel active" data-panel="new">
+        <div class="esm-form">
           <label>元素名称 <span class="required">*</span></label>
-          <input type="text" id="newElementName" class="form-control" placeholder="输入元素名称" required>
+          <input type="text" id="newElementName" placeholder="输入元素名称">
+          <label>备注</label>
+          <input type="text" id="newElementNote" placeholder="可选备注">
         </div>
-        <div class="form-group">
-          <label>备注 (可选)</label>
-          <input type="text" id="newElementNote" class="form-control" placeholder="添加备注说明...">
-        </div>
-        <!-- 元素信息预览 -->
-        <div class="element-preview" id="elementPreview">
-          <div class="preview-title">元素信息</div>
-          <div class="preview-content" id="elementPreviewContent">
-            <!-- 动态填充 -->
-          </div>
+        <div class="esm-section">
+          <div class="esm-section-title">元素信息</div>
+          <div class="esm-table-wrap" id="elementPreviewContent"></div>
         </div>
       </div>
-
-      <!-- Tab 2: 合并入元素 -->
-      <div class="element-save-panel" data-panel="merge">
-        <div class="element-search-container">
-          <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16">
-            <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-          </svg>
-          <input type="text" id="mergeElementSearch" class="form-control" placeholder="搜索元素...">
+      <!-- 合并面板 -->
+      <div class="esm-panel" data-panel="merge">
+        <div class="esm-form">
+          <input type="text" id="mergeElementSearch" placeholder="搜索元素...">
         </div>
-        <div class="element-list-container" id="mergeElementList">
-          <!-- 动态填充元素列表 -->
-        </div>
-        <!-- 合并预览 -->
-        <div class="merge-preview" id="mergePreview" style="display: none;">
-          <div class="preview-title">
-            <span>合并预览</span>
-            <span class="preview-target" id="mergeTargetName"></span>
-          </div>
-          <div class="preview-content" id="mergePreviewContent">
-            <!-- 动态填充 -->
-          </div>
+        <div class="esm-list" id="mergeElementList"></div>
+        <div class="esm-section" id="mergePreview" style="display:none;">
+          <div class="esm-section-title">合并预览 <span class="esm-target" id="mergeTargetName"></span></div>
+          <div class="esm-table-wrap" id="mergePreviewContent"></div>
         </div>
       </div>
     </div>
-
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="cancelElementSave">取消</button>
-      <button class="btn btn-primary" id="confirmElementSave">
-        <span id="confirmBtnText">保存</span>
-      </button>
+    <div class="esm-footer">
+      <button class="esm-btn" id="cancelElementSave">取消</button>
+      <button class="esm-btn primary" id="confirmElementSave">保存</button>
     </div>
   </div>
 </div>
 
-<!-- 覆盖确认对话框 -->
+<!-- 覆盖确认 -->
 <div class="modal" id="overwriteConfirmModal" style="display: none;">
-  <div class="modal-content overwrite-confirm-content">
-    <div class="modal-header">
-      <h3>确认覆盖</h3>
-      <button class="modal-close" id="closeOverwriteModal">&times;</button>
+  <div class="esm-dialog" style="width:400px;">
+    <div class="esm-header">
+      <span>确认覆盖</span>
+      <button class="esm-close" id="closeOverwriteModal">&times;</button>
     </div>
-    <div class="modal-body">
-      <div class="overwrite-warning">
-        <svg viewBox="0 0 24 24" width="24" height="24">
-          <path fill="#f39c12" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-        </svg>
-        <span>以下属性已有值，是否覆盖？</span>
-      </div>
-      <div class="overwrite-fields" id="overwriteFieldsList">
-        <!-- 动态填充冲突字段 -->
-      </div>
+    <div class="esm-body">
+      <div class="esm-warning">以下属性已有值，是否覆盖？</div>
+      <div id="overwriteFieldsList"></div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="cancelOverwrite">取消</button>
-      <button class="btn btn-warning" id="confirmOverwrite">确认覆盖</button>
+    <div class="esm-footer">
+      <button class="esm-btn" id="cancelOverwrite">取消</button>
+      <button class="esm-btn warning" id="confirmOverwrite">确认覆盖</button>
     </div>
   </div>
 </div>
