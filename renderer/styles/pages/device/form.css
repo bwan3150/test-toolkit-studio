@@ -37,6 +37,19 @@
     display: block;
 }
 
+/* 只读输入框样式 */
+.input-readonly {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    cursor: not-allowed;
+    border-color: var(--border-color) !important;
+}
+
+.input-readonly:focus {
+    border-color: var(--border-color) !important;
+    box-shadow: none !important;
+}
+
 .form-note {
     background: rgba(33, 150, 243, 0.1);
     border-left: 3px solid #2196F3;

@@ -9,7 +9,7 @@ function getGlobals() {
 
 // 刷新连接的设备（按平台分组显示 Android 和 iOS 设备）
 async function refreshConnectedDevices() {
-    const { ipcRenderer, path, fs, yaml } = getGlobals();
+    const { ipcRenderer } = getGlobals();
 
     const iosDevicesGrid = document.getElementById('iosDevicesGrid');
     const androidDevicesGrid = document.getElementById('androidDevicesGrid');
@@ -35,18 +35,13 @@ async function refreshConnectedDevices() {
         const categorized = JSON.parse(categorizedResult.output);
         window.rLog('获取到分类设备:', categorized);
 
-        // 加载保存的设备配置
+        // 从数据库加载保存的设备配置
         let savedDeviceConfigs = {};
         if (window.AppGlobals.currentProject) {
             try {
-                const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
-                const files = await fs.readdir(devicesPath);
-                for (const file of files) {
-                    if (file.endsWith('.yaml')) {
-                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
-                        const config = yaml.load(content);
-                        // 添加文件名到配置对象中
-                        config._filename = file;
+                const dbResult = await ipcRenderer.invoke('db-device-getAll', window.AppGlobals.currentProject);
+                if (dbResult.success && dbResult.data) {
+                    for (const config of dbResult.data) {
                         // Android 用 deviceId, iOS 用 udid
                         if (config.deviceId) {
                             savedDeviceConfigs[config.deviceId] = config;
@@ -298,7 +293,8 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
         }
         // 只有打开项目时才显示保存按钮
         if (hasProject) {
-            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存</button>`);
+            const model = deviceInfo?.model || '';
+            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}', '${model}')">保存</button>`);
         }
         // 已连接的设备显示"信息"按钮
         if (isConnected && platform === 'android') {
@@ -312,9 +308,9 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
             const host = deviceId.split(':')[0];
             actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
         }
-        // 已保存的设备都显示编辑和删除按钮
-        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?._filename || ''}')">编辑</button>`);
-        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?._filename || ''}')" title="删除">删除</button>`);
+        // 已保存的设备都显示编辑和删除按钮（使用设备名作为主键）
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?.deviceName || ''}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?.deviceName || ''}')" title="删除">删除</button>`);
         // 已连接的设备显示"信息"按钮
         if (isConnected && platform === 'android') {
             actionButtons.push(`<button class="btn btn-default btn-small" onclick="showDeviceInfoModal('${deviceId}')" title="查看详细信息">信息</button>`);
@@ -415,6 +411,8 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
 
 // 检查 iOS 设备的 WDA 连接状态
 async function checkIosDeviceStatus(device) {
+    const { ipcRenderer } = getGlobals();
+
     try {
         // 尝试通过 USB 连接检查 WDA 状态
         const response = await fetch(`http://localhost:8100/status`, {
@@ -431,18 +429,12 @@ async function checkIosDeviceStatus(device) {
             device.wdaStatus = 'disconnected';
         }
     } catch (error) {
-        // USB 连接失败，尝试检查保存的 WiFi 配置
+        // USB 连接失败，尝试从数据库获取 WiFi 配置
         try {
-            const { path, fs, yaml } = getGlobals();
             if (window.AppGlobals.currentProject) {
-                const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
-                const files = await fs.readdir(devicesPath);
-
-                for (const file of files) {
-                    if (file.endsWith('.yaml')) {
-                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
-                        const config = yaml.load(content);
-
+                const dbResult = await ipcRenderer.invoke('db-device-getAll', window.AppGlobals.currentProject);
+                if (dbResult.success && dbResult.data) {
+                    for (const config of dbResult.data) {
                         // 检查是否是对应的 iOS 设备配置
                         if (config.platform === 'ios' && config.udid === device.udid && config.connectionType === 'wifi' && config.ipAddress) {
                             const wifiResponse = await fetch(`http://${config.ipAddress}:${config.port || 8100}/status`, {

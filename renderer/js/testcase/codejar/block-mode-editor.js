@@ -257,26 +257,30 @@ class BlockModeEditor {
                     `;
                 } else if (param.type === 'element') {
                     // element 类型参数，检查是否已填入元素
-                    const imageMatch = value.match(/^@\{(.+)\}$/);
-                    const xmlMatch = value.match(/^\{(.+?)\}(?:&(resourceId|text|className|contentDesc|xpath))?$/);
+                    // 统一格式：{元素名}&策略
+                    const elementMatch = value.match(/^\{(.+?)\}(?:&(\w+))?$/);
 
                     // 检查是否是坐标格式 {数字, 数字}
                     const isCoordinate = /^\{\s*\d+\s*,\s*\d+\s*\}$/.test(value);
 
-                    if ((imageMatch || xmlMatch) && !isCoordinate) {
+                    if (elementMatch && !isCoordinate) {
                         // 已填入元素，显示可视化卡片
-                        const elementName = imageMatch ? imageMatch[1] : xmlMatch[1];
-                        const strategy = xmlMatch ? xmlMatch[2] : null; // 提取策略
-                        const isImage = !!imageMatch;
+                        const elementName = elementMatch[1];
+                        const strategy = elementMatch[2] || ''; // 提取策略
+                        const isImageStrategy = ['img', 'image'].includes(strategy.toLowerCase());
 
-                        if (isImage) {
-                            // 图片元素 - 显示图片预览，失败时显示图标
-                            const { path: PathModule } = window.AppGlobals;
+                        if (isImageStrategy) {
+                            // 图片元素 - 从 locator 获取真实路径
                             const projectPath = window.AppGlobals.currentProject;
-                            const imagePath = projectPath ? PathModule.join(projectPath, 'locator/img', `${elementName}.png`) : '';
+                            const locator = window.LocatorLibraryPanel?.locators?.[elementName];
+                            const imgPath = locator?.img_path || `img/${elementName}.png`;
+                            const imagePath = projectPath ? `${projectPath}/${imgPath}` : '';
 
                             commandContent += `
-                                <div class="param-visual-card param-image-card" data-param="${param.name}" data-command-index="${index}">
+                                <div class="param-visual-card param-image-card"
+                                     data-param="${param.name}"
+                                     data-command-index="${index}"
+                                     data-strategy="${strategy}">
                                     <div class="visual-image-preview">
                                         <img src="${imagePath}" alt="${elementName}"
                                              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -291,16 +295,16 @@ class BlockModeEditor {
                                 </div>
                             `;
                         } else {
-                            // XML元素 - 根据策略显示不同图标
+                            // 元素卡片 - 根据策略显示不同图标
                             const iconHtml = window.BlockUIStrategyMenu
-                                ? window.BlockUIStrategyMenu.getStrategyIcon(strategy || '', 16)
+                                ? window.BlockUIStrategyMenu.getStrategyIcon(strategy, 16)
                                 : `<svg width="16" height="16" viewBox="0 0 24 24" style="flex-shrink: 0;"><path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/></svg>`;
 
                             commandContent += `
                                 <div class="param-visual-card visual-xml-card"
                                      data-param="${param.name}"
                                      data-command-index="${index}"
-                                     data-strategy="${strategy || ''}">
+                                     data-strategy="${strategy}">
                                     ${iconHtml}
                                     <span class="visual-name">${elementName}</span>
                                     <button class="visual-remove-btn" data-param="${param.name}" data-command-index="${index}" title="移除">×</button>
@@ -475,8 +479,8 @@ class BlockModeEditor {
             });
         });
 
-        // 为 XML 卡片添加点击事件以显示策略菜单
-        this.blocksContainer.querySelectorAll('.visual-xml-card').forEach(card => {
+        // 为所有元素卡片添加点击事件以显示策略菜单（包括 XML 卡片和图片卡片）
+        this.blocksContainer.querySelectorAll('.visual-xml-card, .param-image-card').forEach(card => {
             card.addEventListener('click', (e) => {
                 // 如果点击的是移除按钮，不处理
                 if (e.target.closest('.visual-remove-btn')) {
@@ -499,7 +503,7 @@ class BlockModeEditor {
                 const x = rect.left;
                 const y = rect.bottom + 4;
 
-                window.rLog(`点击 XML 卡片，命令: ${commandIndex}, 参数: ${paramName}, 元素: ${elementName}, 策略: ${currentStrategy}`);
+                window.rLog(`点击元素卡片，命令: ${commandIndex}, 参数: ${paramName}, 元素: ${elementName}, 策略: ${currentStrategy}`);
 
                 // 使用策略菜单模块显示菜单
                 if (window.BlockUIStrategyMenu && typeof window.BlockUIStrategyMenu.show === 'function') {
@@ -625,8 +629,8 @@ class BlockModeEditor {
                     return;
                 }
 
-                // 检查是否是元素拖拽（图片或XML元素）
-                if (types.includes('application/x-locator-image') || types.includes('application/x-locator-xml')) {
+                // 检查是否是元素拖拽（统一格式）
+                if (types.includes('application/x-locator') || types.includes('application/x-locator-image') || types.includes('application/x-locator-xml')) {
                     e.preventDefault();
                     e.stopPropagation();
                     target.classList.add('drag-over');
@@ -649,14 +653,29 @@ class BlockModeEditor {
 
                 // 检查是否是元素拖拽
                 let elementData = null;
-                let elementType = null;
+                let hasImgPath = false;
 
-                if (types.includes('application/x-locator-image')) {
+                // 优先使用新的统一格式
+                if (types.includes('application/x-locator')) {
+                    elementData = e.dataTransfer.getData('application/x-locator');
+                    // 尝试获取 JSON 数据来判断是否有图片路径
+                    try {
+                        const jsonData = e.dataTransfer.getData('application/json');
+                        if (jsonData) {
+                            const parsed = JSON.parse(jsonData);
+                            hasImgPath = parsed.hasImgPath === true;
+                        }
+                    } catch (err) {
+                        // 忽略解析错误
+                    }
+                } else if (types.includes('application/x-locator-image')) {
+                    // 向后兼容：旧的图片格式
                     elementData = e.dataTransfer.getData('application/x-locator-image');
-                    elementType = 'image';
+                    hasImgPath = true;
                 } else if (types.includes('application/x-locator-xml')) {
+                    // 向后兼容：旧的 XML 格式
                     elementData = e.dataTransfer.getData('application/x-locator-xml');
-                    elementType = 'xml';
+                    hasImgPath = false;
                 }
 
                 if (elementData) {
@@ -669,8 +688,8 @@ class BlockModeEditor {
                     const paramName = target.dataset.param;
 
                     if (this.commands[commandIndex]) {
-                        // 格式：图片用 @{name}，XML元素用 {name}
-                        const value = elementType === 'image' ? `@{${elementData}}` : `{${elementData}}`;
+                        // 统一格式：{元素名} 或 {元素名}&img
+                        const value = hasImgPath ? `{${elementData}}&img` : `{${elementData}}`;
                         this.commands[commandIndex].params[paramName] = value;
 
                         // 重新渲染并触发变化
@@ -680,8 +699,8 @@ class BlockModeEditor {
 
                         window.rLog(`元素已填入参数: ${value}`);
 
-                        // 如果是 XML 元素，自动弹出策略选择菜单
-                        if (elementType === 'xml') {
+                        // 如果不是图片元素，自动弹出策略选择菜单
+                        if (!hasImgPath) {
                             // 使用 setTimeout 确保渲染完成后再查找元素
                             setTimeout(() => {
                                 // 查找刚刚填入的可视化卡片

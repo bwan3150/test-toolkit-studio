@@ -1,5 +1,5 @@
 // 设备加载模块
-// 负责从项目文件夹加载已保存的设备配置并显示在UI中
+// 负责从数据库加载已保存的设备配置并显示在UI中
 // 依赖：window.AppGlobals, window.AppNotifications
 
 // 获取全局变量的辅助函数
@@ -10,17 +10,25 @@ function getGlobals() {
 // 加载保存的设备（按平台分组显示）
 // 显示所有保存的设备，包含已连接和未连接的状态
 async function loadSavedDevices() {
-    const { ipcRenderer, path, fs, yaml } = getGlobals();
-    if (!window.AppGlobals.currentProject) return;
+    const { ipcRenderer } = getGlobals();
+    const projectPath = window.AppGlobals.currentProject;
+    if (!projectPath) return;
 
     const iosDevicesGrid = document.getElementById('iosDevicesGrid');
     const androidDevicesGrid = document.getElementById('androidDevicesGrid');
 
     if (!iosDevicesGrid || !androidDevicesGrid) return;
 
-    const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
-
     try {
+        // 从数据库获取所有保存的设备
+        const dbResult = await ipcRenderer.invoke('db-device-getAll', projectPath);
+        if (!dbResult.success) {
+            window.rError('从数据库获取设备失败:', dbResult.error);
+            return;
+        }
+
+        const savedDevices = dbResult.data || [];
+
         // 获取连接的Android和iOS设备
         const [androidResult, iosResult] = await Promise.all([
             ipcRenderer.invoke('adb-devices'),
@@ -30,55 +38,46 @@ async function loadSavedDevices() {
         const connectedAndroidDevices = androidResult.success ? androidResult.devices : [];
         const connectedIosDevices = iosResult.success ? iosResult.devices : [];
 
-        const files = await fs.readdir(devicesPath);
-
         // 分类保存的设备
         const iosDevices = [];
         const androidDevices = [];
 
-        for (const file of files) {
-            if (file.endsWith('.yaml')) {
-                const filePath = path.join(devicesPath, file);
-                const content = await fs.readFile(filePath, 'utf-8');
-                const config = yaml.load(content);
+        for (const config of savedDevices) {
+            // 获取平台类型
+            const platform = config.platform?.toLowerCase() === 'ios' ? 'ios' : 'android';
 
-                // 获取平台类型
-                const platform = config.platform?.toLowerCase() === 'ios' ? 'ios' : 'android';
+            // 判断连接类型
+            const connectionType = config.connectionType || 'usb';
+            const isWifi = connectionType === 'wifi' ||
+                           (config.ipAddress && config.port) ||
+                           config.deviceId?.includes(':') ||
+                           config.deviceId?.includes('._adb-tls-connect._tcp');
 
-                // 判断连接类型
-                const connectionType = config.connectionType || 'usb';
-                const isWifi = connectionType === 'wifi' ||
-                               (config.ipAddress && config.port) ||
-                               config.deviceId?.includes(':') ||
-                               config.deviceId?.includes('._adb-tls-connect._tcp');
+            // 检查设备是否已连接
+            let isConnected = false;
+            if (platform === 'android') {
+                isConnected = config.deviceId && connectedAndroidDevices.some(d =>
+                    d.id === config.deviceId && d.status === 'device'
+                );
+            } else if (platform === 'ios') {
+                // iOS设备通过UDID匹配
+                isConnected = config.udid && connectedIosDevices.some(d =>
+                    d.udid === config.udid
+                );
+            }
 
-                // 检查设备是否已连接
-                let isConnected = false;
-                if (platform === 'android') {
-                    isConnected = config.deviceId && connectedAndroidDevices.some(d =>
-                        d.id === config.deviceId && d.status === 'device'
-                    );
-                } else if (platform === 'ios') {
-                    // iOS设备通过UDID匹配
-                    isConnected = config.udid && connectedIosDevices.some(d =>
-                        d.udid === config.udid
-                    );
-                }
+            const deviceData = {
+                config,
+                platform,
+                isWifi,
+                isConnected
+            };
 
-                const deviceData = {
-                    file,
-                    config,
-                    platform,
-                    isWifi,
-                    isConnected
-                };
-
-                // 按平台分类
-                if (platform === 'ios') {
-                    iosDevices.push(deviceData);
-                } else {
-                    androidDevices.push(deviceData);
-                }
+            // 按平台分类
+            if (platform === 'ios') {
+                iosDevices.push(deviceData);
+            } else {
+                androidDevices.push(deviceData);
             }
         }
 
@@ -120,12 +119,13 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
     // 但需要检查设备是否已存在，避免重复添加
 
     for (const deviceData of devices) {
-        const { file, config, platform, isWifi, isConnected } = deviceData;
+        const { config, platform, isWifi, isConnected } = deviceData;
+        const deviceName = config.deviceName;
 
-        // 检查设备是否已存在 - 通过检查是否有相同的data-device-file属性
-        const existingCard = gridElement.querySelector(`[data-device-file="${file}"]`);
+        // 检查设备是否已存在 - 通过检查是否有相同的data-device-name属性
+        const existingCard = gridElement.querySelector(`[data-device-name="${deviceName}"]`);
         if (existingCard) {
-            window.rLog('设备已存在，跳过:', config.deviceName || file);
+            window.rLog('设备已存在，跳过:', deviceName);
             continue; // 跳过已存在的设备
         }
 
@@ -236,7 +236,7 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
 
         const card = document.createElement('div');
         card.className = 'device-phone-mockup';
-        card.setAttribute('data-device-file', file); // 用于去重检查
+        card.setAttribute('data-device-name', deviceName); // 设备名用于去重检查
         // 同时设置 data-device-id 用于与未保存设备的去重
         const deviceKey = platform === 'ios' ? config.udid : config.deviceId;
         if (deviceKey) {
@@ -284,13 +284,13 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
             actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>`);
         }
 
-        // 已保存的设备都显示编辑和删除按钮
+        // 已保存的设备都显示编辑和删除按钮（使用设备名作为主键）
         // USB已连接/已保存: 编辑 + 删除
         // WiFi已连接/已保存: 断开 + 编辑 + 删除
         // USB未连接/已保存: 编辑 + 删除
         // WiFi未连接/已保存: 编辑 + 删除
-        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${file}')">编辑</button>`);
-        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${file}')" title="删除">删除</button>`);
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${deviceName}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${deviceName}')" title="删除">删除</button>`);
 
         if (actionButtons.length > 0) {
             cardContent += `
@@ -337,7 +337,8 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
 
 // 刷新下拉框中的设备列表
 async function refreshDeviceList() {
-    const { ipcRenderer, path, fs, yaml } = getGlobals();
+    const { ipcRenderer } = getGlobals();
+    const projectPath = window.AppGlobals.currentProject;
     const result = await ipcRenderer.invoke('adb-devices');
     const deviceSelect = document.getElementById('deviceSelect');
 
@@ -349,16 +350,13 @@ async function refreshDeviceList() {
     deviceSelect.innerHTML = '<option value="">Select Device</option>';
 
     if (result.success && result.devices.length > 0) {
-        // 加载保存的设备配置以显示名称而不是ID
+        // 从数据库加载保存的设备配置以显示名称而不是ID
         let deviceConfigs = {};
-        if (window.AppGlobals.currentProject) {
+        if (projectPath) {
             try {
-                const devicesPath = path.join(window.AppGlobals.currentProject, 'devices');
-                const files = await fs.readdir(devicesPath);
-                for (const file of files) {
-                    if (file.endsWith('.yaml')) {
-                        const content = await fs.readFile(path.join(devicesPath, file), 'utf-8');
-                        const config = yaml.load(content);
+                const dbResult = await ipcRenderer.invoke('db-device-getAll', projectPath);
+                if (dbResult.success && dbResult.data) {
+                    for (const config of dbResult.data) {
                         if (config.deviceId) {
                             deviceConfigs[config.deviceId] = config.deviceName;
                         }

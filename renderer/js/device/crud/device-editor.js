@@ -1,5 +1,6 @@
 // 设备编辑模块
-// 负责编辑和删除已保存的设备配置
+// 负责编辑和删除已保存的设备配置（使用数据库）
+// device_name 作为主键
 // 依赖：window.AppGlobals, window.AppNotifications, window.DeviceLoader
 
 // 获取全局变量的辅助函数
@@ -7,19 +8,26 @@ function getGlobals() {
     return window.AppGlobals;
 }
 
-// 编辑设备配置
-async function editDevice(filename) {
-    const { path, fs, yaml } = getGlobals();
-    if (!window.AppGlobals.currentProject) return;
+// 编辑设备配置（使用设备名作为主键）
+async function editDevice(deviceName) {
+    const { ipcRenderer } = getGlobals();
+    const projectPath = window.AppGlobals.currentProject;
+    if (!projectPath) return;
 
     try {
-        const devicePath = path.join(window.AppGlobals.currentProject, 'devices', filename);
-        const content = await fs.readFile(devicePath, 'utf-8');
-        const config = yaml.load(content);
+        // 从数据库获取设备配置
+        const result = await ipcRenderer.invoke('db-device-get', projectPath, deviceName);
+
+        if (!result.success) {
+            window.AppNotifications?.error(`Failed to load device: ${result.error}`);
+            return;
+        }
+
+        const config = result.data;
 
         // 显示设备配置模态窗口（编辑模式）
         if (window.DeviceConfigModalUI && window.DeviceConfigModalUI.showDeviceConfigModalForEdit) {
-            window.DeviceConfigModalUI.showDeviceConfigModalForEdit(filename, config);
+            window.DeviceConfigModalUI.showDeviceConfigModalForEdit(deviceName, config);
         } else {
             window.rError('设备配置模态窗口UI控制器未加载');
         }
@@ -28,20 +36,25 @@ async function editDevice(filename) {
     }
 }
 
-// 删除设备配置
-async function deleteDevice(filename) {
-    const { path, fs } = getGlobals();
-    if (!window.AppGlobals.currentProject) return;
+// 删除设备配置（使用设备名作为主键）
+async function deleteDevice(deviceName) {
+    const { ipcRenderer } = getGlobals();
+    const projectPath = window.AppGlobals.currentProject;
+    if (!projectPath) return;
 
-    if (confirm('Are you sure you want to delete this device configuration?')) {
+    if (confirm(`Are you sure you want to delete device "${deviceName}"?`)) {
         try {
-            const devicePath = path.join(window.AppGlobals.currentProject, 'devices', filename);
-            await fs.unlink(devicePath);
-            window.AppNotifications?.success('Device configuration deleted');
+            const result = await ipcRenderer.invoke('db-device-delete', projectPath, deviceName);
 
-            // 刷新设备页面
-            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
-                await window.DeviceScanner.refreshConnectedDevices();
+            if (result.success) {
+                window.AppNotifications?.success('Device configuration deleted');
+
+                // 刷新设备页面
+                if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                    await window.DeviceScanner.refreshConnectedDevices();
+                }
+            } else {
+                window.AppNotifications?.error(`Failed to delete device: ${result.error}`);
             }
         } catch (error) {
             window.AppNotifications?.error(`Failed to delete device: ${error.message}`);

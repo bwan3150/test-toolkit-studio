@@ -65,6 +65,9 @@ const { registerSystemHandlers } = require('./handlers/electron-core/system-hand
 // 项目管理模块
 const { registerProjectHandlers } = require('./handlers/project/project-handlers');
 
+// 数据库模块
+const { registerDatabaseHandlers, closeAllDatabases } = require('./handlers/database');
+
 // 属性管理模块 - 用户配置数据管理
 const { registerDeviceConfigHandlers } = require('./handlers/property-manage/device-config-handlers');
 
@@ -345,6 +348,10 @@ function registerAllHandlers() {
     console.log('注册项目处理器...');
     registerProjectHandlers();
 
+    // 数据库模块
+    console.log('注册数据库处理器...');
+    registerDatabaseHandlers();
+
     // 属性管理模块
     console.log('注册设备配置处理器...');
     registerDeviceConfigHandlers(app);
@@ -511,6 +518,7 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   cleanupProcesses();
+  closeAllDatabases();
 });
 
 // 导出主窗口引用（供其他模块使用）

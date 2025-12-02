@@ -1,231 +1,225 @@
 <!-- 设备配置模态窗口 -->
 <div class="modal" id="deviceConfigModal" style="display: none">
-  <div class="modal-content modal-large">
+  <div class="modal-content modal-medium">
     <div class="modal-header">
       <h3 id="deviceConfigModalTitle">Add New Device</h3>
       <button class="modal-close" id="closeDeviceConfigModal">&times;</button>
     </div>
     <div class="modal-body">
       <form id="deviceConfigForm">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Device Name</label>
-            <input
-              type="text"
-              name="deviceName"
-              placeholder="e.g., iPhone 15 Pro"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label>Platform Version</label>
-            <input
-              type="text"
-              name="platformVersion"
-              placeholder="e.g., 15"
-              required
-            />
+        <!-- 设备名称 -->
+        <div class="form-group">
+          <label>Device Name</label>
+          <input
+            type="text"
+            name="deviceName"
+            placeholder="e.g., My Test Phone"
+            required
+          />
+        </div>
+
+        <!-- 设备型号 (只读) -->
+        <div class="form-group">
+          <label>Model</label>
+          <input
+            type="text"
+            name="model"
+            placeholder="Auto-detected"
+            readonly
+            class="input-readonly"
+          />
+        </div>
+
+        <!-- 备注 -->
+        <div class="form-group">
+          <label>Note</label>
+          <input
+            type="text"
+            name="note"
+            placeholder="Optional notes about this device"
+          />
+        </div>
+
+        <!-- 平台选择 -->
+        <div class="form-group">
+          <label>Platform</label>
+          <div class="radio-group" id="platformRadios">
+            <label class="radio-option">
+              <input type="radio" name="platform" value="android" checked>
+              <span class="radio-label">Android</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="platform" value="ios">
+              <span class="radio-label">iOS</span>
+            </label>
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group">
-            <label>Platform</label>
-            <div class="radio-group" id="platformRadios">
-              <label class="radio-option">
-                <input type="radio" name="platform" value="android" checked>
-                <span class="radio-label">Android</span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="platform" value="ios">
-                <span class="radio-label">iOS</span>
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Connection Type</label>
-            <div class="radio-group" id="connectionRadios">
-              <label class="radio-option">
-                <input type="radio" name="connectionType" value="usb" checked>
-                <span class="radio-label">USB</span>
-              </label>
-              <label class="radio-option">
-                <input type="radio" name="connectionType" value="wifi">
-                <span class="radio-label">WiFi</span>
-              </label>
-            </div>
+        <!-- 平台版本 -->
+        <div class="form-group">
+          <label>Platform Version</label>
+          <input
+            type="text"
+            name="platformVersion"
+            placeholder="e.g., 14"
+            required
+          />
+        </div>
+
+        <!-- 连接类型 -->
+        <div class="form-group">
+          <label>Connection Type</label>
+          <div class="radio-group" id="connectionRadios">
+            <label class="radio-option">
+              <input type="radio" name="connectionType" value="usb" checked>
+              <span class="radio-label">USB</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="connectionType" value="wifi">
+              <span class="radio-label">WiFi</span>
+            </label>
           </div>
         </div>
 
         <!-- 1. Android + USB 配置 -->
         <div class="config-group" id="android-usb-config" style="display: none;">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Device ID (Optional)</label>
-              <input
-                type="text"
-                name="deviceId"
-                placeholder="e.g., RF8M90XXXXX or leave empty to auto-detect"
-              />
-              <small class="form-help">Android device serial number, auto-detect if empty</small>
-            </div>
+          <div class="form-group">
+            <label>Device ID</label>
+            <input
+              type="text"
+              name="deviceId"
+              placeholder="e.g., RF8M90XXXXX"
+              readonly
+              class="input-readonly"
+            />
+            <small class="form-help">Android device serial number</small>
           </div>
         </div>
 
         <!-- 2. Android + WiFi 配置 -->
         <div class="config-group" id="android-wifi-config" style="display: none;">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Device IP Address</label>
-              <input
-                type="text"
-                name="ipAddress"
-                placeholder="e.g., 192.168.1.100"
-                pattern="^(\d{1,3}\.){3}\d{1,3}$"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label>ADB Port</label>
-              <input
-                type="number"
-                name="port"
-                placeholder="5555"
-                min="1"
-                max="65535"
-              />
-              <small class="form-help">ADB over network port</small>
-            </div>
+          <div class="form-group">
+            <label>Device IP Address</label>
+            <input
+              type="text"
+              name="ipAddress"
+              placeholder="e.g., 192.168.1.100"
+              pattern="^(\d{1,3}\.){3}\d{1,3}$"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label>ADB Port</label>
+            <input
+              type="number"
+              name="port"
+              placeholder="5555"
+              min="1"
+              max="65535"
+            />
+            <small class="form-help">ADB over network port</small>
           </div>
         </div>
 
         <!-- 3. iOS + USB 配置 -->
         <div class="config-group" id="ios-usb-config" style="display: none;">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Device UDID</label>
-              <input
-                type="text"
-                name="udid"
-                placeholder="e.g., 00008110-000A2D8E3A82802E"
-                required
-              />
-              <small class="form-help">iOS device unique identifier</small>
-            </div>
-            <div class="form-group">
-              <label>Test App Bundle ID</label>
-              <input
-                type="text"
-                name="bundleId"
-                placeholder="e.g., com.example.app"
-              />
-              <small class="form-help">Default app for testing</small>
-            </div>
+          <div class="form-group">
+            <label>Device UDID</label>
+            <input
+              type="text"
+              name="udid"
+              placeholder="e.g., 00008110-000A2D8E3A82802E"
+              required
+            />
+            <small class="form-help">iOS device unique identifier</small>
+          </div>
+          <div class="form-group">
+            <label>Test App Bundle ID</label>
+            <input
+              type="text"
+              name="bundleId"
+              placeholder="e.g., com.example.app"
+            />
+            <small class="form-help">Default app for testing</small>
           </div>
         </div>
 
         <!-- 4. iOS + WiFi 配置 -->
         <div class="config-group" id="ios-wifi-config" style="display: none;">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Device UDID</label>
-              <input
-                type="text"
-                name="udid"
-                placeholder="e.g., 00008110-000A2D8E3A82802E"
-                required
-              />
-              <small class="form-help">iOS device unique identifier</small>
-            </div>
-            <div class="form-group">
-              <label>Test App Bundle ID</label>
-              <input
-                type="text"
-                name="bundleId"
-                placeholder="e.g., com.example.app"
-              />
-              <small class="form-help">Default app for testing</small>
-            </div>
+          <div class="form-group">
+            <label>Device UDID</label>
+            <input
+              type="text"
+              name="udid"
+              placeholder="e.g., 00008110-000A2D8E3A82802E"
+              required
+            />
+            <small class="form-help">iOS device unique identifier</small>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>WDA Service IP</label>
-              <input
-                type="text"
-                name="wdaIpAddress"
-                placeholder="e.g., 192.168.1.100"
-                pattern="^(\d{1,3}\.){3}\d{1,3}$"
-                required
-              />
-              <small class="form-help">iOS device WiFi IP address</small>
-            </div>
-            <div class="form-group">
-              <label>WDA Port</label>
-              <input
-                type="number"
-                name="wdaPort"
-                placeholder="8100"
-                min="1"
-                max="65535"
-              />
-              <small class="form-help">WebDriverAgent service port</small>
-            </div>
+          <div class="form-group">
+            <label>Test App Bundle ID</label>
+            <input
+              type="text"
+              name="bundleId"
+              placeholder="e.g., com.example.app"
+            />
+            <small class="form-help">Default app for testing</small>
+          </div>
+          <div class="form-group">
+            <label>WDA Service IP</label>
+            <input
+              type="text"
+              name="wdaIpAddress"
+              placeholder="e.g., 192.168.1.100"
+              pattern="^(\d{1,3}\.){3}\d{1,3}$"
+              required
+            />
+            <small class="form-help">iOS device WiFi IP address</small>
+          </div>
+          <div class="form-group">
+            <label>WDA Port</label>
+            <input
+              type="number"
+              name="wdaPort"
+              placeholder="8100"
+              min="1"
+              max="65535"
+            />
+            <small class="form-help">WebDriverAgent service port</small>
           </div>
         </div>
 
         <!-- 高级设置 (可折叠) -->
         <div class="advanced-settings">
-          <div
-            class="advanced-toggle"
-            id="modalAdvancedToggle"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              class="toggle-icon"
-            >
-              <path
-                fill="currentColor"
-                d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"
-              />
+          <div class="advanced-toggle" id="modalAdvancedToggle">
+            <svg viewBox="0 0 24 24" width="16" height="16" class="toggle-icon">
+              <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
             </svg>
-            <span>Advanced Settings (Optional)</span>
+            <span>Advanced Settings</span>
           </div>
-          <div
-            class="advanced-content"
-            id="advancedSettingsContent"
-            style="display: none"
-          >
-            <div class="form-row">
-              <div class="form-group">
-                <label>Automation Name</label>
-                <input
-                  type="text"
-                  name="automationName"
-                  value="UiAutomator2"
-                />
-              </div>
-              <div class="form-group">
-                <label>Command Timeout</label>
-                <input
-                  type="number"
-                  name="newCommandTimeout"
-                  value="6000"
-                />
-              </div>
+          <div class="advanced-content" id="advancedSettingsContent" style="display: none">
+            <div class="form-group">
+              <label>Automation Name</label>
+              <input
+                type="text"
+                name="automationName"
+                value="UiAutomator2"
+              />
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>No Reset</label>
-                <select name="noReset">
-                  <option value="true">True</option>
-                  <option value="false">False</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <!-- Empty for layout balance -->
-              </div>
+            <div class="form-group">
+              <label>Command Timeout (ms)</label>
+              <input
+                type="number"
+                name="newCommandTimeout"
+                value="6000"
+              />
+            </div>
+            <div class="form-group">
+              <label>No Reset</label>
+              <select name="noReset">
+                <option value="true">True</option>
+                <option value="false">False</option>
+              </select>
             </div>
           </div>
         </div>

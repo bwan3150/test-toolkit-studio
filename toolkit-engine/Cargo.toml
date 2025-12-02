@@ -34,6 +34,8 @@ regex = "1.10"
 which = "6.0"
 # 时间处理
 chrono = { version = "0.4", features = ["serde"] }
+# SQLite数据库
+rusqlite = { version = "0.31", features = ["bundled"] }
 # OCR相关
 tesseract-rs = { version = "0.1.20", features = ["build-tesseract"], optional = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }

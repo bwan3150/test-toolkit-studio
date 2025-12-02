@@ -29,6 +29,7 @@ function showDeviceConfigModal() {
     // 清除编辑模式标记
     delete modal.dataset.mode;
     delete modal.dataset.filename;
+    delete modal.dataset.model;
 
     // 更新表单字段显示
     if (window.updatePlatformFields) {
@@ -40,7 +41,7 @@ function showDeviceConfigModal() {
 }
 
 // 显示设备配置模态窗口（编辑模式）
-function showDeviceConfigModalForEdit(filename, config) {
+function showDeviceConfigModalForEdit(deviceName, config) {
     const modal = document.getElementById('deviceConfigModal');
     const form = document.getElementById('deviceConfigForm');
     const title = document.getElementById('deviceConfigModalTitle');
@@ -55,9 +56,11 @@ function showDeviceConfigModalForEdit(filename, config) {
         title.textContent = 'Edit Device';
     }
 
-    // 设置编辑模式标记
+    // 设置编辑模式标记（保存原设备名用于重命名检测）
     modal.dataset.mode = 'edit';
-    modal.dataset.filename = filename;
+    modal.dataset.oldDeviceName = deviceName;
+    // 保留原有的 model
+    modal.dataset.model = config?.model || '';
 
     // 填充表单数据
     fillFormWithConfig(form, config);
@@ -73,6 +76,14 @@ function fillFormWithConfig(form, config) {
     // 填充基础字段
     const deviceNameInput = form.querySelector('input[name="deviceName"]');
     if (deviceNameInput) deviceNameInput.value = config.deviceName || '';
+
+    // 填充 Model
+    const modelInput = form.querySelector('input[name="model"]');
+    if (modelInput) modelInput.value = config.model || '';
+
+    // 填充 Note
+    const noteInput = form.querySelector('input[name="note"]');
+    if (noteInput) noteInput.value = config.note || '';
 
     const platformVersionInput = form.querySelector('input[name="platformVersion"]');
     if (platformVersionInput) platformVersionInput.value = config.platformVersion || '';
@@ -178,14 +189,27 @@ function hideDeviceConfigModal() {
             form.reset();
         }
         delete modal.dataset.mode;
-        delete modal.dataset.filename;
+        delete modal.dataset.oldDeviceName;
+        delete modal.dataset.model;
     }
 }
 
 // 从连接的设备预填充表单
-async function prefillDeviceConfigForm(deviceId) {
+async function prefillDeviceConfigForm(deviceId, model = '') {
     const form = document.getElementById('deviceConfigForm');
     if (!form) return;
+
+    // 存储 model 到 modal 的 dataset
+    const modal = document.getElementById('deviceConfigModal');
+    if (modal) {
+        modal.dataset.model = model;
+    }
+
+    // 填充 Model 输入框
+    const modelInput = form.querySelector('input[name="model"]');
+    if (modelInput) {
+        modelInput.value = model || '';
+    }
 
     // 判断是否为WiFi设备
     const isWifi = deviceId.includes(':');
@@ -203,11 +227,23 @@ async function prefillDeviceConfigForm(deviceId) {
         connectionRadio.checked = true;
     }
 
-    if (isWifi) {
-        const [ip, port] = deviceId.split(':');
-        form.querySelector('input[name="deviceName"]').value = `WiFi Device (${ip})`;
-    } else {
-        form.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
+    // 填充 Device ID 输入框
+    const deviceIdInput = form.querySelector('input[name="deviceId"]');
+    if (deviceIdInput) {
+        deviceIdInput.value = deviceId || '';
+    }
+
+    // 设置默认设备名称（使用 model 或 deviceId）
+    const deviceNameInput = form.querySelector('input[name="deviceName"]');
+    if (deviceNameInput) {
+        if (model) {
+            deviceNameInput.value = model;
+        } else if (isWifi) {
+            const [ip] = deviceId.split(':');
+            deviceNameInput.value = `WiFi Device (${ip})`;
+        } else {
+            deviceNameInput.value = `Device ${deviceId.substring(0, 8)}`;
+        }
     }
 
     // 自动获取设备的 Android 版本
@@ -372,13 +408,13 @@ function initializeDeviceConfigModal() {
     });
 }
 
-// 保存设备配置
+// 保存设备配置到数据库
 async function saveDeviceConfig() {
-    const { fs, yaml, path } = getGlobals();
     const modal = document.getElementById('deviceConfigModal');
     const form = document.getElementById('deviceConfigForm');
+    const projectPath = window.AppGlobals.currentProject;
 
-    if (!window.AppGlobals.currentProject) {
+    if (!projectPath) {
         window.AppNotifications?.warn('Please open a project first');
         return;
     }
@@ -397,59 +433,59 @@ async function saveDeviceConfig() {
     // 根据平台处理连接信息
     if (deviceConfig.connectionType === 'wifi') {
         if (deviceConfig.platform === 'ios') {
-            // iOS WiFi: 使用 wdaIpAddress 和 wdaPort
             if (deviceConfig.wdaIpAddress) {
                 deviceConfig.ipAddress = deviceConfig.wdaIpAddress;
                 deviceConfig.port = deviceConfig.wdaPort;
                 const port = deviceConfig.wdaPort || '';
-                if (port) {
-                    deviceConfig.deviceId = `${deviceConfig.wdaIpAddress}:${port}`;
-                } else {
-                    deviceConfig.deviceId = deviceConfig.wdaIpAddress;
-                }
+                deviceConfig.deviceId = port ? `${deviceConfig.wdaIpAddress}:${port}` : deviceConfig.wdaIpAddress;
             }
         } else {
-            // Android WiFi: 使用 ipAddress 和 port
             if (deviceConfig.ipAddress) {
                 const port = deviceConfig.port || '';
-                if (port) {
-                    deviceConfig.deviceId = `${deviceConfig.ipAddress}:${port}`;
-                } else {
-                    deviceConfig.deviceId = deviceConfig.ipAddress;
-                }
+                deviceConfig.deviceId = port ? `${deviceConfig.ipAddress}:${port}` : deviceConfig.ipAddress;
             }
         }
     }
 
-    // 根据平台自动设置platformName
-    deviceConfig.platformName = deviceConfig.platform === 'ios' ? 'iOS' : 'Android';
-
     // 检查是否在编辑模式
     const mode = modal?.dataset.mode;
-    let devicePath;
+    const oldDeviceName = modal?.dataset.oldDeviceName || null;
+    const model = modal?.dataset.model || '';
 
-    if (mode === 'edit' && modal?.dataset.filename) {
-        // 编辑模式 - 使用现有文件名
-        devicePath = path.join(window.AppGlobals.currentProject, 'devices', modal.dataset.filename);
-    } else {
-        // 创建模式 - 生成新文件名
-        const timestamp = Date.now();
-        const deviceFileName = `device_${timestamp}.yaml`;
-        devicePath = path.join(window.AppGlobals.currentProject, 'devices', deviceFileName);
-    }
+    // 构建数据库设备对象
+    const device = {
+        deviceName: deviceConfig.deviceName,
+        model: model,
+        note: deviceConfig.note || '',
+        platform: deviceConfig.platform,
+        platformVersion: deviceConfig.platformVersion,
+        connectionType: deviceConfig.connectionType,
+        deviceId: deviceConfig.deviceId,
+        port: deviceConfig.port || '',
+        bundleId: deviceConfig.bundleId || '',
+        wdaPort: deviceConfig.wdaPort || '',
+        automationName: deviceConfig.automationName,
+        newCommandTimeout: deviceConfig.newCommandTimeout || '6000',
+        noReset: deviceConfig.noReset === true || deviceConfig.noReset === 'true'
+    };
 
     try {
-        await fs.writeFile(devicePath, yaml.dump(deviceConfig));
-        window.AppNotifications?.success(
-            mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully'
-        );
+        const { ipcRenderer } = window.AppGlobals;
+        // 传递 oldDeviceName 用于编辑模式的重命名检测
+        const result = await ipcRenderer.invoke('db-device-save', projectPath, device, oldDeviceName);
 
-        // 隐藏模态窗口
-        hideDeviceConfigModal();
+        if (result.success) {
+            window.AppNotifications?.success(
+                mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully'
+            );
+            hideDeviceConfigModal();
 
-        // 刷新设备页面
-        if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
-            await window.DeviceScanner.refreshConnectedDevices();
+            // 刷新设备页面
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                await window.DeviceScanner.refreshConnectedDevices();
+            }
+        } else {
+            window.AppNotifications?.error(`Failed to save device: ${result.error}`);
         }
     } catch (error) {
         window.AppNotifications?.error(`Failed to save device: ${error.message}`);

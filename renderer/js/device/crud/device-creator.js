@@ -8,7 +8,7 @@ function getGlobals() {
 }
 
 // 从连接的设备创建设备
-async function createDeviceFromConnected(deviceId) {
+async function createDeviceFromConnected(deviceId, model = '') {
     if (!window.AppGlobals.currentProject) {
         window.AppNotifications?.warn('Please open a project first');
         return;
@@ -20,7 +20,7 @@ async function createDeviceFromConnected(deviceId) {
 
         // 预填充设备ID到表单（包括自动获取 Android 版本）
         if (window.DeviceConfigModalUI.prefillDeviceConfigForm) {
-            await window.DeviceConfigModalUI.prefillDeviceConfigForm(deviceId);
+            await window.DeviceConfigModalUI.prefillDeviceConfigForm(deviceId, model);
         }
     } else {
         window.rError('设备配置模态窗口UI控制器未加载');

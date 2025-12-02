@@ -26,9 +26,9 @@ const BlockUIStrategyMenu = {
         const strategies = [
             {
                 value: '',
-                label: '默认（全精确匹配）',
+                label: '自动（Auto）',
                 icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4a90e2" d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-4a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-4a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3"/></svg>',
-                description: '所有字段全匹配',
+                description: '自动选择: XML → OCR → 图片',
                 field: null // 默认策略不需要检查特定字段
             },
             {
@@ -65,6 +65,20 @@ const BlockUIStrategyMenu = {
                 icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#ff9800" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8h5Z"/></svg>',
                 description: '使用 XPath 路径',
                 field: 'xpath'
+            },
+            {
+                value: 'ocr',
+                label: 'OCR',
+                icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#e91e63" d="M17.5 11c.83 0 1.5-.67 1.5-1.5S18.33 8 17.5 8 16 8.67 16 9.5s.67 1.5 1.5 1.5M6.5 11C7.33 11 8 10.33 8 9.5S7.33 8 6.5 8 5 8.67 5 9.5 5.67 11 6.5 11M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2m0 2c-4.41 0-8 3.59-8 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8m0 4c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4"/></svg>',
+                description: '使用 OCR 文字识别',
+                field: 'ocr_text'
+            },
+            {
+                value: 'img',
+                label: '图片匹配',
+                icon: '<svg width="18" height="18" viewBox="0 0 24 24"><path fill="#795548" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>',
+                description: '使用图片模板匹配',
+                field: 'img_path'
             }
         ];
 
@@ -212,13 +226,13 @@ const BlockUIStrategyMenu = {
         }
 
         // 解析当前值，提取元素名（去掉旧的策略后缀）
-        const xmlMatch = currentValue.match(/^\{(.+?)\}(?:&(?:resourceId|text|className|contentDesc|xpath))?$/);
-        if (!xmlMatch) {
+        const elementMatch = currentValue.match(/^\{(.+?)\}(?:&(\w+))?$/);
+        if (!elementMatch) {
             window.rError(`无效的元素格式: ${currentValue}`);
             return null;
         }
 
-        const elementName = xmlMatch[1];
+        const elementName = elementMatch[1];
         // 构建新值
         const newValue = newStrategy ? `{${elementName}}&${newStrategy}` : `{${elementName}}`;
 
@@ -234,7 +248,7 @@ const BlockUIStrategyMenu = {
     extractStrategy(value) {
         if (!value) return '';
 
-        const match = value.match(/^\{.+?\}&(resourceId|text|className|contentDesc|xpath)$/);
+        const match = value.match(/^\{.+?\}&(\w+)$/);
         return match ? match[1] : '';
     },
 
@@ -251,7 +265,10 @@ const BlockUIStrategyMenu = {
             'text': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#00897b" d="M9.6 14L12 7.7L14.4 14M11 5L5.5 19h2.25l1.12-3h6.25l1.12 3h2.25L13 5h-2Z"/></svg>`,
             'className': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#9c27b0" d="M10 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>`,
             'contentDesc': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#2196f3" d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>`,
-            'xpath': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#ff9800" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8h5Z"/></svg>`
+            'xpath': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#ff9800" d="M10 20v-6h4v6h5v-8h3L12 3L2 12h3v8h5Z"/></svg>`,
+            'ocr': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#e91e63" d="M17.5 11c.83 0 1.5-.67 1.5-1.5S18.33 8 17.5 8 16 8.67 16 9.5s.67 1.5 1.5 1.5M6.5 11C7.33 11 8 10.33 8 9.5S7.33 8 6.5 8 5 8.67 5 9.5 5.67 11 6.5 11M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2m0 2c-4.41 0-8 3.59-8 8s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8m0 4c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4"/></svg>`,
+            'img': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#795548" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`,
+            'image': `<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="#795548" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`
         };
         return icons[strategy] || icons[''];
     },

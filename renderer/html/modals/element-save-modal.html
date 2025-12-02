@@ -1,0 +1,61 @@
+<!-- 元素保存模态框 -->
+<div class="modal" id="elementSaveModal" style="display: none;">
+  <div class="esm-dialog">
+    <div class="esm-header">
+      <span id="elementSaveModalTitle">保存元素</span>
+      <button class="esm-close" id="closeElementSaveModal">&times;</button>
+    </div>
+    <div class="esm-tabs">
+      <button class="esm-tab active" data-tab="new">新建元素</button>
+      <button class="esm-tab" data-tab="merge">合并入元素</button>
+    </div>
+    <div class="esm-body">
+      <!-- 新建元素面板 -->
+      <div class="esm-panel active" data-panel="new">
+        <div class="esm-form">
+          <label>元素名称 <span class="required">*</span></label>
+          <input type="text" id="newElementName" placeholder="输入元素名称">
+          <label>备注</label>
+          <input type="text" id="newElementNote" placeholder="可选备注">
+        </div>
+        <div class="esm-section">
+          <div class="esm-section-title">元素信息</div>
+          <div class="esm-table-wrap" id="elementPreviewContent"></div>
+        </div>
+      </div>
+      <!-- 合并面板 -->
+      <div class="esm-panel" data-panel="merge">
+        <div class="esm-form">
+          <input type="text" id="mergeElementSearch" placeholder="搜索元素...">
+        </div>
+        <div class="esm-list" id="mergeElementList"></div>
+        <div class="esm-section" id="mergePreview" style="display:none;">
+          <div class="esm-section-title">合并预览 <span class="esm-target" id="mergeTargetName"></span></div>
+          <div class="esm-table-wrap" id="mergePreviewContent"></div>
+        </div>
+      </div>
+    </div>
+    <div class="esm-footer">
+      <button class="esm-btn" id="cancelElementSave">取消</button>
+      <button class="esm-btn primary" id="confirmElementSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 覆盖确认 -->
+<div class="modal" id="overwriteConfirmModal" style="display: none;">
+  <div class="esm-dialog" style="width:400px;">
+    <div class="esm-header">
+      <span>确认覆盖</span>
+      <button class="esm-close" id="closeOverwriteModal">&times;</button>
+    </div>
+    <div class="esm-body">
+      <div class="esm-warning">以下属性已有值，是否覆盖？</div>
+      <div id="overwriteFieldsList"></div>
+    </div>
+    <div class="esm-footer">
+      <button class="esm-btn" id="cancelOverwrite">取消</button>
+      <button class="esm-btn warning" id="confirmOverwrite">确认覆盖</button>
+    </div>
+  </div>
+</div>

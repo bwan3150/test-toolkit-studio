@@ -12,6 +12,7 @@ use crate::{Result, TkeError};
 use std::path::PathBuf;
 use std::collections::HashSet;
 use serde::{Serialize, Deserialize};
+use rusqlite::Connection;
 
 /// 已保存设备信息
 #[derive(Debug, Default)]
@@ -44,40 +45,58 @@ pub struct AndroidCategorized {
 pub struct DeviceCategorizer;
 
 impl DeviceCategorizer {
-    /// 加载项目中保存的设备配置
+    /// 从数据库加载项目中保存的设备配置
     pub fn load_saved_devices(project_path: &PathBuf) -> Result<SavedDevicesInfo> {
-        use std::fs;
-
-        let devices_dir = project_path.join("devices");
+        let db_path = project_path.join("project.db");
         let mut android_saved = Vec::new();
         let mut ios_saved = Vec::new();
 
-        if !devices_dir.exists() {
+        // 如果数据库不存在，返回空
+        if !db_path.exists() {
             return Ok(SavedDevicesInfo::default());
         }
 
-        let entries = fs::read_dir(&devices_dir)
-            .map_err(|e| TkeError::IoError(e))?;
+        // 打开数据库连接
+        let conn = Connection::open(&db_path)
+            .map_err(|e| TkeError::DatabaseError(format!("无法打开数据库: {}", e)))?;
 
-        for entry in entries {
-            let entry = entry.map_err(|e| TkeError::IoError(e))?;
-            let path = entry.path();
+        // 检查 devices 表是否存在
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='devices'",
+                [],
+                |row| row.get(0),
+            )
+            .map(|count: i32| count > 0)
+            .unwrap_or(false);
 
-            if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-                // 读取yaml文件
-                let content = fs::read_to_string(&path)
-                    .map_err(|e| TkeError::IoError(e))?;
+        if !table_exists {
+            return Ok(SavedDevicesInfo::default());
+        }
 
-                // 简单解析yaml来获取platform和设备标识
-                if content.contains("platform: android") || content.contains("platform: Android") {
-                    // Android设备，查找deviceId
-                    if let Some(device_id) = Self::extract_yaml_field(&content, "deviceId") {
-                        android_saved.push(device_id);
-                    }
-                } else if content.contains("platform: ios") || content.contains("platform: iOS") {
-                    // iOS设备，查找udid
-                    if let Some(udid) = Self::extract_yaml_field(&content, "udid") {
-                        ios_saved.push(udid);
+        // 查询所有设备
+        let mut stmt = conn
+            .prepare("SELECT platform, device_id FROM devices")
+            .map_err(|e| TkeError::DatabaseError(format!("SQL准备失败: {}", e)))?;
+
+        let device_iter = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            })
+            .map_err(|e| TkeError::DatabaseError(format!("查询失败: {}", e)))?;
+
+        for device_result in device_iter {
+            if let Ok((platform, device_id)) = device_result {
+                if let Some(id) = device_id {
+                    if !id.is_empty() {
+                        match platform.to_lowercase().as_str() {
+                            "android" => android_saved.push(id),
+                            "ios" => ios_saved.push(id),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -87,22 +106,6 @@ impl DeviceCategorizer {
             android: android_saved,
             ios: ios_saved,
         })
-    }
-
-    /// 从yaml内容中提取字段值
-    fn extract_yaml_field(content: &str, field: &str) -> Option<String> {
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with(&format!("{}:", field)) {
-                let value = trimmed.trim_start_matches(&format!("{}:", field)).trim();
-                // 移除引号
-                let value = value.trim_matches('"').trim_matches('\'');
-                if !value.is_empty() {
-                    return Some(value.to_string());
-                }
-            }
-        }
-        None
     }
 
     /// 分类设备
@@ -211,25 +214,4 @@ mod tests {
         assert_eq!(result.ios.saved_disconnected, vec!["ios2"]);
     }
 
-    #[test]
-    fn test_extract_yaml_field() {
-        let yaml = r#"
-deviceName: Test Device
-deviceId: abc123
-platform: android
-        "#;
-
-        assert_eq!(
-            DeviceCategorizer::extract_yaml_field(yaml, "deviceId"),
-            Some("abc123".to_string())
-        );
-        assert_eq!(
-            DeviceCategorizer::extract_yaml_field(yaml, "platform"),
-            Some("android".to_string())
-        );
-        assert_eq!(
-            DeviceCategorizer::extract_yaml_field(yaml, "notexist"),
-            None
-        );
-    }
 }

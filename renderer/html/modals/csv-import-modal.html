@@ -1,0 +1,55 @@
+<!-- CSV 导入模态框 -->
+<div class="modal" id="csvImportModal" style="display: none;">
+  <div class="cim-dialog">
+    <div class="cim-header">
+      <span>导入测试用例</span>
+      <button class="cim-close" id="closeCsvImportModal">&times;</button>
+    </div>
+    <div class="cim-body">
+      <!-- 步骤1: 选择文件 -->
+      <div class="cim-step" id="csvImportStep1">
+        <div class="cim-dropzone" id="csvDropzone">
+          <svg class="cim-dropzone-icon" viewBox="0 0 24 24" width="48" height="48">
+            <path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+            <path fill="currentColor" d="M8 15h8v2H8z"/>
+            <path fill="currentColor" d="M8 11h8v2H8z"/>
+          </svg>
+          <p>拖拽 CSV/Excel 文件到这里</p>
+          <span class="cim-or">或</span>
+          <button class="cim-btn primary" id="selectCsvFile">选择文件</button>
+          <p class="cim-hint">支持 .csv, .xlsx, .xls 格式</p>
+        </div>
+      </div>
+
+      <!-- 步骤2: 选择列 -->
+      <div class="cim-step" id="csvImportStep2" style="display: none;">
+        <div class="cim-section">
+          <div class="cim-section-title">文件预览</div>
+          <div class="cim-file-info">
+            <span id="csvFileName">file.csv</span>
+            <span id="csvRowCount">0 行数据</span>
+          </div>
+        </div>
+
+        <div class="cim-section">
+          <div class="cim-section-title">选择用例名称列 <span class="required">*</span></div>
+          <div class="cim-column-select" id="csvColumnSelect">
+            <!-- 动态生成列选项 -->
+          </div>
+        </div>
+
+        <div class="cim-section">
+          <div class="cim-section-title">数据预览</div>
+          <div class="cim-preview-table" id="csvPreviewTable">
+            <!-- 动态生成预览表格 -->
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cim-footer">
+      <button class="cim-btn" id="cancelCsvImport">取消</button>
+      <button class="cim-btn" id="backCsvImport" style="display: none;">上一步</button>
+      <button class="cim-btn primary" id="confirmCsvImport" disabled>导入</button>
+    </div>
+  </div>
+</div>

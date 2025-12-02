@@ -44,9 +44,8 @@ const CommandParser = {
             // 根据参数类型处理值
             if (param.type === 'coordinate') {
                 result[def.name] = `{${param.value.join(',')}}`;
-            } else if (param.type === 'image-locator') {
-                result[def.name] = `@{${param.value}}`;
             } else if (param.type === 'locator') {
+                // 统一格式：{元素名}&策略
                 result[def.name] = `{${param.value}}`;
             } else {
                 result[def.name] = param.value.toString();
@@ -92,16 +91,13 @@ const CommandParser = {
             }
         }
 
-        // 解析图片引用 @{imageName}
-        const imageMatch = commandText.match(/@\{([^}]+)\}/);
-        if (imageMatch) {
-            params.target = `@{${imageMatch[1]}}`;
-        }
-
-        // 解析XML元素引用 {elementName}
-        const xmlMatch = commandText.match(/(?<!@)\{([^}]+)\}/);
-        if (xmlMatch && !imageMatch) {
-            params.target = `{${xmlMatch[1]}}`;
+        // 解析元素引用 {elementName} 或 {elementName}&strategy（统一格式）
+        const elementMatch = commandText.match(/\{([^}]+)\}(?:&(\w+))?/);
+        if (elementMatch) {
+            const elementName = elementMatch[1];
+            const strategy = elementMatch[2];
+            // 保留完整格式（包括策略）
+            params.target = strategy ? `{${elementName}}&${strategy}` : `{${elementName}}`;
         }
 
         // 解析坐标 {x,y}
