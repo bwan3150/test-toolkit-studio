@@ -357,3 +357,183 @@
     font-size: 13px;
 }
 
+/* ========== 元素编辑模态框 (EEM) ========== */
+
+.eem-dialog {
+    width: 420px;
+    max-height: 80vh;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.eem-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex-shrink: 0;
+}
+
+.eem-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.eem-close:hover { color: var(--text-primary); }
+
+.eem-body {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+}
+
+.eem-props {
+    display: flex;
+    flex-direction: column;
+}
+
+.eem-prop {
+    display: flex;
+    align-items: flex-start;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+.eem-prop:last-child { border-bottom: none; }
+
+.eem-label {
+    width: 90px;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding-top: 6px;
+}
+
+.eem-input {
+    flex: 1;
+    padding: 6px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+}
+.eem-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.eem-textarea {
+    flex: 1;
+    padding: 6px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    min-height: 60px;
+    resize: vertical;
+}
+.eem-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.eem-img-container {
+    flex: 1;
+}
+
+.eem-img-thumb {
+    max-width: 100px;
+    max-height: 80px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.eem-img-thumb:hover {
+    opacity: 0.8;
+}
+
+.eem-img-empty {
+    flex: 1;
+    padding: 6px 0;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.eem-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.eem-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+}
+.eem-btn:hover { background: var(--bg-hover); }
+.eem-btn.primary {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+.eem-btn.primary:hover { opacity: 0.9; }
+
+/* ========== 图片预览模态框 (IPM) ========== */
+
+.ipm-dialog {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.ipm-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    width: 32px;
+    height: 32px;
+    background: rgba(0,0,0,0.6);
+    border: none;
+    border-radius: 50%;
+    font-size: 20px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ipm-close:hover { background: rgba(0,0,0,0.8); }
+
+#imagePreviewContent {
+    max-width: 90vw;
+    max-height: 85vh;
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+}
+

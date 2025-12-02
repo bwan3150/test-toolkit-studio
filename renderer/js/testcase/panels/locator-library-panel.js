@@ -361,11 +361,11 @@ const LocatorLibraryPanel = {
         `;
         
         menu.innerHTML = `
-            <div class="context-menu-item" data-action="rename">
+            <div class="context-menu-item" data-action="edit">
                 <svg viewBox="0 0 24 24" width="16" height="16">
                     <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                 </svg>
-                重命名
+                编辑
             </div>
             <div class="context-menu-item" data-action="delete">
                 <svg viewBox="0 0 24 24" width="16" height="16">
@@ -378,12 +378,12 @@ const LocatorLibraryPanel = {
         // 添加点击事件
         menu.addEventListener('click', async (e) => {
             const action = e.target.closest('.context-menu-item')?.dataset.action;
-            if (action === 'rename') {
-                await this.renameLocator(name);
+            menu.remove();
+            if (action === 'edit') {
+                await this.editLocator(name);
             } else if (action === 'delete') {
                 await this.deleteLocator(name);
             }
-            menu.remove();
         });
         
         // 点击其他地方关闭菜单
@@ -398,22 +398,20 @@ const LocatorLibraryPanel = {
         document.body.appendChild(menu);
     },
     
-    // 重命名定位器
-    async renameLocator(oldName) {
-        const newName = prompt(`重命名定位器 "${oldName}"`, oldName);
-        if (!newName || newName === oldName) return;
-        
-        if (this.locators[newName]) {
-            window.AppNotifications?.error('该名称已存在');
+    // 编辑定位器
+    async editLocator(name) {
+        if (!window.ElementEditModal) {
+            window.rError('ElementEditModal 未加载');
+            window.AppNotifications?.error('编辑模态框未加载');
             return;
         }
-        
-        this.locators[newName] = this.locators[oldName];
-        delete this.locators[oldName];
-        
-        await this.saveLocators();
-        this.renderLocators();
-        window.AppNotifications?.success('重命名成功');
+
+        try {
+            await window.ElementEditModal.show(name);
+        } catch (error) {
+            window.rError('编辑元素失败:', error);
+            window.AppNotifications?.error('编辑失败: ' + error.message);
+        }
     },
     
     // 使用定位器（插入到编辑器）
