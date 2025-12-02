@@ -1,18 +1,34 @@
-// 新建测试用例模态框控制器
-// 用于逐条新建测试用例
+// 新建/编辑测试用例模态框控制器
+// 用于逐条新建或编辑测试用例
 
 // 获取全局变量
 function getGlobals() {
     return window.AppGlobals;
 }
 
+// 当前是否为编辑模式
+let isEditMode = false;
+// 编辑模式下的用例 ID
+let editingId = null;
+
 // 显示新建用例模态框
 async function showTestcaseAddModal() {
+    isEditMode = false;
+    editingId = null;
+
     const modal = document.getElementById('testcaseAddModal');
     if (!modal) {
         window.rError('找不到新建用例模态框');
         return;
     }
+
+    // 设置标题
+    const titleEl = document.getElementById('testcaseAddModalTitle');
+    if (titleEl) titleEl.textContent = '新建测试用例';
+
+    // 设置按钮文字
+    const confirmBtn = document.getElementById('confirmTestcaseAdd');
+    if (confirmBtn) confirmBtn.textContent = '创建';
 
     // 重置表单
     resetTestcaseAddForm();
@@ -29,12 +45,58 @@ async function showTestcaseAddModal() {
     }, 100);
 }
 
+// 显示编辑用例模态框
+async function showTestcaseEditModal(testcase) {
+    isEditMode = true;
+    editingId = testcase.id;
+
+    const modal = document.getElementById('testcaseAddModal');
+    if (!modal) {
+        window.rError('找不到编辑用例模态框');
+        return;
+    }
+
+    // 设置标题
+    const titleEl = document.getElementById('testcaseAddModalTitle');
+    if (titleEl) titleEl.textContent = '编辑测试用例';
+
+    // 设置按钮文字
+    const confirmBtn = document.getElementById('confirmTestcaseAdd');
+    if (confirmBtn) confirmBtn.textContent = '保存';
+
+    // 填充表单
+    const idInput = document.getElementById('tamIdInput');
+    const caseNameInput = document.getElementById('tamCaseNameInput');
+    const noteInput = document.getElementById('tamNoteInput');
+    const aiTestYes = document.querySelector('input[name="tamAiTest"][value="1"]');
+    const aiTestNo = document.querySelector('input[name="tamAiTest"][value="0"]');
+
+    if (idInput) idInput.value = testcase.id;
+    if (caseNameInput) caseNameInput.value = testcase.caseName || '';
+    if (noteInput) noteInput.value = testcase.note || '';
+    if (testcase.aiTest) {
+        if (aiTestYes) aiTestYes.checked = true;
+    } else {
+        if (aiTestNo) aiTestNo.checked = true;
+    }
+
+    // 显示模态框
+    modal.style.display = 'flex';
+
+    // 聚焦到用例名称输入框
+    setTimeout(() => {
+        document.getElementById('tamCaseNameInput')?.focus();
+    }, 100);
+}
+
 // 隐藏模态框
 function hideTestcaseAddModal() {
     const modal = document.getElementById('testcaseAddModal');
     if (modal) {
         modal.style.display = 'none';
     }
+    isEditMode = false;
+    editingId = null;
     resetTestcaseAddForm();
 }
 
@@ -71,8 +133,8 @@ async function fetchNextId() {
     }
 }
 
-// 执行创建
-async function executeCreate() {
+// 执行创建或更新
+async function executeCreateOrUpdate() {
     const caseNameInput = document.getElementById('tamCaseNameInput');
     const noteInput = document.getElementById('tamNoteInput');
     const aiTestChecked = document.querySelector('input[name="tamAiTest"]:checked');
@@ -93,14 +155,32 @@ async function executeCreate() {
     const { ipcRenderer } = getGlobals();
 
     try {
-        const result = await ipcRenderer.invoke('db-testcase-create', projectPath, {
-            caseName: caseName,
-            note: noteInput?.value?.trim() || '',
-            aiTest: aiTestChecked?.value === '1' ? 1 : 0
-        });
+        let result;
+        if (isEditMode && editingId) {
+            // 更新模式
+            result = await ipcRenderer.invoke('db-testcase-update', projectPath, editingId, {
+                caseName: caseName,
+                note: noteInput?.value?.trim() || '',
+                aiTest: aiTestChecked?.value === '1' ? 1 : 0
+            });
+
+            if (result.success) {
+                window.AppNotifications?.success('测试用例已更新');
+            }
+        } else {
+            // 创建模式
+            result = await ipcRenderer.invoke('db-testcase-create', projectPath, {
+                caseName: caseName,
+                note: noteInput?.value?.trim() || '',
+                aiTest: aiTestChecked?.value === '1' ? 1 : 0
+            });
+
+            if (result.success) {
+                window.AppNotifications?.success('测试用例创建成功');
+            }
+        }
 
         if (result.success) {
-            window.AppNotifications?.success('测试用例创建成功');
             hideTestcaseAddModal();
 
             // 刷新用例列表
@@ -108,11 +188,11 @@ async function executeCreate() {
                 await window.ProjectTestcaseManager.refreshTestcaseList();
             }
         } else {
-            window.AppNotifications?.error(`创建失败: ${result.error}`);
+            window.AppNotifications?.error(`操作失败: ${result.error}`);
         }
     } catch (error) {
-        window.rError('创建用例失败:', error);
-        window.AppNotifications?.error(`创建失败: ${error.message}`);
+        window.rError('操作失败:', error);
+        window.AppNotifications?.error(`操作失败: ${error.message}`);
     }
 }
 
@@ -135,9 +215,9 @@ function initializeTestcaseAddModal() {
         cancelBtn.addEventListener('click', hideTestcaseAddModal);
     }
 
-    // 创建按钮
+    // 创建/保存按钮
     if (confirmBtn) {
-        confirmBtn.addEventListener('click', executeCreate);
+        confirmBtn.addEventListener('click', executeCreateOrUpdate);
     }
 
     // 点击模态框外部关闭
@@ -153,7 +233,7 @@ function initializeTestcaseAddModal() {
         caseNameInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                executeCreate();
+                executeCreateOrUpdate();
             }
         });
     }
@@ -162,6 +242,7 @@ function initializeTestcaseAddModal() {
 // 导出模块
 window.TestcaseAddModal = {
     show: showTestcaseAddModal,
+    showEdit: showTestcaseEditModal,
     hide: hideTestcaseAddModal,
     initialize: initializeTestcaseAddModal
 };

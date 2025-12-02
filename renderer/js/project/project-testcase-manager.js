@@ -148,36 +148,37 @@ async function renderTestcaseList(testcases) {
         btnWrapper.className = 'floating-btn-wrapper';
         btnWrapper.dataset.rowIndex = index;
 
-        const floatingBtn = document.createElement('button');
-        floatingBtn.className = 'table-action-btn';
+        // Edit 按钮
+        const editBtn = document.createElement('button');
+        editBtn.className = 'table-action-btn btn-edit';
+        editBtn.innerHTML = `<img src="../../assets/icons/project/edit.svg" alt="Edit" /><span>Edit</span>`;
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            editTestcase(tc.id);
+        };
+
+        // Create/Open 按钮
+        const actionBtn = document.createElement('button');
+        actionBtn.className = 'table-action-btn';
 
         if (caseExists) {
-            floatingBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
-                <span>Open</span>
-            `;
-            floatingBtn.className += ' btn-exists';
-            floatingBtn.onclick = (e) => {
+            actionBtn.innerHTML = `<img src="../../assets/icons/project/open-folder.svg" alt="Open" /><span>Open</span>`;
+            actionBtn.className += ' btn-exists';
+            actionBtn.onclick = (e) => {
                 e.stopPropagation();
                 openTestcase(tc.id);
             };
         } else {
-            floatingBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="14" height="14">
-                    <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-                <span>Create</span>
-            `;
-            floatingBtn.className += ' btn-create';
-            floatingBtn.onclick = (e) => {
+            actionBtn.innerHTML = `<img src="../../assets/icons/project/add-folder.svg" alt="Create" /><span>Create</span>`;
+            actionBtn.className += ' btn-create';
+            actionBtn.onclick = (e) => {
                 e.stopPropagation();
                 createCaseFolder(tc.id);
             };
         }
 
-        btnWrapper.appendChild(floatingBtn);
+        btnWrapper.appendChild(editBtn);
+        btnWrapper.appendChild(actionBtn);
         floatingContainer.appendChild(btnWrapper);
     });
 
@@ -187,19 +188,6 @@ async function renderTestcaseList(testcases) {
     // 清除现有内容并添加表格容器
     testcaseList.innerHTML = '';
     testcaseList.appendChild(tableContainer);
-
-    // 添加新建用例按钮（在表格下方）
-    const addBtnContainer = document.createElement('div');
-    addBtnContainer.className = 'testcase-add-btn-container';
-    addBtnContainer.innerHTML = `
-        <button class="btn btn-outline" onclick="window.ProjectTestcaseManager.showAddTestcaseModal()">
-            <svg class="btn-icon" viewBox="0 0 24 24">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-            新建用例
-        </button>
-    `;
-    testcaseList.appendChild(addBtnContainer);
 
     // 设置浮动按钮位置同步
     setupTableButtonsSync(scrollContainer, table, floatingContainer);
@@ -235,7 +223,7 @@ function setupTableButtonsSync(scrollContainer, table, floatingContainer) {
 
             if (isInScrollArea && isBelowHeader) {
                 const rowTopRelativeToContainer = rowRect.top - tableContainerRect.top;
-                btnWrapper.style.display = 'block';
+                btnWrapper.style.display = 'flex';
                 btnWrapper.style.top = `${rowTopRelativeToContainer + rowHeight / 2}px`;
             } else {
                 btnWrapper.style.display = 'none';
@@ -370,6 +358,22 @@ function showAddTestcaseModal() {
     }
 }
 
+// 编辑用例
+function editTestcase(id) {
+    const testcase = testcasesCache.find(tc => tc.id === id);
+    if (!testcase) {
+        window.AppNotifications?.error('用例不存在');
+        return;
+    }
+
+    if (window.TestcaseAddModal && window.TestcaseAddModal.showEdit) {
+        window.TestcaseAddModal.showEdit(testcase);
+    } else {
+        window.rError('TestcaseAddModal 模块未加载');
+        window.AppNotifications?.error('编辑用例模块未加载');
+    }
+}
+
 // HTML 转义
 function escapeHtml(text) {
     if (!text) return '';
@@ -383,5 +387,6 @@ window.ProjectTestcaseManager = {
     refreshTestcaseList,
     openTestcase,
     createCaseFolder,
-    showAddTestcaseModal
+    showAddTestcaseModal,
+    editTestcase
 };

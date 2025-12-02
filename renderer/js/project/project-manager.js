@@ -13,6 +13,7 @@ function initializeProjectPage() {
     const openProjectBtn = document.getElementById('openProjectBtn');
     const backToProjectsBtn = document.getElementById('backToProjectsBtn');
     const importCsvBtn = document.getElementById('importCsvBtn');
+    const addTestcaseBtn = document.getElementById('addTestcaseBtn');
 
     // 返回项目列表按钮
     if (backToProjectsBtn) {
@@ -92,6 +93,18 @@ function initializeProjectPage() {
             } else {
                 window.rError('CsvImportModal 模块未加载');
                 window.AppNotifications?.error('CSV 导入模块未加载');
+            }
+        });
+    }
+
+    // 新建用例按钮
+    if (addTestcaseBtn) {
+        addTestcaseBtn.addEventListener('click', () => {
+            if (window.TestcaseAddModal && window.TestcaseAddModal.show) {
+                window.TestcaseAddModal.show();
+            } else {
+                window.rError('TestcaseAddModal 模块未加载');
+                window.AppNotifications?.error('新建用例模块未加载');
             }
         });
     }

@@ -114,6 +114,53 @@
     border: 1px solid var(--border-color);
 }
 
+/* 按钮区卡片 */
+.action-card-buttons {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+}
+
+.action-card-buttons .btn-outline {
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.action-card-buttons .btn-outline:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-hover);
+}
+
+/* 表格区卡片 */
+.action-card-table {
+    padding: 0;
+    flex: 1;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.action-card-table .testcase-list {
+    flex: 1;
+    margin: 0;
+    max-height: none;
+}
+
+/* 表格容器无边框圆角 */
+.action-card-table .testcase-table-container {
+    border: none;
+    border-radius: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.action-card-table .testcase-scroll-container {
+    flex: 1;
+    max-height: none;
+}
+
 .action-card h4 {
     font-size: 14px;
     margin-bottom: 8px;
@@ -244,7 +291,7 @@
     position: absolute;
     top: 0;
     right: 8px;
-    width: 90px;
+    width: 130px;
     height: 100%;
     pointer-events: none;
     z-index: 5; /* 低于表头的z-index: 10 */
@@ -257,6 +304,8 @@
     transform: translateY(-50%);
     display: none;
     pointer-events: auto;
+    flex-direction: row;
+    gap: 4px;
 }
 
 /* 表格操作按钮 */
@@ -267,13 +316,24 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 3px;
-    font-size: 10px;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
     font-weight: 500;
+    width: 60px;
     transition: all 0.2s;
-    white-space: nowrap;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
     border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.table-action-btn.btn-edit {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.table-action-btn.btn-edit:hover {
+    background: var(--bg-hover);
+    transform: scale(1.05);
 }
 
 .table-action-btn.btn-create {
@@ -297,9 +357,10 @@
     transform: scale(1.05);
 }
 
-.table-action-btn svg {
-    width: 12px;
-    height: 12px;
+.table-action-btn svg,
+.table-action-btn img {
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
 }
 

@@ -48,22 +48,20 @@
         <p class="project-path" id="projectPath"></p>
 
         <div class="project-actions">
-          <div class="action-card">
-            <h4>Import Test Cases</h4>
-            <p>Import test cases from CSV file</p>
+          <!-- 操作按钮区 -->
+          <div class="action-card action-card-buttons">
             <button class="btn btn-outline" id="importCsvBtn">
-              <svg class="btn-icon" viewBox="0 0 24 24">
-                <path
-                  d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 9v4h-2v-4H8l4-4 4 4h-3z"
-                />
-              </svg>
-              Import CSV
+              <img class="btn-icon" src="../../assets/icons/project/import.svg" alt="Import" />
+              从 CSV/Excel 导入用例
+            </button>
+            <button class="btn btn-outline" id="addTestcaseBtn">
+              <img class="btn-icon" src="../../assets/icons/project/add.svg" alt="Add" />
+              新建用例
             </button>
           </div>
 
-          <div class="action-card">
-            <h4>Test Cases</h4>
-            <p>View and manage test cases</p>
+          <!-- 测试用例表格区 -->
+          <div class="action-card action-card-table">
             <div class="testcase-list" id="testcaseList"></div>
           </div>
         </div>
