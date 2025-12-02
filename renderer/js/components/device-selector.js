@@ -54,7 +54,7 @@
          * @returns {Promise<void>}
          */
         async refresh() {
-            const { ipcRenderer, path, fs, yaml } = window.AppGlobals;
+            const { ipcRenderer } = window.AppGlobals;
 
             try {
                 // 使用get-connected-devices API获取已连接设备
@@ -68,34 +68,17 @@
 
                 const connectedDevices = result.devices || [];
 
-                // 获取保存的设备配置（用于显示友好名称）
+                // 从数据库获取保存的设备配置（用于显示友好名称）
                 let deviceConfigs = {};
                 const currentProject = window.AppGlobals.currentProject;
 
                 if (currentProject) {
                     try {
-                        const devicesPath = path.join(currentProject, 'devices');
-
-                        // 检查devices文件夹是否存在
-                        let devicesPathExists = false;
-                        try {
-                            await fs.access(devicesPath);
-                            devicesPathExists = true;
-                        } catch {
-                            // devices文件夹不存在，跳过
-                            window.rLog('devices文件夹不存在，跳过加载设备配置');
-                        }
-
-                        if (devicesPathExists) {
-                            const files = await fs.readdir(devicesPath);
-                            for (const file of files) {
-                                if (file.endsWith('.yaml')) {
-                                    const filePath = path.join(devicesPath, file);
-                                    const content = await fs.readFile(filePath, 'utf-8');
-                                    const config = yaml.load(content);
-                                    if (config.deviceId) {
-                                        deviceConfigs[config.deviceId] = config.deviceName || config.deviceId;
-                                    }
+                        const dbResult = await ipcRenderer.invoke('db-device-getAll', currentProject);
+                        if (dbResult.success && dbResult.data) {
+                            for (const config of dbResult.data) {
+                                if (config.deviceId) {
+                                    deviceConfigs[config.deviceId] = config.deviceName || config.deviceId;
                                 }
                             }
                         }

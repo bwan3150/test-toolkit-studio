@@ -91,10 +91,8 @@ const ElementEditModal = {
             const value = data[field.key] || '';
 
             if (field.type === 'image') {
-                // 图片类型
                 html += this._renderImageField(field, value);
             } else if (field.type === 'textarea') {
-                // 多行文本
                 html += `
                     <div class="eem-prop">
                         <label class="eem-label">${field.label}</label>
@@ -102,7 +100,6 @@ const ElementEditModal = {
                     </div>
                 `;
             } else {
-                // 普通文本
                 html += `
                     <div class="eem-prop">
                         <label class="eem-label">${field.label}</label>
@@ -130,7 +127,7 @@ const ElementEditModal = {
             `;
         }
 
-        // 构建完整图片路径
+        // 构建完整图片路径 (新路径: img/{name}.png)
         const projectPath = window.AppGlobals?.currentProject || '';
         const fullPath = projectPath ? `${projectPath}/${value}` : value;
         const imgSrc = fullPath.startsWith('file://') ? fullPath : `file://${fullPath}`;
@@ -186,15 +183,23 @@ const ElementEditModal = {
         }
 
         const oldName = this._elementName;
-        const locators = window.LocatorLibraryPanel?.locators || {};
+        const projectPath = window.AppGlobals?.currentProject;
 
-        // 如果名称变更，检查是否冲突
-        if (newName !== oldName && locators[newName]) {
-            window.AppNotifications?.warn('该名称已存在');
+        if (!projectPath) {
+            window.AppNotifications?.error('没有打开的项目');
             return;
         }
 
-        // 更新元素数据
+        // 如果名称变更，检查是否冲突
+        if (newName !== oldName) {
+            const locators = window.LocatorLibraryPanel?.locators || {};
+            if (locators[newName]) {
+                window.AppNotifications?.warn('该名称已存在');
+                return;
+            }
+        }
+
+        // 构建更新后的 locator 对象
         const updatedLocator = { ...this._elementData };
         this._editableFields.forEach(field => {
             if (field.type !== 'image' && newData[field.key] !== undefined) {
@@ -202,24 +207,39 @@ const ElementEditModal = {
             }
         });
         updatedLocator.name = newName;
-        updatedLocator.updated_at = new Date().toISOString();
 
-        // 如果名称变更，删除旧的并创建新的
-        if (newName !== oldName) {
-            delete locators[oldName];
-        }
-        locators[newName] = updatedLocator;
+        try {
+            // 如果名称变更，需要先删除旧的
+            if (newName !== oldName) {
+                await window.AppGlobals.ipcRenderer.invoke('db-locator-delete', projectPath, oldName);
+            }
 
-        // 保存并刷新
-        await window.LocatorLibraryPanel?.saveLocators();
-        window.LocatorLibraryPanel?.renderLocators();
+            // 保存新数据
+            const result = await window.AppGlobals.ipcRenderer.invoke('db-locator-save', projectPath, updatedLocator);
 
-        this.hide();
-        window.AppNotifications?.success('保存成功');
+            if (result.success) {
+                // 更新本地缓存
+                if (newName !== oldName) {
+                    delete window.LocatorLibraryPanel.locators[oldName];
+                }
+                window.LocatorLibraryPanel.locators[newName] = updatedLocator;
 
-        if (this._resolvePromise) {
-            this._resolvePromise({ name: newName, data: updatedLocator });
-            this._resolvePromise = null;
+                // 重新渲染列表
+                window.LocatorLibraryPanel?.renderLocators();
+
+                this.hide();
+                window.AppNotifications?.success('保存成功');
+
+                if (this._resolvePromise) {
+                    this._resolvePromise({ name: newName, data: updatedLocator });
+                    this._resolvePromise = null;
+                }
+            } else {
+                window.AppNotifications?.error('保存失败: ' + result.error);
+            }
+        } catch (error) {
+            window.rError('保存元素失败:', error);
+            window.AppNotifications?.error('保存失败: ' + error.message);
         }
     },
 

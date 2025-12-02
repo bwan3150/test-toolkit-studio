@@ -382,9 +382,8 @@ const ScreenshotMode = {
     }
 
     try {
-      // 确保locator/img目录存在
-      const locatorDir = path.join(projectPath, 'locator');
-      const imgDir = path.join(locatorDir, 'img');
+      // 确保 img 目录存在
+      const imgDir = path.join(projectPath, 'img');
       await fs.mkdir(imgDir, { recursive: true });
 
       // 生成图片文件名
@@ -395,25 +394,21 @@ const ScreenshotMode = {
       const imageBuffer = Buffer.from(this._pendingBase64Image.split(',')[1], 'base64');
       await fs.writeFile(imagePath, imageBuffer);
 
-      // 创建图像定位器对象 - 统一格式
+      // 创建图像定位器对象
       const locator = {
         name: name,
         note: note || '',
-        img_path: `locator/img/${imageFileName}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        img_path: `img/${imageFileName}`
       };
 
-      // 添加到LocatorLibraryPanel并保存到element.json
+      // 保存到数据库
       if (window.LocatorLibraryPanel) {
-        window.LocatorLibraryPanel.locators[name] = locator;
-        await window.LocatorLibraryPanel.saveLocators();
-        window.LocatorLibraryPanel.renderLocators();
-
-        // 切换到Locator库标签
-        const locatorTab = document.getElementById('locatorLibTab');
-        if (locatorTab) {
-          locatorTab.click();
+        const result = await window.LocatorLibraryPanel.saveLocator(locator);
+        if (result.success) {
+          window.LocatorLibraryPanel.renderLocators();
+          // 切换到 Locator 库标签
+          const locatorTab = document.getElementById('locatorLibTab');
+          if (locatorTab) locatorTab.click();
         }
       }
 
@@ -449,9 +444,8 @@ const ScreenshotMode = {
     }
 
     try {
-      // 确保locator/img目录存在
-      const locatorDir = path.join(projectPath, 'locator');
-      const imgDir = path.join(locatorDir, 'img');
+      // 确保 img 目录存在
+      const imgDir = path.join(projectPath, 'img');
       await fs.mkdir(imgDir, { recursive: true });
 
       // 如果已有旧图片，先删除
@@ -474,18 +468,16 @@ const ScreenshotMode = {
       await fs.writeFile(imagePath, imageBuffer);
 
       // 更新元素的 img_path
-      existingLocator.img_path = `locator/img/${imageFileName}`;
-      existingLocator.updated_at = new Date().toISOString();
+      existingLocator.img_path = `img/${imageFileName}`;
 
-      // 保存到 element.json
+      // 保存到数据库
       if (window.LocatorLibraryPanel) {
-        await window.LocatorLibraryPanel.saveLocators();
-        window.LocatorLibraryPanel.renderLocators();
-
-        // 切换到Locator库标签
-        const locatorTab = document.getElementById('locatorLibTab');
-        if (locatorTab) {
-          locatorTab.click();
+        const result = await window.LocatorLibraryPanel.saveLocator(existingLocator);
+        if (result.success) {
+          window.LocatorLibraryPanel.renderLocators();
+          // 切换到 Locator 库标签
+          const locatorTab = document.getElementById('locatorLibTab');
+          if (locatorTab) locatorTab.click();
         }
       }
 

@@ -172,10 +172,11 @@ const BlockUIBuilder = {
                     const isImageStrategy = ['img', 'image'].includes(strategy.toLowerCase());
 
                     if (isImageStrategy) {
-                        // 渲染图片元素
-                        const { path: PathModule } = window.AppGlobals;
+                        // 渲染图片元素 - 从 locator 获取真实路径
                         const projectPath = window.AppGlobals.currentProject;
-                        const imagePath = projectPath ? PathModule.join(projectPath, 'locator/img', `${elementName}.png`) : '';
+                        const locator = window.LocatorLibraryPanel?.locators?.[elementName];
+                        const imgPath = locator?.img_path || `img/${elementName}.png`;
+                        const imagePath = projectPath ? `${projectPath}/${imgPath}` : '';
 
                         element.innerHTML = `
                             <div class="visual-image-card" data-strategy="${strategy}">

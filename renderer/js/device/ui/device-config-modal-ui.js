@@ -40,7 +40,7 @@ function showDeviceConfigModal() {
 }
 
 // 显示设备配置模态窗口（编辑模式）
-function showDeviceConfigModalForEdit(filename, config) {
+function showDeviceConfigModalForEdit(deviceId, config) {
     const modal = document.getElementById('deviceConfigModal');
     const form = document.getElementById('deviceConfigForm');
     const title = document.getElementById('deviceConfigModalTitle');
@@ -55,9 +55,9 @@ function showDeviceConfigModalForEdit(filename, config) {
         title.textContent = 'Edit Device';
     }
 
-    // 设置编辑模式标记
+    // 设置编辑模式标记（使用数据库ID）
     modal.dataset.mode = 'edit';
-    modal.dataset.filename = filename;
+    modal.dataset.deviceId = deviceId;
 
     // 填充表单数据
     fillFormWithConfig(form, config);
@@ -178,7 +178,7 @@ function hideDeviceConfigModal() {
             form.reset();
         }
         delete modal.dataset.mode;
-        delete modal.dataset.filename;
+        delete modal.dataset.deviceId;
     }
 }
 
@@ -372,13 +372,13 @@ function initializeDeviceConfigModal() {
     });
 }
 
-// 保存设备配置
+// 保存设备配置到数据库
 async function saveDeviceConfig() {
-    const { fs, yaml, path } = getGlobals();
     const modal = document.getElementById('deviceConfigModal');
     const form = document.getElementById('deviceConfigForm');
+    const projectPath = window.AppGlobals.currentProject;
 
-    if (!window.AppGlobals.currentProject) {
+    if (!projectPath) {
         window.AppNotifications?.warn('Please open a project first');
         return;
     }
@@ -397,59 +397,56 @@ async function saveDeviceConfig() {
     // 根据平台处理连接信息
     if (deviceConfig.connectionType === 'wifi') {
         if (deviceConfig.platform === 'ios') {
-            // iOS WiFi: 使用 wdaIpAddress 和 wdaPort
             if (deviceConfig.wdaIpAddress) {
                 deviceConfig.ipAddress = deviceConfig.wdaIpAddress;
                 deviceConfig.port = deviceConfig.wdaPort;
                 const port = deviceConfig.wdaPort || '';
-                if (port) {
-                    deviceConfig.deviceId = `${deviceConfig.wdaIpAddress}:${port}`;
-                } else {
-                    deviceConfig.deviceId = deviceConfig.wdaIpAddress;
-                }
+                deviceConfig.deviceId = port ? `${deviceConfig.wdaIpAddress}:${port}` : deviceConfig.wdaIpAddress;
             }
         } else {
-            // Android WiFi: 使用 ipAddress 和 port
             if (deviceConfig.ipAddress) {
                 const port = deviceConfig.port || '';
-                if (port) {
-                    deviceConfig.deviceId = `${deviceConfig.ipAddress}:${port}`;
-                } else {
-                    deviceConfig.deviceId = deviceConfig.ipAddress;
-                }
+                deviceConfig.deviceId = port ? `${deviceConfig.ipAddress}:${port}` : deviceConfig.ipAddress;
             }
         }
     }
 
-    // 根据平台自动设置platformName
-    deviceConfig.platformName = deviceConfig.platform === 'ios' ? 'iOS' : 'Android';
-
     // 检查是否在编辑模式
     const mode = modal?.dataset.mode;
-    let devicePath;
+    const existingId = modal?.dataset.deviceId;
 
-    if (mode === 'edit' && modal?.dataset.filename) {
-        // 编辑模式 - 使用现有文件名
-        devicePath = path.join(window.AppGlobals.currentProject, 'devices', modal.dataset.filename);
-    } else {
-        // 创建模式 - 生成新文件名
-        const timestamp = Date.now();
-        const deviceFileName = `device_${timestamp}.yaml`;
-        devicePath = path.join(window.AppGlobals.currentProject, 'devices', deviceFileName);
-    }
+    // 构建数据库设备对象（与旧 YAML 结构一致）
+    const device = {
+        id: (mode === 'edit' && existingId) ? existingId : `device_${Date.now()}`,
+        deviceName: deviceConfig.deviceName,
+        platform: deviceConfig.platform,
+        platformVersion: deviceConfig.platformVersion,
+        connectionType: deviceConfig.connectionType,
+        deviceId: deviceConfig.deviceId,
+        port: deviceConfig.port || '',
+        bundleId: deviceConfig.bundleId || '',
+        wdaPort: deviceConfig.wdaPort || '',
+        automationName: deviceConfig.automationName,
+        newCommandTimeout: deviceConfig.newCommandTimeout || '6000',
+        noReset: deviceConfig.noReset === true || deviceConfig.noReset === 'true'
+    };
 
     try {
-        await fs.writeFile(devicePath, yaml.dump(deviceConfig));
-        window.AppNotifications?.success(
-            mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully'
-        );
+        const { ipcRenderer } = window.AppGlobals;
+        const result = await ipcRenderer.invoke('db-device-save', projectPath, device);
 
-        // 隐藏模态窗口
-        hideDeviceConfigModal();
+        if (result.success) {
+            window.AppNotifications?.success(
+                mode === 'edit' ? 'Device updated successfully' : 'Device saved successfully'
+            );
+            hideDeviceConfigModal();
 
-        // 刷新设备页面
-        if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
-            await window.DeviceScanner.refreshConnectedDevices();
+            // 刷新设备页面
+            if (window.DeviceScanner && window.DeviceScanner.refreshConnectedDevices) {
+                await window.DeviceScanner.refreshConnectedDevices();
+            }
+        } else {
+            window.AppNotifications?.error(`Failed to save device: ${result.error}`);
         }
     } catch (error) {
         window.AppNotifications?.error(`Failed to save device: ${error.message}`);

@@ -270,10 +270,11 @@ class BlockModeEditor {
                         const isImageStrategy = ['img', 'image'].includes(strategy.toLowerCase());
 
                         if (isImageStrategy) {
-                            // 图片元素 - 显示图片预览，失败时显示图标
-                            const { path: PathModule } = window.AppGlobals;
+                            // 图片元素 - 从 locator 获取真实路径
                             const projectPath = window.AppGlobals.currentProject;
-                            const imagePath = projectPath ? PathModule.join(projectPath, 'locator/img', `${elementName}.png`) : '';
+                            const locator = window.LocatorLibraryPanel?.locators?.[elementName];
+                            const imgPath = locator?.img_path || `img/${elementName}.png`;
+                            const imagePath = projectPath ? `${projectPath}/${imgPath}` : '';
 
                             commandContent += `
                                 <div class="param-visual-card param-image-card"

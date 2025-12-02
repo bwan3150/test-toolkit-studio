@@ -82,6 +82,9 @@ pub enum TkeError {
     #[error("脚本解析错误: {0}")]
     ScriptParseError(String),
 
+    #[error("数据库错误: {0}")]
+    DatabaseError(String),
+
     #[error("脚本执行错误: {0}")]
     ScriptExecuteError(String),
 

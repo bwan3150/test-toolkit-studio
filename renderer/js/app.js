@@ -242,7 +242,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 设备管理主入口（依赖所有子模块）
         await loadScript('../js/device/device-manager.js');
-        await loadScript('../js/testcase/controller/locator-manager-tke.js');
         await loadScript('../js/logviewer/log-manager.js');
         await loadScript('../js/services/bug-analyzer-client.js'); // Bug分析API客户端
         await loadScript('../js/insights/test-report-manager.js');
