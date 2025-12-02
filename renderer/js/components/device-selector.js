@@ -121,13 +121,8 @@
                 const option = document.createElement('option');
                 option.value = device.id;
 
-                // 优先使用保存的设备名称，否则使用model或id
-                let displayName = device.id;
-                if (deviceConfigs[device.id]) {
-                    displayName = deviceConfigs[device.id];
-                } else if (device.model) {
-                    displayName = device.model;
-                }
+                // 优先使用保存的设备名称，否则使用设备ID
+                const displayName = deviceConfigs[device.id] || device.id;
 
                 option.textContent = displayName;
                 this.selectElement.appendChild(option);
