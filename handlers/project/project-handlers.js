@@ -22,9 +22,6 @@ function registerProjectHandlers() {
             await mkdir(path.join(projectPath, 'workarea'), { recursive: true });
             await mkdir(path.join(projectPath, 'img'), { recursive: true });
 
-            // 创建空的测试用例表
-            await writeFile(path.join(projectPath, 'testcase_sheet.csv'), '', 'utf-8');
-
             // 创建并初始化 SQLite 数据库
             createProjectDatabase(projectPath);
 

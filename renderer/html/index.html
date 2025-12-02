@@ -104,6 +104,12 @@
     <!-- 元素编辑弹窗 - 动态加载 -->
     <div id="elementEditModalContainer"></div>
 
+    <!-- CSV 导入弹窗 - 动态加载 -->
+    <div id="csvImportModalContainer"></div>
+
+    <!-- 新建测试用例弹窗 - 动态加载 -->
+    <div id="testcaseAddModalContainer"></div>
+
     <!-- 定义组件加载函数,但不立即执行 -->
     <script>
       // Electron 应用中使用 Node.js fs 模块同步加载 HTML 组件
@@ -144,6 +150,8 @@
           loadComponentIntoContainer("modals/app-list-modal.html", "appListModalContainer");
           loadComponentIntoContainer("modals/element-save-modal.html", "elementSaveModalContainer");
           loadComponentIntoContainer("modals/element-edit-modal.html", "elementEditModalContainer");
+          loadComponentIntoContainer("modals/csv-import-modal.html", "csvImportModalContainer");
+          loadComponentIntoContainer("modals/testcase-add-modal.html", "testcaseAddModalContainer");
           console.log("✓ 所有 HTML 组件已同步加载完成");
         } catch (error) {
           console.error("❌ 组件加载失败:", error);

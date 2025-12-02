@@ -81,14 +81,30 @@ function ensureTables(db) {
     `);
 
     // 创建 testcases 表
+    // id: 唯一测试用例编号(主键递增)
+    // case_name: 测试用例名称
+    // note: 测试用例备注
+    // folder_name: 用例文件夹路径(如 cases/case_001)，可为空，创建文件夹后才填充
+    // result: 测试结果状态 (PASS/FAILED/NA)
+    // task_batch: 批量测试任务分组，多选用逗号分隔
+    // ai_test: 是否启用AI测试 (0/1)
+    // ai_prompt: 给AI的提示词
+    // ai_result: AI测试结果 (PASS/FAILED/NA)
+    // ai_comment: AI测试后的总结
     db.exec(`
         CREATE TABLE IF NOT EXISTS testcases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sort_order INTEGER NOT NULL,
-            folder_name TEXT NOT NULL UNIQUE,
-            display_name TEXT,
+            case_name TEXT NOT NULL,
+            note TEXT DEFAULT '',
+            folder_name TEXT DEFAULT '',
+            result TEXT DEFAULT 'NA',
+            task_batch TEXT DEFAULT '',
             created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            updated_at TEXT NOT NULL,
+            ai_test INTEGER DEFAULT 0,
+            ai_prompt TEXT DEFAULT '',
+            ai_result TEXT DEFAULT '',
+            ai_comment TEXT DEFAULT ''
         )
     `);
 

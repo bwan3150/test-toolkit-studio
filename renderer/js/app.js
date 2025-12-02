@@ -179,6 +179,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // 3. 加载业务功能模块
         await loadScript('../js/project/project-manager.js');
+        await loadScript('../js/project/project-testcase-manager.js'); // 项目测试用例管理
+        await loadScript('../js/project/csv-import-modal.js'); // CSV 导入模态框
+        await loadScript('../js/project/testcase-add-modal.js'); // 新建测试用例模态框
 
         // 加载拆分的 testcase 子模块
         await loadScript('../js/testcase/explorer/testcase-explorer.js');

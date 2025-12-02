@@ -325,3 +325,34 @@
     color: var(--text-primary);
 }
 
+/* 测试用例添加按钮容器 */
+.testcase-add-btn-container {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* 状态标签样式 */
+.ptc-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.ptc-status.status-pass {
+    background: rgba(78, 201, 176, 0.2);
+    color: var(--accent-success);
+}
+
+.ptc-status.status-failed {
+    background: rgba(244, 67, 54, 0.2);
+    color: var(--accent-error);
+}
+
+.ptc-status.status-na {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-tertiary);
+}
+

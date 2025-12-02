@@ -1,0 +1,49 @@
+<!-- 新建测试用例模态框 -->
+<div class="modal" id="testcaseAddModal" style="display: none;">
+  <div class="modal-content modal-medium">
+    <div class="modal-header">
+      <h3>新建测试用例</h3>
+      <button class="modal-close" id="closeTestcaseAddModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="testcaseAddForm">
+        <!-- 用例 ID -->
+        <div class="form-group">
+          <label>用例 ID</label>
+          <input type="text" id="tamIdInput" placeholder="自动生成" readonly class="input-readonly" />
+        </div>
+
+        <!-- 测试用例名称 -->
+        <div class="form-group">
+          <label>测试用例名称 <span class="required">*</span></label>
+          <textarea id="tamCaseNameInput" rows="3" placeholder="请输入测试用例名称，如：验证新用户登录后能正常显示用户信息"></textarea>
+        </div>
+
+        <!-- 备注 -->
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="tamNoteInput" rows="2" placeholder="可选的备注信息"></textarea>
+        </div>
+
+        <!-- 是否用于 AI 测试脚本生成 -->
+        <div class="form-group">
+          <label>是否用于 AI 测试脚本生成</label>
+          <div class="radio-group" id="tamAiTestRadios">
+            <label class="radio-option">
+              <input type="radio" name="tamAiTest" value="0" checked>
+              <span class="radio-label">否</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="tamAiTest" value="1">
+              <span class="radio-label">是</span>
+            </label>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="confirmTestcaseAdd">创建</button>
+      <button class="btn btn-secondary" id="cancelTestcaseAdd">取消</button>
+    </div>
+  </div>
+</div>
