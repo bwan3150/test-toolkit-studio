@@ -30,6 +30,16 @@
     overflow: hidden;
 }
 
+/* 中等尺寸模态框 */
+.modal-content.modal-medium {
+    width: 480px;
+}
+
+/* 大尺寸模态框 */
+.modal-content.modal-large {
+    width: 640px;
+}
+
 .modal-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-color);

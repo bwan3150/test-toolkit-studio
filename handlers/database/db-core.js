@@ -92,11 +92,12 @@ function ensureTables(db) {
         )
     `);
 
-    // 创建 devices 表（与旧 YAML 结构一致）
+    // 创建 devices 表（device_name 作为主键）
     db.exec(`
         CREATE TABLE IF NOT EXISTS devices (
-            id TEXT PRIMARY KEY,
-            device_name TEXT NOT NULL,
+            device_name TEXT PRIMARY KEY,
+            model TEXT,
+            note TEXT,
             platform TEXT NOT NULL,
             platform_version TEXT,
             platform_name TEXT,
@@ -112,6 +113,7 @@ function ensureTables(db) {
             updated_at TEXT NOT NULL
         )
     `);
+
 }
 
 /**

@@ -67,7 +67,6 @@ async function loadSavedDevices() {
             }
 
             const deviceData = {
-                id: config.id, // 数据库ID
                 config,
                 platform,
                 isWifi,
@@ -120,12 +119,13 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
     // 但需要检查设备是否已存在，避免重复添加
 
     for (const deviceData of devices) {
-        const { id, config, platform, isWifi, isConnected } = deviceData;
+        const { config, platform, isWifi, isConnected } = deviceData;
+        const deviceName = config.deviceName;
 
-        // 检查设备是否已存在 - 通过检查是否有相同的data-db-id属性
-        const existingCard = gridElement.querySelector(`[data-db-id="${id}"]`);
+        // 检查设备是否已存在 - 通过检查是否有相同的data-device-name属性
+        const existingCard = gridElement.querySelector(`[data-device-name="${deviceName}"]`);
         if (existingCard) {
-            window.rLog('设备已存在，跳过:', config.deviceName || id);
+            window.rLog('设备已存在，跳过:', deviceName);
             continue; // 跳过已存在的设备
         }
 
@@ -236,7 +236,7 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
 
         const card = document.createElement('div');
         card.className = 'device-phone-mockup';
-        card.setAttribute('data-db-id', id); // 数据库ID用于去重检查
+        card.setAttribute('data-device-name', deviceName); // 设备名用于去重检查
         // 同时设置 data-device-id 用于与未保存设备的去重
         const deviceKey = platform === 'ios' ? config.udid : config.deviceId;
         if (deviceKey) {
@@ -284,13 +284,13 @@ async function renderSavedDevices(devices, gridElement, connectedDevices) {
             actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${config.ipAddress}', ${config.port || 5555})">断开</button>`);
         }
 
-        // 已保存的设备都显示编辑和删除按钮
+        // 已保存的设备都显示编辑和删除按钮（使用设备名作为主键）
         // USB已连接/已保存: 编辑 + 删除
         // WiFi已连接/已保存: 断开 + 编辑 + 删除
         // USB未连接/已保存: 编辑 + 删除
         // WiFi未连接/已保存: 编辑 + 删除
-        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${id}')">编辑</button>`);
-        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${id}')" title="删除">删除</button>`);
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${deviceName}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${deviceName}')" title="删除">删除</button>`);
 
         if (actionButtons.length > 0) {
             cardContent += `

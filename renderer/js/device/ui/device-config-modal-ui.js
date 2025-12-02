@@ -29,6 +29,7 @@ function showDeviceConfigModal() {
     // 清除编辑模式标记
     delete modal.dataset.mode;
     delete modal.dataset.filename;
+    delete modal.dataset.model;
 
     // 更新表单字段显示
     if (window.updatePlatformFields) {
@@ -40,7 +41,7 @@ function showDeviceConfigModal() {
 }
 
 // 显示设备配置模态窗口（编辑模式）
-function showDeviceConfigModalForEdit(deviceId, config) {
+function showDeviceConfigModalForEdit(deviceName, config) {
     const modal = document.getElementById('deviceConfigModal');
     const form = document.getElementById('deviceConfigForm');
     const title = document.getElementById('deviceConfigModalTitle');
@@ -55,9 +56,11 @@ function showDeviceConfigModalForEdit(deviceId, config) {
         title.textContent = 'Edit Device';
     }
 
-    // 设置编辑模式标记（使用数据库ID）
+    // 设置编辑模式标记（保存原设备名用于重命名检测）
     modal.dataset.mode = 'edit';
-    modal.dataset.deviceId = deviceId;
+    modal.dataset.oldDeviceName = deviceName;
+    // 保留原有的 model
+    modal.dataset.model = config?.model || '';
 
     // 填充表单数据
     fillFormWithConfig(form, config);
@@ -73,6 +76,14 @@ function fillFormWithConfig(form, config) {
     // 填充基础字段
     const deviceNameInput = form.querySelector('input[name="deviceName"]');
     if (deviceNameInput) deviceNameInput.value = config.deviceName || '';
+
+    // 填充 Model
+    const modelInput = form.querySelector('input[name="model"]');
+    if (modelInput) modelInput.value = config.model || '';
+
+    // 填充 Note
+    const noteInput = form.querySelector('input[name="note"]');
+    if (noteInput) noteInput.value = config.note || '';
 
     const platformVersionInput = form.querySelector('input[name="platformVersion"]');
     if (platformVersionInput) platformVersionInput.value = config.platformVersion || '';
@@ -178,14 +189,27 @@ function hideDeviceConfigModal() {
             form.reset();
         }
         delete modal.dataset.mode;
-        delete modal.dataset.deviceId;
+        delete modal.dataset.oldDeviceName;
+        delete modal.dataset.model;
     }
 }
 
 // 从连接的设备预填充表单
-async function prefillDeviceConfigForm(deviceId) {
+async function prefillDeviceConfigForm(deviceId, model = '') {
     const form = document.getElementById('deviceConfigForm');
     if (!form) return;
+
+    // 存储 model 到 modal 的 dataset
+    const modal = document.getElementById('deviceConfigModal');
+    if (modal) {
+        modal.dataset.model = model;
+    }
+
+    // 填充 Model 输入框
+    const modelInput = form.querySelector('input[name="model"]');
+    if (modelInput) {
+        modelInput.value = model || '';
+    }
 
     // 判断是否为WiFi设备
     const isWifi = deviceId.includes(':');
@@ -203,11 +227,23 @@ async function prefillDeviceConfigForm(deviceId) {
         connectionRadio.checked = true;
     }
 
-    if (isWifi) {
-        const [ip, port] = deviceId.split(':');
-        form.querySelector('input[name="deviceName"]').value = `WiFi Device (${ip})`;
-    } else {
-        form.querySelector('input[name="deviceName"]').value = `Device ${deviceId.substring(0, 8)}`;
+    // 填充 Device ID 输入框
+    const deviceIdInput = form.querySelector('input[name="deviceId"]');
+    if (deviceIdInput) {
+        deviceIdInput.value = deviceId || '';
+    }
+
+    // 设置默认设备名称（使用 model 或 deviceId）
+    const deviceNameInput = form.querySelector('input[name="deviceName"]');
+    if (deviceNameInput) {
+        if (model) {
+            deviceNameInput.value = model;
+        } else if (isWifi) {
+            const [ip] = deviceId.split(':');
+            deviceNameInput.value = `WiFi Device (${ip})`;
+        } else {
+            deviceNameInput.value = `Device ${deviceId.substring(0, 8)}`;
+        }
     }
 
     // 自动获取设备的 Android 版本
@@ -413,12 +449,14 @@ async function saveDeviceConfig() {
 
     // 检查是否在编辑模式
     const mode = modal?.dataset.mode;
-    const existingId = modal?.dataset.deviceId;
+    const oldDeviceName = modal?.dataset.oldDeviceName || null;
+    const model = modal?.dataset.model || '';
 
-    // 构建数据库设备对象（与旧 YAML 结构一致）
+    // 构建数据库设备对象
     const device = {
-        id: (mode === 'edit' && existingId) ? existingId : `device_${Date.now()}`,
         deviceName: deviceConfig.deviceName,
+        model: model,
+        note: deviceConfig.note || '',
         platform: deviceConfig.platform,
         platformVersion: deviceConfig.platformVersion,
         connectionType: deviceConfig.connectionType,
@@ -433,7 +471,8 @@ async function saveDeviceConfig() {
 
     try {
         const { ipcRenderer } = window.AppGlobals;
-        const result = await ipcRenderer.invoke('db-device-save', projectPath, device);
+        // 传递 oldDeviceName 用于编辑模式的重命名检测
+        const result = await ipcRenderer.invoke('db-device-save', projectPath, device, oldDeviceName);
 
         if (result.success) {
             window.AppNotifications?.success(

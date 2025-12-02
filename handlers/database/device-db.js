@@ -1,17 +1,19 @@
 // Device 设备配置数据库操作模块
 // 项目级设备配置，存储在项目数据库中
+// device_name 作为主键
 
 const { ipcMain } = require('electron');
 const { getDatabase } = require('./db-core');
 
 /**
- * 将数据库行转换为 device 对象（与旧 YAML 结构一致）
+ * 将数据库行转换为 device 对象
  */
 function rowToDevice(row) {
     if (!row) return null;
     return {
-        id: row.id,
         deviceName: row.device_name,
+        model: row.model,
+        note: row.note,
         platform: row.platform,
         platformVersion: row.platform_version,
         platformName: row.platform_name,
@@ -40,94 +42,119 @@ function getAllDevices(projectPath) {
 /**
  * 获取单个设备配置
  */
-function getDevice(projectPath, id) {
+function getDevice(projectPath, deviceName) {
     const db = getDatabase(projectPath);
-    const row = db.prepare('SELECT * FROM devices WHERE id = ?').get(id);
+    const row = db.prepare('SELECT * FROM devices WHERE device_name = ?').get(deviceName);
     return rowToDevice(row);
 }
 
 /**
- * 创建或更新设备配置（与旧 YAML 结构一致）
+ * 检查设备名是否存在
  */
-function saveDevice(projectPath, device) {
+function deviceExists(projectPath, deviceName) {
+    const db = getDatabase(projectPath);
+    const row = db.prepare('SELECT device_name FROM devices WHERE device_name = ?').get(deviceName);
+    return !!row;
+}
+
+/**
+ * 创建或更新设备配置
+ * @param {string} projectPath - 项目路径
+ * @param {object} device - 设备配置
+ * @param {string} oldDeviceName - 原设备名（编辑时用于重命名）
+ */
+function saveDevice(projectPath, device, oldDeviceName = null) {
     const db = getDatabase(projectPath);
     const now = new Date().toISOString();
-
-    // 生成 ID（如果没有）
-    const id = device.id || `device_${Date.now()}`;
 
     // 根据 platform 自动设置 platformName
     const platformName = device.platform === 'ios' ? 'iOS' : 'Android';
 
-    const existing = db.prepare('SELECT id FROM devices WHERE id = ?').get(id);
+    const isEditing = !!oldDeviceName;
+    const isRenaming = isEditing && oldDeviceName !== device.deviceName;
 
-    if (existing) {
-        // 更新
-        db.prepare(`
-            UPDATE devices SET
-                device_name = ?, platform = ?, platform_version = ?,
-                platform_name = ?, connection_type = ?, device_id = ?,
-                port = ?, bundle_id = ?, wda_port = ?, automation_name = ?,
-                new_command_timeout = ?, no_reset = ?, updated_at = ?
-            WHERE id = ?
-        `).run(
-            device.deviceName,
-            device.platform,
-            device.platformVersion || '',
-            platformName,
-            device.connectionType || '',
-            device.deviceId || '',
-            device.port || '',
-            device.bundleId || '',
-            device.wdaPort || '',
-            device.automationName || '',
-            device.newCommandTimeout || '6000',
-            device.noReset ? 1 : 0,
-            now,
-            id
-        );
-    } else {
-        // 插入
-        db.prepare(`
-            INSERT INTO devices (
-                id, device_name, platform, platform_version, platform_name,
-                connection_type, device_id, port, bundle_id, wda_port,
-                automation_name, new_command_timeout, no_reset,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-            id,
-            device.deviceName,
-            device.platform,
-            device.platformVersion || '',
-            platformName,
-            device.connectionType || '',
-            device.deviceId || '',
-            device.port || '',
-            device.bundleId || '',
-            device.wdaPort || '',
-            device.automationName || '',
-            device.newCommandTimeout || '6000',
-            device.noReset ? 1 : 0,
-            now,
-            now
-        );
+    // 检查新名称是否已存在（新增或重命名时）
+    if (!isEditing || isRenaming) {
+        if (deviceExists(projectPath, device.deviceName)) {
+            return { success: false, error: `设备名称 "${device.deviceName}" 已存在` };
+        }
     }
 
-    return { success: true, id };
+    if (isEditing) {
+        if (isRenaming) {
+            // 重命名：先删除旧记录，再插入新记录
+            db.prepare('DELETE FROM devices WHERE device_name = ?').run(oldDeviceName);
+        } else {
+            // 更新（不改名）
+            db.prepare(`
+                UPDATE devices SET
+                    model = ?, note = ?, platform = ?, platform_version = ?,
+                    platform_name = ?, connection_type = ?, device_id = ?,
+                    port = ?, bundle_id = ?, wda_port = ?, automation_name = ?,
+                    new_command_timeout = ?, no_reset = ?, updated_at = ?
+                WHERE device_name = ?
+            `).run(
+                device.model || '',
+                device.note || '',
+                device.platform,
+                device.platformVersion || '',
+                platformName,
+                device.connectionType || '',
+                device.deviceId || '',
+                device.port || '',
+                device.bundleId || '',
+                device.wdaPort || '',
+                device.automationName || '',
+                device.newCommandTimeout || '6000',
+                device.noReset ? 1 : 0,
+                now,
+                device.deviceName
+            );
+            return { success: true, deviceName: device.deviceName };
+        }
+    }
+
+    // 插入新记录（新增或重命名后）
+    db.prepare(`
+        INSERT INTO devices (
+            device_name, model, note, platform, platform_version, platform_name,
+            connection_type, device_id, port, bundle_id, wda_port,
+            automation_name, new_command_timeout, no_reset,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        device.deviceName,
+        device.model || '',
+        device.note || '',
+        device.platform,
+        device.platformVersion || '',
+        platformName,
+        device.connectionType || '',
+        device.deviceId || '',
+        device.port || '',
+        device.bundleId || '',
+        device.wdaPort || '',
+        device.automationName || '',
+        device.newCommandTimeout || '6000',
+        device.noReset ? 1 : 0,
+        now,
+        now
+    );
+
+    return { success: true, deviceName: device.deviceName };
 }
 
 /**
  * 删除设备配置
  */
-function deleteDevice(projectPath, id) {
+function deleteDevice(projectPath, deviceName) {
     const db = getDatabase(projectPath);
-    db.prepare('DELETE FROM devices WHERE id = ?').run(id);
+    db.prepare('DELETE FROM devices WHERE device_name = ?').run(deviceName);
     return { success: true };
 }
 
 /**
- * 批量保存设备（用于导入/迁移，与旧 YAML 结构一致）
+ * 批量保存设备（用于导入/迁移）
  */
 function batchSaveDevices(projectPath, devices) {
     const db = getDatabase(projectPath);
@@ -135,20 +162,20 @@ function batchSaveDevices(projectPath, devices) {
 
     const insert = db.prepare(`
         INSERT OR REPLACE INTO devices (
-            id, device_name, platform, platform_version, platform_name,
+            device_name, model, note, platform, platform_version, platform_name,
             connection_type, device_id, port, bundle_id, wda_port,
             automation_name, new_command_timeout, no_reset,
             created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const batchInsert = db.transaction((items) => {
         for (const device of items) {
-            const id = device.id || `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             const platformName = device.platform === 'ios' ? 'iOS' : 'Android';
             insert.run(
-                id,
                 device.deviceName,
+                device.model || '',
+                device.note || '',
                 device.platform,
                 device.platformVersion || '',
                 platformName,
@@ -184,9 +211,9 @@ function registerDeviceDbHandlers() {
         }
     });
 
-    ipcMain.handle('db-device-get', async (event, projectPath, id) => {
+    ipcMain.handle('db-device-get', async (event, projectPath, deviceName) => {
         try {
-            const device = getDevice(projectPath, id);
+            const device = getDevice(projectPath, deviceName);
             return { success: true, data: device };
         } catch (error) {
             console.error('获取 device 失败:', error);
@@ -194,18 +221,21 @@ function registerDeviceDbHandlers() {
         }
     });
 
-    ipcMain.handle('db-device-save', async (event, projectPath, device) => {
+    // 保存设备（新增或编辑）
+    // device 对象包含设备配置
+    // oldDeviceName 用于编辑时标识原设备（可选）
+    ipcMain.handle('db-device-save', async (event, projectPath, device, oldDeviceName) => {
         try {
-            return saveDevice(projectPath, device);
+            return saveDevice(projectPath, device, oldDeviceName);
         } catch (error) {
             console.error('保存 device 失败:', error);
             return { success: false, error: error.message };
         }
     });
 
-    ipcMain.handle('db-device-delete', async (event, projectPath, id) => {
+    ipcMain.handle('db-device-delete', async (event, projectPath, deviceName) => {
         try {
-            return deleteDevice(projectPath, id);
+            return deleteDevice(projectPath, deviceName);
         } catch (error) {
             console.error('删除 device 失败:', error);
             return { success: false, error: error.message };
@@ -227,6 +257,7 @@ function registerDeviceDbHandlers() {
 module.exports = {
     getAllDevices,
     getDevice,
+    deviceExists,
     saveDevice,
     deleteDevice,
     batchSaveDevices,

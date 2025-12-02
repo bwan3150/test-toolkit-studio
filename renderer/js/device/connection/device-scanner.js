@@ -293,7 +293,8 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
         }
         // 只有打开项目时才显示保存按钮
         if (hasProject) {
-            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}')">保存</button>`);
+            const model = deviceInfo?.model || '';
+            actionButtons.push(`<button class="btn btn-primary btn-small" onclick="createDeviceFromConnected('${deviceId}', '${model}')">保存</button>`);
         }
         // 已连接的设备显示"信息"按钮
         if (isConnected && platform === 'android') {
@@ -307,9 +308,9 @@ async function renderDeviceCard(deviceId, platform, isConnected, isSaved, isWifi
             const host = deviceId.split(':')[0];
             actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="disconnectWirelessDevice('${host}', ${port})">断开</button>`);
         }
-        // 已保存的设备都显示编辑和删除按钮（使用数据库ID）
-        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?.id || ''}')">编辑</button>`);
-        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?.id || ''}')" title="删除">删除</button>`);
+        // 已保存的设备都显示编辑和删除按钮（使用设备名作为主键）
+        actionButtons.push(`<button class="btn btn-secondary btn-small" onclick="editDevice('${savedConfig?.deviceName || ''}')">编辑</button>`);
+        actionButtons.push(`<button class="btn btn-outline btn-small" onclick="deleteDevice('${savedConfig?.deviceName || ''}')" title="删除">删除</button>`);
         // 已连接的设备显示"信息"按钮
         if (isConnected && platform === 'android') {
             actionButtons.push(`<button class="btn btn-default btn-small" onclick="showDeviceInfoModal('${deviceId}')" title="查看详细信息">信息</button>`);
