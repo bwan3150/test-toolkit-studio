@@ -49,15 +49,10 @@ async function renderTestcaseList(testcases) {
 
     if (testcases.length === 0) {
         testcaseList.innerHTML = `
-            <div class="text-muted">
-                暂无测试用例。点击「Import CSV」导入或手动添加。
+            <div class="testcase-empty-state">
+                <p>暂无测试用例</p>
+                <span>点击上方「导入」或「新建」添加</span>
             </div>
-            <button class="btn btn-outline" style="margin-top: 12px;" onclick="window.ProjectTestcaseManager.showAddTestcaseModal()">
-                <svg class="btn-icon" viewBox="0 0 24 24">
-                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-                新建用例
-            </button>
         `;
         return;
     }
