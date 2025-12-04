@@ -547,6 +547,51 @@
     box-shadow: 0 4px 30px rgba(0,0,0,0.5);
 }
 
+/* ========== 表单扩展样式 ========== */
+
+/* 可折叠区域 */
+.form-collapse {
+    margin-top: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.form-collapse-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+
+.form-collapse-header:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.form-collapse-header .collapse-icon {
+    transition: transform 0.2s;
+}
+
+.form-collapse-header.expanded .collapse-icon {
+    transform: rotate(180deg);
+}
+
+.form-collapse-content {
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+.form-collapse-content .form-group:last-child {
+    margin-bottom: 0;
+}
+
 /* ========== CSV 导入模态框 (CIM) ========== */
 
 .cim-dialog {
