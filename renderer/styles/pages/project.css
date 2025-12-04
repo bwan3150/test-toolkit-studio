@@ -266,7 +266,7 @@
 .testcase-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 13px;
     background: var(--bg-primary);
     min-width: 2380px;
 }
@@ -310,13 +310,12 @@
 }
 
 .testcase-table tbody tr.case-created {
-    opacity: 0.8;
-    background: rgba(78, 201, 176, 0.1);
+    background: rgba(78, 201, 176, 0.08);
 }
 
 .testcase-table td {
     padding: 8px 12px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     vertical-align: top;
 }
 

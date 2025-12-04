@@ -585,11 +585,87 @@
 }
 .cim-close:hover { color: var(--text-primary); }
 
+/* Tab 切换 */
+.cim-tabs {
+    display: flex;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.cim-tab {
+    flex: 1;
+    padding: 10px 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+}
+
+.cim-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.cim-tab.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+}
+
+/* Tab 内容 */
+.cim-tab-content {
+    display: none;
+}
+
+.cim-tab-content.active {
+    display: block;
+}
+
 .cim-body {
     flex: 1;
     overflow-y: auto;
     padding: 16px;
     background: var(--bg-secondary);
+}
+
+/* 文本导入 */
+.cim-text-import {
+    display: flex;
+    flex-direction: column;
+    height: 280px;
+}
+
+.cim-text-input {
+    flex: 1;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+}
+
+.cim-text-input:focus {
+    border-color: var(--accent-primary);
+}
+
+.cim-text-input::placeholder {
+    color: var(--text-tertiary);
+}
+
+.cim-text-hint {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 8px;
+    font-size: 12px;
+    color: var(--text-tertiary);
 }
 
 .cim-step {

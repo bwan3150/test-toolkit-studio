@@ -1,51 +1,72 @@
-<!-- CSV 导入模态框 -->
+<!-- 导入测试用例模态框 -->
 <div class="modal" id="csvImportModal" style="display: none;">
   <div class="cim-dialog">
     <div class="cim-header">
       <span>导入测试用例</span>
       <button class="cim-close" id="closeCsvImportModal">&times;</button>
     </div>
+
+    <!-- Tab 切换 -->
+    <div class="cim-tabs">
+      <div class="cim-tab active" data-tab="file">从文件导入</div>
+      <div class="cim-tab" data-tab="text">从文本导入</div>
+    </div>
+
     <div class="cim-body">
-      <!-- 步骤1: 选择文件 -->
-      <div class="cim-step" id="csvImportStep1">
-        <div class="cim-dropzone" id="csvDropzone">
-          <svg class="cim-dropzone-icon" viewBox="0 0 24 24" width="48" height="48">
-            <path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
-            <path fill="currentColor" d="M8 15h8v2H8z"/>
-            <path fill="currentColor" d="M8 11h8v2H8z"/>
-          </svg>
-          <p>拖拽 CSV/Excel 文件到这里</p>
-          <span class="cim-or">或</span>
-          <button class="cim-btn primary" id="selectCsvFile">选择文件</button>
-          <p class="cim-hint">支持 .csv, .xlsx, .xls 格式</p>
+      <!-- Tab 1: 从文件导入 -->
+      <div class="cim-tab-content active" id="tabFile">
+        <!-- 步骤1: 选择文件 -->
+        <div class="cim-step" id="csvImportStep1">
+          <div class="cim-dropzone" id="csvDropzone">
+            <svg class="cim-dropzone-icon" viewBox="0 0 24 24" width="40" height="40">
+              <path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
+            </svg>
+            <p>拖入或点击选择文件</p>
+            <span class="cim-hint">支持 CSV / Excel</span>
+          </div>
+        </div>
+
+        <!-- 步骤2: 选择列 -->
+        <div class="cim-step" id="csvImportStep2" style="display: none;">
+          <div class="cim-section">
+            <div class="cim-section-title">文件预览</div>
+            <div class="cim-file-info">
+              <span id="csvFileName">file.csv</span>
+              <span id="csvRowCount">0 行数据</span>
+            </div>
+          </div>
+
+          <div class="cim-section">
+            <div class="cim-section-title">选择用例名称列 <span class="required">*</span></div>
+            <div class="cim-column-select" id="csvColumnSelect">
+              <!-- 动态生成列选项 -->
+            </div>
+          </div>
+
+          <div class="cim-section">
+            <div class="cim-section-title">数据预览</div>
+            <div class="cim-preview-table" id="csvPreviewTable">
+              <!-- 动态生成预览表格 -->
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 步骤2: 选择列 -->
-      <div class="cim-step" id="csvImportStep2" style="display: none;">
-        <div class="cim-section">
-          <div class="cim-section-title">文件预览</div>
-          <div class="cim-file-info">
-            <span id="csvFileName">file.csv</span>
-            <span id="csvRowCount">0 行数据</span>
-          </div>
-        </div>
-
-        <div class="cim-section">
-          <div class="cim-section-title">选择用例名称列 <span class="required">*</span></div>
-          <div class="cim-column-select" id="csvColumnSelect">
-            <!-- 动态生成列选项 -->
-          </div>
-        </div>
-
-        <div class="cim-section">
-          <div class="cim-section-title">数据预览</div>
-          <div class="cim-preview-table" id="csvPreviewTable">
-            <!-- 动态生成预览表格 -->
+      <!-- Tab 2: 从文本导入 -->
+      <div class="cim-tab-content" id="tabText">
+        <div class="cim-text-import">
+          <textarea
+            class="cim-text-input"
+            id="textImportInput"
+            placeholder="粘贴测试用例，每行一个用例..."
+          ></textarea>
+          <div class="cim-text-hint">
+            <span id="textLineCount">0 条用例</span>
           </div>
         </div>
       </div>
     </div>
+
     <div class="cim-footer">
       <button class="cim-btn" id="cancelCsvImport">取消</button>
       <button class="cim-btn" id="backCsvImport" style="display: none;">上一步</button>
