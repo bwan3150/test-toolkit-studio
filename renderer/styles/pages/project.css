@@ -268,7 +268,7 @@
     border-collapse: collapse;
     font-size: 12px;
     background: var(--bg-primary);
-    min-width: 2300px;
+    min-width: 2380px;
 }
 
 .testcase-table thead {
@@ -361,12 +361,12 @@
 }
 
 .table-action-btn.btn-edit {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
+    background: var(--accent-info);
+    color: white;
 }
 
 .table-action-btn.btn-edit:hover {
-    background: var(--bg-hover);
+    background: #1976d2;
     transform: scale(1.05);
 }
 
@@ -388,6 +388,16 @@
 
 .table-action-btn.btn-exists:hover {
     opacity: 1;
+    transform: scale(1.05);
+}
+
+.table-action-btn.btn-delete {
+    background: var(--accent-danger);
+    color: white;
+}
+
+.table-action-btn.btn-delete:hover {
+    background: #d32f2f;
     transform: scale(1.05);
 }
 
@@ -444,7 +454,7 @@
 
 .ptc-status.status-failed {
     background: rgba(244, 67, 54, 0.2);
-    color: var(--accent-error);
+    color: var(--accent-danger);
 }
 
 .ptc-status.status-na {
@@ -627,31 +637,39 @@
     height: 14px;
 }
 
-.cell-action .btn-edit {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+.cell-action .table-action-btn.btn-edit {
+    background: var(--accent-info);
+    color: white;
 }
 
-.cell-action .btn-edit:hover {
-    background: var(--bg-hover);
+.cell-action .table-action-btn.btn-edit:hover {
+    background: #1976d2;
 }
 
-.cell-action .btn-create {
+.cell-action .table-action-btn.btn-create {
     background: var(--accent-primary);
     color: white;
 }
 
-.cell-action .btn-create:hover {
+.cell-action .table-action-btn.btn-create:hover {
     opacity: 0.9;
 }
 
-.cell-action .btn-exists {
+.cell-action .table-action-btn.btn-exists {
     background: var(--accent-success);
     color: white;
 }
 
-.cell-action .btn-exists:hover {
+.cell-action .table-action-btn.btn-exists:hover {
     opacity: 0.9;
+}
+
+.cell-action .table-action-btn.btn-delete {
+    background: var(--accent-danger);
+    color: white;
+}
+
+.cell-action .table-action-btn.btn-delete:hover {
+    background: #d32f2f;
 }
 

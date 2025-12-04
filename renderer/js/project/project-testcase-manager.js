@@ -90,6 +90,7 @@ async function renderTestcaseList(testcases) {
             <th class="col-datetime">更新时间</th>
             <th class="col-action">编辑用例</th>
             <th class="col-action">测试脚本</th>
+            <th class="col-action">删除用例</th>
         </tr>
     `;
     table.appendChild(thead);
@@ -164,6 +165,11 @@ async function renderTestcaseList(testcases) {
                     <img src="../../assets/icons/project/${scriptBtnIcon}.svg" alt="${scriptBtnText}" /><span>${scriptBtnText}</span>
                 </button>
             </td>
+            <td class="cell-action">
+                <button class="table-action-btn btn-delete" data-id="${tc.id}" data-exists="${caseExists}" data-name="${escapeHtml(tc.caseName)}">
+                    <img src="../../assets/icons/project/delete.svg" alt="Delete" /><span>Delete</span>
+                </button>
+            </td>
         `;
 
         tbody.appendChild(row);
@@ -208,6 +214,76 @@ function bindActionButtons(tbody) {
             }
         });
     });
+
+    // 删除按钮
+    tbody.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.id);
+            const exists = btn.dataset.exists === 'true';
+            const name = btn.dataset.name || `用例 #${id}`;
+            confirmDeleteTestcase(id, name, exists);
+        });
+    });
+}
+
+// 确认删除用例
+function confirmDeleteTestcase(id, name, hasFolder) {
+    let message;
+    if (hasFolder) {
+        message = `用例「${name}」已创建了脚本项目文件夹。<br><br>删除此用例将同时删除对应的文件夹及其中的所有脚本文件。<br><br>确定要删除吗？`;
+    } else {
+        message = `确定要删除用例「${name}」吗？`;
+    }
+
+    window.ModalManager.showConfirm({
+        title: '删除用例',
+        message: message,
+        confirmText: '删除',
+        cancelText: '取消',
+        onConfirm: () => {
+            deleteTestcase(id, hasFolder);
+        }
+    });
+}
+
+// 删除用例
+async function deleteTestcase(id, deleteFolder = false) {
+    const testcase = testcasesCache.find(tc => tc.id === id);
+    if (!testcase) {
+        window.AppNotifications?.error('用例不存在');
+        return;
+    }
+
+    const projectPath = window.AppGlobals.currentProject;
+    if (!projectPath) return;
+
+    const { path, fs, ipcRenderer } = getGlobals();
+
+    try {
+        // 如果有文件夹且需要删除，先删除文件夹
+        if (deleteFolder && testcase.folderName) {
+            const casePath = path.join(projectPath, testcase.folderName);
+            try {
+                await fs.rm(casePath, { recursive: true, force: true });
+            } catch (err) {
+                window.rError('删除文件夹失败:', err);
+                // 继续删除数据库记录
+            }
+        }
+
+        // 删除数据库记录
+        const result = await ipcRenderer.invoke('db-testcase-delete', projectPath, id);
+        if (result.success) {
+            window.AppNotifications?.success('用例已删除');
+            await refreshTestcaseList();
+        } else {
+            window.AppNotifications?.error(`删除失败: ${result.error}`);
+        }
+    } catch (error) {
+        window.rError('删除用例失败:', error);
+        window.AppNotifications?.error(`删除失败: ${error.message}`);
+    }
 }
 
 // 创建用例文件夹结构
