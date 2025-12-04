@@ -14,13 +14,13 @@ function rowToTestcase(row) {
         caseName: row.case_name,
         note: row.note || '',
         folderName: row.folder_name || '',
-        result: row.result || 'NA',
+        result: row.result || 'NOT TESTED',
         taskBatch: row.task_batch || '',
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         aiTest: !!row.ai_test,
         aiPrompt: row.ai_prompt || '',
-        aiResult: row.ai_result || '',
+        aiResult: row.ai_result || 'NOT TESTED',
         aiComment: row.ai_comment || ''
     };
 }
@@ -107,13 +107,13 @@ function createTestcase(projectPath, testcase) {
         testcase.caseName || '',
         testcase.note || '',
         '',  // folder_name 默认为空
-        testcase.result || 'NA',
+        testcase.result || 'NOT TESTED',
         testcase.taskBatch || '',
         now,
         now,
         testcase.aiTest ? 1 : 0,
         testcase.aiPrompt || '',
-        testcase.aiResult || '',
+        testcase.aiResult || 'NOT TESTED',
         testcase.aiComment || ''
     );
 
@@ -215,13 +215,13 @@ function batchImportTestcases(projectPath, testcases) {
                 tc.caseName || '',
                 tc.note || '',
                 '',  // folder_name 默认为空，等待用户点击 Create 时填充
-                'NA',
+                'NOT TESTED',
                 '',
                 now,
                 now,
                 0,
                 '',
-                '',
+                'NOT TESTED',
                 ''
             );
             results.push({

@@ -161,6 +161,7 @@
 .action-card-table .testcase-scroll-container {
     flex: 1;
     max-height: none;
+    overflow: auto;
 }
 
 /* 空状态居中显示 */
@@ -267,7 +268,7 @@
     border-collapse: collapse;
     font-size: 12px;
     background: var(--bg-primary);
-    min-width: 600px;
+    min-width: 2300px;
 }
 
 .testcase-table thead {
@@ -284,16 +285,28 @@
     color: var(--text-primary);
     border-bottom: 2px solid var(--border-color);
     white-space: nowrap;
-    min-width: 120px;
+    vertical-align: middle;
 }
+
+/* 列宽规范 */
+.testcase-table .col-id { width: 50px; text-align: center; }
+.testcase-table .col-text { min-width: 350px; }
+.testcase-table .col-select { width: 120px; text-align: center; }
+.testcase-table .col-checkbox { width: 60px; text-align: center; }
+.testcase-table .col-multiselect { width: 100px; text-align: center; }
+.testcase-table .col-datetime { width: 145px; text-align: center; }
+.testcase-table .col-action { width: 80px; text-align: center; }
 
 .testcase-table tbody tr {
     border-bottom: 1px solid var(--border-color);
-    transition: all 0.2s;
 }
 
-.testcase-table tbody tr:hover {
-    background: var(--bg-hover);
+.testcase-table tbody {
+    overflow: visible;
+}
+
+.testcase-table td {
+    overflow: visible;
 }
 
 .testcase-table tbody tr.case-created {
@@ -304,10 +317,7 @@
 .testcase-table td {
     padding: 8px 12px;
     color: var(--text-secondary);
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    vertical-align: top;
 }
 
 /* 表格浮动按钮容器 - 固定在表格容器右侧 */
@@ -424,6 +434,7 @@
     border-radius: 3px;
     font-size: 11px;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .ptc-status.status-pass {
@@ -439,5 +450,208 @@
 .ptc-status.status-na {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-tertiary);
+}
+
+.ptc-status.status-blocked {
+    background: rgba(255, 152, 0, 0.2);
+    color: #ff9800;
+}
+
+.ptc-status.status-not-tested {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-tertiary);
+}
+
+/* ID 单元格 */
+.testcase-table td.cell-id {
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* 可编辑单元格 */
+.cell-editable {
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s;
+}
+
+.cell-editable:hover {
+    background: var(--bg-hover);
+}
+
+.cell-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+}
+
+.testcase-table td.cell-checkbox {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.testcase-table td.cell-select,
+.testcase-table td.cell-multiselect {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.tc-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+}
+
+/* 内联编辑输入框 */
+.inline-edit-input {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-primary);
+    border-radius: 3px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+}
+
+/* 内联编辑多行文本框 */
+.inline-edit-textarea {
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid var(--accent-primary);
+    border-radius: 3px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: inherit;
+    line-height: 1.5;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+}
+
+/* 下拉菜单 */
+.inline-dropdown {
+    z-index: 10000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    min-width: 120px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.dropdown-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.dropdown-item:hover {
+    background: var(--bg-hover);
+}
+
+.dropdown-item.active {
+    background: var(--bg-tertiary);
+}
+
+.dropdown-item.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dropdown-item.checkbox-item input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent-primary);
+}
+
+/* 批量任务标签 */
+.batch-tags {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+}
+
+.batch-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.batch-empty {
+    color: var(--text-tertiary);
+}
+
+/* 时间列 */
+.testcase-table td.cell-datetime {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    white-space: nowrap;
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* 操作列 */
+.testcase-table td.cell-action {
+    text-align: center;
+    padding: 4px 8px;
+    vertical-align: middle;
+}
+
+.cell-action .table-action-btn {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.cell-action .table-action-btn img {
+    width: 14px;
+    height: 14px;
+}
+
+.cell-action .btn-edit {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.cell-action .btn-edit:hover {
+    background: var(--bg-hover);
+}
+
+.cell-action .btn-create {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.cell-action .btn-create:hover {
+    opacity: 0.9;
+}
+
+.cell-action .btn-exists {
+    background: var(--accent-success);
+    color: white;
+}
+
+.cell-action .btn-exists:hover {
+    opacity: 0.9;
 }
 
