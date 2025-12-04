@@ -1,5 +1,5 @@
-// CSV 导入模态框控制器
-// 负责 CSV/Excel 文件的选择、解析和批量导入测试用例
+// 导入测试用例模态框控制器
+// 支持从文件(CSV/Excel)导入和从文本导入
 
 // 获取全局变量
 function getGlobals() {
@@ -8,18 +8,20 @@ function getGlobals() {
 
 // 模态框状态
 let csvImportState = {
+    activeTab: 'file',  // 'file' 或 'text'
     step: 1,
     fileName: '',
     records: [],
     headers: [],
-    selectedColumn: null
+    selectedColumn: null,
+    textLines: []  // 文本导入的行
 };
 
-// 显示 CSV 导入模态框
+// 显示导入模态框
 function showCsvImportModal() {
     const modal = document.getElementById('csvImportModal');
     if (!modal) {
-        window.rError('找不到 CSV 导入模态框');
+        window.rError('找不到导入模态框');
         return;
     }
 
@@ -30,7 +32,7 @@ function showCsvImportModal() {
     modal.style.display = 'flex';
 }
 
-// 隐藏 CSV 导入模态框
+// 隐藏导入模态框
 function hideCsvImportModal() {
     const modal = document.getElementById('csvImportModal');
     if (modal) {
@@ -42,11 +44,13 @@ function hideCsvImportModal() {
 // 重置状态
 function resetCsvImportState() {
     csvImportState = {
+        activeTab: 'file',
         step: 1,
         fileName: '',
         records: [],
         headers: [],
-        selectedColumn: null
+        selectedColumn: null,
+        textLines: []
     };
 
     // 重置 UI
@@ -54,11 +58,74 @@ function resetCsvImportState() {
     const step2 = document.getElementById('csvImportStep2');
     const backBtn = document.getElementById('backCsvImport');
     const confirmBtn = document.getElementById('confirmCsvImport');
+    const textInput = document.getElementById('textImportInput');
+    const lineCount = document.getElementById('textLineCount');
 
     if (step1) step1.style.display = 'block';
     if (step2) step2.style.display = 'none';
     if (backBtn) backBtn.style.display = 'none';
     if (confirmBtn) confirmBtn.disabled = true;
+    if (textInput) textInput.value = '';
+    if (lineCount) lineCount.textContent = '0 条用例';
+
+    // 重置 Tab
+    switchTab('file');
+}
+
+// 切换 Tab
+function switchTab(tabName) {
+    csvImportState.activeTab = tabName;
+
+    // 更新 Tab 样式
+    document.querySelectorAll('.cim-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    // 更新内容显示
+    document.getElementById('tabFile')?.classList.toggle('active', tabName === 'file');
+    document.getElementById('tabText')?.classList.toggle('active', tabName === 'text');
+
+    // 更新按钮状态
+    updateConfirmButtonState();
+
+    // 隐藏上一步按钮（文本模式不需要）
+    const backBtn = document.getElementById('backCsvImport');
+    if (backBtn) {
+        backBtn.style.display = (tabName === 'file' && csvImportState.step === 2) ? 'inline-block' : 'none';
+    }
+}
+
+// 更新确认按钮状态
+function updateConfirmButtonState() {
+    const confirmBtn = document.getElementById('confirmCsvImport');
+    if (!confirmBtn) return;
+
+    if (csvImportState.activeTab === 'file') {
+        // 文件模式：需要选择列
+        confirmBtn.disabled = !csvImportState.selectedColumn;
+    } else {
+        // 文本模式：需要有内容
+        confirmBtn.disabled = csvImportState.textLines.length === 0;
+    }
+}
+
+// 处理文本输入变化
+function handleTextInput(text) {
+    // 按行分割，过滤空行
+    const lines = text.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+    csvImportState.textLines = lines;
+
+    // 更新行数显示
+    const lineCount = document.getElementById('textLineCount');
+    if (lineCount) {
+        lineCount.textContent = `${lines.length} 条用例`;
+    }
+
+    // 更新按钮状态
+    updateConfirmButtonState();
 }
 
 // 处理文件选择
@@ -83,14 +150,11 @@ async function handleFileSelect(file) {
         // 尝试检测编码并解码
         let content;
         try {
-            // 首先尝试 UTF-8
             content = new TextDecoder('utf-8').decode(arrayBuffer);
-            // 检查是否有乱码（BOM 或常见乱码字符）
             if (content.charCodeAt(0) === 0xFEFF) {
-                content = content.slice(1); // 移除 BOM
+                content = content.slice(1);
             }
         } catch (e) {
-            // 如果 UTF-8 失败，尝试 GBK/GB2312（中文 Windows 常用）
             try {
                 content = new TextDecoder('gbk').decode(arrayBuffer);
             } catch (e2) {
@@ -102,13 +166,12 @@ async function handleFileSelect(file) {
         let headers = [];
 
         if (isCSV) {
-            // 解析 CSV - 不设置行数限制
             records = parse(content, {
                 columns: true,
                 skip_empty_lines: true,
-                relax_quotes: true,        // 允许不规范的引号
-                relax_column_count: true,  // 允许列数不一致
-                trim: true                 // 去除空白
+                relax_quotes: true,
+                relax_column_count: true,
+                trim: true
             });
 
             if (records.length > 0) {
@@ -117,7 +180,6 @@ async function handleFileSelect(file) {
 
             window.rLog(`CSV 解析完成: ${records.length} 行数据`);
         } else {
-            // Excel 文件需要通过 IPC 处理
             window.AppNotifications?.warn('Excel 文件支持开发中，请先使用 CSV 格式');
             return;
         }
@@ -141,7 +203,7 @@ async function handleFileSelect(file) {
     }
 }
 
-// 从文件路径处理 CSV（使用 Node.js fs 直接读取）
+// 从文件路径处理 CSV
 async function handleFileFromPath(filePath) {
     const { fsSync, parse } = getGlobals();
     const fileName = filePath.split('/').pop() || filePath.split('\\').pop();
@@ -160,24 +222,18 @@ async function handleFileFromPath(filePath) {
     }
 
     try {
-        // 使用 Node.js fs 直接读取文件（二进制方式）
         const buffer = fsSync.readFileSync(filePath);
 
-        // 尝试不同的编码
         let content;
         try {
-            // 首先尝试 UTF-8
             content = buffer.toString('utf8');
-            // 检查并移除 BOM
             if (content.charCodeAt(0) === 0xFEFF) {
                 content = content.slice(1);
             }
         } catch (e) {
-            // 如果有问题，使用默认编码
             content = buffer.toString();
         }
 
-        // 解析 CSV - 不设置行数限制
         const records = parse(content, {
             columns: true,
             skip_empty_lines: true,
@@ -195,12 +251,10 @@ async function handleFileFromPath(filePath) {
 
         window.rLog(`CSV 解析完成: ${records.length} 行数据`);
 
-        // 保存状态
         csvImportState.fileName = fileName;
         csvImportState.records = records;
         csvImportState.headers = headers;
 
-        // 切换到步骤2
         showStep2();
 
     } catch (error) {
@@ -209,7 +263,7 @@ async function handleFileFromPath(filePath) {
     }
 }
 
-// 显示步骤2
+// 显示步骤2（文件导入）
 function showStep2() {
     csvImportState.step = 2;
 
@@ -221,14 +275,10 @@ function showStep2() {
     if (step2) step2.style.display = 'block';
     if (backBtn) backBtn.style.display = 'inline-block';
 
-    // 更新文件信息
     document.getElementById('csvFileName').textContent = csvImportState.fileName;
     document.getElementById('csvRowCount').textContent = `${csvImportState.records.length} 行数据`;
 
-    // 生成列选项
     renderColumnOptions();
-
-    // 生成预览表格
     renderPreviewTable();
 }
 
@@ -259,18 +309,12 @@ function renderColumnOptions() {
         </div>
     `).join('');
 
-    // 添加点击事件
     container.querySelectorAll('.cim-column-option').forEach(option => {
         option.addEventListener('click', () => {
-            // 移除其他选中状态
             container.querySelectorAll('.cim-column-option').forEach(o => o.classList.remove('selected'));
-            // 添加选中状态
             option.classList.add('selected');
-            // 保存选中的列
             csvImportState.selectedColumn = option.dataset.header;
-            // 启用确认按钮
-            document.getElementById('confirmCsvImport').disabled = false;
-            // 更新预览表格高亮
+            updateConfirmButtonState();
             updatePreviewHighlight();
         });
     });
@@ -281,7 +325,6 @@ function renderPreviewTable() {
     const container = document.getElementById('csvPreviewTable');
     if (!container) return;
 
-    // 只显示前 5 行
     const previewRecords = csvImportState.records.slice(0, 5);
 
     let html = '<table><thead><tr>';
@@ -294,7 +337,6 @@ function renderPreviewTable() {
         html += '<tr>';
         csvImportState.headers.forEach(header => {
             const value = record[header] || '';
-            // 截断过长的文本
             const displayValue = value.length > 50 ? value.substring(0, 50) + '...' : value;
             html += `<td data-header="${header}" title="${value}">${displayValue}</td>`;
         });
@@ -310,12 +352,10 @@ function updatePreviewHighlight() {
     const container = document.getElementById('csvPreviewTable');
     if (!container) return;
 
-    // 移除所有高亮
     container.querySelectorAll('.selected-column').forEach(el => {
         el.classList.remove('selected-column');
     });
 
-    // 添加选中列高亮
     if (csvImportState.selectedColumn) {
         container.querySelectorAll(`[data-header="${csvImportState.selectedColumn}"]`).forEach(el => {
             el.classList.add('selected-column');
@@ -325,11 +365,6 @@ function updatePreviewHighlight() {
 
 // 执行导入
 async function executeImport() {
-    if (!csvImportState.selectedColumn || csvImportState.records.length === 0) {
-        window.AppNotifications?.error('请先选择用例名称列');
-        return;
-    }
-
     const projectPath = window.AppGlobals.currentProject;
     if (!projectPath) {
         window.AppNotifications?.error('请先打开项目');
@@ -337,22 +372,37 @@ async function executeImport() {
     }
 
     const { ipcRenderer } = getGlobals();
+    let testcases = [];
 
-    // 准备导入数据
-    const testcases = csvImportState.records.map(record => ({
-        caseName: record[csvImportState.selectedColumn] || '',
-        note: ''
-    }));
+    if (csvImportState.activeTab === 'file') {
+        // 文件导入
+        if (!csvImportState.selectedColumn || csvImportState.records.length === 0) {
+            window.AppNotifications?.error('请先选择用例名称列');
+            return;
+        }
+        testcases = csvImportState.records.map(record => ({
+            caseName: record[csvImportState.selectedColumn] || '',
+            note: ''
+        }));
+    } else {
+        // 文本导入
+        if (csvImportState.textLines.length === 0) {
+            window.AppNotifications?.error('请输入测试用例');
+            return;
+        }
+        testcases = csvImportState.textLines.map(line => ({
+            caseName: line,
+            note: ''
+        }));
+    }
 
     try {
-        // 批量导入
         const result = await ipcRenderer.invoke('db-testcase-batchImport', projectPath, testcases);
 
         if (result.success) {
             window.AppNotifications?.success(`成功导入 ${result.count} 条测试用例`);
             hideCsvImportModal();
 
-            // 刷新用例列表
             if (window.ProjectTestcaseManager && window.ProjectTestcaseManager.refreshTestcaseList) {
                 await window.ProjectTestcaseManager.refreshTestcaseList();
             }
@@ -365,7 +415,18 @@ async function executeImport() {
     }
 }
 
-// 初始化 CSV 导入模态框事件
+// 打开文件选择对话框
+async function openFileDialog() {
+    const { ipcRenderer } = getGlobals();
+    const result = await ipcRenderer.invoke('select-file', [
+        { name: 'CSV/Excel Files', extensions: ['csv', 'xlsx', 'xls'] }
+    ]);
+    if (result) {
+        await handleFileFromPath(result);
+    }
+}
+
+// 初始化导入模态框事件
 function initializeCsvImportModal() {
     const modal = document.getElementById('csvImportModal');
     if (!modal) return;
@@ -374,8 +435,8 @@ function initializeCsvImportModal() {
     const cancelBtn = document.getElementById('cancelCsvImport');
     const backBtn = document.getElementById('backCsvImport');
     const confirmBtn = document.getElementById('confirmCsvImport');
-    const selectFileBtn = document.getElementById('selectCsvFile');
     const dropzone = document.getElementById('csvDropzone');
+    const textInput = document.getElementById('textImportInput');
 
     // 关闭按钮
     if (closeBtn) {
@@ -397,22 +458,14 @@ function initializeCsvImportModal() {
         confirmBtn.addEventListener('click', executeImport);
     }
 
-    // 选择文件按钮
-    if (selectFileBtn) {
-        selectFileBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const { ipcRenderer } = getGlobals();
-            const result = await ipcRenderer.invoke('select-file', [
-                { name: 'CSV/Excel Files', extensions: ['csv', 'xlsx', 'xls'] }
-            ]);
-            if (result) {
-                // 直接处理文件路径
-                await handleFileFromPath(result);
-            }
+    // Tab 切换
+    document.querySelectorAll('.cim-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            switchTab(tab.dataset.tab);
         });
-    }
+    });
 
-    // 拖拽区域
+    // 拖拽区域 - 点击直接打开文件选择
     if (dropzone) {
         dropzone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -433,11 +486,14 @@ function initializeCsvImportModal() {
             }
         });
 
-        // 点击也可以选择文件
-        dropzone.addEventListener('click', (e) => {
-            if (e.target === dropzone || e.target.closest('.cim-dropzone-icon') || e.target.tagName === 'P') {
-                document.getElementById('selectCsvFile')?.click();
-            }
+        // 点击打开文件选择
+        dropzone.addEventListener('click', openFileDialog);
+    }
+
+    // 文本输入
+    if (textInput) {
+        textInput.addEventListener('input', (e) => {
+            handleTextInput(e.target.value);
         });
     }
 

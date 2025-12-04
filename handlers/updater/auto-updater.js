@@ -27,6 +27,20 @@ if (process.platform === 'darwin') {
 let mainWindow = null;
 let updateDownloaded = false;
 
+// 安全发送消息到渲染进程（避免"Object has been destroyed"错误）
+function safeSend(channel, data) {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send(channel, data);
+      return true;
+    }
+  } catch (error) {
+    // 窗口可能在检查和发送之间被销毁，忽略此错误
+    log.warn('Failed to send to renderer (window may be destroyed):', error.message);
+  }
+  return false;
+}
+
 // 设置更新 channel（beta 或 latest）
 function setUpdateChannel() {
   const receiveBetaUpdates = store.get('receive_beta_updates', false);
@@ -160,23 +174,19 @@ function setupUpdateListeners() {
       }
 
       // 通知渲染进程显示更新提示弹窗
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-ready', {
-          version: info.version,
-          releaseNotes: releaseNotes,
-          releaseDate: info.releaseDate
-        });
-      }
+      safeSend('update-ready', {
+        version: info.version,
+        releaseNotes: releaseNotes,
+        releaseDate: info.releaseDate
+      });
     } catch (error) {
       log.error('处理更新下载完成事件时出错:', error);
       // 即使获取 release notes 失败，也要通知渲染进程
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-ready', {
-          version: info.version,
-          releaseNotes: null,
-          releaseDate: info.releaseDate
-        });
-      }
+      safeSend('update-ready', {
+        version: info.version,
+        releaseNotes: null,
+        releaseDate: info.releaseDate
+      });
     }
   });
 
@@ -201,9 +211,7 @@ function setupUpdateListeners() {
  * 发送更新状态到渲染进程
  */
 function sendStatusToWindow(event, data) {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('update-status', { event, data });
-  }
+  safeSend('update-status', { event, data });
 }
 
 /**
@@ -315,9 +323,7 @@ async function simulateUpdate() {
   updateDownloaded = true;
 
   // 发送到渲染进程
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('update-ready', mockUpdateInfo);
-  }
+  safeSend('update-ready', mockUpdateInfo);
 }
 
 module.exports = {

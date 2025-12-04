@@ -49,15 +49,10 @@ async function renderTestcaseList(testcases) {
 
     if (testcases.length === 0) {
         testcaseList.innerHTML = `
-            <div class="text-muted">
-                暂无测试用例。点击「Import CSV」导入或手动添加。
+            <div class="testcase-empty-state">
+                <p>暂无测试用例</p>
+                <span>点击上方「导入」或「新建」添加</span>
             </div>
-            <button class="btn btn-outline" style="margin-top: 12px;" onclick="window.ProjectTestcaseManager.showAddTestcaseModal()">
-                <svg class="btn-icon" viewBox="0 0 24 24">
-                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-                新建用例
-            </button>
         `;
         return;
     }
@@ -78,13 +73,24 @@ async function renderTestcaseList(testcases) {
     table.className = 'testcase-table';
 
     // 创建表头
+    // 列宽规范：ID=50, 文本=350, 单选=120, 多选=100, 勾选=60, 时间=145, 按钮=80
     const thead = document.createElement('thead');
     thead.innerHTML = `
         <tr>
-            <th>ID</th>
-            <th>用例名称</th>
-            <th>备注</th>
-            <th>状态</th>
+            <th class="col-id">ID</th>
+            <th class="col-text">用例名称</th>
+            <th class="col-text">备注</th>
+            <th class="col-select">测试结果</th>
+            <th class="col-checkbox">AI生成</th>
+            <th class="col-multiselect">批量任务</th>
+            <th class="col-text">AI Prompt</th>
+            <th class="col-select">AI Result</th>
+            <th class="col-text">AI Comment</th>
+            <th class="col-datetime">创建时间</th>
+            <th class="col-datetime">更新时间</th>
+            <th class="col-action">编辑用例</th>
+            <th class="col-action">测试脚本</th>
+            <th class="col-action">删除用例</th>
         </tr>
     `;
     table.appendChild(thead);
@@ -107,138 +113,177 @@ async function renderTestcaseList(testcases) {
             row.classList.add('case-created');
         }
 
-        // 状态显示
-        const statusText = tc.result === 'PASS' ? 'PASS' : tc.result === 'FAILED' ? 'FAILED' : 'N/A';
-        const statusClass = tc.result === 'PASS' ? 'status-pass' : tc.result === 'FAILED' ? 'status-failed' : 'status-na';
+        // 测试结果选项
+        const resultOptions = ['NOT TESTED', 'PASS', 'FAILED', 'N/A', 'BLOCKED'];
+        const currentResult = tc.result || 'NOT TESTED';
+        const resultClass = getResultClass(currentResult);
+
+        // 批量任务选项
+        const batchOptions = ['默认'];
+        const currentBatch = tc.taskBatch || '';
+
+        // 格式化时间
+        const createdAt = tc.createdAt ? formatDateTime(tc.createdAt) : '-';
+        const updatedAt = tc.updatedAt ? formatDateTime(tc.updatedAt) : '-';
+
+        // AI Result 状态
+        const aiResultValue = tc.aiResult || 'NOT TESTED';
+        const aiResultClass = getResultClass(aiResultValue);
+
+        // 编辑和脚本按钮
+        const scriptBtnClass = caseExists ? 'btn-exists' : 'btn-create';
+        const scriptBtnText = caseExists ? 'Open' : 'Create';
+        const scriptBtnIcon = caseExists ? 'open-folder' : 'add-folder';
 
         row.innerHTML = `
-            <td>${tc.id}</td>
-            <td title="${escapeHtml(tc.caseName)}">${escapeHtml(tc.caseName)}</td>
-            <td title="${escapeHtml(tc.note)}">${escapeHtml(tc.note) || '-'}</td>
-            <td><span class="ptc-status ${statusClass}">${statusText}</span></td>
+            <td class="cell-id">${tc.id}</td>
+            <td class="cell-editable cell-text" data-field="caseName" data-id="${tc.id}" title="${escapeHtml(tc.caseName)}">${escapeHtml(tc.caseName)}</td>
+            <td class="cell-editable cell-text" data-field="note" data-id="${tc.id}" title="${escapeHtml(tc.note)}">${escapeHtml(tc.note) || '-'}</td>
+            <td class="cell-editable cell-select" data-field="result" data-id="${tc.id}">
+                <span class="ptc-status ${resultClass}">${currentResult}</span>
+            </td>
+            <td class="cell-editable cell-checkbox" data-field="aiTest" data-id="${tc.id}">
+                <input type="checkbox" class="tc-checkbox" ${tc.aiTest ? 'checked' : ''} onchange="window.ProjectTestcaseManager.updateField(${tc.id}, 'aiTest', this.checked ? 1 : 0)" />
+            </td>
+            <td class="cell-editable cell-multiselect" data-field="taskBatch" data-id="${tc.id}">
+                <span class="batch-tags">${currentBatch ? `<span class="batch-tag">${escapeHtml(currentBatch)}</span>` : '<span class="batch-empty">-</span>'}</span>
+            </td>
+            <td class="cell-editable cell-text" data-field="aiPrompt" data-id="${tc.id}" title="${escapeHtml(tc.aiPrompt)}">${escapeHtml(tc.aiPrompt) || '-'}</td>
+            <td class="cell-editable cell-select" data-field="aiResult" data-id="${tc.id}">
+                <span class="ptc-status ${aiResultClass}">${aiResultValue}</span>
+            </td>
+            <td class="cell-editable cell-text" data-field="aiComment" data-id="${tc.id}" title="${escapeHtml(tc.aiComment)}">${escapeHtml(tc.aiComment) || '-'}</td>
+            <td class="cell-datetime" title="${tc.createdAt || ''}">${createdAt}</td>
+            <td class="cell-datetime" title="${tc.updatedAt || ''}">${updatedAt}</td>
+            <td class="cell-action">
+                <button class="table-action-btn btn-edit" data-id="${tc.id}">
+                    <img src="../../assets/icons/project/edit.svg" alt="Edit" /><span>Edit</span>
+                </button>
+            </td>
+            <td class="cell-action">
+                <button class="table-action-btn ${scriptBtnClass}" data-id="${tc.id}" data-exists="${caseExists}">
+                    <img src="../../assets/icons/project/${scriptBtnIcon}.svg" alt="${scriptBtnText}" /><span>${scriptBtnText}</span>
+                </button>
+            </td>
+            <td class="cell-action">
+                <button class="table-action-btn btn-delete" data-id="${tc.id}" data-exists="${caseExists}" data-name="${escapeHtml(tc.caseName)}">
+                    <img src="../../assets/icons/project/delete.svg" alt="Delete" /><span>Delete</span>
+                </button>
+            </td>
         `;
-
-        // 点击行打开用例
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', () => {
-            if (caseExists) {
-                openTestcase(tc.id);
-            } else {
-                createCaseFolder(tc.id);
-            }
-        });
 
         tbody.appendChild(row);
     }
     table.appendChild(tbody);
+
+    // 绑定内联编辑事件
+    bindInlineEditEvents(tbody);
+
+    // 绑定按钮事件
+    bindActionButtons(tbody);
+
     scrollContainer.appendChild(table);
-
-    // 创建浮动按钮容器
-    const floatingContainer = document.createElement('div');
-    floatingContainer.className = 'table-floating-buttons';
-
-    testcases.forEach((tc, index) => {
-        let caseExists = false;
-        if (tc.folderName) {
-            const casePath = path.join(projectPath, tc.folderName);
-            caseExists = fsSync.existsSync(casePath);
-        }
-
-        const btnWrapper = document.createElement('div');
-        btnWrapper.className = 'floating-btn-wrapper';
-        btnWrapper.dataset.rowIndex = index;
-
-        // Edit 按钮
-        const editBtn = document.createElement('button');
-        editBtn.className = 'table-action-btn btn-edit';
-        editBtn.innerHTML = `<img src="../../assets/icons/project/edit.svg" alt="Edit" /><span>Edit</span>`;
-        editBtn.onclick = (e) => {
-            e.stopPropagation();
-            editTestcase(tc.id);
-        };
-
-        // Create/Open 按钮
-        const actionBtn = document.createElement('button');
-        actionBtn.className = 'table-action-btn';
-
-        if (caseExists) {
-            actionBtn.innerHTML = `<img src="../../assets/icons/project/open-folder.svg" alt="Open" /><span>Open</span>`;
-            actionBtn.className += ' btn-exists';
-            actionBtn.onclick = (e) => {
-                e.stopPropagation();
-                openTestcase(tc.id);
-            };
-        } else {
-            actionBtn.innerHTML = `<img src="../../assets/icons/project/add-folder.svg" alt="Create" /><span>Create</span>`;
-            actionBtn.className += ' btn-create';
-            actionBtn.onclick = (e) => {
-                e.stopPropagation();
-                createCaseFolder(tc.id);
-            };
-        }
-
-        btnWrapper.appendChild(editBtn);
-        btnWrapper.appendChild(actionBtn);
-        floatingContainer.appendChild(btnWrapper);
-    });
-
     tableContainer.appendChild(scrollContainer);
-    tableContainer.appendChild(floatingContainer);
 
     // 清除现有内容并添加表格容器
     testcaseList.innerHTML = '';
     testcaseList.appendChild(tableContainer);
-
-    // 设置浮动按钮位置同步
-    setupTableButtonsSync(scrollContainer, table, floatingContainer);
 }
 
-// 设置表格浮动按钮位置同步
-function setupTableButtonsSync(scrollContainer, table, floatingContainer) {
-    const tbody = table.querySelector('tbody');
-    const btnWrappers = floatingContainer.querySelectorAll('.floating-btn-wrapper');
-    const tableContainer = scrollContainer.parentElement;
+// 绑定操作按钮事件
+function bindActionButtons(tbody) {
+    // 编辑按钮
+    tbody.querySelectorAll('.btn-edit').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.id);
+            editTestcase(id);
+        });
+    });
 
-    function updateButtonPositions() {
-        const rows = tbody.querySelectorAll('tr');
-        const containerRect = scrollContainer.getBoundingClientRect();
-        const tableContainerRect = tableContainer.getBoundingClientRect();
-        const thead = table.querySelector('thead');
-        const theadRect = thead ? thead.getBoundingClientRect() : null;
-
-        rows.forEach((row, index) => {
-            const btnWrapper = btnWrappers[index];
-            if (!btnWrapper) return;
-
-            const rowRect = row.getBoundingClientRect();
-            const rowHeight = rowRect.height;
-
-            const relativeTop = rowRect.top - containerRect.top;
-            const isInScrollArea = relativeTop > -rowHeight && relativeTop < containerRect.height;
-
-            let isBelowHeader = true;
-            if (theadRect) {
-                isBelowHeader = rowRect.bottom > theadRect.bottom;
-            }
-
-            if (isInScrollArea && isBelowHeader) {
-                const rowTopRelativeToContainer = rowRect.top - tableContainerRect.top;
-                btnWrapper.style.display = 'flex';
-                btnWrapper.style.top = `${rowTopRelativeToContainer + rowHeight / 2}px`;
+    // 脚本按钮 (Open/Create)
+    tbody.querySelectorAll('.btn-exists, .btn-create').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.id);
+            const exists = btn.dataset.exists === 'true';
+            if (exists) {
+                openTestcase(id);
             } else {
-                btnWrapper.style.display = 'none';
+                createCaseFolder(id);
             }
         });
+    });
+
+    // 删除按钮
+    tbody.querySelectorAll('.btn-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.id);
+            const exists = btn.dataset.exists === 'true';
+            const name = btn.dataset.name || `用例 #${id}`;
+            confirmDeleteTestcase(id, name, exists);
+        });
+    });
+}
+
+// 确认删除用例
+function confirmDeleteTestcase(id, name, hasFolder) {
+    let message;
+    if (hasFolder) {
+        message = `用例「${name}」已创建了脚本项目文件夹。<br><br>删除此用例将同时删除对应的文件夹及其中的所有脚本文件。<br><br>确定要删除吗？`;
+    } else {
+        message = `确定要删除用例「${name}」吗？`;
     }
 
-    setTimeout(updateButtonPositions, 50);
-    scrollContainer.addEventListener('scroll', updateButtonPositions);
-    window.addEventListener('resize', updateButtonPositions);
-
-    const observer = new ResizeObserver(() => {
-        setTimeout(updateButtonPositions, 10);
+    window.ModalManager.showConfirm({
+        title: '删除用例',
+        message: message,
+        confirmText: '删除',
+        cancelText: '取消',
+        onConfirm: () => {
+            deleteTestcase(id, hasFolder);
+        }
     });
-    observer.observe(table);
+}
+
+// 删除用例
+async function deleteTestcase(id, deleteFolder = false) {
+    const testcase = testcasesCache.find(tc => tc.id === id);
+    if (!testcase) {
+        window.AppNotifications?.error('用例不存在');
+        return;
+    }
+
+    const projectPath = window.AppGlobals.currentProject;
+    if (!projectPath) return;
+
+    const { path, fs, ipcRenderer } = getGlobals();
+
+    try {
+        // 如果有文件夹且需要删除，先删除文件夹
+        if (deleteFolder && testcase.folderName) {
+            const casePath = path.join(projectPath, testcase.folderName);
+            try {
+                await fs.rm(casePath, { recursive: true, force: true });
+            } catch (err) {
+                window.rError('删除文件夹失败:', err);
+                // 继续删除数据库记录
+            }
+        }
+
+        // 删除数据库记录
+        const result = await ipcRenderer.invoke('db-testcase-delete', projectPath, id);
+        if (result.success) {
+            window.AppNotifications?.success('用例已删除');
+            await refreshTestcaseList();
+        } else {
+            window.AppNotifications?.error(`删除失败: ${result.error}`);
+        }
+    } catch (error) {
+        window.rError('删除用例失败:', error);
+        window.AppNotifications?.error(`删除失败: ${error.message}`);
+    }
 }
 
 // 创建用例文件夹结构
@@ -382,11 +427,273 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// 格式化日期时间
+function formatDateTime(isoString) {
+    if (!isoString) return '-';
+    try {
+        const date = new Date(isoString);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
+    } catch {
+        return '-';
+    }
+}
+
+// 获取测试结果的 CSS 类
+function getResultClass(result) {
+    switch (result) {
+        case 'PASS': return 'status-pass';
+        case 'FAILED': return 'status-failed';
+        case 'BLOCKED': return 'status-blocked';
+        case 'N/A': return 'status-na';
+        default: return 'status-not-tested';
+    }
+}
+
+// 绑定内联编辑事件
+function bindInlineEditEvents(tbody) {
+    // 文本单元格点击编辑
+    tbody.querySelectorAll('.cell-text').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+            if (cell.querySelector('input')) return; // 已经在编辑中
+            startTextEdit(cell);
+        });
+    });
+
+    // 结果单选下拉
+    tbody.querySelectorAll('.cell-select').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+            showResultDropdown(cell);
+        });
+    });
+
+    // 批量任务多选下拉
+    tbody.querySelectorAll('.cell-multiselect').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+            showBatchDropdown(cell);
+        });
+    });
+}
+
+// 开始文本编辑
+function startTextEdit(cell) {
+    const field = cell.dataset.field;
+    const id = parseInt(cell.dataset.id);
+    const currentValue = cell.textContent === '-' ? '' : cell.textContent;
+
+    // 使用 textarea 支持多行编辑
+    const textarea = document.createElement('textarea');
+    textarea.className = 'inline-edit-textarea';
+    textarea.value = currentValue;
+
+    // 保存原始高度，确保至少和当前单元格一样高
+    const cellHeight = cell.offsetHeight;
+
+    cell.innerHTML = '';
+    cell.appendChild(textarea);
+
+    // 设置初始高度并自动调整
+    textarea.style.minHeight = Math.max(cellHeight - 16, 24) + 'px';
+    autoResizeTextarea(textarea);
+
+    textarea.focus();
+    textarea.select();
+
+    const saveEdit = async () => {
+        const newValue = textarea.value.trim();
+        await updateField(id, field, newValue);
+        cell.textContent = newValue || '-';
+        cell.title = newValue;
+    };
+
+    textarea.addEventListener('blur', saveEdit);
+    textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+    textarea.addEventListener('keydown', (e) => {
+        // Shift+Enter 换行，Enter 保存
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            textarea.blur();
+        } else if (e.key === 'Escape') {
+            cell.textContent = currentValue || '-';
+            cell.title = currentValue;
+        }
+    });
+}
+
+// 自动调整 textarea 高度
+function autoResizeTextarea(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+}
+
+// 显示结果下拉菜单（通用，支持 result 和 aiResult）
+function showResultDropdown(cell) {
+    // 如果已有下拉菜单，关闭并返回
+    if (document.querySelector('.inline-dropdown')) {
+        closeAllDropdowns();
+        return;
+    }
+
+    const id = parseInt(cell.dataset.id);
+    const field = cell.dataset.field; // 'result' 或 'aiResult'
+    const options = ['NOT TESTED', 'PASS', 'FAILED', 'N/A', 'BLOCKED'];
+    const currentValue = cell.querySelector('.ptc-status')?.textContent || 'NOT TESTED';
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'inline-dropdown';
+
+    options.forEach(opt => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item' + (opt === currentValue ? ' active' : '');
+        item.innerHTML = `<span class="ptc-status ${getResultClass(opt)}">${opt}</span>`;
+        item.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await updateField(id, field, opt);
+            cell.innerHTML = `<span class="ptc-status ${getResultClass(opt)}">${opt}</span>`;
+            closeAllDropdowns();
+        });
+        dropdown.appendChild(item);
+    });
+
+    // 使用 fixed 定位，添加到 body
+    document.body.appendChild(dropdown);
+    const rect = cell.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = rect.bottom + 'px';
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.minWidth = rect.width + 'px';
+
+    // 点击外部关闭
+    const closeHandler = (e) => {
+        if (!dropdown.contains(e.target) && e.target !== cell && !cell.contains(e.target)) {
+            closeAllDropdowns();
+            document.removeEventListener('click', closeHandler);
+        }
+    };
+    setTimeout(() => {
+        document.addEventListener('click', closeHandler);
+    }, 10);
+}
+
+// 显示批量任务下拉菜单
+function showBatchDropdown(cell) {
+    // 如果已有下拉菜单，关闭并返回
+    if (document.querySelector('.inline-dropdown')) {
+        closeAllDropdowns();
+        return;
+    }
+
+    const id = parseInt(cell.dataset.id);
+    const options = ['默认'];
+    const tc = testcasesCache.find(t => t.id === id);
+    const currentValues = tc?.taskBatch ? tc.taskBatch.split(',') : [];
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'inline-dropdown';
+
+    options.forEach(opt => {
+        const isSelected = currentValues.includes(opt);
+        const item = document.createElement('div');
+        item.className = 'dropdown-item checkbox-item' + (isSelected ? ' selected' : '');
+        item.innerHTML = `
+            <input type="checkbox" ${isSelected ? 'checked' : ''} />
+            <span>${opt}</span>
+        `;
+        item.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const checkbox = item.querySelector('input');
+            checkbox.checked = !checkbox.checked;
+            item.classList.toggle('selected', checkbox.checked);
+
+            // 更新选中值
+            const newValues = [];
+            dropdown.querySelectorAll('.checkbox-item').forEach(it => {
+                if (it.querySelector('input').checked) {
+                    newValues.push(it.querySelector('span').textContent);
+                }
+            });
+            const newValue = newValues.join(',');
+            await updateField(id, 'taskBatch', newValue);
+
+            // 更新显示
+            const tagsSpan = cell.querySelector('.batch-tags');
+            if (newValues.length > 0) {
+                tagsSpan.innerHTML = newValues.map(v => `<span class="batch-tag">${escapeHtml(v)}</span>`).join('');
+            } else {
+                tagsSpan.innerHTML = '<span class="batch-empty">-</span>';
+            }
+        });
+        dropdown.appendChild(item);
+    });
+
+    // 使用 fixed 定位，添加到 body
+    document.body.appendChild(dropdown);
+    const rect = cell.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = rect.bottom + 'px';
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.minWidth = rect.width + 'px';
+
+    // 点击外部关闭
+    const closeHandler = (e) => {
+        if (!dropdown.contains(e.target) && e.target !== cell && !cell.contains(e.target)) {
+            closeAllDropdowns();
+            document.removeEventListener('click', closeHandler);
+        }
+    };
+    setTimeout(() => {
+        document.addEventListener('click', closeHandler);
+    }, 10);
+}
+
+// 定位下拉菜单
+function positionDropdown(cell, dropdown) {
+    const cellRect = cell.getBoundingClientRect();
+    dropdown.style.minWidth = cellRect.width + 'px';
+}
+
+// 关闭所有下拉菜单
+function closeAllDropdowns() {
+    document.querySelectorAll('.inline-dropdown').forEach(d => d.remove());
+}
+
+// 更新单个字段
+async function updateField(id, field, value) {
+    const projectPath = window.AppGlobals.currentProject;
+    if (!projectPath) return;
+
+    const { ipcRenderer } = getGlobals();
+
+    try {
+        const updateData = {};
+        updateData[field] = value;
+
+        const result = await ipcRenderer.invoke('db-testcase-update', projectPath, id, updateData);
+        if (!result.success) {
+            window.AppNotifications?.error(`更新失败: ${result.error}`);
+        } else {
+            // 更新缓存
+            const tc = testcasesCache.find(t => t.id === id);
+            if (tc) {
+                tc[field] = value;
+            }
+        }
+    } catch (error) {
+        window.rError('更新字段失败:', error);
+        window.AppNotifications?.error(`更新失败: ${error.message}`);
+    }
+}
+
 // 导出模块
 window.ProjectTestcaseManager = {
     refreshTestcaseList,
     openTestcase,
     createCaseFolder,
     showAddTestcaseModal,
-    editTestcase
+    editTestcase,
+    updateField
 };

@@ -13,10 +13,10 @@
           <input type="text" id="tamIdInput" placeholder="自动生成" readonly class="input-readonly" />
         </div>
 
-        <!-- 测试用例名称 -->
+        <!-- 用例名称 -->
         <div class="form-group">
           <label>测试用例 <span class="required">*</span></label>
-          <textarea id="tamCaseNameInput" rows="3" placeholder="测试用例描述"></textarea>
+          <textarea id="tamCaseNameInput" rows="2" placeholder="测试用例描述"></textarea>
         </div>
 
         <!-- 备注 -->
@@ -25,25 +25,72 @@
           <textarea id="tamNoteInput" rows="2" placeholder="备注信息"></textarea>
         </div>
 
-        <!-- 是否用于 AI 测试脚本生成 -->
+        <!-- 测试结果 -->
         <div class="form-group">
-          <label>是否用于 AI 测试脚本生成</label>
-          <div class="radio-group" id="tamAiTestRadios">
-            <label class="radio-option">
-              <input type="radio" name="tamAiTest" value="0" checked>
-              <span class="radio-label">否</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="tamAiTest" value="1">
-              <span class="radio-label">是</span>
-            </label>
+          <label>测试结果</label>
+          <select id="tamResultSelect">
+            <option value="NOT TESTED">NOT TESTED</option>
+            <option value="PASS">PASS</option>
+            <option value="FAILED">FAILED</option>
+            <option value="N/A">N/A</option>
+            <option value="BLOCKED">BLOCKED</option>
+          </select>
+        </div>
+
+        <!-- AI 相关设置（可折叠） -->
+        <div class="form-collapse">
+          <div class="form-collapse-header" id="tamAiCollapseHeader">
+            <span>AI 测试设置</span>
+            <svg class="collapse-icon" viewBox="0 0 24 24" width="16" height="16">
+              <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            </svg>
+          </div>
+          <div class="form-collapse-content" id="tamAiCollapseContent" style="display: none;">
+            <!-- AI 生成 -->
+            <div class="form-group">
+              <label>AI 生成</label>
+              <div class="radio-group" id="tamAiTestRadios">
+                <label class="radio-option">
+                  <input type="radio" name="tamAiTest" value="0" checked>
+                  <span class="radio-label">禁用</span>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="tamAiTest" value="1">
+                  <span class="radio-label">启用</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- AI Result -->
+            <div class="form-group">
+              <label>AI Result</label>
+              <select id="tamAiResultSelect">
+                <option value="NOT TESTED">NOT TESTED</option>
+                <option value="PASS">PASS</option>
+                <option value="FAILED">FAILED</option>
+                <option value="N/A">N/A</option>
+                <option value="BLOCKED">BLOCKED</option>
+              </select>
+            </div>
+
+            <!-- AI Prompt -->
+            <div class="form-group">
+              <label>AI Prompt</label>
+              <textarea id="tamAiPromptInput" rows="2" placeholder="AI 测试提示词"></textarea>
+            </div>
+
+            <!-- AI Comment -->
+            <div class="form-group">
+              <label>AI Comment</label>
+              <textarea id="tamAiCommentInput" rows="2" placeholder="AI 测试备注"></textarea>
+            </div>
           </div>
         </div>
       </form>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" id="confirmTestcaseAdd">创建</button>
       <button class="btn btn-secondary" id="cancelTestcaseAdd">取消</button>
+      <button class="btn btn-primary" id="confirmTestcaseAdd">创建</button>
     </div>
   </div>
 </div>

@@ -9,6 +9,20 @@ const { getTkePath, buildTkeAdbCommand } = require('./adb-handlers');
 const logcatProcesses = new Map();
 const logcatBuffers = new Map();
 
+// 安全发送消息到渲染进程（避免"Object has been destroyed"错误）
+function safeSend(mainWindow, channel, data) {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+      mainWindow.webContents.send(channel, data);
+      return true;
+    }
+  } catch (error) {
+    // 窗口可能在检查和发送之间被销毁，忽略此错误
+    console.warn('Failed to send to renderer (window may be destroyed):', error.message);
+  }
+  return false;
+}
+
 
 // 注册Logcat相关的IPC处理器
 function registerLogcatHandlers(app, mainWindow) {
@@ -117,10 +131,7 @@ function registerLogcatHandlers(app, mainWindow) {
         // 发送完整的行
         if (lines.length > 0) {
           const completeOutput = lines.join('\n') + '\n';
-          // 检查window是否已销毁，避免"Object has been destroyed"错误
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('logcat-data', completeOutput);
-          }
+          safeSend(mainWindow, 'logcat-data', completeOutput);
         }
       });
       
@@ -136,10 +147,7 @@ function registerLogcatHandlers(app, mainWindow) {
         const remainingBuffer = logcatBuffers.get(device);
         if (remainingBuffer && remainingBuffer.trim()) {
           console.log('Sending last line from buffer:', remainingBuffer);
-          // 检查window是否已销毁，避免"Object has been destroyed"错误
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('logcat-data', remainingBuffer + '\n');
-          }
+          safeSend(mainWindow, 'logcat-data', remainingBuffer + '\n');
         }
 
         logcatProcesses.delete(device);
