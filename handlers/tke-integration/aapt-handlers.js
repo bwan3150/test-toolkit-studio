@@ -99,6 +99,13 @@ function registerAaptHandlers(app) {
         }
       } catch (error) {
         console.error('TKE AAPT方法失败:', error.message);
+        // 输出更详细的错误信息用于调试
+        if (error.stderr) {
+          console.error('TKE AAPT stderr:', error.stderr);
+        }
+        if (error.stdout) {
+          console.error('TKE AAPT stdout:', error.stdout);
+        }
         return { success: false, error: `AAPT执行失败: ${error.message}` };
       }
 

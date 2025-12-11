@@ -197,38 +197,38 @@ async function installApkToDevice(deviceId, apkPath) {
     }
 
     try {
-        // 第一步：先用 AAPT 获取包名和主Activity
+        // 第一步：尝试用 AAPT 获取包名（可选，失败不阻止安装）
         if (window.ApkUI && window.ApkUI.showApkInstallLoading) {
             window.ApkUI.showApkInstallLoading('正在解析APK信息...', '');
         }
 
+        let packageName = null;
         const packageInfo = await ipcRenderer.invoke('get-apk-package-name', apkPath);
 
-        if (!packageInfo.success || !packageInfo.packageName) {
-            if (window.ApkUI && window.ApkUI.hideApkInstallLoading) {
-                window.ApkUI.hideApkInstallLoading();
-            }
-            window.AppNotifications?.error('无法解析APK文件');
-            return;
+        if (packageInfo.success && packageInfo.packageName) {
+            packageName = packageInfo.packageName;
+            window.rLog('通过 AAPT 获取到包名:', packageName);
+        } else {
+            // AAPT解析失败，但继续安装
+            window.rWarn('AAPT解析APK失败，将直接安装（无法获取包名）:', packageInfo.error);
         }
-
-        const packageName = packageInfo.packageName;
-        window.rLog('通过 AAPT 获取到包名:', packageName);
 
         // 第二步：开始安装
         if (window.ApkUI && window.ApkUI.updateApkInstallLoading) {
-            window.ApkUI.updateApkInstallLoading('正在安装APK...', '', packageName);
+            window.ApkUI.updateApkInstallLoading('正在安装APK...', '', packageName || '');
         }
 
         const result = await ipcRenderer.invoke('adb-install-apk', deviceId, apkPath, false);
         window.rLog('收到安装结果:', result);
 
         if (result.success) {
-            // 安装成功，使用已获取的包名启动应用
+            // 安装成功
             if (window.ApkUI && window.ApkUI.hideApkInstallLoading) {
                 window.ApkUI.hideApkInstallLoading();
             }
-            if (window.ApkLauncher && window.ApkLauncher.autoLaunchAppAfterInstall) {
+
+            // 如果有包名，尝试启动应用
+            if (packageName && window.ApkLauncher && window.ApkLauncher.autoLaunchAppAfterInstall) {
                 await window.ApkLauncher.autoLaunchAppAfterInstall(deviceId, packageName);
             }
             window.AppNotifications?.success('APK安装成功！');
@@ -240,13 +240,18 @@ async function installApkToDevice(deviceId, apkPath) {
             return;
         }
 
-        // 第三步：安装失败，显示确认对话框询问是否卸载重装
-        window.rLog('安装失败，显示卸载重装确认对话框');
+        // 第三步：安装失败
+        window.rLog('安装失败，错误信息:', result.error);
         if (window.ApkUI && window.ApkUI.hideApkInstallLoading) {
             window.ApkUI.hideApkInstallLoading();
         }
-        if (window.ApkUI && window.ApkUI.showApkInstallModalWithPackage) {
+
+        // 如果有包名，显示卸载重装确认对话框
+        if (packageName && window.ApkUI && window.ApkUI.showApkInstallModalWithPackage) {
             window.ApkUI.showApkInstallModalWithPackage(deviceId, apkPath, packageName);
+        } else {
+            // 没有包名，直接显示错误
+            window.AppNotifications?.error(`安装失败: ${result.error || '未知错误'}`);
         }
 
     } catch (error) {
