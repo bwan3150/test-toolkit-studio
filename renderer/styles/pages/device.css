@@ -41,27 +41,6 @@
     color: var(--text-primary);
 }
 
-.device-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-}
-
-.device-card {
-    background: var(--bg-secondary);
-    border-radius: 6px;
-    padding: 16px;
-    border: 1px solid var(--border-color);
-    position: relative;
-    transition: all 0.2s;
-}
-
-.device-card:hover {
-    border-color: var(--accent-primary);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
 .device-status {
     position: absolute;
     top: 16px;
@@ -2245,22 +2224,6 @@
     transform-origin: center center;
 }
 
-/* Device Phone Mockup - 手机图片就是全部 */
-.device-phone-mockup {
-    position: relative;
-    width: 200px;
-    height: 344px;
-    background-image: url('../../../assets/images/device-page/old_phone_mockup.png');
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    transition: transform 0.3s ease;
-}
-
-.device-phone-mockup:hover {
-    transform: translateY(-8px);
-}
-
 /* 手机屏幕内容区域 */
 .device-screen-content {
     position: absolute;
@@ -2654,23 +2617,7 @@
     }
 }
 
-/* 设备卡片样式 */
-.device-card {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 12px;
-    transition: all 0.2s ease;
-    position: relative;
-}
-
-.device-card:hover {
-    border-color: var(--accent-primary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* 拖拽APK时的高亮效果 - 旧的device-card样式 */
+/* 拖拽APK时的高亮效果 */
 .device-card.drag-over {
     border-color: var(--accent-success);
     background: rgba(76, 175, 80, 0.05);
@@ -2897,15 +2844,6 @@
     font-size: 12px;
     margin-bottom: 12px;
     padding-left: 16px;
-}
-
-.device-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 40px;
-    margin-top: 16px;
-    justify-content: flex-start;
-    padding: 20px;
 }
 
 .device-sections {

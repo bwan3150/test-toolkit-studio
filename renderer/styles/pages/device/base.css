@@ -21,20 +21,36 @@
     color: var(--text-primary);
 }
 
-/* 设备网格布局 */
-.device-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-}
-
+/* 设备网格布局 - 水平滚动，不换行 */
 .device-grid {
     display: flex;
-    flex-wrap: wrap;
-    gap: 40px;
+    flex-wrap: nowrap;
+    gap: 24px;
     margin-top: 16px;
     justify-content: flex-start;
     padding: 20px;
+    padding-bottom: 60px; /* 为按钮留出空间 */
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.device-grid::-webkit-scrollbar {
+    height: 6px;
+}
+
+.device-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.device-grid::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.device-grid::-webkit-scrollbar-thumb:hover {
+    background: var(--text-disabled);
 }
 
 /* 设备内容容器 */

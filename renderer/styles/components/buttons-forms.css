@@ -79,27 +79,6 @@
     color: var(--text-primary);
 }
 
-.device-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-}
-
-.device-card {
-    background: var(--bg-secondary);
-    border-radius: 6px;
-    padding: 16px;
-    border: 1px solid var(--border-color);
-    position: relative;
-    transition: all 0.2s;
-}
-
-.device-card:hover {
-    border-color: var(--accent-primary);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
 .device-status {
     position: absolute;
     top: 16px;

@@ -1,21 +1,6 @@
 /* 设备卡片样式 */
 
 .device-card {
-    background: var(--bg-secondary);
-    border-radius: 6px;
-    padding: 16px;
-    border: 1px solid var(--border-color);
-    position: relative;
-    transition: all 0.2s;
-}
-
-.device-card:hover {
-    border-color: var(--accent-primary);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.device-card {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -23,6 +8,10 @@
     margin-bottom: 12px;
     transition: all 0.2s ease;
     position: relative;
+    /* 固定宽度，防止在水平滚动时被压缩 */
+    min-width: 220px;
+    width: 220px;
+    flex-shrink: 0;
 }
 
 .device-card:hover {
@@ -80,6 +69,9 @@
     background-repeat: no-repeat;
     background-position: center;
     transition: transform 0.3s ease;
+    /* 固定大小，不允许压缩或拉伸 */
+    flex-shrink: 0;
+    flex-grow: 0;
 }
 
 .device-phone-mockup:hover {
