@@ -28,7 +28,7 @@
     gap: 24px;
     margin-top: 16px;
     justify-content: flex-start;
-    padding: 20px;
+    padding: 20px 60px; /* 左右为hover浮层留出空间 */
     padding-bottom: 60px; /* 为按钮留出空间 */
     overflow-x: auto;
     overflow-y: visible;
