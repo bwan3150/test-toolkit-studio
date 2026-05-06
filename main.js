@@ -79,6 +79,9 @@ const { registerReleaseNotesHandlers } = require('./handlers/api-proxy/release-n
 // 自动更新模块
 const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/auto-updater');
 
+// LocalSend 模块
+const { registerLocalSendHandlers } = require('./handlers/localsend/localsend-handler');
+
 // ws-scrcpy 模块
 const { registerScrcpyHandlers, cleanupScrcpyServer } = require('./handlers/ws-scrcpy/scrcpy-server-handler');
 const { registerStreamCaptureHandlers } = require('./handlers/ws-scrcpy/stream-capture-handler');
@@ -369,6 +372,10 @@ function registerAllHandlers() {
     // 自动更新模块
     console.log('注册自动更新处理器...');
     registerUpdateHandlers();
+
+    // LocalSend 模块
+    console.log('注册LocalSend处理器...');
+    registerLocalSendHandlers(mainWindow);
 
     // ws-scrcpy 模块
     console.log('注册ws-scrcpy处理器...');

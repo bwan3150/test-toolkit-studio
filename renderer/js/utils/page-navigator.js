@@ -41,6 +41,11 @@
       label: 'Insights',
       navSelector: '[data-page="report"]'
     },
+    'localsend': {
+      id: 'localsendPage',
+      label: 'LocalSend',
+      navSelector: '[data-page="localsend"]'
+    },
     'settings': {
       id: 'settingsPage',
       label: 'Settings',

@@ -248,6 +248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadScript('../js/logviewer/log-manager.js');
         await loadScript('../js/services/bug-analyzer-client.js'); // Bug分析API客户端
         await loadScript('../js/insights/test-report-manager.js');
+        await loadScript('../js/localsend/localsend-controller.js');
         // console.log('✓ 业务模块已加载'); // 已禁用以减少日志
         
         // 4. 加载工具模块
