@@ -208,12 +208,13 @@
 
             const result = await ipcRenderer.invoke('get-user-info');
             if (result.success && result.data) {
-                const userData = result.data;
+                // 新 API 返回 { success, user: { _id, email, username, ... } }
+                const userData = result.data.user || result.data;
                 if (window.Sentry.setUser) {
                     window.Sentry.setUser({
-                        id: userData.id || userData.user_id,
+                        id: userData._id || userData.id,
                         email: userData.email,
-                        username: userData.username || userData.name,
+                        username: userData.username,
                     });
                     console.log('渲染进程 Sentry 用户上下文已设置:', userData.email);
                 }

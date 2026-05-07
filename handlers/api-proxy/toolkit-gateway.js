@@ -15,11 +15,11 @@ function registerAuthHandlers() {
   ipcMain.handle('login', async (event, credentials) => {
     try {
       const axios = require('axios');
-      const response = await axios.post(`${credentials.baseUrl}/api/auth/login`, 
-        `email=${encodeURIComponent(credentials.email)}&password=${encodeURIComponent(credentials.password)}`,
+      const response = await axios.post(`${credentials.baseUrl}/api/auth/login`,
+        { email: credentials.email, password: credentials.password },
         {
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
+            'Content-Type': 'application/json'
           }
         }
       );
@@ -202,14 +202,15 @@ async function setSentryUser() {
       }
     });
 
-    const userData = response.data;
+    // 新 API 返回 { success, user: { _id, email, username, ... } }
+    const userData = response.data.user || response.data;
 
     // 设置 Sentry 用户上下文
     if (Sentry && Sentry.setUser) {
       Sentry.setUser({
-        id: userData.id || userData.user_id,
+        id: userData._id || userData.id,
         email: userData.email,
-        username: userData.username || userData.name,
+        username: userData.username,
       });
       console.log('Sentry 用户上下文已设置:', userData.email);
     }

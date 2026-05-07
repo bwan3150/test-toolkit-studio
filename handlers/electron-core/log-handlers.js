@@ -75,16 +75,17 @@ function registerLogHandlers(app) {
         };
       }
       
-      // 生成日志文件名 - 使用平台名称
-      const fileName = `${process.platform}.log`;
-      
+      // 生成日志文件名 - 时间戳+平台，确保不重名
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `${timestamp}_${process.platform}.log`;
+
       // 格式化日志内容
       const logContent = formatLogContent(logData, app);
-      
-      // 创建 FormData
+
+      // 创建 FormData（字段名对应新接口：appName + file）
       const form = new FormData();
-      form.append('app', 'Toolkit_Studio');
-      form.append('log', Buffer.from(logContent), {
+      form.append('appName', 'Toolkit_Studio');
+      form.append('file', Buffer.from(logContent), {
         filename: fileName,
         contentType: 'text/plain'
       });
