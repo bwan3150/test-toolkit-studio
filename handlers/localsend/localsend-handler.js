@@ -22,6 +22,10 @@ const API_BASE = '/api/localsend/v2';
 const ANNOUNCE_INTERVAL_MS = 5000;
 const STALE_AFTER_MS = 15000;
 const STORE_KEY_SAVE_DIR = 'localsend.saveDir';
+const STORE_KEY_PREFERRED_IFACE = 'localsend.preferredIface';
+
+// 虚拟网卡前缀黑名单：VPN 隧道、Docker、回环、苹果私有接口等
+const VIRTUAL_IFACE_PATTERN = /^(lo|utun|ppp|docker|br-|veth|vmnet|virbr|tun\d|tap\d|awdl|llw|gif|stf|pdp_ip|ap\d|bridge|XHC)/i;
 
 // 运行时状态
 let mainWindowRef = null;
@@ -38,16 +42,62 @@ const receivedBuffers = new Map();   // sessionId → Map<fileId, Buffer>
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────
 
-function getLocalIp() {
+// 获取所有物理网卡（过滤掉 VPN/Docker/lo 等虚拟接口）
+function getPhysicalInterfaces() {
   const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
-    for (const iface of ifaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+  const result = [];
+  for (const [name, addrs] of Object.entries(ifaces)) {
+    if (VIRTUAL_IFACE_PATTERN.test(name)) continue;
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        result.push({ name, ip: addr.address });
       }
     }
   }
-  return '127.0.0.1';
+  return result;
+}
+
+function getLocalIp() {
+  const ifaces = getPhysicalInterfaces();
+  if (ifaces.length === 0) {
+    // 回退：找任意一个非 internal IPv4
+    const all = os.networkInterfaces();
+    for (const addrs of Object.values(all)) {
+      for (const addr of addrs) {
+        if (addr.family === 'IPv4' && !addr.internal) return addr.address;
+      }
+    }
+    return '127.0.0.1';
+  }
+  // 优先使用用户手动选择的接口
+  const preferred = store.get(STORE_KEY_PREFERRED_IFACE);
+  if (preferred) {
+    const found = ifaces.find(i => i.name === preferred);
+    if (found) return found.ip;
+  }
+  return ifaces[0].ip;
+}
+
+function getLocalIfaceName() {
+  const ifaces = getPhysicalInterfaces();
+  if (ifaces.length === 0) return null;
+  const preferred = store.get(STORE_KEY_PREFERRED_IFACE);
+  if (preferred) {
+    const found = ifaces.find(i => i.name === preferred);
+    if (found) return found.name;
+  }
+  return ifaces[0].name;
+}
+
+// 获取所有本机 IPv4 地址（用于过滤自身发出的 UDP 包）
+function getAllLocalIps() {
+  const set = new Set();
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4') set.add(addr.address);
+    }
+  }
+  return set;
 }
 
 function getSaveDir() {
@@ -136,7 +186,8 @@ function startSendMode() {
 
   sock.on('message', (msg, rinfo) => {
     const fromIp = rinfo.address;
-    if (fromIp === getLocalIp()) return;
+    // 过滤掉本机所有网卡地址（防止自身回环）
+    if (getAllLocalIps().has(fromIp)) return;
     try {
       const dto = JSON.parse(msg.toString());
       if (!dto.fingerprint || !dto.alias) return;
@@ -146,7 +197,9 @@ function startSendMode() {
 
   sock.bind(PORT, () => {
     try {
-      sock.addMembership(MULTICAST_GROUP);
+      // 指定物理网卡 IP 加入多播组，避免 VPN/Docker 接口干扰
+      const localIp = getLocalIp();
+      sock.addMembership(MULTICAST_GROUP, localIp);
       sock.setMulticastLoopback(false);
     } catch (e) {
       emit('localsend:error', { message: `加入多播组失败: ${e.message}` });
@@ -190,7 +243,11 @@ function announcePresence() {
   const dto = buildDeviceDto(true);
   const msg = Buffer.from(JSON.stringify(dto));
   const sock = dgram.createSocket('udp4');
-  sock.send(msg, 0, msg.length, PORT, MULTICAST_GROUP, () => sock.close());
+  const localIp = getLocalIp();
+  // 绑定到物理网卡 IP，确保多播包从正确接口发出（而非 VPN 接口）
+  sock.bind(0, localIp, () => {
+    sock.send(msg, 0, msg.length, PORT, MULTICAST_GROUP, () => sock.close());
+  });
 }
 
 function startHttpServer() {
@@ -249,7 +306,7 @@ function startHttpServer() {
 
         emit('localsend:receive-incoming', {
           sessionId,
-          fromAlias: reqBody.info?.alias || '未知设备',
+          fromAlias: reqBody.info?.alias || 'Unknown device',
           files: Object.values(reqBody.files || {}),
         });
 
@@ -299,8 +356,9 @@ function startHttpServer() {
     res.writeHead(404).end();
   });
 
-  server.listen(PORT, localIp, () => {
-    emit('localsend:receive-ready', { ip: localIp, port: PORT });
+  // 绑定到 0.0.0.0（接受所有接口的入站连接），对外通告物理网卡 IP
+  server.listen(PORT, '0.0.0.0', () => {
+    emit('localsend:receive-ready', { ip: localIp, port: PORT, ifaceName: getLocalIfaceName() });
   });
 
   server.on('error', (err) => {
@@ -345,7 +403,7 @@ function finalizeSession(sessionId) {
       size: meta.size,
       localPath: savedPath,
       previewText,
-      fromAlias: session.fromDevice?.alias || '未知',
+      fromAlias: session.fromDevice?.alias || 'Unknown',
       receivedAt: Date.now(),
     });
   }
@@ -443,7 +501,17 @@ function registerLocalSendHandlers(mainWindow) {
   ipcMain.handle('localsend:get-device-info', () => ({
     ...buildDeviceDto(),
     ip: getLocalIp(),
+    ifaceName: getLocalIfaceName(),
   }));
+
+  // 获取所有可用物理网卡列表
+  ipcMain.handle('localsend:get-network-interfaces', () => getPhysicalInterfaces());
+
+  // 设置用户偏好网卡（持久化），重启后生效
+  ipcMain.handle('localsend:set-preferred-interface', (_, ifaceName) => {
+    store.set(STORE_KEY_PREFERRED_IFACE, ifaceName || null);
+    return { success: true };
+  });
 
   ipcMain.handle('localsend:start-send-mode', () => {
     try { startSendMode(); return { success: true }; }

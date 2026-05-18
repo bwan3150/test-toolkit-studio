@@ -1,127 +1,119 @@
-<!-- LocalSend 页面 -->
+<!-- LocalSend page -->
 <div class="page" id="localsendPage">
   <div class="localsend-page">
 
-    <!-- 顶部标题栏 + 模式切换 -->
-    <div class="localsend-header">
-      <div class="localsend-title">
-        <h2>LocalSend</h2>
-        <span class="localsend-device-badge" id="lsDeviceBadge">加载中...</span>
-      </div>
-      <div class="mode-switcher">
-        <button class="mode-btn active" id="lsSendModeBtn">发送</button>
-        <button class="mode-btn" id="lsReceiveModeBtn">接收</button>
+    <!-- Single-line header -->
+    <div class="ls-header">
+      <h2 class="ls-title">LocalSend</h2>
+      <div class="ls-header-actions">
+        <div class="ls-iface-chip">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 6c0 0 5-4 11-4s11 4 11 4"/>
+            <path d="M5 10c0 0 3-2.5 7-2.5S19 10 19 10"/>
+            <path d="M9 14c0 0 1-1 3-1s3 1 3 1"/>
+            <circle cx="12" cy="18" r="1.5" fill="currentColor"/>
+          </svg>
+          <select class="ls-iface-select" id="lsIfaceSelect" title="Select LAN interface">
+            <option value="">Detecting...</option>
+          </select>
+        </div>
+        <div class="ls-mode-switcher">
+          <button class="ls-mode-btn active" id="lsSendModeBtn">Send</button>
+          <button class="ls-mode-btn" id="lsReceiveModeBtn">Receive</button>
+        </div>
       </div>
     </div>
 
-    <!-- ── SEND 模式 ── -->
-    <div class="mode-content active" id="lsSendMode">
-      <div class="send-layout">
+    <!-- ── SEND mode ── -->
+    <div class="ls-mode-content active" id="lsSendMode">
+      <div class="ls-send-layout">
 
-        <!-- 左侧：设备列表 -->
-        <div class="devices-panel">
-          <div class="devices-panel-header">
-            <span>局域网设备</span>
-            <div class="scan-indicator" id="lsScanIndicator">
-              <div class="scan-dot"></div>
-              <span>扫描中</span>
+        <!-- Left: device list -->
+        <div class="ls-devices-panel">
+          <div class="ls-devices-header">
+            <span>Nearby</span>
+            <div class="ls-scan-dot-wrap" id="lsScanIndicator">
+              <div class="ls-scan-dot"></div>
             </div>
           </div>
-          <div class="devices-list" id="lsDevicesList">
-            <div class="devices-empty" id="lsDevicesEmpty">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M6.3 6.3a8 8 0 0 0 0 11.4M17.7 6.3a8 8 0 0 1 0 11.4"/>
-                <path d="M3.5 3.5a14 14 0 0 0 0 17M20.5 3.5a14 14 0 0 1 0 17"/>
+          <div class="ls-devices-list" id="lsDevicesList">
+            <div class="ls-devices-empty" id="lsDevicesEmpty">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                <path d="M1 6c0 0 5-4 11-4s11 4 11 4"/>
+                <path d="M5 10c0 0 3-2.5 7-2.5S19 10 19 10"/>
+                <path d="M9 14c0 0 1-1 3-1s3 1 3 1"/>
+                <circle cx="12" cy="18" r="1.5" fill="currentColor"/>
               </svg>
-              <span>等待发现设备...</span>
+              <span>Looking for devices…</span>
             </div>
           </div>
         </div>
 
-        <!-- 右侧：发送内容区 -->
-        <div class="send-content-panel">
+        <!-- Right: send content -->
+        <div class="ls-send-content">
 
-          <!-- 未选中设备时的占位提示 -->
-          <div class="send-placeholder" id="lsSendPlaceholder">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-              <path d="M22 2L11 13"/>
-              <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+          <div class="ls-send-placeholder" id="lsSendPlaceholder">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+              <path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/>
             </svg>
-            <p>从左侧选择目标设备</p>
+            <p>Select a device to send</p>
           </div>
 
-          <!-- 选中设备后显示的发送面板 -->
-          <div class="send-panel" id="lsSendPanel" style="display:none;">
+          <div class="ls-send-panel" id="lsSendPanel" style="display:none;">
 
-            <div class="send-panel-header">
-              <span class="to-label">发送至</span>
-              <span class="target-name" id="lsTargetName">—</span>
-            </div>
-
-            <!-- 类型切换 -->
-            <div class="type-tabs">
-              <button class="type-tab active" id="lsTextTabBtn">文字</button>
-              <button class="type-tab" id="lsFileTabBtn">文件</button>
-            </div>
-
-            <!-- 文字发送区 -->
-            <div id="lsTextSendArea" class="text-send-area">
-              <div class="textarea-wrapper">
-                <textarea
-                  id="lsTextInput"
-                  class="text-input"
-                  placeholder="输入要发送的文字..."
-                  rows="5"
-                ></textarea>
-              </div>
-              <div class="text-actions">
-                <button class="btn btn-ghost btn-sm" id="lsPasteBtn">粘贴剪切板</button>
-                <button class="btn btn-primary btn-sm" id="lsSendTextBtn">发 送</button>
+            <div class="ls-send-target">
+              <div class="ls-send-target-icon" id="lsTargetIcon"></div>
+              <div class="ls-send-target-info">
+                <div class="ls-send-target-name" id="lsTargetName">—</div>
+                <div class="ls-send-target-label" id="lsTargetIp">—</div>
               </div>
             </div>
 
-            <!-- 文件发送区 -->
-            <div id="lsFileSendArea" class="file-send-area" style="display:none;">
-              <div class="file-drop-zone" id="lsFileDropZone">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="display:block;margin:0 auto 8px;">
+            <div class="ls-type-tabs">
+              <button class="ls-type-tab active" id="lsTextTabBtn">Text</button>
+              <button class="ls-type-tab" id="lsFileTabBtn">File</button>
+            </div>
+
+            <div id="lsTextSendArea" class="ls-text-area">
+              <textarea id="lsTextInput" class="ls-textarea" placeholder="Type a message…" rows="5"></textarea>
+              <div class="ls-text-actions">
+                <button class="ls-btn ls-btn-ghost" id="lsPasteBtn">Paste</button>
+                <button class="ls-btn ls-btn-primary" id="lsSendTextBtn">Send</button>
+              </div>
+            </div>
+
+            <div id="lsFileSendArea" class="ls-file-area" style="display:none;">
+              <div class="ls-drop-zone" id="lsFileDropZone">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>
-                  <line x1="12" y1="18" x2="12" y2="12"/>
-                  <line x1="9" y1="15" x2="15" y2="15"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
                 </svg>
-                <p>点击选择文件</p>
-                <p class="sub">或将文件拖到此处</p>
+                <span>Drop file here or <u>browse</u></span>
                 <input type="file" id="lsFileInput" style="display:none;" />
               </div>
-              <div id="lsSelectedFileRow" class="selected-file-row" style="display:none;">
-                <span class="selected-file-icon" id="lsSelectedFileIcon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                  </svg>
-                </span>
-                <div class="selected-file-info">
-                  <div class="selected-file-name" id="lsSelectedFileName">—</div>
-                  <div class="selected-file-size" id="lsSelectedFileSize">—</div>
+              <div id="lsSelectedFileRow" class="ls-file-row" style="display:none;">
+                <span class="ls-file-icon" id="lsSelectedFileIcon"></span>
+                <div class="ls-file-info">
+                  <div class="ls-file-name" id="lsSelectedFileName">—</div>
+                  <div class="ls-file-size" id="lsSelectedFileSize">—</div>
                 </div>
-                <button class="clear-file-btn" id="lsClearFileBtn">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <button class="ls-clear-btn" id="lsClearFileBtn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                   </svg>
                 </button>
               </div>
-              <div class="file-actions">
-                <button class="btn btn-primary btn-sm" id="lsSendFileBtn" disabled>发 送</button>
+              <div class="ls-file-actions">
+                <button class="ls-btn ls-btn-primary" id="lsSendFileBtn" disabled>Send</button>
               </div>
             </div>
 
-            <!-- 发送进度 -->
-            <div id="lsSendProgressArea" class="send-progress-area" style="display:none;">
-              <div class="progress-bar-track">
-                <div class="progress-bar-fill" id="lsProgressFill"></div>
+            <div id="lsSendProgressArea" class="ls-progress-area" style="display:none;">
+              <div class="ls-progress-track">
+                <div class="ls-progress-fill" id="lsProgressFill"></div>
               </div>
-              <div class="progress-label" id="lsProgressLabel">0%</div>
+              <div class="ls-progress-label" id="lsProgressLabel">0%</div>
             </div>
 
           </div>
@@ -129,71 +121,74 @@
       </div>
     </div>
 
-    <!-- ── RECEIVE 模式 ── -->
-    <div class="mode-content" id="lsReceiveMode">
-      <div class="receive-layout">
+    <!-- ── RECEIVE mode ── -->
+    <div class="ls-mode-content" id="lsReceiveMode">
+      <div class="ls-receive-layout">
 
-        <!-- 保存位置配置行 -->
-        <div class="save-dir-row">
-          <div class="save-dir-label">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
-            <span>保存位置</span>
-          </div>
-          <span class="save-dir-path" id="lsSaveDirPath">加载中...</span>
-          <button class="btn btn-ghost btn-sm" id="lsChangeSaveDirBtn">更改</button>
-        </div>
-
-        <!-- 广播状态卡片 -->
-        <div class="receive-status-card">
-          <div class="receive-broadcast-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ec9b0" stroke-width="1.8">
-              <path d="M1 6c0 0 5-4 11-4s11 4 11 4"/>
-              <path d="M5 10c0 0 3-2.5 7-2.5S19 10 19 10"/>
-              <path d="M9 14c0 0 1-1 3-1s3 1 3 1"/>
-              <circle cx="12" cy="18" r="1.5" fill="#4ec9b0"/>
-            </svg>
-          </div>
-          <div class="receive-status-text">
-            <div class="receive-status-title">正在广播，等待接收</div>
-            <div class="receive-status-subtitle">局域网内的设备可以发现您并发送文件</div>
-          </div>
-          <span class="receive-ip-badge" id="lsReceiveIpBadge">...</span>
-        </div>
-
-        <!-- 正在接收的传输（动态显示） -->
-        <div id="lsIncomingArea" style="display:none;">
-          <div class="incoming-transfer" id="lsIncomingTransfer">
-            <div class="incoming-from">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="19 12 5 12 12 5"/>
-                <polyline points="5 12 12 19"/>
+        <!-- Your device card -->
+        <div class="ls-your-device">
+          <div class="ls-device-visual">
+            <div class="ls-device-avatar">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
               </svg>
-              <span id="lsIncomingFrom">来自 ...</span>
             </div>
-            <div class="incoming-files" id="lsIncomingFiles">正在接收...</div>
-            <div class="send-progress-area">
-              <div class="progress-bar-track">
-                <div class="progress-bar-fill" id="lsReceiveProgressFill"></div>
+            <div class="ls-device-ring ls-ring-1"></div>
+            <div class="ls-device-ring ls-ring-2"></div>
+          </div>
+          <div class="ls-device-meta">
+            <div class="ls-device-name" id="lsDeviceBadge">Loading…</div>
+            <div class="ls-device-addr">
+              <span class="ls-iface-pill" id="lsReceiveIfaceBadge" style="display:none;"></span>
+              <span id="lsReceiveIpBadge">…</span>
+            </div>
+          </div>
+          <div class="ls-visible-badge">
+            <div class="ls-visible-dot"></div>
+            Visible
+          </div>
+        </div>
+
+        <!-- Save location -->
+        <div class="ls-save-row">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.5;">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="ls-save-path" id="lsSaveDirPath">Loading…</span>
+          <button class="ls-btn ls-btn-ghost ls-btn-sm" id="lsChangeSaveDirBtn">Change</button>
+        </div>
+
+        <!-- Incoming transfer -->
+        <div id="lsIncomingArea" style="display:none;">
+          <div class="ls-incoming">
+            <div class="ls-incoming-header">
+              <div class="ls-incoming-spinner"></div>
+              <span id="lsIncomingFrom">From …</span>
+            </div>
+            <div class="ls-incoming-files" id="lsIncomingFiles">Receiving…</div>
+            <div class="ls-progress-area" style="margin-top:8px;">
+              <div class="ls-progress-track">
+                <div class="ls-progress-fill" id="lsReceiveProgressFill"></div>
               </div>
-              <div class="progress-label" id="lsReceiveProgressLabel">0%</div>
+              <div class="ls-progress-label" id="lsReceiveProgressLabel">0%</div>
             </div>
           </div>
         </div>
 
-        <!-- 已接收历史 -->
-        <div class="received-history-header">
-          <span>已接收</span>
-          <button class="btn btn-ghost btn-sm" id="lsClearReceivedBtn">清空</button>
+        <!-- Received history -->
+        <div class="ls-history-header">
+          <span>Received</span>
+          <button class="ls-btn ls-btn-ghost ls-btn-sm" id="lsClearReceivedBtn">Clear</button>
         </div>
-        <div class="received-list" id="lsReceivedList">
-          <div class="received-empty" id="lsReceivedEmpty">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:0.3;">
+        <div class="ls-received-list" id="lsReceivedList">
+          <div class="ls-received-empty" id="lsReceivedEmpty">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <span>暂无接收记录</span>
+            <span>No files received yet</span>
           </div>
         </div>
 

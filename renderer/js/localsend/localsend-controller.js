@@ -76,10 +76,12 @@
     try {
       const info = await ipcRenderer.invoke('localsend:get-device-info');
       const badge = $('lsDeviceBadge');
-      if (badge) badge.textContent = `${info.alias} (${info.ip})`;
+      if (badge) badge.textContent = info.alias;
     } catch (e) {
       window.rError('LocalSend: 获取设备信息失败', e.message);
     }
+
+    await loadNetworkInterfaces();
 
     $('lsSendModeBtn').addEventListener('click', () => switchMode('send'));
     $('lsReceiveModeBtn').addEventListener('click', () => switchMode('receive'));
@@ -138,6 +140,59 @@
     }
   }
 
+  // ── 网络接口选择 ──────────────────────────────────────────────────────────
+
+  async function loadNetworkInterfaces() {
+    try {
+      const ifaces = await ipcRenderer.invoke('localsend:get-network-interfaces');
+      const sel = $('lsIfaceSelect');
+      if (!sel) return;
+
+      sel.innerHTML = '';
+      if (!ifaces || ifaces.length === 0) {
+        sel.innerHTML = '<option value="">No physical interfaces found</option>';
+        return;
+      }
+
+      for (const iface of ifaces) {
+        const opt = document.createElement('option');
+        opt.value = iface.name;
+        opt.textContent = `${iface.name}  ${iface.ip}`;
+        sel.appendChild(opt);
+      }
+
+      // 同步当前已选接口（主进程偏好）
+      const info = await ipcRenderer.invoke('localsend:get-device-info');
+      if (info.ifaceName) sel.value = info.ifaceName;
+
+      sel.addEventListener('change', onIfaceChange);
+    } catch (e) {
+      window.rError('LocalSend: 加载网络接口列表失败', e.message);
+    }
+  }
+
+  async function onIfaceChange() {
+    const sel = $('lsIfaceSelect');
+    if (!sel) return;
+    const ifaceName = sel.value;
+    await ipcRenderer.invoke('localsend:set-preferred-interface', ifaceName);
+
+    // 刷新 receive mode 设备卡片
+    try {
+      const info = await ipcRenderer.invoke('localsend:get-device-info');
+      const badge = $('lsDeviceBadge');
+      if (badge) badge.textContent = info.alias;
+    } catch (_) {}
+
+    // 以当前模式重启服务，使新接口立即生效
+    await ipcRenderer.invoke('localsend:stop');
+    if (currentMode === 'send') {
+      await activateSendMode();
+    } else {
+      await activateReceiveMode();
+    }
+  }
+
   // ── 页面激活 ──────────────────────────────────────────────────────────────
 
   async function onPageActivate() {
@@ -178,6 +233,7 @@
 
     $('lsSendModeBtn').classList.toggle('active', mode === 'send');
     $('lsReceiveModeBtn').classList.toggle('active', mode === 'receive');
+    // ls-mode-content 元素通过 active 类控制 display
     $('lsSendMode').classList.toggle('active', mode === 'send');
     $('lsReceiveMode').classList.toggle('active', mode === 'receive');
 
@@ -204,9 +260,21 @@
   }
 
   async function activateReceiveMode() {
-    const localIp = await ipcRenderer.invoke('localsend:get-local-ip');
-    const badge = $('lsReceiveIpBadge');
-    if (badge) badge.textContent = `${localIp}:53317`;
+    // 先用 device info 获取 IP + 接口名，显示到 badge（服务启动前的初始值）
+    try {
+      const info = await ipcRenderer.invoke('localsend:get-device-info');
+      const ipBadge = $('lsReceiveIpBadge');
+      if (ipBadge) ipBadge.textContent = `${info.ip}:53317`;
+      const ifaceBadge = $('lsReceiveIfaceBadge');
+      if (ifaceBadge) {
+        if (info.ifaceName) {
+          ifaceBadge.textContent = info.ifaceName;
+          ifaceBadge.style.display = '';
+        } else {
+          ifaceBadge.style.display = 'none';
+        }
+      }
+    } catch (_) {}
 
     const result = await ipcRenderer.invoke('localsend:start-receive-mode');
     if (!result.success) window.rError('LocalSend: 启动 RECEIVE 模式失败', result.error);
@@ -251,7 +319,9 @@
     });
     $('lsSendPlaceholder').style.display = 'none';
     $('lsSendPanel').style.display = '';
-    $('lsTargetName').textContent = `${device.alias} (${device.ip})`;
+    $('lsTargetName').textContent = device.alias;
+    $('lsTargetIp').textContent = device.ip;
+    $('lsTargetIcon').innerHTML = deviceTypeIcon(device.deviceType);
     resetSendState();
   }
 
@@ -336,18 +406,18 @@
 
   function onSendProgress(data) {
     const pct = Math.round((data.progress || 0) * 100);
-    updateProgress(pct, data.state === 'connecting' ? '连接中...' : `上传 ${pct}%`);
+    updateProgress(pct, data.state === 'connecting' ? 'Connecting...' : `Uploading ${pct}%`);
   }
 
   function onSendComplete() {
-    updateProgress(100, '发送完成');
+    updateProgress(100, 'Done');
     isSending = false;
     setSendButtonsDisabled(false);
     setTimeout(hideProgress, 2000);
   }
 
   function onSendError(data) {
-    updateProgress(0, `发送失败: ${data.message}`);
+    updateProgress(0, `Failed: ${data.message}`);
     isSending = false;
     setSendButtonsDisabled(false);
     setTimeout(hideProgress, 3000);
@@ -358,13 +428,24 @@
   function onReceiveReady(data) {
     const badge = $('lsReceiveIpBadge');
     if (badge) badge.textContent = `${data.ip}:${data.port}`;
+
+    // 显示接口名 badge
+    const ifaceBadge = $('lsReceiveIfaceBadge');
+    if (ifaceBadge) {
+      if (data.ifaceName) {
+        ifaceBadge.textContent = data.ifaceName;
+        ifaceBadge.style.display = '';
+      } else {
+        ifaceBadge.style.display = 'none';
+      }
+    }
   }
 
   function onReceiveIncoming(data) {
     $('lsIncomingArea').style.display = '';
-    $('lsIncomingFrom').textContent = `来自 ${data.fromAlias}`;
+    $('lsIncomingFrom').textContent = `From ${data.fromAlias}`;
     const fileNames = (data.files || []).map(f => f.fileName).join(', ');
-    $('lsIncomingFiles').textContent = fileNames || '正在接收...';
+    $('lsIncomingFiles').textContent = fileNames || 'Receiving...';
     $('lsReceiveProgressFill').style.width = '0%';
     $('lsReceiveProgressLabel').textContent = '0%';
   }
@@ -377,7 +458,7 @@
 
   async function onReceiveComplete(data) {
     $('lsReceiveProgressFill').style.width = '100%';
-    $('lsReceiveProgressLabel').textContent = '完成';
+    $('lsReceiveProgressLabel').textContent = 'Done';
     setTimeout(hideIncomingArea, 2000);
 
     // 重新从主进程拉完整历史（新条目已合并进去）
@@ -420,16 +501,16 @@
 
     // 操作按钮（用 SVG 图标）
     const revealBtn = item.localPath
-      ? `<button class="icon-btn" data-action="reveal" title="在 Finder 中显示">${ICONS.revealFile}</button>` : '';
+      ? `<button class="icon-btn" data-action="reveal" title="Show in Finder">${ICONS.revealFile}</button>` : '';
     const copyBtn = item.previewText
-      ? `<button class="icon-btn" data-action="copy" title="复制到剪切板">${ICONS.copyText}</button>` : '';
+      ? `<button class="icon-btn" data-action="copy" title="Copy to clipboard">${ICONS.copyText}</button>` : '';
 
     el.innerHTML = `
       <div class="received-item-icon">${iconSvg}</div>
       <div class="received-item-body">
         <div class="received-item-name">${escapeHtml(item.fileName)}</div>
         <div class="received-item-meta">
-          <span>来自 ${escapeHtml(item.fromAlias || '未知')}</span>
+          <span>From ${escapeHtml(item.fromAlias || 'Unknown')}</span>
           <span>${formatBytes(item.size || 0)}</span>
           <span>${timeStr}</span>
         </div>
@@ -460,7 +541,7 @@
 
   function showProgress() {
     $('lsSendProgressArea').style.display = '';
-    updateProgress(0, '准备中...');
+    updateProgress(0, 'Preparing...');
   }
 
   function hideProgress() {
