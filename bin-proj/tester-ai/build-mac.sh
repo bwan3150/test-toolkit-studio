@@ -9,7 +9,7 @@ cd "$SCRIPT_DIR"
 echo "==============================="
 
 # 读取版本号：package.json → BUILD_VERSION 环境变量
-PACKAGE_JSON="$SCRIPT_DIR/../package.json"
+PACKAGE_JSON="$SCRIPT_DIR/../../package.json"
 if [ ! -f "$PACKAGE_JSON" ]; then
     echo "Error: package.json not found at $PACKAGE_JSON"
     exit 1
@@ -56,7 +56,7 @@ echo "OS: $PLATFORM"
 SOURCE_BINARY="$SCRIPT_DIR/target/release/$BINARY_NAME"
 
 # 目标目录和文件路径
-TARGET_DIR="$SCRIPT_DIR/../resources/$PLATFORM/tester-ai"
+TARGET_DIR="$SCRIPT_DIR/../../bin/$PLATFORM/tester-ai"
 TARGET_BINARY="$TARGET_DIR/$BINARY_NAME"
 
 # 检查源文件是否存在

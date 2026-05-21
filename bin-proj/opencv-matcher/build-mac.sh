@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # 读取版本号：package.json → BUILD_VERSION 环境变量
-PACKAGE_JSON="$SCRIPT_DIR/../package.json"
+PACKAGE_JSON="$SCRIPT_DIR/../../package.json"
 if [ ! -f "$PACKAGE_JSON" ]; then
     echo "Error: package.json not found at $PACKAGE_JSON"
     exit 1
@@ -37,7 +37,7 @@ echo "✓ 已生成 _version.py: $BUILD_VERSION"
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 # 确定输出目录（项目根目录的 resources）
-OUTPUT_DIR="../resources/${OS}/toolkit-engine"
+OUTPUT_DIR="$SCRIPT_DIR/../../bin/${OS}/toolkit-engine"
 mkdir -p "$OUTPUT_DIR"
 
 # 激活 uv 环境并打包
