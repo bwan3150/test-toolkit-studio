@@ -24,8 +24,8 @@ function getScrcpyServerPath() {
   }
 
   if (isDev) {
-    // 开发环境：使用项目根目录下的 resources
-    return path.join(__dirname, '..', '..', 'resources', platform, 'scrcpy-server', binName);
+    // 开发环境：使用项目根目录下的 bin
+    return path.join(__dirname, '..', '..', 'bin', platform, 'scrcpy-server', binName);
   } else {
     // 生产环境：使用打包后的 resources
     return path.join(process.resourcesPath, platform, 'scrcpy-server', binName);
@@ -47,7 +47,7 @@ function getTkeAdbPath(app) {
   }
 
   // 开发环境路径
-  const devPath = path.join(__dirname, '..', '..', 'resources', platform, 'toolkit-engine', tkeBinName);
+  const devPath = path.join(__dirname, '..', '..', 'bin', platform, 'toolkit-engine', tkeBinName);
 
   // 生产环境路径
   const prodPath = path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinName);
@@ -63,7 +63,7 @@ function getTkeAdbPath(app) {
   }
 
   // 找不到 tke，抛出错误
-  const error = `未找到 tke 可执行文件。\n尝试的路径:\n  开发: ${devPath}\n  生产: ${prodPath}\n请确保 tke 已正确编译并放置在 resources/${platform}/toolkit-engine/ 目录下`;
+  const error = `未找到 tke 可执行文件。\n尝试的路径:\n  开发: ${devPath}\n  生产: ${prodPath}\n请确保 tke 已正确编译并放置在 bin/${platform}/toolkit-engine/ 目录下`;
   console.error(error);
   throw new Error(error);
 }

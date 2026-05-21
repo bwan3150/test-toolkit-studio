@@ -979,8 +979,8 @@ function getTkePath(app) {
     // 生产模式：process.resourcesPath/[platform]/toolkit-engine/tke
     return path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName);
   } else {
-    // 开发模式：resources/[platform]/toolkit-engine/tke
-    return path.join(app.getAppPath(), 'resources', platform, 'toolkit-engine', tkeBinaryName);
+    // 开发模式：bin/[platform]/toolkit-engine/tke
+    return path.join(app.getAppPath(), 'bin', platform, 'toolkit-engine', tkeBinaryName);
   }
 }
 

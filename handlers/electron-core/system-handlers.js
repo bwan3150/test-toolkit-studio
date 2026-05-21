@@ -24,13 +24,13 @@ function getBinaryPath(toolName, subdir, app) {
   if (isDevMode) {
     // 开发模式：从项目根目录的 resources 获取
     const projectRoot = process.env.ELECTRON_PROJECT_ROOT || process.cwd();
-    return path.join(projectRoot, 'resources', platform, subdir, binaryName);
+    return path.join(projectRoot, 'bin', platform, subdir, binaryName);
   } else if (app.isPackaged) {
     // 打包模式：从 app resources 获取
     return path.join(process.resourcesPath, platform, subdir, binaryName);
   } else {
     // 其他情况（未打包但非开发模式）
-    return path.join(__dirname, '..', '..', '..', 'resources', platform, subdir, binaryName);
+    return path.join(__dirname, '..', '..', '..', 'bin', platform, subdir, binaryName);
   }
 }
 

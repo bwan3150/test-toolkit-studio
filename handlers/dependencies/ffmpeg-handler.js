@@ -168,10 +168,10 @@ function getFfmpegExecutablePath(app) {
       execName
     );
   } else {
-    // 开发环境: 项目根目录/resources/darwin/toolkit-engine/ffmpeg
+    // 开发环境: 项目根目录/bin/darwin/toolkit-engine/ffmpeg
     ffmpegPath = path.join(
       appPath,
-      'resources',
+      'bin',
       platformName,
       'toolkit-engine',
       execName
