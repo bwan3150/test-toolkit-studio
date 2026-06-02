@@ -158,22 +158,16 @@ function getFfmpegExecutablePath(app) {
   let ffmpegPath;
 
   if (app.isPackaged) {
-    // 打包环境: /Applications/Toolkit Studio.app/Contents/Resources/darwin/toolkit-engine/ffmpeg
-    // app.getAppPath() = /Applications/Toolkit Studio.app/Contents/Resources/app.asar
-    // 需要回退到 Contents/Resources/ 然后进入 darwin/toolkit-engine/
     ffmpegPath = path.join(
-      path.dirname(appPath), // Contents/Resources/
+      path.dirname(appPath),
       platformName,
-      'toolkit-engine',
       execName
     );
   } else {
-    // 开发环境: 项目根目录/bin/darwin/toolkit-engine/ffmpeg
     ffmpegPath = path.join(
       appPath,
       'bin',
       platformName,
-      'toolkit-engine',
       execName
     );
   }

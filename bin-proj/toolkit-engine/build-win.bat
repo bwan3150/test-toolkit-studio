@@ -45,7 +45,7 @@ REM 源文件路径
 set SOURCE_BINARY=%~dp0target\release\%BINARY_NAME%
 
 REM 目标目录和文件路径
-set TARGET_DIR=%~dp0..\resources\%PLATFORM%\toolkit-engine
+set TARGET_DIR=%~dp0..\..\bin\%PLATFORM%
 set TARGET_BINARY=%TARGET_DIR%\%BINARY_NAME%
 
 REM 检查源文件是否存在
@@ -62,7 +62,7 @@ copy /Y "%SOURCE_BINARY%" "%TARGET_BINARY%"
 
 REM 复制 ADB 的 DLL 依赖 (Windows adb.exe 需要这些 DLL)
 REM DLL 文件应该放在 toolkit-engine/resources/win32/ 下
-set DLL_SOURCE_DIR=%~dp0resources\win32
+set DLL_SOURCE_DIR=%~dp0..\..\bin\win32
 if exist "%DLL_SOURCE_DIR%\AdbWinApi.dll" (
     copy /Y "%DLL_SOURCE_DIR%\AdbWinApi.dll" "%TARGET_DIR%\AdbWinApi.dll"
     echo Copied AdbWinApi.dll

@@ -8,29 +8,24 @@ const { exec } = require('child_process');
 const execPromise = promisify(exec);
 
 /**
- * 获取二进制文件的路径
+ * 获取二进制文件的路径，所有工具平铺在 bin/[platform]/ 下
  * @param {string} toolName - 工具名称，如 'tke', 'tke-opencv', 'tester-ai'
- * @param {string} subdir - 子目录，如 'toolkit-engine', 'tester-ai'
  * @param {Electron.App} app - Electron app 实例
  * @returns {string} 二进制文件路径
  */
-function getBinaryPath(toolName, subdir, app) {
+function getBinaryPath(toolName, app) {
   const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux';
   const binaryName = process.platform === 'win32' ? `${toolName}.exe` : toolName;
 
-  // 检查是否在开发模式
   const isDevMode = process.env.ELECTRON_DEV_MODE === 'true';
 
   if (isDevMode) {
-    // 开发模式：从项目根目录的 resources 获取
     const projectRoot = process.env.ELECTRON_PROJECT_ROOT || process.cwd();
-    return path.join(projectRoot, 'bin', platform, subdir, binaryName);
+    return path.join(projectRoot, 'bin', platform, binaryName);
   } else if (app.isPackaged) {
-    // 打包模式：从 app resources 获取
-    return path.join(process.resourcesPath, platform, subdir, binaryName);
+    return path.join(process.resourcesPath, platform, binaryName);
   } else {
-    // 其他情况（未打包但非开发模式）
-    return path.join(__dirname, '..', '..', '..', 'bin', platform, subdir, binaryName);
+    return path.join(__dirname, '..', '..', '..', 'bin', platform, binaryName);
   }
 }
 
@@ -52,7 +47,7 @@ function registerSystemHandlers(app) {
   // 获取 TKE 引擎版本
   ipcMain.handle('get-tke-version', async () => {
     try {
-      const tkePath = getBinaryPath('tke', 'toolkit-engine', app);
+      const tkePath = getBinaryPath('tke', app);
 
       if (!fs.existsSync(tkePath)) {
         return { success: false, error: '可执行文件不存在' };
@@ -77,7 +72,7 @@ function registerSystemHandlers(app) {
   // 获取 TKE 内嵌 ADB 版本
   ipcMain.handle('get-tke-adb-version', async () => {
     try {
-      const tkePath = getBinaryPath('tke', 'toolkit-engine', app);
+      const tkePath = getBinaryPath('tke', app);
 
       if (!fs.existsSync(tkePath)) {
         return { success: false, error: '可执行文件不存在' };
@@ -102,7 +97,7 @@ function registerSystemHandlers(app) {
   // 获取 TKE 内嵌 AAPT 版本
   ipcMain.handle('get-tke-aapt-version', async () => {
     try {
-      const tkePath = getBinaryPath('tke', 'toolkit-engine', app);
+      const tkePath = getBinaryPath('tke', app);
 
       if (!fs.existsSync(tkePath)) {
         return { success: false, error: '可执行文件不存在' };
@@ -127,7 +122,7 @@ function registerSystemHandlers(app) {
   // 获取 TKE-OpenCV 版本
   ipcMain.handle('get-tke-opencv-version', async () => {
     try {
-      const opencvPath = getBinaryPath('tke-opencv', 'toolkit-engine', app);
+      const opencvPath = getBinaryPath('tke-opencv', app);
 
       if (!fs.existsSync(opencvPath)) {
         return { success: false, error: '可执行文件不存在' };
@@ -152,7 +147,7 @@ function registerSystemHandlers(app) {
   // 获取 Tester-AI 版本
   ipcMain.handle('get-tester-ai-version', async () => {
     try {
-      const testerAiPath = getBinaryPath('tester-ai', 'tester-ai', app);
+      const testerAiPath = getBinaryPath('tester-ai', app);
 
       if (!fs.existsSync(testerAiPath)) {
         return { success: false, error: '可执行文件不存在' };
@@ -177,7 +172,7 @@ function registerSystemHandlers(app) {
   // 获取 TKE-Scrcpy 版本
   ipcMain.handle('get-tke-scrcpy-version', async () => {
     try {
-      const scrcpyPath = getBinaryPath('tke-scrcpy', 'scrcpy-server', app);
+      const scrcpyPath = getBinaryPath('tke-scrcpy', app);
 
       if (!fs.existsSync(scrcpyPath)) {
         return { success: false, error: '可执行文件不存在' };

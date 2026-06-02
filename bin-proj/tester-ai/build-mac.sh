@@ -56,7 +56,7 @@ echo "OS: $PLATFORM"
 SOURCE_BINARY="$SCRIPT_DIR/target/release/$BINARY_NAME"
 
 # 目标目录和文件路径
-TARGET_DIR="$SCRIPT_DIR/../../bin/$PLATFORM/tester-ai"
+TARGET_DIR="$SCRIPT_DIR/../../bin/$PLATFORM"
 TARGET_BINARY="$TARGET_DIR/$BINARY_NAME"
 
 # 检查源文件是否存在

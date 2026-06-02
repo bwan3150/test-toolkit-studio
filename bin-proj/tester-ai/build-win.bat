@@ -45,7 +45,7 @@ REM 源文件路径
 set SOURCE_BINARY=%~dp0target\release\%BINARY_NAME%
 
 REM 目标目录和文件路径
-set TARGET_DIR=%~dp0..\resources\%PLATFORM%\tester-ai
+set TARGET_DIR=%~dp0..\..\bin\%PLATFORM%
 set TARGET_BINARY=%TARGET_DIR%\%BINARY_NAME%
 
 REM 检查源文件是否存在

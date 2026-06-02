@@ -37,7 +37,7 @@ echo "✓ 已生成 _version.py: $BUILD_VERSION"
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 # 确定输出目录（项目根目录的 resources）
-OUTPUT_DIR="$SCRIPT_DIR/../../bin/${OS}/toolkit-engine"
+OUTPUT_DIR="$SCRIPT_DIR/../../bin/${OS}"
 mkdir -p "$OUTPUT_DIR"
 
 # 激活 uv 环境并打包
