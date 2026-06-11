@@ -1,15 +1,15 @@
 // 目标解析模块 - 将参数解析为坐标点
-// 解析结果同时记录到 ActionTrace，供工作流标注截图/定位问题用
+// 解析结果（坐标 + 实时元素边界框）记录到 ActionTrace，供工作流标注截图用
 
 use crate::{Result, TkeError, TksParam, Point, Controller, Recognizer, LocatorStrategy};
-use std::path::PathBuf;
+use crate::utils::Workarea;
 use tracing::{debug, info, error};
 
 use super::ActionTrace;
 
 /// 目标解析器
 pub struct TargetResolver<'a> {
-    project_path: &'a PathBuf,
+    workarea: &'a Workarea,
     controller: &'a mut Controller,
     recognizer: &'a Recognizer,
     trace: &'a mut ActionTrace,
@@ -17,13 +17,13 @@ pub struct TargetResolver<'a> {
 
 impl<'a> TargetResolver<'a> {
     pub fn new(
-        project_path: &'a PathBuf,
+        workarea: &'a Workarea,
         controller: &'a mut Controller,
         recognizer: &'a Recognizer,
         trace: &'a mut ActionTrace,
     ) -> Self {
         Self {
-            project_path,
+            workarea,
             controller,
             recognizer,
             trace,
@@ -60,21 +60,18 @@ impl<'a> TargetResolver<'a> {
     /// 解析元素定位
     async fn resolve_element(&mut self, name: &str, strategy: &LocatorStrategy) -> Result<Point> {
         // 刷新UI状态
-        if let Err(e) = self.controller.capture_ui_state(self.project_path).await {
+        if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
             error!("刷新UI状态失败: {}", e);
             return Err(e);
         }
         self.trace.captured = true;
-
-        // 记录元素名和元素库中保存的边界框（用于截图画框）
         self.trace.element_name = Some(name.to_string());
-        if let Some(locator) = self.recognizer.get_locator(name) {
-            self.trace.bounds = locator.bounds.clone();
-        }
 
-        match self.recognizer.find_element(name, strategy.clone()).await {
-            Ok(point) => {
+        match self.recognizer.find_element_detailed(name, strategy.clone()).await {
+            Ok((point, bounds)) => {
                 info!("找到元素 '{}' 位置: ({}, {})", name, point.x, point.y);
+                // 记录实时边界框（来自当前页面实际匹配到的元素）
+                self.trace.bounds = Some(bounds);
                 Ok(point)
             }
             Err(e) => {
@@ -87,7 +84,7 @@ impl<'a> TargetResolver<'a> {
     /// 解析文本查找
     async fn resolve_text(&mut self, text: &str) -> Result<Point> {
         // 刷新UI状态
-        if let Err(e) = self.controller.capture_ui_state(self.project_path).await {
+        if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
             error!("刷新UI状态失败: {}", e);
             return Err(e);
         }
@@ -95,8 +92,9 @@ impl<'a> TargetResolver<'a> {
         self.trace.element_name = Some(text.to_string());
 
         match self.recognizer.find_element_by_text(text) {
-            Ok(point) => {
+            Ok((point, bounds)) => {
                 info!("找到文本元素 '{}' 位置: ({}, {})", text, point.x, point.y);
+                self.trace.bounds = Some(bounds);
                 Ok(point)
             }
             Err(e) => {

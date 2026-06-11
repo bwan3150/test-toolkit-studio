@@ -1,49 +1,96 @@
 // Script 工作流 - 执行单个 .tks 脚本
-// 逐行执行：实时回调 step_start/step_end 事件（NDJSON 输出由 handler 负责），
-// 每步保存标注截图 + UI 结构文件，结束后写入完整 run.json
+// 逐行执行：实时回调 step_start/step_end 事件（NDJSON 输出由 handler 负责）
+// 指定 --log 时每步保存标注截图 + 页面结构文件，结束后写入完整 log.json
+// 工作区使用系统缓存临时目录，运行结束即删除
 
 use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter};
+use crate::utils::Workarea;
 use super::{RunEvent, RunArtifacts};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// 脚本运行器
 pub struct ScriptRunner {
-    project_path: PathBuf,
     device_id: Option<String>,
+    /// 元素库路径（None 按默认路径查找）
+    element_path: Option<PathBuf>,
 }
 
 impl ScriptRunner {
-    pub fn new(project_path: PathBuf, device_id: Option<String>) -> Self {
-        Self { project_path, device_id }
+    pub fn new(device_id: Option<String>, element_path: Option<PathBuf>) -> Self {
+        Self { device_id, element_path }
     }
 
     /// 执行脚本文件
     ///
-    /// - runs_root: 产物根目录（缺省 <project>/runs；flow 传入自己的运行目录）
+    /// - log_root: 产物根目录；None 时不保存任何产物（纯执行 + 事件流）
     /// - on_event: 实时事件回调（逐行输出）
     pub async fn run(
         &self,
         script_path: &Path,
-        runs_root: Option<&Path>,
+        log_root: Option<&Path>,
         on_event: &mut dyn FnMut(&RunEvent),
     ) -> Result<ExecutionResult> {
-        // 1. 解析脚本
+        // 解析脚本文件
         let parser = ScriptParser::new();
         let script = parser.parse_file(&script_path.to_path_buf())?;
 
         let script_stem = script_path
             .file_stem()
             .and_then(|s| s.to_str())
-            .unwrap_or("script");
+            .unwrap_or("script")
+            .to_string();
+        let display_path = script_path.to_string_lossy().to_string();
 
-        // 2. 创建产物目录
-        let artifacts = RunArtifacts::create(&self.project_path, runs_root, script_stem)?;
-        let run_dir_str = artifacts.run_dir.to_string_lossy().to_string();
+        self.run_script(script, &display_path, &script_stem, log_root, on_event).await
+    }
 
-        // 3. 初始化解释器
-        let mut interpreter =
-            ScriptInterpreter::new(self.project_path.clone(), self.device_id.clone())?;
+    /// 不落文件执行一串 .tks 指令（tke steps）
+    pub async fn run_lines(
+        &self,
+        lines: &[String],
+        log_root: Option<&Path>,
+        on_event: &mut dyn FnMut(&RunEvent),
+    ) -> Result<ExecutionResult> {
+        // 拼成最小脚本交给解析器
+        let content = format!("步骤:\n{}", lines.join("\n"));
+        let parser = ScriptParser::new();
+        let script = parser.parse(&content)?;
+
+        if script.steps.is_empty() {
+            return Err(TkeError::ScriptParseError("没有可执行的有效指令".to_string()));
+        }
+
+        self.run_script(script, "<steps>", "steps", log_root, on_event).await
+    }
+
+    /// 内部统一执行逻辑
+    async fn run_script(
+        &self,
+        script: crate::TksScript,
+        display_path: &str,
+        script_stem: &str,
+        log_root: Option<&Path>,
+        on_event: &mut dyn FnMut(&RunEvent),
+    ) -> Result<ExecutionResult> {
+
+        // 产物目录（仅 --log 时创建）
+        let artifacts = match log_root {
+            Some(root) => Some(RunArtifacts::create(root, script_stem)?),
+            None => None,
+        };
+        let run_dir_str = artifacts
+            .as_ref()
+            .map(|a| a.run_dir.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // 3. 临时工作区 + 解释器
+        let workarea = Workarea::temp_for_run()?;
+        let mut interpreter = ScriptInterpreter::new(
+            self.device_id.clone(),
+            self.element_path.as_deref(),
+            workarea.clone(),
+        )?;
 
         let start_time = chrono::Local::now().to_rfc3339();
 
@@ -59,12 +106,12 @@ impl ScriptRunner {
             end_time: String::new(),
             steps: Vec::new(),
             error: None,
-            script_path: Some(script_path.to_string_lossy().to_string()),
-            run_dir: Some(run_dir_str.clone()),
+            script_path: Some(display_path.to_string()),
+            run_dir: artifacts.as_ref().map(|_| run_dir_str.clone()),
         };
 
         on_event(&RunEvent::RunStart {
-            script: script_path.to_string_lossy().to_string(),
+            script: display_path.to_string(),
             script_name: result.script_name.clone(),
             total_steps: script.steps.len(),
             run_dir: run_dir_str.clone(),
@@ -83,19 +130,27 @@ impl ScriptRunner {
             let exec_result = interpreter.interpret_step(step).await;
             let duration_ms = step_start.elapsed().as_millis() as u64;
 
-            // 本步执行中若未采集过页面状态（如纯坐标点击/等待/返回），补采一次，
-            // 保证每一步都留有截图和结构文件
-            if !interpreter.last_trace.captured {
-                let _ = interpreter.capture_state().await;
-            }
-
-            // 保存本步产物：标注截图 + XML
-            let (screenshot, xml) =
-                artifacts.save_step(&self.project_path, index, &interpreter.last_trace);
-
             let (success, error) = match exec_result {
                 Ok(()) => (true, None),
                 Err(e) => (false, Some(e.to_string())),
+            };
+
+            // 保存本步产物（仅 --log 时）
+            let (screenshot, xml) = if let Some(artifacts) = &artifacts {
+                // 本步执行中若未采集过页面状态（如纯坐标点击/等待/返回），补采一次，
+                // 保证每一步都留有截图和结构文件
+                if !interpreter.last_trace.captured {
+                    let _ = interpreter.capture_state().await;
+                }
+                artifacts.save_step(
+                    &workarea,
+                    index,
+                    &interpreter.last_trace,
+                    &step.raw,
+                    success,
+                )
+            } else {
+                (None, None)
             };
 
             let step_result = StepResult {
@@ -135,8 +190,14 @@ impl ScriptRunner {
 
         result.end_time = chrono::Local::now().to_rfc3339();
 
-        // 5. 写入完整运行日志
-        let log_path = artifacts.write_log(&result)?;
+        // 5. 写入完整运行日志（仅 --log 时）
+        let log_path = match &artifacts {
+            Some(a) => a.write_log(&result)?.to_string_lossy().to_string(),
+            None => String::new(),
+        };
+
+        // 6. 清理临时工作区
+        workarea.cleanup();
 
         on_event(&RunEvent::RunEnd {
             success: result.success,
@@ -144,7 +205,7 @@ impl ScriptRunner {
             successful_steps: result.steps.iter().filter(|s| s.success).count(),
             error: result.error.clone(),
             run_dir: run_dir_str,
-            log: log_path.to_string_lossy().to_string(),
+            log: log_path,
         });
 
         Ok(result)

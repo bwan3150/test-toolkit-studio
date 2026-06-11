@@ -1,7 +1,7 @@
 // 命令执行器模块 - 执行各种 TKS 命令
 
 use crate::{Result, TkeError, TksParam, Point, Controller, Recognizer, LocatorStrategy};
-use std::path::PathBuf;
+use crate::utils::Workarea;
 use tracing::{debug, info};
 
 use super::param_extractor::ParamExtractor;
@@ -10,7 +10,7 @@ use super::ActionTrace;
 
 /// 命令执行器
 pub struct CommandExecutor<'a> {
-    project_path: &'a PathBuf,
+    workarea: &'a Workarea,
     controller: &'a mut Controller,
     recognizer: &'a Recognizer,
     trace: &'a mut ActionTrace,
@@ -18,13 +18,13 @@ pub struct CommandExecutor<'a> {
 
 impl<'a> CommandExecutor<'a> {
     pub fn new(
-        project_path: &'a PathBuf,
+        workarea: &'a Workarea,
         controller: &'a mut Controller,
         recognizer: &'a Recognizer,
         trace: &'a mut ActionTrace,
     ) -> Self {
         Self {
-            project_path,
+            workarea,
             controller,
             recognizer,
             trace,
@@ -46,7 +46,7 @@ impl<'a> CommandExecutor<'a> {
         tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
         // 刷新UI状态
-        self.controller.capture_ui_state(self.project_path).await?;
+        self.controller.capture_ui_state(self.workarea).await?;
         self.trace.captured = true;
 
         Ok(())
@@ -223,7 +223,7 @@ impl<'a> CommandExecutor<'a> {
 
         while start.elapsed() < timeout {
             // 刷新UI状态
-            if let Err(e) = self.controller.capture_ui_state(self.project_path).await {
+            if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
                 debug!("刷新UI状态失败: {}", e);
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
@@ -251,12 +251,21 @@ impl<'a> CommandExecutor<'a> {
         }
 
         // 刷新UI状态
-        self.controller.capture_ui_state(self.project_path).await?;
+        self.controller.capture_ui_state(self.workarea).await?;
         self.trace.captured = true;
 
         let (element_exists, element_name) = match &params[0] {
             TksParam::Element { name, strategy } => {
-                let exists = self.recognizer.find_element(name, strategy.clone()).await.is_ok();
+                // 记录断言目标到执行轨迹（用于截图标注，bounds 为实时匹配结果）
+                self.trace.element_name = Some(name.clone());
+                let exists = match self.recognizer.find_element_detailed(name, strategy.clone()).await {
+                    Ok((point, bounds)) => {
+                        self.trace.points.push(point);
+                        self.trace.bounds = Some(bounds);
+                        true
+                    }
+                    Err(_) => false,
+                };
                 (exists, name.as_str())
             }
             _ => return Err(TkeError::InvalidArgument("断言目标必须是元素".to_string())),
@@ -283,7 +292,7 @@ impl<'a> CommandExecutor<'a> {
     /// 解析目标位置（内部调用 TargetResolver，并记录到 trace）
     async fn resolve_target(&mut self, param: &TksParam) -> Result<Point> {
         let mut resolver = TargetResolver::new(
-            self.project_path,
+            self.workarea,
             self.controller,
             self.recognizer,
             self.trace,

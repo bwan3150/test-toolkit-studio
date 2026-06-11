@@ -1,5 +1,6 @@
 // Recognize 命令处理器（② 原子方法）
 // 在当前页面定位元素位置（默认先采集最新页面状态再定位）
+// 元素库由 --element 指定（缺省按 ./element.json → ./locator/element.json 查找）
 
 use tke::{Result, Recognize, JsonOutput, LocatorStrategy};
 use std::path::PathBuf;
@@ -7,8 +8,8 @@ use std::path::PathBuf;
 /// Recognize 命令参数
 #[derive(clap::Args)]
 pub struct RecognizeArgs {
-    /// 元素名称（元素库中的 locator 名）；--by-text 时为直接查找的文本
-    pub element: String,
+    /// 元素名称（元素库 key）；--by-text 时为直接查找的文本
+    pub name: String,
 
     /// 定位策略 (auto/xpath/resource-id/text/content-desc/class-name/ocr/img)
     #[arg(long, short, default_value = "auto")]
@@ -22,7 +23,7 @@ pub struct RecognizeArgs {
     #[arg(long)]
     pub by_text: bool,
 
-    /// 使用 workarea 中已有的页面状态，跳过重新采集
+    /// 使用工作区中已有的页面状态，跳过重新采集
     #[arg(long)]
     pub cached: bool,
 }
@@ -45,32 +46,31 @@ fn parse_strategy(s: &str) -> LocatorStrategy {
 pub async fn handle(
     args: RecognizeArgs,
     device_id: Option<String>,
-    project_path: PathBuf,
+    element_path: Option<PathBuf>,
 ) -> Result<()> {
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("recognize 必须指定设备: -d/--device <设备ID>"));
 
-    let mut recognize = Recognize::new(device, project_path)
+    let mut recognize = Recognize::new(device, element_path.as_deref())
         .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
     recognize.set_confidence_threshold(args.threshold);
 
     let result = if args.by_text {
-        recognize.find_text(&args.element, args.cached).await
+        recognize.find_text(&args.name, args.cached).await
     } else {
         recognize
-            .find(&args.element, parse_strategy(&args.strategy), args.cached)
+            .find(&args.name, parse_strategy(&args.strategy), args.cached)
             .await
     };
 
     match result {
-        Ok(point) => {
-            // 附带元素库中保存的边界框（如有）
-            let bounds = recognize.locator_bounds(&args.element);
+        Ok((point, bounds)) => {
             JsonOutput::success(serde_json::json!({
                 "success": true,
-                "element": args.element,
+                "element": args.name,
                 "x": point.x,
                 "y": point.y,
+                // 实时边界框：来自当前页面实际匹配到的元素
                 "bounds": bounds,
             }));
             Ok(())

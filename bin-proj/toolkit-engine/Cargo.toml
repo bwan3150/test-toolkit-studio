@@ -21,6 +21,10 @@ quick-xml = "0.36"
 # 图像处理
 image = "0.25"
 imageproc = "0.25"
+# 截图标注文字渲染
+ab_glyph = "0.2"
+# TOML 解析 (flow 定义 / --config)
+toml = "0.8"
 # 并行处理
 rayon = "1.10"
 # 日志

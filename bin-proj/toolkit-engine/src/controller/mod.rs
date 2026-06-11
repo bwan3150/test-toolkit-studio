@@ -1,11 +1,9 @@
-// Controller模块 - 负责ADB控制
-
-mod device_categorizer;
+// Controller模块 - 负责ADB控制（Android 驱动；wda/playwright 为未来扩展位）
 
 use crate::{Result, TkeError, DeviceInfo, AdbManager};
+use crate::utils::Workarea;
 use std::path::PathBuf;
 use std::process::Command;
-pub use device_categorizer::{CategorizedDevices, SavedDevicesInfo, DeviceCategorizer};
 
 pub struct Controller {
     device_id: Option<String>,
@@ -55,54 +53,20 @@ impl Controller {
         Ok(devices)
     }
 
-    // 获取分类后的设备列表
-    pub fn get_devices_categorized(&self, project_path: &PathBuf) -> Result<CategorizedDevices> {
-        // 1. 获取已连接的Android设备
-        let connected_android = self.get_devices()?;
-
-        // 2. 获取已连接的iOS设备 (TODO: 需要实现iOS设备检测)
-        let connected_ios = Vec::new();
-
-        // 3. 加载已保存的设备配置
-        let saved_devices = DeviceCategorizer::load_saved_devices(project_path)?;
-
-        // 4. 分类设备
-        let categorized = DeviceCategorizer::categorize_devices(
-            connected_android,
-            connected_ios,
-            saved_devices,
-        );
-
-        Ok(categorized)
-    }
-    
-    // 指令1: 获取设备截图和XML并保存到项目目录
-    pub async fn capture_ui_state(&self, project_path: &PathBuf) -> Result<()> {
-        let workarea = project_path.join("workarea");
-
-        // 确保workarea目录存在
-        std::fs::create_dir_all(&workarea)
-            .map_err(|e| TkeError::IoError(e))?;
-
+    // 采集设备截图和UI XML到工作区
+    pub async fn capture_ui_state(&self, workarea: &Workarea) -> Result<()> {
         // 获取截图
-        self.capture_screenshot(&workarea.join("current_screenshot.png")).await?;
+        self.capture_screenshot(&workarea.screenshot_path()).await?;
 
         // 获取UI树
-        self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
+        self.capture_ui_tree(&workarea.ui_tree_path()).await?;
 
         Ok(())
     }
 
-    // 仅获取UI XML并保存到项目目录 (不截图)
-    pub async fn capture_xml_only(&self, project_path: &PathBuf) -> Result<()> {
-        let workarea = project_path.join("workarea");
-
-        // 确保workarea目录存在
-        std::fs::create_dir_all(&workarea)
-            .map_err(|e| TkeError::IoError(e))?;
-
-        // 只获取UI树
-        self.capture_ui_tree(&workarea.join("current_ui_tree.xml")).await?;
+    // 仅采集UI XML到工作区 (不截图)
+    pub async fn capture_xml_only(&self, workarea: &Workarea) -> Result<()> {
+        self.capture_ui_tree(&workarea.ui_tree_path()).await?;
 
         Ok(())
     }

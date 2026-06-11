@@ -1,9 +1,12 @@
 // Flow 工作流 - 依次执行一组 .tks 脚本
-// flow 文件为 JSON: { "name": "冒烟测试", "scripts": ["a.tks", "b.tks", ...] }
-// 路径相对于 flow 文件所在目录解析；产物结构:
-// runs/<时间戳>_flow_<名称>/
-//   ├── flow.json           整个 flow 的汇总日志
-//   └── <脚本名>/            每个脚本一个子目录（结构同 script 运行）
+// flow 文件为 TOML:
+//   name = "冒烟测试"           # 可省略，默认用文件名
+//   scripts = ["a.tks", "b.tks"]  # 按顺序执行，路径相对 flow 文件所在目录
+//
+// 指定 --log 时产物结构:
+// <log>/<时间戳>_flow_<名称>/
+//   ├── flow.json             整个 flow 的汇总日志
+//   └── <脚本名>/              每个脚本一个子目录（log.json + screenshots/ + page/）
 
 use crate::{Result, TkeError, ExecutionResult};
 use super::{RunEvent, RunArtifacts, ScriptRunner};
@@ -11,7 +14,7 @@ use super::script_runner::validate_script_path;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Flow 定义文件
+/// Flow 定义文件 (TOML)
 #[derive(Debug, Deserialize)]
 pub struct FlowDef {
     /// flow 名称（缺省用文件名）
@@ -36,24 +39,26 @@ pub struct FlowResult {
 
 /// Flow 运行器
 pub struct FlowRunner {
-    project_path: PathBuf,
     device_id: Option<String>,
+    element_path: Option<PathBuf>,
 }
 
 impl FlowRunner {
-    pub fn new(project_path: PathBuf, device_id: Option<String>) -> Self {
-        Self { project_path, device_id }
+    pub fn new(device_id: Option<String>, element_path: Option<PathBuf>) -> Self {
+        Self { device_id, element_path }
     }
 
     /// 执行 flow 文件
+    /// log_root: 产物根目录；None 时不保存任何产物
     pub async fn run(
         &self,
         flow_path: &Path,
+        log_root: Option<&Path>,
         on_event: &mut dyn FnMut(&RunEvent),
     ) -> Result<FlowResult> {
-        // 1. 读取 flow 定义
+        // 1. 读取 flow 定义 (TOML)
         let content = std::fs::read_to_string(flow_path).map_err(TkeError::IoError)?;
-        let def: FlowDef = serde_json::from_str(&content)
+        let def: FlowDef = toml::from_str(&content)
             .map_err(|e| TkeError::ScriptParseError(format!("flow 文件解析失败: {}", e)))?;
 
         if def.scripts.is_empty() {
@@ -68,10 +73,15 @@ impl FlowRunner {
                 .to_string()
         });
 
-        // 2. 创建 flow 产物目录
-        let artifacts =
-            RunArtifacts::create(&self.project_path, None, &format!("flow_{}", flow_name))?;
-        let run_dir_str = artifacts.run_dir.to_string_lossy().to_string();
+        // 2. flow 产物目录（仅 --log 时创建）
+        let artifacts = match log_root {
+            Some(root) => Some(RunArtifacts::create(root, &format!("flow_{}", flow_name))?),
+            None => None,
+        };
+        let run_dir_str = artifacts
+            .as_ref()
+            .map(|a| a.run_dir.to_string_lossy().to_string())
+            .unwrap_or_default();
 
         let flow_dir = flow_path.parent().unwrap_or(Path::new("."));
         let start_time = chrono::Local::now().to_rfc3339();
@@ -83,7 +93,7 @@ impl FlowRunner {
         });
 
         // 3. 依次执行每个脚本
-        let runner = ScriptRunner::new(self.project_path.clone(), self.device_id.clone());
+        let runner = ScriptRunner::new(self.device_id.clone(), self.element_path.clone());
         let mut results: Vec<ExecutionResult> = Vec::new();
         let mut all_success = true;
 
@@ -103,7 +113,11 @@ impl FlowRunner {
             let exec = match validate_script_path(&script_path) {
                 Ok(()) => {
                     runner
-                        .run(&script_path, Some(&artifacts.run_dir), on_event)
+                        .run(
+                            &script_path,
+                            artifacts.as_ref().map(|a| a.run_dir.as_path()),
+                            on_event,
+                        )
                         .await
                 }
                 Err(e) => Err(e),
@@ -143,7 +157,7 @@ impl FlowRunner {
             }
         }
 
-        // 4. 写入 flow 汇总日志
+        // 4. 写入 flow 汇总日志（仅 --log 时）
         let flow_result = FlowResult {
             success: all_success,
             flow: flow_name,
@@ -156,16 +170,21 @@ impl FlowRunner {
             scripts: results,
         };
 
-        let log_path = artifacts.run_dir.join("flow.json");
-        let json = serde_json::to_string_pretty(&flow_result).map_err(TkeError::JsonError)?;
-        std::fs::write(&log_path, json).map_err(TkeError::IoError)?;
+        let log_path = if let Some(a) = &artifacts {
+            let path = a.run_dir.join("flow.json");
+            let json = serde_json::to_string_pretty(&flow_result).map_err(TkeError::JsonError)?;
+            std::fs::write(&path, json).map_err(TkeError::IoError)?;
+            path.to_string_lossy().to_string()
+        } else {
+            String::new()
+        };
 
         on_event(&RunEvent::FlowEnd {
             success: flow_result.success,
             total_scripts: flow_result.total_scripts,
             successful_scripts: flow_result.successful_scripts,
             run_dir: run_dir_str,
-            log: log_path.to_string_lossy().to_string(),
+            log: log_path,
         });
 
         Ok(flow_result)

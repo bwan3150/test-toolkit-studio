@@ -1,13 +1,19 @@
 // ToolkitEngine (tke) CLI Main Entrance
 // tke = 所有测试工具的统一入口/协调器，三大块：
 //   ① 工具直通  tke adb/aapt/k6/ffmpeg/... <原生指令>（同目录二进制，零代码扩展）
-//   ② 原子方法  tke fetch / recognize / control（必带 -d/--device）
-//   ③ 工作流    tke run script / flow / ai / step
+//   ② 原子方法  tke refresh / fetch / recognize / control（必带 -d/--device）
+//   ③ 工作流    tke run <x.tks|x.toml> / tke steps "指令"... / tke case <用例> --script <出>
+//
+// 全局参数（均可放入 --config 指定的 tke.toml，CLI 显式参数优先）：
+//   -d/--device   目标设备
+//   --element     元素库 element.json 路径
+//   --log         产物输出目录（不传则不保存 log/截图/结构文件）
+//   -c/--config   配置文件 tke.toml
+//
 // Main 只负责路由，所有命令处理逻辑都在 handlers 模块中
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod handlers;
@@ -25,9 +31,17 @@ struct Cli {
     #[arg(short, long, global = true)]
     device: Option<String>,
 
-    /// 项目路径（默认当前目录）
+    /// 元素库 element.json 路径（缺省按 ./element.json → ./locator/element.json 查找）
+    #[arg(long, global = true)]
+    element: Option<PathBuf>,
+
+    /// 产物输出目录（不传则 run 不保存 log/截图序列/页面结构序列）
+    #[arg(long, global = true)]
+    log: Option<PathBuf>,
+
+    /// 配置文件 tke.toml（等同自动输入 device/element/log 等参数，CLI 显式参数优先）
     #[arg(short, long, global = true)]
-    project: Option<PathBuf>,
+    config: Option<PathBuf>,
 
     /// 输出 DEBUG 级别日志
     #[arg(short, long, global = true)]
@@ -37,7 +51,12 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     // ==================== ② 原子方法（必带 -d/--device） ====================
-    /// [原子] 采集页面：截图 + UI XML (+ OCR / 元素列表 / 裁剪元素图)
+    /// [原子] 刷新页面状态：采集截图 + UI XML 到工作区 (+ OCR / 剪裁元素图)
+    Refresh {
+        #[command(flatten)]
+        args: RefreshArgs,
+    },
+    /// [原子] 提取当前页面的元素列表（含 xpath），直接输出 JSON 数组
     Fetch {
         #[command(flatten)]
         args: FetchArgs,
@@ -54,10 +73,20 @@ enum Commands {
     },
 
     // ==================== ③ 工作流 ====================
-    /// [工作流] 执行 .tks 脚本 / flow / AI 探索生成
+    /// [工作流] 执行 .tks 单脚本 / .toml flow(多脚本顺序执行)
     Run {
-        #[command(subcommand)]
-        action: RunCommands,
+        #[command(flatten)]
+        args: RunArgs,
+    },
+    /// [工作流] 不落文件执行一串 .tks 指令: tke steps "点击 [{登录按钮}]" "等待 [2]"
+    Steps {
+        #[command(flatten)]
+        args: StepsArgs,
+    },
+    /// [工作流] AI 根据文字用例探索测试并生成 .tks: tke case <用例.md|文字> --script <导出路径>
+    Case {
+        #[command(flatten)]
+        args: CaseArgs,
     },
 
     // ==================== ① 工具直通 ====================
@@ -74,22 +103,7 @@ enum Commands {
         args: Vec<String>,
     },
 
-    // ==================== legacy 兼容命令 ====================
-    /// (legacy) ADB 控制，由 fetch/control 替代
-    Controller {
-        #[command(subcommand)]
-        action: ControllerCommands,
-    },
-    /// (legacy) XML 元素解析，由 fetch --elements 替代
-    Fetcher {
-        #[command(subcommand)]
-        action: FetcherCommands,
-    },
-    /// (legacy) 元素识别，由 recognize 替代
-    Recognizer {
-        #[command(subcommand)]
-        action: RecognizerCommands,
-    },
+    // ==================== 设备工具命令 ====================
     /// OCR - 图片文字识别
     Ocr {
         /// 图片路径
@@ -134,14 +148,27 @@ enum Commands {
 async fn main() -> tke::Result<()> {
     let cli = Cli::parse();
 
-    // 直通命令：完全跳过日志初始化和项目信息输出，保持原生工具体验
+    // 加载配置文件并合并参数（CLI 显式参数优先）
+    let config = match &cli.config {
+        Some(path) => match tke::utils::TkeConfig::load(path) {
+            Ok(c) => c,
+            Err(e) => tke::JsonOutput::error(e.to_string()),
+        },
+        None => tke::utils::TkeConfig::default(),
+    };
+
+    let device = cli.device.or(config.device);
+    let element = cli.element.or(config.element);
+    let log = cli.log.or(config.log);
+
+    // 直通命令：完全跳过日志初始化，保持原生工具体验
     let is_passthrough_command = matches!(
         cli.command,
-        Commands::Adb { .. } | Commands::Aapt { .. } | Commands::Tool(_)
-    ) || matches!(cli.command, Commands::Run { action: RunCommands::Ai { .. } });
+        Commands::Adb { .. } | Commands::Aapt { .. } | Commands::Tool(_) | Commands::Case { .. }
+    );
 
-    let project_path = if !is_passthrough_command {
-        // 除直通外所有命令都输出 JSON：日志一律走 stderr，保持 stdout 纯净
+    if !is_passthrough_command {
+        // 所有命令输出 JSON/NDJSON 到 stdout：日志一律走 stderr
         let level = if cli.verbose {
             tracing::Level::DEBUG
         } else {
@@ -158,72 +185,55 @@ async fn main() -> tke::Result<()> {
                     .with_writer(std::io::stderr)
             )
             .init();
-
-        let project_path = cli.project.unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        });
-
-        if cli.verbose {
-            info!("项目路径: {:?}", project_path);
-            if let Some(ref device) = cli.device {
-                info!("目标设备: {}", device);
-            }
-        }
-
-        project_path
-    } else {
-        cli.project.unwrap_or_else(|| {
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-        })
-    };
+    }
 
     // 路由到对应的 handler
     match cli.command {
         // ② 原子方法
+        Commands::Refresh { args } => {
+            refresh::handle(args, device).await
+        }
         Commands::Fetch { args } => {
-            fetch::handle(args, cli.device, project_path).await
+            fetch::handle(args, device).await
         }
         Commands::Recognize { args } => {
-            recognize::handle(args, cli.device, project_path).await
+            recognize::handle(args, device, element).await
         }
         Commands::Control { action } => {
-            control::handle(action, cli.device).await
+            control::handle(action, device).await
         }
         // ③ 工作流
-        Commands::Run { action } => {
-            runner::handle(action, project_path, cli.device).await
+        Commands::Run { args } => {
+            runner::handle(args, device, element, log).await
+        }
+        Commands::Steps { args } => {
+            steps::handle(args, device, element, log).await
+        }
+        Commands::Case { args } => {
+            case_cmd::handle(args, device, element).await
         }
         // ① 工具直通
         Commands::Adb { args } => {
-            adb::handle(args, cli.device).await
+            adb::handle(args, device).await
         }
         Commands::Aapt { args } => {
             aapt::handle(args).await
         }
         Commands::Tool(args) => {
-            tools::handle(args, cli.device).await
+            tools::handle(args, device).await
         }
-        // legacy 兼容命令
-        Commands::Controller { action } => {
-            controller::handle(action, cli.device, project_path).await
-        }
-        Commands::Fetcher { action } => {
-            fetcher::handle(action, project_path).await
-        }
-        Commands::Recognizer { action } => {
-            recognizer::handle(action, project_path).await
-        }
+        // 设备工具命令
         Commands::Ocr { image, online, url, lang } => {
             ocr::handle(image, online, url, lang).await
         }
         Commands::File { action } => {
-            file::handle(action, cli.device).await
+            file::handle(action, device).await
         }
         Commands::App { action } => {
-            app::handle(action, cli.device).await
+            app::handle(action, device).await
         }
         Commands::Device { action } => {
-            device::handle(action, cli.device)
+            device::handle(action, device)
         }
     }
 }

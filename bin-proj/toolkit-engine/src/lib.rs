@@ -31,7 +31,7 @@ pub use utils::{JsonOutput, AdbManager, AaptManager};
 pub use tools::ToolManager;
 
 // 导出原子方法
-pub use atomic::{Fetch, FetchOptions, FetchResult, Recognize, Control, ControlAction};
+pub use atomic::{Refresh, RefreshOptions, RefreshResult, Fetch, Recognize, Control, ControlAction};
 
 // 导出工作流
 pub use workflow::{RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult};

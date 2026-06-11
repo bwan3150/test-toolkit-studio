@@ -5,7 +5,8 @@ mod param_extractor;
 mod target_resolver;
 
 use crate::{Result, TksStep, TksCommand, Controller, Recognizer, Point, Bounds};
-use std::path::PathBuf;
+use crate::utils::Workarea;
+use std::path::Path;
 use tracing::debug;
 
 use command_executor::CommandExecutor;
@@ -17,7 +18,7 @@ pub struct ActionTrace {
     pub captured: bool,
     /// 本步解析出的目标坐标（点击点/滑动起终点）
     pub points: Vec<Point>,
-    /// 目标元素在元素库中保存的边界框（用于画框）
+    /// 目标元素的实时边界框（来自当前页面实际匹配到的元素，用于画框）
     pub bounds: Option<Bounds>,
     /// 目标元素名称
     pub element_name: Option<String>,
@@ -31,7 +32,7 @@ impl ActionTrace {
 
 /// 脚本解释器
 pub struct ScriptInterpreter {
-    project_path: PathBuf,
+    workarea: Workarea,
     #[allow(dead_code)]
     device_id: Option<String>,
     controller: Controller,
@@ -42,12 +43,18 @@ pub struct ScriptInterpreter {
 
 impl ScriptInterpreter {
     /// 创建新的解释器实例
-    pub fn new(project_path: PathBuf, device_id: Option<String>) -> Result<Self> {
+    /// element_path: 元素库路径（None 按默认路径查找）
+    /// workarea: 页面采集工作区
+    pub fn new(
+        device_id: Option<String>,
+        element_path: Option<&Path>,
+        workarea: Workarea,
+    ) -> Result<Self> {
         let controller = Controller::new(device_id.clone())?;
-        let recognizer = Recognizer::new(project_path.clone())?;
+        let recognizer = Recognizer::new(element_path, workarea.clone())?;
 
         Ok(Self {
-            project_path,
+            workarea,
             device_id,
             controller,
             recognizer,
@@ -62,7 +69,7 @@ impl ScriptInterpreter {
         self.last_trace.reset();
 
         let mut executor = CommandExecutor::new(
-            &self.project_path,
+            &self.workarea,
             &mut self.controller,
             &self.recognizer,
             &mut self.last_trace,
@@ -84,13 +91,13 @@ impl ScriptInterpreter {
         }
     }
 
-    /// 主动采集一次页面状态（截图+XML 到 workarea），供工作流补采产物
+    /// 主动采集一次页面状态（截图+XML 到工作区），供工作流补采产物
     pub async fn capture_state(&self) -> Result<()> {
-        self.controller.capture_ui_state(&self.project_path).await
+        self.controller.capture_ui_state(&self.workarea).await
     }
 
-    /// 重新加载 locator 定义
-    pub fn reload_locators(&mut self) -> Result<()> {
-        self.recognizer.reload_locators()
+    /// 工作区引用
+    pub fn workarea(&self) -> &Workarea {
+        &self.workarea
     }
 }
