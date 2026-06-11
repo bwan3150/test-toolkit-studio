@@ -43,6 +43,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
 
+    /// 强制输出 NDJSON 事件流（默认终端为友好格式，管道/重定向自动切 NDJSON）
+    #[arg(long, global = true)]
+    json: bool,
+
     /// 输出 DEBUG 级别日志
     #[arg(short, long, global = true)]
     verbose: bool,
@@ -169,10 +173,11 @@ async fn main() -> tke::Result<()> {
 
     if !is_passthrough_command {
         // 所有命令输出 JSON/NDJSON 到 stdout：日志一律走 stderr
+        // 默认只输出 WARN 以上，保持 CLI 干净；-v 时输出 DEBUG
         let level = if cli.verbose {
             tracing::Level::DEBUG
         } else {
-            tracing::Level::INFO
+            tracing::Level::WARN
         };
 
         tracing_subscriber::registry()
@@ -204,10 +209,10 @@ async fn main() -> tke::Result<()> {
         }
         // ③ 工作流
         Commands::Run { args } => {
-            runner::handle(args, device, element, log).await
+            runner::handle(args, device, element, log, cli.json).await
         }
         Commands::Steps { args } => {
-            steps::handle(args, device, element, log).await
+            steps::handle(args, device, element, log, cli.json).await
         }
         Commands::Case { args } => {
             case_cmd::handle(args, device, element).await

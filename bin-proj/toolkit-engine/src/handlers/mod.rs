@@ -16,6 +16,7 @@ pub mod control;
 pub mod runner;
 pub mod steps;
 pub mod case_cmd;
+pub mod printer;
 
 // 设备工具命令
 pub mod ocr;
@@ -31,16 +32,7 @@ pub use control::ControlCommands;
 pub use runner::RunArgs;
 pub use steps::StepsArgs;
 pub use case_cmd::CaseArgs;
+pub use printer::EventPrinter;
 pub use file::FileCommands;
 pub use app::AppCommands;
 pub use device::DeviceCommands;
-
-use std::io::Write;
-
-/// 输出一行 NDJSON 事件并立即 flush（run/steps 共用，保证实时性）
-pub fn emit(event: &tke::RunEvent) {
-    if let Ok(json) = serde_json::to_string(event) {
-        println!("{}", json);
-        let _ = std::io::stdout().flush();
-    }
-}

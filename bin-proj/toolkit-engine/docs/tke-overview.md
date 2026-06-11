@@ -31,6 +31,7 @@ CLI / CI / Electron App
 | `--element <path>` | 元素库 element.json（缺省找 ./element.json → ./locator/element.json） |
 | `--log <dir>` | 产物输出目录；**不传则 run 不保存任何产物**（CI 纯跑模式） |
 | `-c/--config <tke.toml>` | 配置文件 = 自动输入上述参数；CLI 显式参数优先 |
+| `--json` | 强制 NDJSON 输出（默认终端=友好格式，管道=NDJSON 自动切换） |
 
 ```toml
 # tke.toml（相对路径基于本文件所在目录）
@@ -92,9 +93,19 @@ name = "冒烟测试"
 scripts = ["login.tks", "devices.tks"]   # 按顺序执行，路径相对本文件
 ```
 
-实时输出 NDJSON（每行一个事件：run_start / step_start / step_end / run_end /
-flow_start / script_start / script_end / flow_end），CI 监控和编辑器逐行跟踪
-都消费这个流；退出码 0/1。
+**输出双模式**（退出码均 0/1）：
+- 终端里跑 → 人类友好进度格式（彩色、步骤序号、耗时，无时间戳噪音）：
+  ```
+  ▶ smarthome_smoke (10 步)
+    [ 1/10] 启动 [com.konec.smarthome, ...] ... ✓ 5.9s
+    [ 2/10] 点击 [{930, 2294}] ... ✓ 56ms
+  ✓ 通过 (10/10 步)
+    产物: logs/20260611-180925_smarthome_smoke
+  ```
+- 管道/重定向（App spawn、CI）→ 自动切 NDJSON 事件流（每行一个事件：
+  run_start / step_start / step_end / run_end / flow_* / script_*）；
+  `--json` 可强制 NDJSON
+- 日志默认只输出 WARN 以上到 stderr；`-v` 输出 DEBUG
 
 ### 产物（仅 --log 时保存）
 

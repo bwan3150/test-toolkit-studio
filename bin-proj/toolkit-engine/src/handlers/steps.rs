@@ -5,7 +5,7 @@
 use tke::{Result, ScriptRunner, JsonOutput};
 use std::path::PathBuf;
 
-use super::emit;
+use super::EventPrinter;
 
 /// Steps 命令参数
 #[derive(clap::Args)]
@@ -21,7 +21,10 @@ pub async fn handle(
     device_id: Option<String>,
     element: Option<PathBuf>,
     log: Option<PathBuf>,
+    json: bool,
 ) -> Result<()> {
+    let mut printer = EventPrinter::auto(json);
+    let mut emit = move |e: &tke::RunEvent| printer.print(e);
     let runner = ScriptRunner::new(device_id, element);
     let result = runner
         .run_lines(&args.lines, log.as_deref(), &mut emit)
