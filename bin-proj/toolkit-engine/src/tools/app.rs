@@ -2,7 +2,7 @@
 
 use crate::Result;
 use crate::models::{AppInfo, CurrentFocus};
-use crate::utils::AdbManager;
+use crate::AdbManager;
 use crate::TkeError;
 use std::process::Command;
 

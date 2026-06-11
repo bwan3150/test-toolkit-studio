@@ -1,38 +1,19 @@
-// Handlers 模块 - 统一管理所有命令处理器
-// 按三大块组织：① 工具直通 ② 原子方法 ③ 工作流 (+ 设备工具命令)
+// Handlers 模块 - CLI 命令处理器
+// 按四大块组织：① 直通 ② 原子方法 ③ 工作流 ④ 自有工具
 
-// ① 工具直通
-pub mod tools;
-pub mod adb;
-pub mod aapt;
+// ① 直通（统一处理所有外部二进制，含 adb -d 注入特例）
+pub mod passthrough;
 
 // ② 原子方法
-pub mod refresh;
-pub mod fetch;
-pub mod recognize;
-pub mod control;
+pub mod atomic;
 
 // ③ 工作流
-pub mod runner;
-pub mod steps;
-pub mod case_cmd;
-pub mod printer;
+pub mod workflow;
 
-// 设备工具命令
-pub mod ocr;
-pub mod file;
-pub mod app;
-pub mod device;
+// ④ 自有工具
+pub mod tools;
 
-// 重新导出命令枚举，方便 main.rs 使用
-pub use refresh::RefreshArgs;
-pub use fetch::FetchArgs;
-pub use recognize::RecognizeArgs;
-pub use control::ControlCommands;
-pub use runner::RunArgs;
-pub use steps::StepsArgs;
-pub use case_cmd::CaseArgs;
-pub use printer::EventPrinter;
-pub use file::FileCommands;
-pub use app::AppCommands;
-pub use device::DeviceCommands;
+// 重新导出命令参数类型，方便 main.rs 使用
+pub use atomic::{RefreshArgs, FetchArgs, RecognizeArgs, ControlCommands};
+pub use workflow::{RunArgs, StepsArgs, CaseArgs};
+pub use tools::{FileCommands, AppCommands, DeviceCommands};

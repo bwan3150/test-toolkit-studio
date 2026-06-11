@@ -1,58 +1,58 @@
 // Toolkit Engine 核心库
-// 提供自动化测试的核心功能
+// tke = 所有测试工具的统一入口/协调器，四大模块：
+//   passthrough ① 直通: 透传同目录任意二进制 (adb/aapt/k6/ffmpeg/...)
+//   atomic      ② 原子方法: refresh / fetch / recognize / control + 驱动与识别引擎
+//   workflow    ③ 工作流: run / steps / case + 脚本解析执行引擎
+//   tools       ④ 自有工具: ocr / file / app / device
 
-// 核心模块
+// 基础设施
 pub mod utils;
 pub mod models;
 
-// ① 工具直通 - tke 作为所有测试工具的统一入口
-pub mod tools;
-pub mod adb;
-pub mod aapt;
+// ① 直通
+pub mod passthrough;
 
-// ② 原子方法 - fetch / recognize / control
+// ② 原子方法
 pub mod atomic;
 
-// ③ 工作流 - script / flow / ai
+// ③ 工作流
 pub mod workflow;
 
-// 底层功能模块（被原子方法和工作流复用，同时支撑 legacy 命令）
-pub mod ocr;
-pub mod controller;
-pub mod fetcher;
-pub mod recognizer;
-pub mod runner;
-pub mod file;
-pub mod app;
-pub mod device;
+// ④ 自有工具
+pub mod tools;
 
-// 导出工具类
-pub use utils::{JsonOutput, AdbManager, AaptManager};
-pub use tools::ToolManager;
+// ===== 统一导出（保持 crate 根路径简洁） =====
 
-// 导出原子方法
-pub use atomic::{Refresh, RefreshOptions, RefreshResult, Fetch, Recognize, Control, ControlAction};
+// 基础设施
+pub use utils::{JsonOutput, Workarea, TkeConfig};
 
-// 导出工作流
-pub use workflow::{RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult};
+// ① 直通
+pub use passthrough::{ToolManager, AdbManager, AaptManager};
 
-// 导出底层功能模块
-pub use controller::Controller;
-pub use fetcher::Fetcher;
-pub use recognizer::Recognizer;
-pub use runner::{Runner, ScriptParser, ScriptInterpreter, ActionTrace};
-pub use file::FileManager;
-pub use app::AppManager;
-pub use device::DeviceManager;
+// ② 原子方法
+pub use atomic::{
+    Refresh, RefreshOptions, RefreshResult,
+    Fetch, Recognize, Control, ControlAction,
+    Controller, Fetcher, Recognizer,
+};
 
-// 导出 OCR 功能
-pub use ocr::{ocr, OcrResult, OcrText};
+// ③ 工作流
+pub use workflow::{
+    RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult,
+    Runner, ScriptParser, ScriptInterpreter, ActionTrace,
+};
 
-// 导出模型
+// ④ 自有工具
+pub use tools::{FileManager, AppManager, DeviceManager};
+pub use tools::ocr;
+pub use tools::ocr::{ocr as run_ocr, OcrResult, OcrText};
+
+// 数据模型
 pub use models::{
     UIElement,
     Locator,
     LocatorStrategy,
+    XmlLocator,
     TksScript,
     TksStep,
     TksCommand,

@@ -8,7 +8,11 @@ pub mod artifacts;
 pub mod script_runner;
 pub mod flow;
 
+// 脚本执行引擎（.tks 解析器 + 解释器）
+pub mod runner;
+
 pub use events::RunEvent;
+pub use runner::{Runner, ScriptParser, ScriptInterpreter, ActionTrace};
 pub use artifacts::RunArtifacts;
 pub use script_runner::ScriptRunner;
 pub use flow::{FlowDef, FlowRunner, FlowResult};

@@ -1,18 +1,17 @@
 // ToolkitEngine (tke) CLI Main Entrance
-// tke = 所有测试工具的统一入口/协调器，三大块：
-//   ① 工具直通  tke adb/aapt/k6/ffmpeg/... <原生指令>（同目录二进制，零代码扩展）
+// tke = 所有测试工具的统一入口/协调器，四大块：
+//   ① 直通      tke <二进制名> <原生指令>（同目录二进制自动可用，零代码扩展）
 //   ② 原子方法  tke refresh / fetch / recognize / control（必带 -d/--device）
 //   ③ 工作流    tke run <x.tks|x.toml> / tke steps "指令"... / tke case <用例> --script <出>
+//   ④ 自有工具  tke ocr / file / app / device
 //
 // 全局参数（均可放入 --config 指定的 tke.toml，CLI 显式参数优先）：
-//   -d/--device   目标设备
-//   --element     元素库 element.json 路径
-//   --log         产物输出目录（不传则不保存 log/截图/结构文件）
-//   -c/--config   配置文件 tke.toml
+//   -d/--device   目标设备    --element  元素库路径
+//   --log         产物输出目录（不传则不保存产物）    --json  强制 NDJSON 输出
 //
 // Main 只负责路由，所有命令处理逻辑都在 handlers 模块中
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -27,7 +26,7 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// 目标设备 ID（fetch/recognize/control 必须指定）
+    /// 目标设备 ID（refresh/fetch/recognize/control 必须指定）
     #[arg(short, long, global = true)]
     device: Option<String>,
 
@@ -35,7 +34,7 @@ struct Cli {
     #[arg(long, global = true)]
     element: Option<PathBuf>,
 
-    /// 产物输出目录（不传则 run 不保存 log/截图序列/页面结构序列）
+    /// 产物输出目录（不传则 run/steps 不保存 log/截图序列/页面结构序列）
     #[arg(long, global = true)]
     log: Option<PathBuf>,
 
@@ -93,22 +92,8 @@ enum Commands {
         args: CaseArgs,
     },
 
-    // ==================== ① 工具直通 ====================
-    /// [直通] ADB（-d 自动转为 adb -s）
-    Adb {
-        /// 透传给内嵌 adb 的参数
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-    /// [直通] AAPT
-    Aapt {
-        /// 透传给内嵌 aapt 的参数
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        args: Vec<String>,
-    },
-
-    // ==================== 设备工具命令 ====================
-    /// OCR - 图片文字识别
+    // ==================== ④ 自有工具 ====================
+    /// [工具] OCR 图片文字识别
     Ocr {
         /// 图片路径
         #[arg(short, long)]
@@ -126,31 +111,95 @@ enum Commands {
         #[arg(long, default_value = "eng")]
         lang: String,
     },
-    /// File - Android 设备文件系统管理
+    /// [工具] Android 设备文件系统管理
     File {
         #[command(subcommand)]
         action: FileCommands,
     },
-    /// App - 管理设备上的应用信息
+    /// [工具] 设备应用管理
     App {
         #[command(subcommand)]
         action: AppCommands,
     },
-    /// Device - 获取设备详细信息
+    /// [工具] 设备详细信息
     Device {
         #[command(subcommand)]
         action: DeviceCommands,
     },
 
-    // ==================== ① 工具直通（通用扩展位） ====================
-    /// [直通] 其他任意工具: tke <工具名> <原生指令>（k6/ffmpeg/opencv/scrcpy/tester-ai...）
+    // ==================== ① 直通（不在静态列表，见 --help 末尾动态清单） ====================
+    /// [直通] 透传任意同目录二进制: tke <工具名> <原生指令>
     #[command(external_subcommand)]
     Tool(Vec<String>),
 }
 
+/// 手工排版的总览 help（按四大块分组，直通清单动态扫描）
+fn build_help() -> String {
+    use std::io::IsTerminal;
+
+    // 终端带颜色，重定向时纯文本
+    let tty = std::io::stdout().is_terminal();
+    let (b, c, g, d, r) = if tty {
+        ("\x1b[1m", "\x1b[1;36m", "\x1b[32m", "\x1b[2m", "\x1b[0m")
+    } else {
+        ("", "", "", "", "")
+    };
+
+    let available = tke::ToolManager::list_available();
+    let tools_line = if available.is_empty() {
+        format!("  {d}(当前目录下未发现可直通的二进制){r}")
+    } else {
+        available
+            .iter()
+            .map(|t| format!("  {g}{t}{r}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+
+    format!(
+        "\
+{b}Toolkit Engine{r}  {d}v{}{r}
+
+{c}原子指令{r}
+  {g}refresh{r}      刷新页面状态: 采集截图 + UI XML 到工作区 {d}(+OCR / 剪裁元素图){r}
+  {g}fetch{r}        提取当前页面元素列表 {d}(含 xpath, 输出 JSON 数组){r}
+  {g}recognize{r}    定位元素: xml / ocr / 图像匹配, 返回坐标
+  {g}control{r}      执行操作: click / press / swipe / drag / swipe-dir / input
+               clear / hide-keyboard / back / home / launch / close / key
+
+{c}工作流{r}
+  {g}run{r}          执行 .tks 单脚本 或 .toml flow {d}(多脚本顺序执行){r}
+  {g}steps{r}        不落文件执行一串指令  {d}例: tke steps \"点击 [{{登录按钮}}]\" \"等待 [2]\"{r}
+  {g}case{r}         AI 探索测试并生成脚本  {d}例: tke case 用例.md --script 出.tks{r}
+
+{c}自有工具{r}
+  {g}ocr{r}          图片文字识别 {d}(离线 / 在线){r}
+  {g}file{r}         设备文件系统管理
+  {g}app{r}          设备应用管理
+  {g}device{r}       设备详细信息
+
+{c}直通{r}
+{tools_line}
+
+{c}全局参数{r}
+  {g}-d, --device{r} <ID>      目标设备
+      {g}--element{r} <path>   元素库 element.json {d}(缺省 ./element.json → ./locator/element.json){r}
+      {g}--log{r} <dir>        产物输出目录 {d}(不传则 run/steps 不保存产物){r}
+  {g}-c, --config{r} <toml>    配置文件 {d}(自动填入上述参数, CLI 显式参数优先){r}
+      {g}--json{r}             强制 NDJSON 输出 {d}(终端默认友好格式, 管道自动 NDJSON){r}
+  {g}-v, --verbose{r}          DEBUG 日志    {g}-h{r} 帮助    {g}-V{r} 版本
+",
+        env!("BUILD_VERSION")
+    )
+}
+
 #[tokio::main]
 async fn main() -> tke::Result<()> {
-    let cli = Cli::parse();
+    let matches = Cli::command()
+        .override_help(build_help())
+        .get_matches();
+    let cli = Cli::from_arg_matches(&matches)
+        .unwrap_or_else(|e| e.exit());
 
     // 加载配置文件并合并参数（CLI 显式参数优先）
     let config = match &cli.config {
@@ -168,12 +217,11 @@ async fn main() -> tke::Result<()> {
     // 直通命令：完全跳过日志初始化，保持原生工具体验
     let is_passthrough_command = matches!(
         cli.command,
-        Commands::Adb { .. } | Commands::Aapt { .. } | Commands::Tool(_) | Commands::Case { .. }
+        Commands::Tool(_) | Commands::Case { .. }
     );
 
     if !is_passthrough_command {
-        // 所有命令输出 JSON/NDJSON 到 stdout：日志一律走 stderr
-        // 默认只输出 WARN 以上，保持 CLI 干净；-v 时输出 DEBUG
+        // 默认只输出 WARN 以上保持 CLI 干净；-v 输出 DEBUG；日志一律走 stderr
         let level = if cli.verbose {
             tracing::Level::DEBUG
         } else {
@@ -196,49 +244,43 @@ async fn main() -> tke::Result<()> {
     match cli.command {
         // ② 原子方法
         Commands::Refresh { args } => {
-            refresh::handle(args, device).await
+            atomic::refresh::handle(args, device).await
         }
         Commands::Fetch { args } => {
-            fetch::handle(args, device).await
+            atomic::fetch::handle(args, device).await
         }
         Commands::Recognize { args } => {
-            recognize::handle(args, device, element).await
+            atomic::recognize::handle(args, device, element).await
         }
         Commands::Control { action } => {
-            control::handle(action, device).await
+            atomic::control::handle(action, device).await
         }
         // ③ 工作流
         Commands::Run { args } => {
-            runner::handle(args, device, element, log, cli.json).await
+            workflow::run::handle(args, device, element, log, cli.json).await
         }
         Commands::Steps { args } => {
-            steps::handle(args, device, element, log, cli.json).await
+            workflow::steps::handle(args, device, element, log, cli.json).await
         }
         Commands::Case { args } => {
-            case_cmd::handle(args, device, element).await
+            workflow::case::handle(args, device, element).await
         }
-        // ① 工具直通
-        Commands::Adb { args } => {
-            adb::handle(args, device).await
-        }
-        Commands::Aapt { args } => {
-            aapt::handle(args).await
-        }
-        Commands::Tool(args) => {
-            tools::handle(args, device).await
-        }
-        // 设备工具命令
+        // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {
-            ocr::handle(image, online, url, lang).await
+            tools::ocr::handle(image, online, url, lang).await
         }
         Commands::File { action } => {
-            file::handle(action, device).await
+            tools::file::handle(action, device).await
         }
         Commands::App { action } => {
-            app::handle(action, device).await
+            tools::app::handle(action, device).await
         }
         Commands::Device { action } => {
-            device::handle(action, device)
+            tools::device::handle(action, device)
+        }
+        // ① 直通
+        Commands::Tool(args) => {
+            passthrough::handle(args, device).await
         }
     }
 }

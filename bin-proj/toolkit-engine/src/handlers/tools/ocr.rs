@@ -17,9 +17,9 @@ pub async fn handle(
         let url = url.ok_or_else(|| {
             TkeError::InvalidArgument("在线模式需要提供 --url 参数".to_string())
         })?;
-        tke::ocr(&image_data, true, &url).await
+        tke::run_ocr(&image_data, true, &url).await
     } else {
-        tke::ocr(&image_data, false, &lang).await
+        tke::run_ocr(&image_data, false, &lang).await
     };
 
     match result {

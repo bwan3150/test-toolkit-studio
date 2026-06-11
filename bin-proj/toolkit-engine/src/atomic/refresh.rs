@@ -82,7 +82,7 @@ impl Refresh {
                 ));
             }
             let image_data = std::fs::read(&screenshot_path).map_err(TkeError::IoError)?;
-            let ocr_result = crate::ocr(&image_data, false, lang)
+            let ocr_result = crate::run_ocr(&image_data, false, lang)
                 .await
                 .map_err(|e| TkeError::OcrError(e.to_string()))?;
             result.ocr = Some(serde_json::to_value(&ocr_result).map_err(TkeError::JsonError)?);

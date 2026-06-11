@@ -162,9 +162,30 @@ key = 元素名（唯一主键，人类可读，脚本里 `{元素名}` 直接�
 
 每一行 = 一步。命令：启动 关闭 点击 按压 滑动 定向滑动 输入 清理 隐藏键盘 返回 等待 断言
 
-## 设备工具命令
+## ④ 自有工具
 
 `ocr`（图片文字识别）/ `file`（设备文件系统）/ `app`（应用管理）/ `device`（设备信息）
+
+## src 目录结构（四大模块）
+
+```
+src/
+├── passthrough/   ① 直通: ToolManager(通用二进制透传) + adb/aapt 路径管理
+├── atomic/        ② 原子: refresh/fetch/recognize/control
+│   ├── controller/    设备驱动 (adb; wda/playwright 扩展位)
+│   ├── fetcher/       UI XML 解析 (元素提取/xpath 生成)
+│   └── recognizer/    元素识别引擎 (xml/ocr/图像三通道)
+├── workflow/      ③ 工作流: run/steps/case + 产物/事件
+│   └── runner/        .tks 解析器 + 解释器
+├── tools/         ④ 自有工具: ocr/file/app/device
+├── models/  utils/(workarea/config/json_output)
+├── handlers/      CLI 命令处理器（镜像四大块分目录）
+├── lib.rs  main.rs
+```
+
+`tke --help` = 原子指令 + 工作流 + 自有工具（静态）+ 当前二进制目录下
+所有可直通二进制（动态扫描，末尾列出）；不存在的二进制会提示
+"xxx 可执行文件缺失或不完整"。
 
 > 旧版 controller/fetcher/recognizer/run project 命令及 -p/--project 参数已全部移除，
 > Toolkit Studio 重构时按本文档新接口对接。

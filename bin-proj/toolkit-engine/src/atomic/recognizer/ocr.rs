@@ -2,7 +2,7 @@
 // 返回 (中心点, 识别文字的实时边界框)
 
 use crate::{Result, TkeError, Point, Bounds, Locator};
-use crate::ocr::{ocr, OcrResult};
+use crate::tools::ocr::{ocr, OcrResult};
 use std::path::Path;
 use tracing::debug;
 
