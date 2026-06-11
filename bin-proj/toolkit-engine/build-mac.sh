@@ -32,19 +32,29 @@ echo "Building Toolkit Engine..."
 # 构建 release 版本
 cargo build --release
 
-# 检测平台
+# 检测平台和架构（与 bin/<platform>-<arch>/ 目录结构一致）
 OS=$(uname)
+ARCH=$(uname -m)
+case "$ARCH" in
+    arm64|aarch64) ARCH_NAME="arm64" ;;
+    x86_64|amd64)  ARCH_NAME="amd64" ;;
+    *)
+        echo "Not supported arch: $ARCH"
+        exit 1
+        ;;
+esac
+
 case "$OS" in
     Darwin)
-        PLATFORM="darwin"
+        PLATFORM="darwin-$ARCH_NAME"
         BINARY_NAME="tke"
         ;;
     Linux)
-        PLATFORM="linux"
+        PLATFORM="linux-$ARCH_NAME"
         BINARY_NAME="tke"
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        PLATFORM="win32"
+        PLATFORM="windows-$ARCH_NAME"
         BINARY_NAME="tke.exe"
         ;;
     *)

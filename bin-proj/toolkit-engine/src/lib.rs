@@ -5,9 +5,18 @@
 pub mod utils;
 pub mod models;
 
-// 功能模块（对应 tke 命令）
+// ① 工具直通 - tke 作为所有测试工具的统一入口
+pub mod tools;
 pub mod adb;
 pub mod aapt;
+
+// ② 原子方法 - fetch / recognize / control
+pub mod atomic;
+
+// ③ 工作流 - script / flow / ai
+pub mod workflow;
+
+// 底层功能模块（被原子方法和工作流复用，同时支撑 legacy 命令）
 pub mod ocr;
 pub mod controller;
 pub mod fetcher;
@@ -19,12 +28,19 @@ pub mod device;
 
 // 导出工具类
 pub use utils::{JsonOutput, AdbManager, AaptManager};
+pub use tools::ToolManager;
 
-// 导出功能模块
+// 导出原子方法
+pub use atomic::{Fetch, FetchOptions, FetchResult, Recognize, Control, ControlAction};
+
+// 导出工作流
+pub use workflow::{RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult};
+
+// 导出底层功能模块
 pub use controller::Controller;
 pub use fetcher::Fetcher;
 pub use recognizer::Recognizer;
-pub use runner::{Runner, ScriptParser, ScriptInterpreter};
+pub use runner::{Runner, ScriptParser, ScriptInterpreter, ActionTrace};
 pub use file::FileManager;
 pub use app::AppManager;
 pub use device::DeviceManager;

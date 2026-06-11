@@ -4,11 +4,30 @@ mod command_executor;
 mod param_extractor;
 mod target_resolver;
 
-use crate::{Result, TksStep, TksCommand, Controller, Recognizer};
+use crate::{Result, TksStep, TksCommand, Controller, Recognizer, Point, Bounds};
 use std::path::PathBuf;
 use tracing::debug;
 
 use command_executor::CommandExecutor;
+
+/// 单步执行轨迹 - 记录定位结果，供工作流标注截图/定位问题用
+#[derive(Debug, Default, Clone)]
+pub struct ActionTrace {
+    /// 本步执行中是否已采集过页面状态（截图+XML）
+    pub captured: bool,
+    /// 本步解析出的目标坐标（点击点/滑动起终点）
+    pub points: Vec<Point>,
+    /// 目标元素在元素库中保存的边界框（用于画框）
+    pub bounds: Option<Bounds>,
+    /// 目标元素名称
+    pub element_name: Option<String>,
+}
+
+impl ActionTrace {
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
 
 /// 脚本解释器
 pub struct ScriptInterpreter {
@@ -17,6 +36,8 @@ pub struct ScriptInterpreter {
     device_id: Option<String>,
     controller: Controller,
     recognizer: Recognizer,
+    /// 最近一步的执行轨迹
+    pub last_trace: ActionTrace,
 }
 
 impl ScriptInterpreter {
@@ -30,6 +51,7 @@ impl ScriptInterpreter {
             device_id,
             controller,
             recognizer,
+            last_trace: ActionTrace::default(),
         })
     }
 
@@ -37,10 +59,13 @@ impl ScriptInterpreter {
     pub async fn interpret_step(&mut self, step: &TksStep) -> Result<()> {
         debug!("执行步骤: {} (行号: {})", step.raw, step.line_number);
 
+        self.last_trace.reset();
+
         let mut executor = CommandExecutor::new(
             &self.project_path,
             &mut self.controller,
             &self.recognizer,
+            &mut self.last_trace,
         );
 
         match step.command {
@@ -57,6 +82,11 @@ impl ScriptInterpreter {
             TksCommand::Wait => executor.execute_wait(&step.params).await,
             TksCommand::Assert => executor.execute_assert(&step.params).await,
         }
+    }
+
+    /// 主动采集一次页面状态（截图+XML 到 workarea），供工作流补采产物
+    pub async fn capture_state(&self) -> Result<()> {
+        self.controller.capture_ui_state(&self.project_path).await
     }
 
     /// 重新加载 locator 定义

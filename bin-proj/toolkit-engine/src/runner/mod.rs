@@ -6,7 +6,7 @@ mod interpreter;
 
 // 导出
 pub use parser::ScriptParser;
-pub use interpreter::ScriptInterpreter;
+pub use interpreter::{ScriptInterpreter, ActionTrace};
 
 use crate::{
     Result, TkeError, TksScript,
@@ -70,6 +70,9 @@ impl Runner {
                 success: true,
                 error: None,
                 duration_ms: start_time.elapsed().as_millis() as u64,
+                line: None,
+                screenshot: None,
+                xml: None,
             }),
             Err(e) => Ok(StepResult {
                 index: 0,
@@ -77,6 +80,9 @@ impl Runner {
                 success: false,
                 error: Some(e.to_string()),
                 duration_ms: start_time.elapsed().as_millis() as u64,
+                line: None,
+                screenshot: None,
+                xml: None,
             })
         }
     }
@@ -125,6 +131,8 @@ impl Runner {
             end_time: String::new(),
             steps: Vec::new(),
             error: None,
+            script_path: script.file_path.as_ref().map(|p| p.to_string_lossy().to_string()),
+            run_dir: None,
         };
 
         // 执行每个步骤
@@ -144,6 +152,9 @@ impl Runner {
                     success: true,
                     error: None,
                     duration_ms: step_start.elapsed().as_millis() as u64,
+                    line: None,
+                    screenshot: None,
+                    xml: None,
                 },
                 Err(e) => {
                     result.success = false;
@@ -155,6 +166,9 @@ impl Runner {
                         success: false,
                         error: Some(e.to_string()),
                         duration_ms: step_start.elapsed().as_millis() as u64,
+                        line: None,
+                        screenshot: None,
+                        xml: None,
                     }
                 }
             };

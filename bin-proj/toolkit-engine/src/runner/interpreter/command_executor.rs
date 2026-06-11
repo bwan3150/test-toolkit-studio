@@ -6,12 +6,14 @@ use tracing::{debug, info};
 
 use super::param_extractor::ParamExtractor;
 use super::target_resolver::TargetResolver;
+use super::ActionTrace;
 
 /// 命令执行器
 pub struct CommandExecutor<'a> {
     project_path: &'a PathBuf,
     controller: &'a mut Controller,
     recognizer: &'a Recognizer,
+    trace: &'a mut ActionTrace,
 }
 
 impl<'a> CommandExecutor<'a> {
@@ -19,11 +21,13 @@ impl<'a> CommandExecutor<'a> {
         project_path: &'a PathBuf,
         controller: &'a mut Controller,
         recognizer: &'a Recognizer,
+        trace: &'a mut ActionTrace,
     ) -> Self {
         Self {
             project_path,
             controller,
             recognizer,
+            trace,
         }
     }
 
@@ -43,6 +47,7 @@ impl<'a> CommandExecutor<'a> {
 
         // 刷新UI状态
         self.controller.capture_ui_state(self.project_path).await?;
+        self.trace.captured = true;
 
         Ok(())
     }
@@ -223,6 +228,7 @@ impl<'a> CommandExecutor<'a> {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 continue;
             }
+            self.trace.captured = true;
 
             // 尝试查找元素
             if self.recognizer.find_element(name, strategy.clone()).await.is_ok() {
@@ -246,6 +252,7 @@ impl<'a> CommandExecutor<'a> {
 
         // 刷新UI状态
         self.controller.capture_ui_state(self.project_path).await?;
+        self.trace.captured = true;
 
         let (element_exists, element_name) = match &params[0] {
             TksParam::Element { name, strategy } => {
@@ -273,12 +280,13 @@ impl<'a> CommandExecutor<'a> {
         Ok(())
     }
 
-    /// 解析目标位置（内部调用 TargetResolver）
+    /// 解析目标位置（内部调用 TargetResolver，并记录到 trace）
     async fn resolve_target(&mut self, param: &TksParam) -> Result<Point> {
         let mut resolver = TargetResolver::new(
             self.project_path,
             self.controller,
             self.recognizer,
+            self.trace,
         );
         resolver.resolve(param).await
     }

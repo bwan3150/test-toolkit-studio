@@ -12,6 +12,12 @@ pub struct ExecutionResult {
     pub end_time: String,
     pub steps: Vec<StepResult>,
     pub error: Option<String>,
+    /// 脚本文件路径（工作流运行时记录）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script_path: Option<String>,
+    /// 本次运行的产物目录（工作流运行时记录）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_dir: Option<String>,
 }
 
 /// 单步执行结果
@@ -22,6 +28,15 @@ pub struct StepResult {
     pub success: bool,
     pub error: Option<String>,
     pub duration_ms: u64,
+    /// 脚本中的行号
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    /// 本步标注后截图路径（相对 run_dir）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub screenshot: Option<String>,
+    /// 本步 UI 结构文件路径（相对 run_dir）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xml: Option<String>,
 }
 
 /// 应用信息

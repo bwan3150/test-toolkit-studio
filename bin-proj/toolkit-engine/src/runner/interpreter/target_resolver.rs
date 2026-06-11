@@ -1,14 +1,18 @@
 // 目标解析模块 - 将参数解析为坐标点
+// 解析结果同时记录到 ActionTrace，供工作流标注截图/定位问题用
 
 use crate::{Result, TkeError, TksParam, Point, Controller, Recognizer, LocatorStrategy};
 use std::path::PathBuf;
 use tracing::{debug, info, error};
+
+use super::ActionTrace;
 
 /// 目标解析器
 pub struct TargetResolver<'a> {
     project_path: &'a PathBuf,
     controller: &'a mut Controller,
     recognizer: &'a Recognizer,
+    trace: &'a mut ActionTrace,
 }
 
 impl<'a> TargetResolver<'a> {
@@ -16,34 +20,41 @@ impl<'a> TargetResolver<'a> {
         project_path: &'a PathBuf,
         controller: &'a mut Controller,
         recognizer: &'a Recognizer,
+        trace: &'a mut ActionTrace,
     ) -> Self {
         Self {
             project_path,
             controller,
             recognizer,
+            trace,
         }
     }
 
     /// 解析目标位置
     pub async fn resolve(&mut self, param: &TksParam) -> Result<Point> {
-        match param {
+        let point = match param {
             TksParam::Coordinate(point) => {
                 debug!("使用坐标: ({}, {})", point.x, point.y);
-                Ok(*point)
+                *point
             }
             TksParam::Element { name, strategy } => {
                 debug!("查找元素: {}, 策略: {:?}", name, strategy);
-                self.resolve_element(name, strategy).await
+                self.resolve_element(name, strategy).await?
             }
             TksParam::Text(text) => {
                 debug!("查找文本元素: {}", text);
-                self.resolve_text(text).await
+                self.resolve_text(text).await?
             }
             _ => {
                 error!("无效的目标类型: {:?}", param);
-                Err(TkeError::InvalidArgument("无效的目标类型".to_string()))
+                return Err(TkeError::InvalidArgument("无效的目标类型".to_string()));
             }
-        }
+        };
+
+        // 记录解析出的坐标到执行轨迹
+        self.trace.points.push(point);
+
+        Ok(point)
     }
 
     /// 解析元素定位
@@ -52,6 +63,13 @@ impl<'a> TargetResolver<'a> {
         if let Err(e) = self.controller.capture_ui_state(self.project_path).await {
             error!("刷新UI状态失败: {}", e);
             return Err(e);
+        }
+        self.trace.captured = true;
+
+        // 记录元素名和元素库中保存的边界框（用于截图画框）
+        self.trace.element_name = Some(name.to_string());
+        if let Some(locator) = self.recognizer.get_locator(name) {
+            self.trace.bounds = locator.bounds.clone();
         }
 
         match self.recognizer.find_element(name, strategy.clone()).await {
@@ -73,6 +91,8 @@ impl<'a> TargetResolver<'a> {
             error!("刷新UI状态失败: {}", e);
             return Err(e);
         }
+        self.trace.captured = true;
+        self.trace.element_name = Some(text.to_string());
 
         match self.recognizer.find_element_by_text(text) {
             Ok(point) => {
