@@ -69,10 +69,12 @@ pub enum ControlCommands {
     Back,
     /// 主页键
     Home,
-    /// 启动应用: control launch <包名> <Activity>
+    /// 启动: control launch <包名> <Activity> (Android) / control launch <URL> (web)
     Launch {
+        /// Android 包名 或 网页 URL
         package: String,
-        activity: String,
+        /// Activity 名（web 时省略）
+        activity: Option<String>,
     },
     /// 关闭应用: control close <包名>
     Close {
@@ -123,7 +125,10 @@ fn to_action(cmd: ControlCommands) -> Result<ControlAction> {
         ControlCommands::HideKeyboard => ControlAction::HideKeyboard,
         ControlCommands::Back => ControlAction::Back,
         ControlCommands::Home => ControlAction::Home,
-        ControlCommands::Launch { package, activity } => ControlAction::Launch { package, activity },
+        ControlCommands::Launch { package, activity } => ControlAction::Launch {
+            package,
+            activity: activity.unwrap_or_default(),
+        },
         ControlCommands::Close { package } => ControlAction::Close { package },
         ControlCommands::Key { code } => ControlAction::Key { code },
     })

@@ -42,7 +42,8 @@ impl ScriptRunner {
             .to_string();
         let display_path = script_path.to_string_lossy().to_string();
 
-        self.run_script(script, &display_path, &script_stem, log_root, on_event).await
+        // run 工作流: 结束后销毁 web 会话（teardown=true）
+        self.run_script(script, &display_path, &script_stem, log_root, true, on_event).await
     }
 
     /// 不落文件执行一串 .tks 指令（tke steps）
@@ -61,7 +62,8 @@ impl ScriptRunner {
             return Err(TkeError::ScriptParseError("没有可执行的有效指令".to_string()));
         }
 
-        self.run_script(script, "<steps>", "steps", log_root, on_event).await
+        // steps 调试: 保持会话便于连续交互（teardown=false）
+        self.run_script(script, "<steps>", "steps", log_root, false, on_event).await
     }
 
     /// 内部统一执行逻辑
@@ -71,6 +73,7 @@ impl ScriptRunner {
         display_path: &str,
         script_stem: &str,
         log_root: Option<&Path>,
+        teardown: bool,
         on_event: &mut dyn FnMut(&RunEvent),
     ) -> Result<ExecutionResult> {
 
@@ -196,8 +199,11 @@ impl ScriptRunner {
             None => String::new(),
         };
 
-        // 6. 清理临时工作区
+        // 6. 清理：临时工作区 + （run 工作流）销毁 web 会话，不留后台浏览器
         workarea.cleanup();
+        if teardown {
+            interpreter.teardown();
+        }
 
         on_event(&RunEvent::RunEnd {
             success: result.success,

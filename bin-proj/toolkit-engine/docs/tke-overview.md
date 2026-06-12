@@ -48,6 +48,33 @@ tke run smarthome_smoke.tks -c tke.toml     # 一个 -c 搞定全部参数
 （跨进程共享，`recognize --cached` 依赖它）；run 工作流用每次运行独立的
 临时目录，结束自动删除。
 
+## 多端驱动（-d 决定）
+
+| -d | 驱动 | 说明 |
+|----|------|------|
+| `<Android序列号>` | adb | 手机/模拟器 |
+| `web` | chromedriver + Chrome for Testing (W3C WebDriver) | 网页，体验与 App 完全一致 |
+| `wda:<id>` | WebDriverAgent | iOS（预留） |
+
+各端底层指令映射对照（排查平台差异用）见 [driver-mapping.md](driver-mapping.md)。
+
+**web 驱动要点**：
+- 浏览器会话跨 tke 进程持久（信息存 `$TMPDIR/tke/web/`），首次使用自动拉起
+- **生命周期**：`tke run` 结束自动销毁会话（无论成败，不留后台 Chrome）；
+  `tke steps`/原子命令保持会话（交互调试连续用），`control close` 显式销毁；
+  每次新建会话前自动收割上次遗留的孤儿 Chrome 进程和 profile
+- chromedriver 与 tke 同目录；Chrome for Testing 放
+  `~/Library/Application Support/tke/chrome-mac-arm64/`（**不可放 ~/Documents
+  等 TCC 保护目录，会卡死在系统授权**），与 chromedriver 版本必须配对
+- 页面元素经 JS 提取后**归一化为 uiautomator 风格 XML**：resource-id=DOM id、
+  content-desc=aria-label、text=直接文本、bounds=截图像素坐标（已乘
+  devicePixelRatio）——元素库 xml 通道、ocr/img 通道、标注、fetch 全部直接复用
+- 操作语义映射：启动 [URL]（单参数）/ 返回=history.back / 滑动=滚轮 /
+  输入=原生 setter+input 事件（兼容 React/Vue）/ 主页=about:blank
+- 窗口固定 1280×900 且 `--force-device-scale-factor=1`：不同机器/显示器
+  渲染一致，脚本像素坐标可移植
+- 注意：网页 Header 下拉菜单不产生导航历史，`返回` 只对真实跳转有效
+
 ## ① 工具直通
 
 透传给 tke 同目录（`bin/<platform>/`）下任意二进制，新增工具零代码：
@@ -121,38 +148,48 @@ scripts = ["login.tks", "devices.tks"]   # 按顺序执行，路径相对本文�
 flow: <log>/<时间戳>_flow_<名>/ 下 flow.json + 每脚本一个子目录（结构同上）
 ```
 
-## 元素库（element.json, schema v2）
+## 元素库（element.json, schema v3）
 
-key = 元素名（唯一主键，人类可读，脚本里 `{元素名}` 直接引用，**不设独立 id**）。
-一个完整元素 = 多端标识 + 两条通用通道，**字段可 null 不可缺**：
+顶层 = `elements`（key=元素名，唯一主键，脚本里 `{元素名}` 直接引用，
+不设独立 id）。每个元素按**平台名**分通道 + 两条通用通道，**字段可 null 不可缺**：
 
 ```json
 {
-  "Devices入口": {
-    "desc": "首页 Devices 卡片，点击进入设备管理页",
-    "xml":  { "xpath": null, "resource_id": null, "text": null,
-              "content_desc": "Devices", "class_name": null },
-    "wda":  null,
-    "dom":  null,
-    "img":  "img/devices.png",
-    "ocr":  "Devices"
+  "elements": {
+    "Devices入口": {
+      "desc": "首页 Devices 卡片，点击进入设备管理页",
+      "android": { "xpath": null, "resource_id": null, "text": null,
+                   "content_desc": "Devices", "class_name": null },
+      "ios": null,
+      "web": null,
+      "img": "img/devices.png",
+      "ocr": "Devices"
+    },
+    "产品菜单": {
+      "desc": "官网顶部导航 Products",
+      "android": null,
+      "ios": null,
+      "web": { "css": null, "xpath": null, "id": null,
+               "text": "Products", "aria": null, "tag": null },
+      "img": null,
+      "ocr": "Products"
+    }
   }
 }
 ```
 
-- `xml`=Android / `wda`=iOS / `dom`=Web：多端 App 一个元素三套标识
+- 平台通道按 `-d` 自动选用：`-d <序列号>`→android、`-d web`→web、`-d wda:`→ios
 - `img` 路径**相对 element.json 所在目录** → 元素库（json+img/）自包含可搬云端
-- `ocr`：OCR 识别用文字
 - **不存 bounds/clickable**（换设备/分辨率即失效）；标注和返回的 bounds
-  一律来自运行时实际匹配到的元素（xml=元素框, ocr=文字框, img=模板尺寸）
-- auto 策略兜底顺序：xml → ocr → img（拿不到 xml/dom 的页面靠 ocr/img）
+  一律来自运行时实际匹配到的元素（结构=元素框, ocr=文字框, img=模板尺寸）
+- auto 策略兜底顺序：平台结构标识 → ocr → img
 - 元素图用 `tke refresh --crop "x1,y1,x2,y2" --out img/xxx.png` 截取
 
 ## .tks 脚本
 
 ```
 步骤:
-启动 [com.example.app, .MainActivity]
+启动 [com.example.app, .MainActivity]   # Android; web 为 启动 [https://...]
 点击 [{Devices入口}]          # {元素名} 经元素库定位; {元素名}&xpath 指定策略
 点击 [{930, 2294}]            # {x,y} 直接坐标
 等待 [{某元素}]               # 等元素出现(30s超时); 等待 [2000] 为固定毫秒

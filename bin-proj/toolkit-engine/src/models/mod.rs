@@ -11,7 +11,7 @@ mod execution;
 // 导出所有公开类型
 pub use point::{Point, Bounds};
 pub use ui_element::UIElement;
-pub use locator::{Locator, LocatorStrategy, XmlLocator};
+pub use locator::{Locator, LocatorStrategy, Platform, AndroidLocator, WebLocator, ElementLibrary};
 pub use tks_types::{TksCommand, TksParam, TksStep, TksScript};
 pub use device_info::{DeviceInfo, HardwareInfo, BatteryInfo, NetworkInfo};
 pub use execution::{ExecutionResult, StepResult, AppInfo, CurrentFocus};

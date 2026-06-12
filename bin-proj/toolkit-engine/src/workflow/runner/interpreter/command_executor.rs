@@ -31,14 +31,19 @@ impl<'a> CommandExecutor<'a> {
         }
     }
 
-    /// 启动应用
+    /// 启动: Android = [包名, Activity]；Web = [URL]
     pub async fn execute_launch(&mut self, params: &[TksParam]) -> Result<()> {
-        if params.len() < 2 {
-            return Err(TkeError::InvalidArgument("启动命令需要包名和Activity名".to_string()));
+        if params.is_empty() {
+            return Err(TkeError::InvalidArgument(
+                "启动命令需要目标: [包名, Activity] (Android) 或 [URL] (Web)".to_string()));
         }
 
         let package = ParamExtractor::extract_text(&params[0])?;
-        let activity = ParamExtractor::extract_text(&params[1])?;
+        let activity = if params.len() > 1 {
+            ParamExtractor::extract_text(&params[1])?
+        } else {
+            String::new()
+        };
 
         self.controller.launch_app(&package, &activity)?;
 
@@ -52,12 +57,12 @@ impl<'a> CommandExecutor<'a> {
         Ok(())
     }
 
-    /// 关闭应用
+    /// 关闭: Android = [包名]；Web = [URL 或任意值]（销毁浏览器会话，与 URL 无关）
     pub fn execute_close(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {
-            return Err(TkeError::InvalidArgument("关闭命令需要包名".to_string()));
+            return Err(TkeError::InvalidArgument(
+                "关闭命令需要目标: [包名] (Android) 或 [URL] (Web)".to_string()));
         }
-
         let package = ParamExtractor::extract_text(&params[0])?;
         self.controller.stop_app(&package)
     }

@@ -2,7 +2,7 @@
 // 默认先 fetch 一次最新页面状态（截图+XML），再按策略定位；
 // --cached 可跳过采集，直接用设备缓存工作区中已有的页面状态
 
-use crate::{Result, Controller, Recognizer, LocatorStrategy, Point, Bounds};
+use crate::{Result, Controller, Recognizer, LocatorStrategy, Platform, Point, Bounds};
 use crate::utils::Workarea;
 use std::path::Path;
 
@@ -17,8 +17,9 @@ impl Recognize {
     /// element_path: 元素库路径（None 按默认路径查找）
     pub fn new(device_id: String, element_path: Option<&Path>) -> Result<Self> {
         let workarea = Workarea::for_device(Some(&device_id))?;
+        let platform = Platform::from_device(Some(&device_id));
         let controller = Controller::new(Some(device_id))?;
-        let recognizer = Recognizer::new(element_path, workarea.clone())?;
+        let recognizer = Recognizer::new(element_path, workarea.clone(), platform)?;
         Ok(Self { controller, recognizer, workarea })
     }
 

@@ -4,7 +4,7 @@ mod command_executor;
 mod param_extractor;
 mod target_resolver;
 
-use crate::{Result, TksStep, TksCommand, Controller, Recognizer, Point, Bounds};
+use crate::{Result, TksStep, TksCommand, Controller, Recognizer, Platform, Point, Bounds};
 use crate::utils::Workarea;
 use std::path::Path;
 use tracing::debug;
@@ -50,8 +50,9 @@ impl ScriptInterpreter {
         element_path: Option<&Path>,
         workarea: Workarea,
     ) -> Result<Self> {
+        let platform = Platform::from_device(device_id.as_deref());
         let controller = Controller::new(device_id.clone())?;
-        let recognizer = Recognizer::new(element_path, workarea.clone())?;
+        let recognizer = Recognizer::new(element_path, workarea.clone(), platform)?;
 
         Ok(Self {
             workarea,
@@ -94,6 +95,13 @@ impl ScriptInterpreter {
     /// 主动采集一次页面状态（截图+XML 到工作区），供工作流补采产物
     pub async fn capture_state(&self) -> Result<()> {
         self.controller.capture_ui_state(&self.workarea).await
+    }
+
+    /// 运行结束清理：web 平台销毁浏览器会话（run 工作流专用，不留幽灵 Chrome）
+    pub fn teardown(&self) {
+        if Platform::from_device(self.device_id.as_deref()) == Platform::Web {
+            let _ = self.controller.stop_app("");
+        }
     }
 
     /// 工作区引用

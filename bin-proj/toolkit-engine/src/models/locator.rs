@@ -1,21 +1,52 @@
-// 元素定位器数据结构 - 统一的元素模型 (schema v2)
+// 元素定位器数据结构 - 统一的元素模型 (schema v3)
 //
-// 元素库 element.json: { "<元素名>": { ...Locator } }
-//   - key 即元素名，是唯一主键（人类可读，脚本中 {元素名} 直接引用）
-//   - 一个完整元素包含多端标识 + 两条通用识别通道，字段可为 null 但不可缺：
-//       xml: Android (uiautomator)    wda: iOS    dom: Web
+// 元素库 element.json:
+// {
+//   "elements": { "<元素名>": { ...Locator } }
+// }
+//
+//   - elements 的 key 即元素名（唯一主键，人类可读，脚本中 {元素名} 直接引用）
+//   - 每个元素按平台分通道存标识 + 两条通用识别通道，字段可为 null 但不可缺：
+//       android: uiautomator 标识    ios: WDA 标识(预留)    web: DOM 标识
 //       img: UI 元素图（图像模板匹配，路径相对 element.json 所在目录）
 //       ocr: 文字内容（OCR 识别）
-//   - 不存储 bounds/clickable 等设备相关快照（换设备/分辨率即失效），
-//     截图标注所需的元素框改为运行时从实际匹配到的元素获取
+//   - 不存储 bounds/clickable 等设备相关快照，截图标注所需的元素框
+//     运行时从实际匹配到的元素获取
 
 use serde::{Deserialize, Serialize};
+
+/// 目标平台（由 -d 设备 ID 推断）
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Platform {
+    Android,
+    Ios,
+    Web,
+}
+
+impl Platform {
+    /// 从设备 ID 推断平台: web* → Web, wda:* → Ios, 其他 → Android
+    pub fn from_device(device_id: Option<&str>) -> Self {
+        match device_id {
+            Some(d) if d == "web" || d.starts_with("web:") => Platform::Web,
+            Some(d) if d.starts_with("wda:") => Platform::Ios,
+            _ => Platform::Android,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Platform::Android => "android",
+            Platform::Ios => "ios",
+            Platform::Web => "web",
+        }
+    }
+}
 
 /// 定位策略枚举
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LocatorStrategy {
-    // XML 类定位
+    // 结构标识类定位（android/web 通道字段）
     XPath,
     ResourceId,
     Text,
@@ -25,7 +56,7 @@ pub enum LocatorStrategy {
     Ocr,
     // 图片模板匹配
     Img,
-    // 自动选择（按优先级：xml类 → ocr → img）
+    // 自动选择（按优先级：结构标识 → ocr → img）
     Auto,
 }
 
@@ -51,9 +82,9 @@ impl LocatorStrategy {
     }
 }
 
-/// Android XML (uiautomator) 标识
+/// Android (uiautomator) 标识
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct XmlLocator {
+pub struct AndroidLocator {
     #[serde(default)]
     pub xpath: Option<String>,
     #[serde(default)]
@@ -66,15 +97,26 @@ pub struct XmlLocator {
     pub class_name: Option<String>,
 }
 
-impl XmlLocator {
-    /// 是否有任何可用标识
-    pub fn has_any(&self) -> bool {
-        self.xpath.is_some()
-            || self.resource_id.is_some()
-            || self.text.is_some()
-            || self.content_desc.is_some()
-            || self.class_name.is_some()
-    }
+/// Web (DOM) 标识
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WebLocator {
+    /// CSS 选择器（预留：需驱动在线查找，当前离线匹配不使用）
+    #[serde(default)]
+    pub css: Option<String>,
+    #[serde(default)]
+    pub xpath: Option<String>,
+    /// DOM 元素 id 属性
+    #[serde(default)]
+    pub id: Option<String>,
+    /// 直接文本内容
+    #[serde(default)]
+    pub text: Option<String>,
+    /// aria-label
+    #[serde(default)]
+    pub aria: Option<String>,
+    /// 标签名 (button/a/input...)
+    #[serde(default)]
+    pub tag: Option<String>,
 }
 
 /// 统一的元素定位器
@@ -88,16 +130,14 @@ pub struct Locator {
     #[serde(default)]
     pub desc: Option<String>,
 
-    // ========== 多端标识（可 null 不可缺） ==========
-    /// Android XML 标识
+    // ========== 各平台标识（可 null 不可缺） ==========
     #[serde(default)]
-    pub xml: Option<XmlLocator>,
+    pub android: Option<AndroidLocator>,
     /// iOS WDA 标识（预留）
     #[serde(default)]
-    pub wda: Option<serde_json::Value>,
-    /// Web DOM 标识（预留）
+    pub ios: Option<serde_json::Value>,
     #[serde(default)]
-    pub dom: Option<serde_json::Value>,
+    pub web: Option<WebLocator>,
 
     // ========== 通用识别通道（可 null 不可缺） ==========
     /// UI 元素图路径（相对 element.json 所在目录）
@@ -109,34 +149,26 @@ pub struct Locator {
 }
 
 impl Locator {
-    /// 获取所有可用的定位策略（按 auto 兜底顺序）
-    pub fn available_strategies(&self) -> Vec<LocatorStrategy> {
-        let mut strategies = Vec::new();
-
-        if let Some(xml) = &self.xml {
-            if xml.resource_id.is_some() {
-                strategies.push(LocatorStrategy::ResourceId);
-            }
-            if xml.xpath.is_some() {
-                strategies.push(LocatorStrategy::XPath);
-            }
-            if xml.text.is_some() {
-                strategies.push(LocatorStrategy::Text);
-            }
-            if xml.content_desc.is_some() {
-                strategies.push(LocatorStrategy::ContentDesc);
-            }
-            if xml.class_name.is_some() {
-                strategies.push(LocatorStrategy::ClassName);
-            }
+    /// 取当前平台的结构标识，统一映射为 AndroidLocator 形态供匹配引擎使用
+    /// （web 页面已归一化为 uiautomator 风格 XML: id→resource-id, aria→content-desc, tag→class）
+    pub fn structural(&self, platform: Platform) -> Option<AndroidLocator> {
+        match platform {
+            Platform::Android => self.android.clone(),
+            Platform::Web => self.web.as_ref().map(|w| AndroidLocator {
+                xpath: w.xpath.clone(),
+                resource_id: w.id.clone(),
+                text: w.text.clone(),
+                content_desc: w.aria.clone(),
+                class_name: w.tag.clone(),
+            }),
+            Platform::Ios => None, // WDA 未实现
         }
-        if self.ocr.is_some() {
-            strategies.push(LocatorStrategy::Ocr);
-        }
-        if self.img.is_some() {
-            strategies.push(LocatorStrategy::Img);
-        }
-
-        strategies
     }
+}
+
+/// 元素库文件 (element.json 顶层结构)
+#[derive(Debug, Default, Deserialize)]
+pub struct ElementLibrary {
+    #[serde(default)]
+    pub elements: std::collections::HashMap<String, Locator>,
 }

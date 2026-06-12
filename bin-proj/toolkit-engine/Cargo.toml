@@ -25,6 +25,8 @@ imageproc = "0.25"
 ab_glyph = "0.2"
 # TOML 解析 (flow 定义 / --config)
 toml = "0.8"
+# WebDriver HTTP 客户端 (同步, 避免 tokio 运行时冲突)
+ureq = { version = "2", features = ["json"] }
 # 并行处理
 rayon = "1.10"
 # 日志
