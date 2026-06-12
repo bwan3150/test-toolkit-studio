@@ -38,7 +38,7 @@ struct Cli {
     #[arg(long, global = true)]
     log: Option<PathBuf>,
 
-    /// 配置文件 tke.toml（等同自动输入 device/element/log 等参数，CLI 显式参数优先）
+    /// 配置文件（缺省自动读 tke 同目录的 config.toml；CLI 显式参数优先于配置）
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
 
@@ -185,7 +185,7 @@ fn build_help() -> String {
   {g}-d, --device{r} <ID>      目标设备
       {g}--element{r} <path>   元素库 element.json {d}(缺省 ./element.json → ./locator/element.json){r}
       {g}--log{r} <dir>        产物输出目录 {d}(不传则 run/steps 不保存产物){r}
-  {g}-c, --config{r} <toml>    配置文件 {d}(自动填入上述参数, CLI 显式参数优先){r}
+  {g}-c, --config{r} <toml>    配置文件 {d}(缺省读 tke 同目录 config.toml; CLI 参数优先){r}
       {g}--json{r}             强制 NDJSON 输出 {d}(终端默认友好格式, 管道自动 NDJSON){r}
   {g}-v, --verbose{r}          DEBUG 日志    {g}-h{r} 帮助    {g}-V{r} 版本
 ",
@@ -202,20 +202,40 @@ async fn main() -> tke::Result<()> {
         .unwrap_or_else(|e| e.exit());
 
     // 加载配置文件并合并参数（CLI 显式参数优先）
+    // 配置来源优先级（同时只用一个）: --config 指定 > tke 同目录 config.toml > 无
     let config = match &cli.config {
         Some(path) => match tke::utils::TkeConfig::load(path) {
             Ok(c) => c,
             Err(e) => tke::JsonOutput::error(e.to_string()),
         },
-        None => tke::utils::TkeConfig::default(),
+        None => {
+            let default_config = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("config.toml")))
+                .filter(|p| p.exists());
+            match default_config {
+                Some(path) => match tke::utils::TkeConfig::load(&path) {
+                    Ok(c) => c,
+                    Err(e) => tke::JsonOutput::error(format!("默认配置 {} 解析失败: {}", path.display(), e)),
+                },
+                None => tke::utils::TkeConfig::default(),
+            }
+        }
     };
 
     let device = cli.device.or(config.device);
     let element = cli.element.or(config.element);
     let log = cli.log.or(config.log);
 
+    // 便捷路由: tke <path.tks|path.toml> 等价于 tke run <path>
+    let tool_is_script = matches!(&cli.command, Commands::Tool(args)
+        if args.first().map(|f| {
+            let l = f.to_lowercase();
+            l.ends_with(".tks") || l.ends_with(".toml")
+        }).unwrap_or(false));
+
     // 直通命令：完全跳过日志初始化，保持原生工具体验
-    let is_passthrough_command = matches!(
+    let is_passthrough_command = !tool_is_script && matches!(
         cli.command,
         Commands::Tool(_) | Commands::Case { .. }
     );
@@ -278,9 +298,14 @@ async fn main() -> tke::Result<()> {
         Commands::Device { action } => {
             tools::device::handle(action, device)
         }
-        // ① 直通
+        // ① 直通（.tks/.toml 路径自动转 run）
         Commands::Tool(args) => {
-            passthrough::handle(args, device).await
+            if tool_is_script {
+                let path = PathBuf::from(&args[0]);
+                workflow::run::handle(RunArgs { path }, device, element, log, cli.json).await
+            } else {
+                passthrough::handle(args, device).await
+            }
         }
     }
 }

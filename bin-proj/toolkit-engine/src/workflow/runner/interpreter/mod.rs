@@ -39,6 +39,8 @@ pub struct ScriptInterpreter {
     recognizer: Recognizer,
     /// 最近一步的执行轨迹
     pub last_trace: ActionTrace,
+    /// 本次运行中启动过的 Android 包名（flow 收尾统一关闭用）
+    pub launched_packages: Vec<String>,
 }
 
 impl ScriptInterpreter {
@@ -60,6 +62,7 @@ impl ScriptInterpreter {
             controller,
             recognizer,
             last_trace: ActionTrace::default(),
+            launched_packages: Vec::new(),
         })
     }
 
@@ -74,6 +77,7 @@ impl ScriptInterpreter {
             &mut self.controller,
             &self.recognizer,
             &mut self.last_trace,
+            &mut self.launched_packages,
         );
 
         match step.command {
@@ -97,12 +101,6 @@ impl ScriptInterpreter {
         self.controller.capture_ui_state(&self.workarea).await
     }
 
-    /// 运行结束清理：web 平台销毁浏览器会话（run 工作流专用，不留幽灵 Chrome）
-    pub fn teardown(&self) {
-        if Platform::from_device(self.device_id.as_deref()) == Platform::Web {
-            let _ = self.controller.stop_app("");
-        }
-    }
 
     /// 工作区引用
     pub fn workarea(&self) -> &Workarea {

@@ -1,4 +1,5 @@
 // Flow 工作流 - 依次执行一组 .tks 脚本
+// web 会话生命周期: 脚本间保留（可测多脚本联动），flow 结束统一销毁
 // flow 文件为 TOML:
 //   name = "冒烟测试"           # 可省略，默认用文件名
 //   scripts = ["a.tks", "b.tks"]  # 按顺序执行，路径相对 flow 文件所在目录
@@ -110,6 +111,7 @@ impl FlowRunner {
             });
 
             // 校验失败/执行异常不中断 flow，记录后继续下一个脚本
+            // web 会话由各脚本的 关闭 指令控制（不关则下一个脚本直接复用，可测联动）
             let exec = match validate_script_path(&script_path) {
                 Ok(()) => {
                     runner
@@ -149,12 +151,42 @@ impl FlowRunner {
                     error,
                     script_path: Some(script_path.to_string_lossy().to_string()),
                     run_dir: None,
+                    launched_packages: Vec::new(),
                 });
             }
 
             if !success {
                 all_success = false;
             }
+        }
+
+        // flow 收尾清场（脚本间状态保留以便联动，整个 flow 结束统一还原）:
+        //   web     → 销毁浏览器会话
+        //   android → 关闭 flow 期间启动过的所有 App（去重）
+        match crate::Platform::from_device(self.device_id.as_deref()) {
+            crate::Platform::Web => {
+                if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
+                    let _ = controller.stop_app("");
+                }
+            }
+            crate::Platform::Android => {
+                let mut packages: Vec<String> = Vec::new();
+                for r in &results {
+                    for p in &r.launched_packages {
+                        if !packages.contains(p) {
+                            packages.push(p.clone());
+                        }
+                    }
+                }
+                if !packages.is_empty() {
+                    if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
+                        for p in &packages {
+                            let _ = controller.stop_app(p);
+                        }
+                    }
+                }
+            }
+            crate::Platform::Ios => {}
         }
 
         // 4. 写入 flow 汇总日志（仅 --log 时）

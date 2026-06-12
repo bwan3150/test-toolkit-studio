@@ -18,6 +18,9 @@ pub struct ExecutionResult {
     /// 本次运行的产物目录（工作流运行时记录）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_dir: Option<String>,
+    /// 本次运行中启动过的 Android 包名（flow 收尾统一关闭用）
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub launched_packages: Vec<String>,
 }
 
 /// 单步执行结果

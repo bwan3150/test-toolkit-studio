@@ -13,6 +13,15 @@ pub async fn handle(mut args: Vec<String>, device_id: Option<String>) -> Result<
 
     let tool_name = args.remove(0);
 
+    // 路径类参数明确提示（直通只接受工具名）
+    if tool_name.contains('/') {
+        eprintln!(
+            "'{}' 是文件路径而非工具名。直通用法: tke <工具名> <参数> (如 tke adb devices); 运行脚本请用: tke run <path.tks|path.toml>",
+            tool_name
+        );
+        std::process::exit(2);
+    }
+
     // 直通执行（继承 stdio，以工具退出码退出）；缺失时输出干净的错误信息
     if let Err(e) = ToolManager::passthrough(&tool_name, args, device_id) {
         eprintln!("{}", e);

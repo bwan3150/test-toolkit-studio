@@ -1,7 +1,7 @@
 // Script 工作流 - 执行单个 .tks 脚本
 // 逐行执行：实时回调 step_start/step_end 事件（NDJSON 输出由 handler 负责）
 // 指定 --log 时每步保存标注截图 + 页面结构文件，结束后写入完整 log.json
-// 工作区使用系统缓存临时目录，运行结束即删除
+// 工作区使用系统缓存临时目录，运行结束即删除；web 会话由脚本的 关闭 指令控制
 
 use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter};
 use crate::utils::Workarea;
@@ -42,8 +42,7 @@ impl ScriptRunner {
             .to_string();
         let display_path = script_path.to_string_lossy().to_string();
 
-        // run 工作流: 结束后销毁 web 会话（teardown=true）
-        self.run_script(script, &display_path, &script_stem, log_root, true, on_event).await
+        self.run_script(script, &display_path, &script_stem, log_root, on_event).await
     }
 
     /// 不落文件执行一串 .tks 指令（tke steps）
@@ -62,8 +61,7 @@ impl ScriptRunner {
             return Err(TkeError::ScriptParseError("没有可执行的有效指令".to_string()));
         }
 
-        // steps 调试: 保持会话便于连续交互（teardown=false）
-        self.run_script(script, "<steps>", "steps", log_root, false, on_event).await
+        self.run_script(script, "<steps>", "steps", log_root, on_event).await
     }
 
     /// 内部统一执行逻辑
@@ -73,7 +71,6 @@ impl ScriptRunner {
         display_path: &str,
         script_stem: &str,
         log_root: Option<&Path>,
-        teardown: bool,
         on_event: &mut dyn FnMut(&RunEvent),
     ) -> Result<ExecutionResult> {
 
@@ -111,6 +108,7 @@ impl ScriptRunner {
             error: None,
             script_path: Some(display_path.to_string()),
             run_dir: artifacts.as_ref().map(|_| run_dir_str.clone()),
+            launched_packages: Vec::new(),
         };
 
         on_event(&RunEvent::RunStart {
@@ -192,6 +190,7 @@ impl ScriptRunner {
         }
 
         result.end_time = chrono::Local::now().to_rfc3339();
+        result.launched_packages = interpreter.launched_packages.clone();
 
         // 5. 写入完整运行日志（仅 --log 时）
         let log_path = match &artifacts {
@@ -199,11 +198,10 @@ impl ScriptRunner {
             None => String::new(),
         };
 
-        // 6. 清理：临时工作区 + （run 工作流）销毁 web 会话，不留后台浏览器
+        // 6. 清理临时工作区
+        // 注: web 会话不自动销毁——生命周期由脚本的 `关闭` 指令控制,
+        //     不写则保留会话供后续脚本/指令复用; 新建会话时会收割历史孤儿
         workarea.cleanup();
-        if teardown {
-            interpreter.teardown();
-        }
 
         on_event(&RunEvent::RunEnd {
             success: result.success,

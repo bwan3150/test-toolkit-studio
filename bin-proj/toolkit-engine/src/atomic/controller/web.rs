@@ -41,8 +41,9 @@ impl WebDriver {
         Ok(Self { device_id, conn: std::sync::Mutex::new(None) })
     }
 
-    /// 取活动连接：复用进程内连接 → 复用持久化会话 → 新建会话
-    fn ensure(&self) -> Result<Conn> {
+    /// 取已有连接（进程内 → 持久化会话），不存在则报错
+    /// 除"启动/导航"外的所有操作都用这个——避免点击/截图等操作凭空拉起空浏览器
+    fn ensure_existing(&self) -> Result<Conn> {
         let mut guard = self.conn.lock().unwrap();
 
         if let Some(conn) = guard.as_ref() {
@@ -59,9 +60,19 @@ impl WebDriver {
             }
         }
 
-        // 新建：拉起 chromedriver + 创建会话
+        Err(TkeError::DeviceError(
+            "无活动浏览器会话，请先执行 启动 [URL] 或 control launch <URL>".to_string(),
+        ))
+    }
+
+    /// 取活动连接，不存在则新建会话（仅供 导航/启动 使用）
+    fn ensure_create(&self) -> Result<Conn> {
+        if let Ok(conn) = self.ensure_existing() {
+            return Ok(conn);
+        }
+
         let conn = Self::start_new_session(&self.device_id)?;
-        *guard = Some(conn.clone());
+        *self.conn.lock().unwrap() = Some(conn.clone());
         Ok(conn)
     }
 
@@ -295,7 +306,7 @@ impl WebDriver {
     // ===== W3C 协议基础 =====
 
     fn endpoint(&self, path: &str) -> Result<String> {
-        let conn = self.ensure()?;
+        let conn = self.ensure_existing()?;
         Ok(format!("{}/session/{}{}", conn.base, conn.session_id, path))
     }
 
@@ -463,6 +474,9 @@ return out;
     // ===== 操作（入参为截图像素坐标） =====
 
     pub fn navigate(&self, url: &str) -> Result<()> {
+        // 启动/导航是唯一允许创建会话的入口
+        self.ensure_create()?;
+
         // 无协议前缀自动补 https://
         let url = if url.starts_with("http://") || url.starts_with("https://") || url.starts_with("about:") {
             url.to_string()

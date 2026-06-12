@@ -30,7 +30,7 @@ CLI / CI / Electron App
 | `-d/--device` | 目标设备（refresh/fetch/recognize/control 必带） |
 | `--element <path>` | 元素库 element.json（缺省找 ./element.json → ./locator/element.json） |
 | `--log <dir>` | 产物输出目录；**不传则 run 不保存任何产物**（CI 纯跑模式） |
-| `-c/--config <tke.toml>` | 配置文件 = 自动输入上述参数；CLI 显式参数优先 |
+| `-c/--config <toml>` | 配置文件 = 自动输入上述参数；**缺省自动读 tke 同目录的 config.toml**；优先级: CLI 参数 > --config 指定 > 同目录 config.toml（同时只用一个） |
 | `--json` | 强制 NDJSON 输出（默认终端=友好格式，管道=NDJSON 自动切换） |
 
 ```toml
@@ -60,9 +60,16 @@ tke run smarthome_smoke.tks -c tke.toml     # 一个 -c 搞定全部参数
 
 **web 驱动要点**：
 - 浏览器会话跨 tke 进程持久（信息存 `$TMPDIR/tke/web/`），首次使用自动拉起
-- **生命周期**：`tke run` 结束自动销毁会话（无论成败，不留后台 Chrome）；
-  `tke steps`/原子命令保持会话（交互调试连续用），`control close` 显式销毁；
-  每次新建会话前自动收割上次遗留的孤儿 Chrome 进程和 profile
+- **生命周期**：会话由脚本的 `关闭` 指令控制——单脚本/steps/原子命令运行后
+  **不自动销毁**（保留复用：继续调试、测多脚本联动）；**flow 结束统一收尾清场**
+  （web=销毁浏览器会话；android=关闭 flow 期间`启动`过的所有 App）；
+  `control close` 随时显式销毁；每次新建会话前自动收割孤儿 Chrome
+- `启动 [URL]` 在**当前会话当前 tab 内跳转**（不开新浏览器/新 tab），
+  无会话时才自动创建；**只有 启动/导航 会创建会话**，其余操作
+  （fetch/点击/截图等）要求已有会话，否则报错引导先启动
+- **`关闭` 的语义**：web 端"应用"即浏览器会话，`关闭 [URL]` 销毁整个会话
+  （含所有页面），与 Android `关闭 [包名]` 杀整个 App 对称；参数写被测站点
+  URL 仅为可读性，寻址实际由 -d 决定（一个 -d web 对应一个会话）
 - chromedriver 与 tke 同目录；Chrome for Testing 放
   `~/Library/Application Support/tke/chrome-mac-arm64/`（**不可放 ~/Documents
   等 TCC 保护目录，会卡死在系统授权**），与 chromedriver 版本必须配对

@@ -14,6 +14,8 @@ pub struct CommandExecutor<'a> {
     controller: &'a mut Controller,
     recognizer: &'a Recognizer,
     trace: &'a mut ActionTrace,
+    /// 本次运行启动过的 Android 包名（flow 收尾关闭用）
+    launched: &'a mut Vec<String>,
 }
 
 impl<'a> CommandExecutor<'a> {
@@ -22,12 +24,14 @@ impl<'a> CommandExecutor<'a> {
         controller: &'a mut Controller,
         recognizer: &'a Recognizer,
         trace: &'a mut ActionTrace,
+        launched: &'a mut Vec<String>,
     ) -> Self {
         Self {
             workarea,
             controller,
             recognizer,
             trace,
+            launched,
         }
     }
 
@@ -46,6 +50,13 @@ impl<'a> CommandExecutor<'a> {
         };
 
         self.controller.launch_app(&package, &activity)?;
+
+        // 记录启动过的 Android 包（flow 收尾统一关闭）
+        if self.recognizer.platform() == crate::Platform::Android
+            && !self.launched.contains(&package)
+        {
+            self.launched.push(package.clone());
+        }
 
         // 等待应用启动
         tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
