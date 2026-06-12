@@ -1,0 +1,267 @@
+// Element 工具 - 元素库管理
+//
+// add: 按坐标从当前页面取元素，自动落库——
+//   ① 当前平台的结构通道（android/ios/web，按 -d 推断）
+//   ② img 通道：按元素 bounds 从截图 crop 出模板图，存 <库目录>/img/<元素名>.png
+//   ③ ocr 通道：结构中的文本，无文本时对 crop 图跑 OCR 兜底
+// 已有元素则合并：只更新当前平台通道；img/ocr 仅在为 null 时填充（--force 强制覆盖）
+
+use crate::{Result, TkeError, Controller, Fetcher, Platform, UIElement};
+use crate::utils::Workarea;
+use std::path::{Path, PathBuf};
+
+/// 元素库默认查找路径（与 Recognizer 一致）
+const DEFAULT_ELEMENT_PATHS: &[&str] = &["element.json", "locator/element.json"];
+
+/// 解析元素库路径：--element 指定的直接用；缺省按默认路径找，都不存在则用第一个默认值新建
+fn resolve_library_path(element_path: Option<&Path>) -> PathBuf {
+    if let Some(p) = element_path {
+        return p.to_path_buf();
+    }
+    for p in DEFAULT_ELEMENT_PATHS {
+        let path = PathBuf::from(p);
+        if path.exists() {
+            return path;
+        }
+    }
+    PathBuf::from(DEFAULT_ELEMENT_PATHS[0])
+}
+
+/// 元素名 → 安全文件名（保留中文/字母/数字，其余替换为 _）
+fn safe_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect()
+}
+
+/// 空字符串归一化为 None
+fn non_empty(s: &Option<String>) -> Option<String> {
+    s.as_ref().filter(|v| !v.trim().is_empty()).cloned()
+}
+
+/// 按平台构造结构通道 JSON（从归一化 XML 解析出的 UIElement 反推各平台字段）
+fn build_channel(platform: Platform, el: &UIElement) -> (&'static str, serde_json::Value) {
+    let text = non_empty(&el.text);
+    let desc = non_empty(&el.content_desc);
+    let rid = non_empty(&el.resource_id);
+    let class = if el.class_name.trim().is_empty() { None } else { Some(el.class_name.clone()) };
+
+    match platform {
+        Platform::Android => (
+            "android",
+            serde_json::json!({
+                "xpath": el.xpath,
+                "resource_id": rid,
+                "text": text,
+                "content_desc": desc,
+                "class_name": class,
+            }),
+        ),
+        // 归一化映射的逆向: resource-id=name, content-desc=label, text=value|label
+        Platform::Ios => (
+            "ios",
+            serde_json::json!({
+                "xpath": null,
+                "name": rid,
+                "label": desc,
+                // text 与 label 相同说明 value 为空（归一化时 text=value||label）
+                "value": if text == desc { serde_json::Value::Null } else { serde_json::json!(text) },
+                "class_name": class,
+            }),
+        ),
+        // 归一化映射的逆向: resource-id=DOM id, content-desc=aria-label, class=tag
+        Platform::Web => (
+            "web",
+            serde_json::json!({
+                "css": null,
+                "xpath": null,
+                "id": rid,
+                "text": text,
+                "aria": desc,
+                "tag": class,
+            }),
+        ),
+    }
+}
+
+/// 对图片文件跑 OCR（tke 自调用子进程，任何失败/崩溃都安全返回 None）
+fn ocr_via_subprocess(image_path: &Path) -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let output = std::process::Command::new(exe)
+        .arg("ocr")
+        .arg("--image")
+        .arg(image_path)
+        .output()
+        .ok()?;
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let joined = result["texts"]
+        .as_array()?
+        .iter()
+        .filter_map(|t| t["text"].as_str())
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if joined.is_empty() { None } else { Some(joined) }
+}
+
+/// 按坐标添加元素到元素库
+/// 返回结果 JSON（含落库内容摘要）
+pub async fn add_element(
+    device_id: String,
+    element_path: Option<&Path>,
+    name: &str,
+    desc: Option<String>,
+    x: i32,
+    y: i32,
+    cached: bool,
+    force: bool,
+) -> Result<serde_json::Value> {
+    let platform = Platform::from_device(Some(&device_id));
+    let workarea = Workarea::for_device(Some(&device_id))?;
+
+    // 1. 采集当前页面（--cached 跳过）
+    if !cached {
+        let controller = Controller::new(Some(device_id))?;
+        controller.capture_ui_state(&workarea).await?;
+    }
+
+    // 2. 解析页面元素，取包含该坐标的最小面积元素；
+    //    带标识（text/desc/id）的元素优先——略大（≤4 倍面积）的有标识元素
+    //    好过紧贴的无标识容器（如文字外层的装饰 div）
+    let fetcher = Fetcher::new();
+    let elements = fetcher.fetch_elements_from_file(&workarea.ui_tree_path())?;
+    fn area(e: &UIElement) -> i64 {
+        let b = &e.bounds;
+        (b.x2 - b.x1) as i64 * (b.y2 - b.y1) as i64
+    }
+    fn has_identifier(e: &UIElement) -> bool {
+        non_empty(&e.text).is_some()
+            || non_empty(&e.content_desc).is_some()
+            || non_empty(&e.resource_id).is_some()
+    }
+    let containing: Vec<&UIElement> = elements
+        .iter()
+        .filter(|e| {
+            let b = &e.bounds;
+            x >= b.x1 && x <= b.x2 && y >= b.y1 && y <= b.y2 && b.x2 > b.x1 && b.y2 > b.y1
+        })
+        .collect();
+    let smallest = containing.iter().min_by_key(|e| area(e)).copied();
+    let smallest_with_id = containing
+        .iter()
+        .filter(|e| has_identifier(e))
+        .min_by_key(|e| area(e))
+        .copied();
+    let target = match (smallest, smallest_with_id) {
+        (Some(s), Some(sid)) if area(sid) <= area(s) * 4 => sid,
+        (Some(s), _) => s,
+        (None, _) => {
+            return Err(TkeError::ElementNotFound(format!(
+                "坐标 ({}, {}) 处没有可用元素", x, y
+            )));
+        }
+    };
+
+    // 3. 结构通道
+    let (channel_key, channel_value) = build_channel(platform, target);
+
+    // 4. img 通道：从截图 crop 元素模板图
+    let lib_path = resolve_library_path(element_path);
+    let lib_dir = lib_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let img_dir = lib_dir.join("img");
+    std::fs::create_dir_all(&img_dir).map_err(TkeError::IoError)?;
+
+    let screenshot = image::open(workarea.screenshot_path())
+        .map_err(|e| TkeError::DeviceError(format!("读取工作区截图失败: {}", e)))?;
+    let (sw, sh) = (screenshot.width() as i32, screenshot.height() as i32);
+    let b = &target.bounds;
+    let (cx1, cy1) = (b.x1.clamp(0, sw - 1), b.y1.clamp(0, sh - 1));
+    let (cx2, cy2) = (b.x2.clamp(cx1 + 1, sw), b.y2.clamp(cy1 + 1, sh));
+    let crop = screenshot.crop_imm(cx1 as u32, cy1 as u32, (cx2 - cx1) as u32, (cy2 - cy1) as u32);
+
+    let img_file = format!("img/{}.png", safe_filename(name));
+    let img_abs = lib_dir.join(&img_file);
+    crop.save(&img_abs)
+        .map_err(|e| TkeError::DeviceError(format!("保存元素模板图失败: {}", e)))?;
+
+    // 5. ocr 通道：结构文本优先，无文本时对 crop 图跑 OCR 兜底
+    //    （OCR 走 tke 子进程隔离：tesseract 环境问题导致的崩溃不影响落库主流程）
+    //    防护：大容器（>30% 屏幕面积）或过长文本不作为 ocr 通道——整页文字会污染匹配
+    let area_ratio = ((cx2 - cx1) as f64 * (cy2 - cy1) as f64) / (sw as f64 * sh as f64);
+    let is_container_pick = area_ratio > 0.3;
+    let mut ocr_text = non_empty(&target.text).or_else(|| non_empty(&target.content_desc));
+    if ocr_text.is_none() && !is_container_pick {
+        ocr_text = ocr_via_subprocess(&img_abs).filter(|t| t.chars().count() <= 60);
+    }
+
+    // 6. 读取/新建元素库，合并写入（preserve_order 保持文件原有元素顺序）
+    let mut lib: serde_json::Value = match std::fs::read_to_string(&lib_path) {
+        Ok(content) => serde_json::from_str(&content)
+            .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
+        Err(_) => serde_json::json!({ "elements": {} }),
+    };
+    if !lib["elements"].is_object() {
+        lib["elements"] = serde_json::json!({});
+    }
+
+    let existed = lib["elements"][name].is_object();
+    if !existed {
+        // 新元素：所有通道键齐全（可 null 不可缺）
+        lib["elements"][name] = serde_json::json!({
+            "desc": null,
+            "android": null,
+            "ios": null,
+            "web": null,
+            "img": null,
+            "ocr": null,
+        });
+    }
+    let entry = &mut lib["elements"][name];
+
+    if let Some(d) = &desc {
+        entry["desc"] = serde_json::json!(d);
+    }
+    // 当前平台通道更新（本次采集是最新事实）；
+    // 但不允许无标识的新通道覆盖已有的有效通道（class/tag 不算标识）
+    let new_has_id = ["resource_id", "text", "content_desc", "name", "label", "value", "id", "aria", "xpath"]
+        .iter()
+        .any(|k| !channel_value[k].is_null());
+    let old_channel_valid = entry[channel_key].is_object() && !new_has_id;
+    if !old_channel_valid {
+        entry[channel_key] = channel_value.clone();
+    }
+    // img/ocr 为通用通道：仅在为 null 时填充，--force 强制覆盖
+    let img_written = force || entry["img"].is_null();
+    if img_written {
+        entry["img"] = serde_json::json!(img_file);
+    } else {
+        // 没落库则删掉刚 crop 的图，避免遗留孤儿文件
+        let _ = std::fs::remove_file(&img_abs);
+    }
+    let ocr_written = (force || entry["ocr"].is_null()) && ocr_text.is_some();
+    if ocr_written {
+        entry["ocr"] = serde_json::json!(ocr_text);
+    }
+
+    let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
+    std::fs::write(&lib_path, pretty).map_err(TkeError::IoError)?;
+
+    let mut result = serde_json::json!({
+        "success": true,
+        "element": name,
+        "library": lib_path.to_string_lossy(),
+        "updated": existed,
+        "channel": channel_key,
+        channel_key: channel_value,
+        "img": if img_written { serde_json::json!(img_file) } else { serde_json::json!("已有, 未覆盖 (--force 覆盖)") },
+        "ocr": if ocr_written { serde_json::json!(ocr_text) } else { serde_json::Value::Null },
+        "bounds": target.bounds,
+    });
+    if is_container_pick {
+        result["hint"] = serde_json::json!(
+            "该坐标命中的是大容器（无更小的可见元素），建议换更精确的坐标或依赖 img 通道"
+        );
+    }
+    Ok(result)
+}

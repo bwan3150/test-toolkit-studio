@@ -54,6 +54,7 @@ pub use models::{
     LocatorStrategy,
     Platform,
     AndroidLocator,
+    IosLocator,
     WebLocator,
     TksScript,
     TksStep,

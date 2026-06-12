@@ -39,7 +39,7 @@ impl<'a> CommandExecutor<'a> {
     pub async fn execute_launch(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {
             return Err(TkeError::InvalidArgument(
-                "启动命令需要目标: [包名, Activity] (Android) 或 [URL] (Web)".to_string()));
+                "启动命令需要目标: [包名, Activity] (Android) / [BundleID] (iOS) / [URL] (Web)".to_string()));
         }
 
         let package = ParamExtractor::extract_text(&params[0])?;
@@ -51,8 +51,8 @@ impl<'a> CommandExecutor<'a> {
 
         self.controller.launch_app(&package, &activity)?;
 
-        // 记录启动过的 Android 包（flow 收尾统一关闭）
-        if self.recognizer.platform() == crate::Platform::Android
+        // 记录启动过的包/BundleID（flow 收尾统一关闭; web 的会话销毁不走这里）
+        if self.recognizer.platform() != crate::Platform::Web
             && !self.launched.contains(&package)
         {
             self.launched.push(package.clone());
@@ -72,7 +72,7 @@ impl<'a> CommandExecutor<'a> {
     pub fn execute_close(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {
             return Err(TkeError::InvalidArgument(
-                "关闭命令需要目标: [包名] (Android) 或 [URL] (Web)".to_string()));
+                "关闭命令需要目标: [包名] (Android) / [BundleID] (iOS) / [URL] (Web)".to_string()));
         }
         let package = ParamExtractor::extract_text(&params[0])?;
         self.controller.stop_app(&package)
@@ -212,8 +212,15 @@ impl<'a> CommandExecutor<'a> {
                 }
             }
             TksParam::Element { name, strategy } => {
-                debug!("等待元素出现: {}, 策略: {:?}", name, strategy);
-                self.wait_for_element(name, strategy).await?;
+                // 可选第二参数 = 超时秒数: 等待 [{元素}, 90]（缺省 30s）
+                let timeout_secs = match params.get(1) {
+                    Some(TksParam::Number(n)) => *n as u64,
+                    Some(TksParam::Duration(ms)) => (*ms as u64 / 1000).max(1),
+                    Some(TksParam::Text(t)) => t.parse().unwrap_or(30),
+                    _ => 30,
+                };
+                debug!("等待元素出现: {}, 策略: {:?}, 超时: {}s", name, strategy, timeout_secs);
+                self.wait_for_element(name, strategy, timeout_secs).await?;
             }
             TksParam::Text(text) => {
                 // 支持文本参数的等待
@@ -233,8 +240,8 @@ impl<'a> CommandExecutor<'a> {
     }
 
     /// 等待元素出现
-    async fn wait_for_element(&mut self, name: &str, strategy: &LocatorStrategy) -> Result<()> {
-        let timeout = tokio::time::Duration::from_secs(30);
+    async fn wait_for_element(&mut self, name: &str, strategy: &LocatorStrategy, timeout_secs: u64) -> Result<()> {
+        let timeout = tokio::time::Duration::from_secs(timeout_secs);
         let start = tokio::time::Instant::now();
 
         while start.elapsed() < timeout {

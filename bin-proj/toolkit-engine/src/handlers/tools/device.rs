@@ -16,6 +16,23 @@ pub enum DeviceCommands {
 
 /// 处理 Device 相关命令
 pub fn handle(action: DeviceCommands, device_id: Option<String>) -> Result<()> {
+    // 非 Android 设备（iOS/Web）：prop 是 adb 专属；info 走驱动给基础信息（型号/屏幕尺寸）
+    if tke::Platform::from_device(device_id.as_deref()) != tke::Platform::Android {
+        match action {
+            DeviceCommands::Info => {
+                let controller = tke::Controller::new(device_id)?;
+                let info = controller.get_device_info()?;
+                JsonOutput::print(serde_json::to_value(info).unwrap());
+                return Ok(());
+            }
+            DeviceCommands::Prop { .. } => {
+                return Err(tke::TkeError::InvalidArgument(
+                    "device prop 仅支持 Android 设备 (adb getprop)".to_string(),
+                ));
+            }
+        }
+    }
+
     let device_manager = DeviceManager::new(device_id)?;
 
     match action {

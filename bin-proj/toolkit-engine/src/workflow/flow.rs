@@ -161,15 +161,16 @@ impl FlowRunner {
         }
 
         // flow 收尾清场（脚本间状态保留以便联动，整个 flow 结束统一还原）:
-        //   web     → 销毁浏览器会话
-        //   android → 关闭 flow 期间启动过的所有 App（去重）
-        match crate::Platform::from_device(self.device_id.as_deref()) {
+        //   web         → 销毁浏览器会话
+        //   android/ios → 关闭 flow 期间启动过的所有 App（去重）; ios 再销毁 WDA 会话
+        let platform = crate::Platform::from_device(self.device_id.as_deref());
+        match platform {
             crate::Platform::Web => {
                 if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
                     let _ = controller.stop_app("");
                 }
             }
-            crate::Platform::Android => {
+            crate::Platform::Android | crate::Platform::Ios => {
                 let mut packages: Vec<String> = Vec::new();
                 for r in &results {
                     for p in &r.launched_packages {
@@ -178,15 +179,16 @@ impl FlowRunner {
                         }
                     }
                 }
-                if !packages.is_empty() {
-                    if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
-                        for p in &packages {
-                            let _ = controller.stop_app(p);
-                        }
+                if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
+                    for p in &packages {
+                        let _ = controller.stop_app(p);
+                    }
+                    // iOS: App 关完后销毁 WDA 会话
+                    if platform == crate::Platform::Ios {
+                        let _ = controller.stop_app("");
                     }
                 }
             }
-            crate::Platform::Ios => {}
         }
 
         // 4. 写入 flow 汇总日志（仅 --log 时）

@@ -9,6 +9,7 @@ bin/<platform>/                          # 与 tke 同目录 = 直通可用
 ├── tke                                  # 主程序 (bin-proj/toolkit-engine 构建输出)
 ├── adb, aapt                            # Android 工具链
 ├── chromedriver                         # Web 驱动 (单文件, 可以放这里)
+├── go-ios                               # iOS 驱动基础设施 (单文件, 隧道/启动WDA/端口转发)
 ├── k6, ffmpeg, tester-ai, tke-opencv, tke-scrcpy
 └── config.toml                          # 默认配置 (可选, --config 可覆盖)
 
@@ -51,6 +52,48 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # 清隔离属性
 .app 包结构（codesign 报 "code has no resources"）。终端 curl + unzip/ditto 安全；
 若已被隔离，`xattr -cr <app>` 清除。
 
+## ⚠️ iOS（WebDriverAgent）注意事项
+
+iOS 全部基础设施由 tke 经 **go-ios**（与 tke 同目录的单文件二进制）自动管理：
+隧道（iOS 17+）、拉起设备上的 WDA（runwda，经 testmanagerd，**无需 Xcode**）、
+USB 端口转发。冷启动全链路约 10 秒，之后热复用 <1 秒。
+
+**唯一的一次性前置（每台新设备）**：用 Xcode 把 WebDriverAgent 装到设备上——
+
+```bash
+cd ~/Documents/GitHub/WebDriverAgent   # WDA 源码
+xcodebuild -project WebDriverAgent.xcodeproj \
+  -scheme WebDriverAgentRunner \
+  -destination "id=<设备UDID>" \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=<TeamID> CODE_SIGN_STYLE=Automatic \
+  test
+# 装上后 Ctrl-C 退出即可（运行交给 tke 的 go-ios）；
+# 设备上需信任开发者: 设置→通用→VPN与设备管理
+```
+
+实测踩过的坑（iPhone 12, iOS 18.6.2）：
+
+- **iOS 17+ 上旧工具全部失效**：tidevice/老 instruments 协议连不上；
+  `xcrun devicectl ... launch xctrunner` 能拉起 runner 但进程**立即退出**
+  （WDA 必须经 XCTest 会话启动，直接点 App 图标同理）。可靠方式只有
+  xcodebuild test（装+跑）和 go-ios runwda（只跑，tke 用的就是它）。
+- **签名**：xcodebuild 报 "requires a development team" 时，命令行直接传
+  `DEVELOPMENT_TEAM=<TeamID>`（`security find-identity -v -p codesigning` 查证书，
+  团队 ID 在证书 OU 字段）。
+- **设备寻址**：`-d <UDID>`（25 位、第 9 位是连字符的自动识别为 iOS，
+  如 `00008101-000C75842192001E`），或显式 `-d wda:<UDID>`。
+  `go-ios list` / `xcrun devicectl list devices` 查 UDID。
+- **坐标系**：脚本里写截图像素坐标（与 Android/Web 一致）；
+  WDA 协议用逻辑点，tke 按 scale（视网膜倍率，iPhone 12=3）自动换算。
+- **会话语义**：只有 `启动 [BundleID]` 会创建 WDA 会话；其余操作要求已有会话。
+  `关闭 [BundleID]` 只关 App 不销毁会话；`control close x` 销毁会话；
+  flow 结束自动关 App + 销毁会话。隧道/转发/WDA 进程跨命令常驻复用。
+- **排查**：go-ios 各进程日志在 `$TMPDIR/tke/ios/`（tunnel.log /
+  runwda-<udid>.log / forward-<udid>.log）；会话状态在同目录 `<udid>.json`。
+- **selfIdentity.plist**：go-ios 的隧道配对身份文件（密钥对），它默认写到
+  进程 cwd——tke 已把 go-ios 的 cwd 固定为 `$TMPDIR/tke/ios/`。如果在项目目录
+  里看到这个文件，是旧版本留下的，删掉即可（会自动重新配对生成）。
+
 ## ⚠️ 其他实测踩过的坑
 
 - **首次启动很慢**：macOS 对 600MB 的 Chrome 包首启要做完整 Gatekeeper 扫描
@@ -72,7 +115,8 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # 清隔离属性
 $TMPDIR/tke/
 ├── workarea/<设备ID>/      # 原子命令的页面采集缓存 (跨进程共享, 不删除)
 ├── run-<时间戳>-<pid>/     # run 工作流的临时工作区 (运行完自动删除)
-└── web/                    # web 会话信息 + chromedriver 日志 + 浏览器 profile
+├── web/                    # web 会话信息 + chromedriver 日志 + 浏览器 profile
+└── ios/                    # iOS 会话状态 + go-ios 日志 (tunnel/runwda/forward)
 ```
 
 ## 构建

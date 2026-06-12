@@ -54,7 +54,7 @@ tke run smarthome_smoke.tks -c tke.toml     # 一个 -c 搞定全部参数
 |----|------|------|
 | `<Android序列号>` | adb | 手机/模拟器 |
 | `web` | chromedriver + Chrome for Testing (W3C WebDriver) | 网页，体验与 App 完全一致 |
-| `wda:<id>` | WebDriverAgent | iOS（预留） |
+| `<iOS UDID>` 或 `wda:<UDID>` | WebDriverAgent (HTTP) | iPhone/iPad；UDID 格式（25位带连字符）自动识别 |
 
 各端底层指令映射对照（排查平台差异用）见 [driver-mapping.md](driver-mapping.md)。
 
@@ -62,11 +62,20 @@ tke run smarthome_smoke.tks -c tke.toml     # 一个 -c 搞定全部参数
 - 浏览器会话跨 tke 进程持久（信息存 `$TMPDIR/tke/web/`），首次使用自动拉起
 - **生命周期**：会话由脚本的 `关闭` 指令控制——单脚本/steps/原子命令运行后
   **不自动销毁**（保留复用：继续调试、测多脚本联动）；**flow 结束统一收尾清场**
-  （web=销毁浏览器会话；android=关闭 flow 期间`启动`过的所有 App）；
+  （web=销毁浏览器会话；android/ios=关闭 flow 期间`启动`过的所有 App，ios 再销毁 WDA 会话）；
   `control close` 随时显式销毁；每次新建会话前自动收割孤儿 Chrome
 - `启动 [URL]` 在**当前会话当前 tab 内跳转**（不开新浏览器/新 tab），
   无会话时才自动创建；**只有 启动/导航 会创建会话**，其余操作
   （fetch/点击/截图等）要求已有会话，否则报错引导先启动
+
+**iOS 驱动要点**：
+- 基础设施全自动：tke 经同目录的 go-ios 自动管理隧道/拉起 WDA/USB 转发
+  （冷启动约 10s，热复用 <1s；状态与日志在 `$TMPDIR/tke/ios/`）；
+  唯一一次性前置是用 Xcode 给设备装 WDA（见 [setup-notes.md](setup-notes.md)）
+- 会话生命周期与 web 一致：`启动 [BundleID]` 是唯一会话创建入口，
+  单脚本/原子命令不自动销毁，flow 结束统一清场
+- 坐标统一为截图像素，scale（视网膜倍率）自动换算；XCUI 元素树归一化为
+  uiautomator 风格 XML，识别/标注与 Android/Web 同一套代码
 - **`关闭` 的语义**：web 端"应用"即浏览器会话，`关闭 [URL]` 销毁整个会话
   （含所有页面），与 Android `关闭 [包名]` 杀整个 App 对称；参数写被测站点
   URL 仅为可读性，寻址实际由 -d 决定（一个 -d web 对应一个会话）
@@ -184,7 +193,9 @@ flow: <log>/<时间戳>_flow_<名>/ 下 flow.json + 每脚本一个子目录（�
 }
 ```
 
-- 平台通道按 `-d` 自动选用：`-d <序列号>`→android、`-d web`→web、`-d wda:`→ios
+- 平台通道按 `-d` 自动选用：`-d <序列号>`→android、`-d web`→web、`-d <UDID>`→ios
+- ios 通道字段：`{xpath, name, label, value, class_name}`（name=accessibility id，
+  label=accessibility label，匹配引擎映射: name→resource-id, label→content-desc, value→text）
 - `img` 路径**相对 element.json 所在目录** → 元素库（json+img/）自包含可搬云端
 - **不存 bounds/clickable**（换设备/分辨率即失效）；标注和返回的 bounds
   一律来自运行时实际匹配到的元素（结构=元素框, ocr=文字框, img=模板尺寸）
@@ -198,7 +209,7 @@ flow: <log>/<时间戳>_flow_<名>/ 下 flow.json + 每脚本一个子目录（�
 启动 [com.example.app, .MainActivity]   # Android; web 为 启动 [https://...]
 点击 [{Devices入口}]          # {元素名} 经元素库定位; {元素名}&xpath 指定策略
 点击 [{930, 2294}]            # {x,y} 直接坐标
-等待 [{某元素}]               # 等元素出现(30s超时); 等待 [2000] 为固定毫秒
+等待 [{某元素}]               # 等元素出现(默认30s超时); 等待 [{某元素}, 90] 自定义超时秒数; 等待 [2000] 为固定毫秒
 断言 [{Settings入口}, 存在]
 关闭 [com.example.app]
 ```
@@ -207,7 +218,20 @@ flow: <log>/<时间戳>_flow_<名>/ 下 flow.json + 每脚本一个子目录（�
 
 ## ④ 自有工具
 
-`ocr`（图片文字识别）/ `file`（设备文件系统）/ `app`（应用管理）/ `device`（设备信息）
+`ocr`（图片文字识别）/ `file`（设备文件系统）/ `app`（应用管理）/ `device`（设备信息）/
+`element`（元素库管理）
+
+**element add——按坐标取元素落库**（测试人员定位元素的主要入口）：
+
+```bash
+tke element add "帮助菜单" --at 786,57 --desc "顶部导航 Help" -d web -c tke.toml
+```
+
+自动完成三件事：① 取该坐标处最小可见元素（带 text/desc/id 标识的优先），按 `-d`
+平台写入对应结构通道（android/ios/web）；② 按元素 bounds 从当前截图 **crop 出
+模板图**存 `<库目录>/img/<元素名>.png` 并填 img 通道；③ ocr 通道取结构文本，
+无文本的图标类元素自动对 crop 图跑 OCR 兜底。已有元素则合并更新（img/ocr 已有值
+时不覆盖，`--force` 强制；落库即可被 recognize/脚本 `{元素名}` 引用）。
 
 ## src 目录结构（四大模块）
 
@@ -215,12 +239,12 @@ flow: <log>/<时间戳>_flow_<名>/ 下 flow.json + 每脚本一个子目录（�
 src/
 ├── passthrough/   ① 直通: ToolManager(通用二进制透传) + adb/aapt 路径管理
 ├── atomic/        ② 原子: refresh/fetch/recognize/control
-│   ├── controller/    设备驱动 (adb; wda/playwright 扩展位)
+│   ├── controller/    设备驱动 (adb / wda / web)
 │   ├── fetcher/       UI XML 解析 (元素提取/xpath 生成)
 │   └── recognizer/    元素识别引擎 (xml/ocr/图像三通道)
 ├── workflow/      ③ 工作流: run/steps/case + 产物/事件
 │   └── runner/        .tks 解析器 + 解释器
-├── tools/         ④ 自有工具: ocr/file/app/device
+├── tools/         ④ 自有工具: ocr/file/app/device/element
 ├── models/  utils/(workarea/config/json_output)
 ├── handlers/      CLI 命令处理器（镜像四大块分目录）
 ├── lib.rs  main.rs

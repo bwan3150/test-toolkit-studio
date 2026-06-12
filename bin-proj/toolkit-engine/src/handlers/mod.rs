@@ -16,4 +16,4 @@ pub mod tools;
 // 重新导出命令参数类型，方便 main.rs 使用
 pub use atomic::{RefreshArgs, FetchArgs, RecognizeArgs, ControlCommands};
 pub use workflow::{RunArgs, StepsArgs, CaseArgs};
-pub use tools::{FileCommands, AppCommands, DeviceCommands};
+pub use tools::{FileCommands, AppCommands, DeviceCommands, ElementCommands};

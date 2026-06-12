@@ -24,11 +24,11 @@ pub enum Platform {
 }
 
 impl Platform {
-    /// 从设备 ID 推断平台: web* → Web, wda:* → Ios, 其他 → Android
+    /// 从设备 ID 推断平台: web* → Web, wda:*/iOS UDID → Ios, 其他 → Android
     pub fn from_device(device_id: Option<&str>) -> Self {
         match device_id {
             Some(d) if d == "web" || d.starts_with("web:") => Platform::Web,
-            Some(d) if d.starts_with("wda:") => Platform::Ios,
+            Some(d) if d.starts_with("wda:") || is_ios_udid(d) => Platform::Ios,
             _ => Platform::Android,
         }
     }
@@ -40,6 +40,13 @@ impl Platform {
             Platform::Web => "web",
         }
     }
+}
+
+/// 是否为 iOS 设备 UDID（现代格式: 8位hex-16位hex, 如 00008101-000C75842192001E）
+fn is_ios_udid(d: &str) -> bool {
+    d.len() == 25
+        && d.as_bytes()[8] == b'-'
+        && d.chars().enumerate().all(|(i, c)| i == 8 || c.is_ascii_hexdigit())
 }
 
 /// 定位策略枚举
@@ -97,6 +104,25 @@ pub struct AndroidLocator {
     pub class_name: Option<String>,
 }
 
+/// iOS (XCUI/WDA) 标识
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct IosLocator {
+    #[serde(default)]
+    pub xpath: Option<String>,
+    /// accessibility identifier (XCUI name 属性)
+    #[serde(default)]
+    pub name: Option<String>,
+    /// accessibility label
+    #[serde(default)]
+    pub label: Option<String>,
+    /// 元素值（文本框内容/静态文本）
+    #[serde(default)]
+    pub value: Option<String>,
+    /// 元素类型 (XCUIElementTypeButton 等)
+    #[serde(default)]
+    pub class_name: Option<String>,
+}
+
 /// Web (DOM) 标识
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WebLocator {
@@ -133,9 +159,9 @@ pub struct Locator {
     // ========== 各平台标识（可 null 不可缺） ==========
     #[serde(default)]
     pub android: Option<AndroidLocator>,
-    /// iOS WDA 标识（预留）
+    /// iOS WDA 标识
     #[serde(default)]
-    pub ios: Option<serde_json::Value>,
+    pub ios: Option<IosLocator>,
     #[serde(default)]
     pub web: Option<WebLocator>,
 
@@ -150,9 +176,11 @@ pub struct Locator {
 
 impl Locator {
     /// 取当前平台的结构标识，统一映射为 AndroidLocator 形态供匹配引擎使用
-    /// （web 页面已归一化为 uiautomator 风格 XML: id→resource-id, aria→content-desc, tag→class）
+    /// （web/ios 页面均已归一化为 uiautomator 风格 XML:
+    ///   web: id→resource-id, aria→content-desc, tag→class
+    ///   ios: name→resource-id, label→content-desc, value|label→text, type→class）
     pub fn structural(&self, platform: Platform) -> Option<AndroidLocator> {
-        match platform {
+        let loc = match platform {
             Platform::Android => self.android.clone(),
             Platform::Web => self.web.as_ref().map(|w| AndroidLocator {
                 xpath: w.xpath.clone(),
@@ -161,8 +189,19 @@ impl Locator {
                 content_desc: w.aria.clone(),
                 class_name: w.tag.clone(),
             }),
-            Platform::Ios => None, // WDA 未实现
-        }
+            Platform::Ios => self.ios.as_ref().map(|i| AndroidLocator {
+                xpath: i.xpath.clone(),
+                resource_id: i.name.clone(),
+                text: i.value.clone().or_else(|| i.label.clone()),
+                content_desc: i.label.clone(),
+                class_name: i.class_name.clone(),
+            }),
+        };
+        // 字段全空的通道视为无结构标识（否则会无条件匹配任意元素）
+        // class_name 单独存在不构成有效标识（页面上同类元素遍地都是）
+        loc.filter(|l| {
+            l.xpath.is_some() || l.resource_id.is_some() || l.text.is_some() || l.content_desc.is_some()
+        })
     }
 }
 

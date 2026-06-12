@@ -126,6 +126,11 @@ enum Commands {
         #[command(subcommand)]
         action: DeviceCommands,
     },
+    /// [工具] 元素库管理（按坐标取元素落库）
+    Element {
+        #[command(subcommand)]
+        action: ElementCommands,
+    },
 
     // ==================== ① 直通（不在静态列表，见 --help 末尾动态清单） ====================
     /// [直通] 透传任意同目录二进制: tke <工具名> <原生指令>
@@ -177,12 +182,13 @@ fn build_help() -> String {
   {g}file{r}         设备文件系统管理
   {g}app{r}          设备应用管理
   {g}device{r}       设备详细信息
+  {g}element{r}      元素库管理 {d}(element add <名称> --at x,y 取元素落库, 自动crop模板图+ocr){r}
 
 {c}直通{r}
 {tools_line}
 
 {c}全局参数{r}
-  {g}-d, --device{r} <ID>      目标设备
+  {g}-d, --device{r} <ID>      目标设备 {d}(Android序列号 / web / iOS UDID){r}
       {g}--element{r} <path>   元素库 element.json {d}(缺省 ./element.json → ./locator/element.json){r}
       {g}--log{r} <dir>        产物输出目录 {d}(不传则 run/steps 不保存产物){r}
   {g}-c, --config{r} <toml>    配置文件 {d}(缺省读 tke 同目录 config.toml; CLI 参数优先){r}
@@ -297,6 +303,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Device { action } => {
             tools::device::handle(action, device)
+        }
+        Commands::Element { action } => {
+            tools::element::handle(action, device, element).await
         }
         // ① 直通（.tks/.toml 路径自动转 run）
         Commands::Tool(args) => {
