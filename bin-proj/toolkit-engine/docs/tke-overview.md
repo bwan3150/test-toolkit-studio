@@ -70,9 +70,8 @@ tke run smarthome_smoke.tks -c tke.toml     # 一个 -c 搞定全部参数
 - **`关闭` 的语义**：web 端"应用"即浏览器会话，`关闭 [URL]` 销毁整个会话
   （含所有页面），与 Android `关闭 [包名]` 杀整个 App 对称；参数写被测站点
   URL 仅为可读性，寻址实际由 -d 决定（一个 -d web 对应一个会话）
-- chromedriver 与 tke 同目录；Chrome for Testing 放
-  `~/Library/Application Support/tke/chrome-mac-arm64/`（**不可放 ~/Documents
-  等 TCC 保护目录，会卡死在系统授权**），与 chromedriver 版本必须配对
+- chromedriver 与 tke 同目录；Chrome for Testing 的存放位置/版本配对/macOS
+  各类坑见 [setup-notes.md](setup-notes.md)
 - 页面元素经 JS 提取后**归一化为 uiautomator 风格 XML**：resource-id=DOM id、
   content-desc=aria-label、text=直接文本、bounds=截图像素坐标（已乘
   devicePixelRatio）——元素库 xml 通道、ocr/img 通道、标注、fetch 全部直接复用
