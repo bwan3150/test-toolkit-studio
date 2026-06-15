@@ -180,9 +180,10 @@ async fn main() -> tke::Result<()> {
         }).unwrap_or(false));
 
     // 直通命令：完全跳过日志初始化，保持原生工具体验
+    // 注：case 已改为内置 AI 闭环（不再透传 tester-ai），因此走正常日志初始化
     let is_passthrough_command = !tool_is_script && matches!(
         cli.command,
-        Commands::Tool(_) | Commands::Case { .. }
+        Commands::Tool(_)
     );
 
     if !is_passthrough_command {
@@ -228,7 +229,7 @@ async fn main() -> tke::Result<()> {
             workflow::steps::handle(args, device, element, log, cli.json).await
         }
         Commands::Case { args } => {
-            workflow::case::handle(args, device, element).await
+            workflow::case::handle(args, device, element, log, config.ai, config.knowledge).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {

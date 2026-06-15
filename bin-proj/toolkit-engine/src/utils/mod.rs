@@ -7,4 +7,4 @@ pub mod xml;
 
 pub use json_output::JsonOutput;
 pub use workarea::Workarea;
-pub use config::TkeConfig;
+pub use config::{TkeConfig, AiConfig, KnowledgeConfig};

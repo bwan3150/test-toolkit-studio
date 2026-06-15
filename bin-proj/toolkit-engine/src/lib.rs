@@ -33,7 +33,7 @@ pub mod tools;
 // ===== 统一导出（保持 crate 根路径简洁） =====
 
 // 基础设施
-pub use utils::{JsonOutput, Workarea, TkeConfig};
+pub use utils::{JsonOutput, Workarea, TkeConfig, AiConfig, KnowledgeConfig};
 
 // ① 直通 + 二进制定位
 pub use passthrough::ToolManager;
@@ -56,6 +56,12 @@ pub use atomic::{
 pub use workflow::{
     RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult,
     Runner, ScriptParser, ScriptInterpreter, ActionTrace,
+};
+// ③ 工作流 - AI 探索（tke case）
+pub use workflow::agent::{
+    LlmSession, LlmTool, LlmToolCall, LlmReply,
+    AgentRunner, AgentRunOptions, AgentResult,
+    PromptSet, PromptSpec,
 };
 
 // ④ 自有工具
@@ -135,6 +141,9 @@ pub enum TkeError {
 
     #[error("OCR错误: {0}")]
     OcrError(String),
+
+    #[error("AI模型错误: {0}")]
+    LlmError(String),
 }
 
 pub type Result<T> = std::result::Result<T, TkeError>;

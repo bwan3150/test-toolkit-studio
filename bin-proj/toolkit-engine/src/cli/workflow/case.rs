@@ -1,45 +1,116 @@
 // Case 命令处理器（③ 工作流）
-// tke case <用例.md|"用例文字"> --script <导出.tks路径>
-// AI 根据文字用例在真机上探索测试并生成 .tks 脚本（由 tester-ai 实现，tke 作为入口）
+// tke case <用例.md|"用例文字"> --script <导出.tks路径> [-d 设备] [-c 配置]
+// AI 在真机上探索测试并生成 .tks 脚本（tke 内置 AI 闭环，已替代废弃的 tester-ai）
+//
+// 参数来源优先级：CLI 显式 --ai-* / --system-prompt* > 配置文件 [ai] 段。
+// 敏感 key 建议放 -c 配置文件，避免出现在进程命令行。
 
-use tke::{Result, ToolManager, JsonOutput};
 use std::path::PathBuf;
+
+use tke::{AgentRunner, AgentRunOptions, AiConfig, JsonOutput, KnowledgeConfig, PromptSpec, Result};
 
 /// Case 命令参数
 #[derive(clap::Args)]
 pub struct CaseArgs {
-    /// 测试用例: .md 文件路径或一段文字描述
+    /// 测试用例: .md/.txt 文件路径，或一段文字描述
     pub case: String,
 
     /// 生成的 .tks 脚本导出路径
     #[arg(long)]
     pub script: PathBuf,
 
-    /// 透传给 tester-ai 的额外参数
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    pub extra: Vec<String>,
+    /// 覆盖 [ai].provider（anthropic/openai/gemini/deepseek/doubao/qwen）
+    #[arg(long)]
+    pub ai_provider: Option<String>,
+    /// 覆盖 [ai].model
+    #[arg(long)]
+    pub ai_model: Option<String>,
+    /// 覆盖 [ai].api_key（敏感，建议改用 -c 配置文件）
+    #[arg(long)]
+    pub ai_key: Option<String>,
+    /// 覆盖 [ai].base_url（OpenAI 兼容端点：doubao/qwen）
+    #[arg(long)]
+    pub ai_base_url: Option<String>,
+    /// 覆盖探索最大轮数
+    #[arg(long)]
+    pub max_rounds: Option<u32>,
+
+    // ===== 提示词自定义（三选一，优先级从上到下）=====
+    /// 直接注入主系统提示词文本（最高优先级）
+    #[arg(long)]
+    pub system_prompt: Option<String>,
+    /// 主系统提示词 .md 文件路径
+    #[arg(long)]
+    pub system_prompt_file: Option<PathBuf>,
+    /// 提示词目录（约定 agents/*.md、tools/*.md；覆盖内置默认）
+    #[arg(long)]
+    pub prompts_dir: Option<PathBuf>,
 }
 
-/// 处理 Case 命令：组装参数透传给 tester-ai
+/// 处理 Case 命令
 pub async fn handle(
     args: CaseArgs,
     device_id: Option<String>,
     element: Option<PathBuf>,
+    log: Option<PathBuf>,
+    ai: AiConfig,
+    knowledge: KnowledgeConfig,
 ) -> Result<()> {
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("case 必须指定设备: -d/--device <设备ID>"));
 
-    let mut forward: Vec<String> = vec![
-        "--case".into(), args.case,
-        "--script".into(), args.script.to_string_lossy().to_string(),
-        "--device".into(), device,
-    ];
-    if let Some(element) = element {
-        forward.push("--element".into());
-        forward.push(element.to_string_lossy().to_string());
-    }
-    forward.extend(args.extra);
+    // 用例：文件则读取内容，否则当作文字
+    let case_text = {
+        let p = std::path::Path::new(&args.case);
+        if p.is_file() {
+            std::fs::read_to_string(p)
+                .unwrap_or_else(|e| JsonOutput::error(format!("读取用例文件失败 {}: {}", p.display(), e)))
+        } else {
+            args.case.clone()
+        }
+    };
 
-    // 透传给 tester-ai（与 tke 同目录），AI 探索工作流由其实现
-    ToolManager::passthrough("tester-ai", forward, None)
+    // 合并 AI 配置：CLI 覆盖配置文件
+    let merged_ai = AiConfig {
+        provider: args.ai_provider.or(ai.provider),
+        model: args.ai_model.or(ai.model),
+        api_key: args.ai_key.or(ai.api_key),
+        base_url: args.ai_base_url.or(ai.base_url),
+        max_rounds: args.max_rounds.or(ai.max_rounds),
+        prompts_dir: ai.prompts_dir.clone(),
+    };
+
+    // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir
+    let prompt = PromptSpec {
+        system_text: args.system_prompt,
+        system_file: args.system_prompt_file,
+        prompts_dir: args
+            .prompts_dir
+            .or_else(|| merged_ai.prompts_dir.clone().map(PathBuf::from)),
+    };
+
+    let result = AgentRunner::run(AgentRunOptions {
+        case: case_text,
+        device,
+        element,
+        script_out: args.script.clone(),
+        log,
+        ai: merged_ai,
+        knowledge,
+        prompt,
+    })
+    .await
+    .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
+
+    // 人类可读摘要
+    println!(
+        "{} 探索结束（{} 轮）：{}",
+        if result.success { "✓" } else { "✗" },
+        result.rounds,
+        result.finish_reason
+    );
+    println!("  脚本: {}", result.script.display());
+    println!("  对话日志: {}", result.conversation.display());
+
+    std::process::exit(if result.success { 0 } else { 1 });
 }

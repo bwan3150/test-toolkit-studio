@@ -46,6 +46,9 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 tesseract-rs = { version = "0.1.20", features = ["build-tesseract"], optional = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 base64 = "0.22"
+# AI 通用客户端：统一接口对接 openai/anthropic/gemini/deepseek/doubao/qwen
+# （doubao/qwen 走 OpenAI 兼容端点，经 base_url 指定）
+genai = "0.6"
 
 [features]
 # 默认启用在线和离线 OCR
