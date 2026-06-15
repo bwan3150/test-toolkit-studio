@@ -1,24 +1,20 @@
 // Device模块 - 负责获取设备详细信息
 
-use crate::{Result, TkeError, DeviceInfo, HardwareInfo, BatteryInfo, NetworkInfo, AdbManager};
+use crate::{Result, TkeError, DeviceInfo, HardwareInfo, BatteryInfo, NetworkInfo, ToolManager};
 use std::process::Command;
 
 pub struct DeviceManager {
     device_id: Option<String>,
-    adb_manager: AdbManager,
+    adb_path: std::path::PathBuf,
 }
 
 impl DeviceManager {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        // 使用 AdbManager 来获取 ADB
-        let adb_manager = AdbManager::new()?;
-
-        // 验证 ADB 可用性
-        adb_manager.verify_adb()?;
-
+        // adb 由 ToolManager 统一在 tke 同目录定位
+        let adb_path = ToolManager::resolve("adb")?;
         Ok(Self {
             device_id,
-            adb_manager,
+            adb_path,
         })
     }
 
@@ -385,7 +381,7 @@ impl DeviceManager {
 
     /// 执行ADB命令并获取输出
     fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {

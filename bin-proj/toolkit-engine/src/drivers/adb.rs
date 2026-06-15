@@ -1,26 +1,22 @@
 // AdbDriver - Android 设备驱动（adb）
 
-use crate::{Result, TkeError, DeviceInfo, AdbManager};
+use crate::{Result, TkeError, DeviceInfo, ToolManager};
 use crate::utils::Workarea;
 use std::path::PathBuf;
 use std::process::Command;
 
 pub struct AdbDriver {
     device_id: Option<String>,
-    adb_manager: AdbManager,
+    adb_path: PathBuf,
 }
 
 impl AdbDriver {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        // 使用 AdbManager 来获取 ADB (静默模式)
-        let adb_manager = AdbManager::new()?;
-
-        // 验证 ADB 可用性
-        adb_manager.verify_adb()?;
-
+        // adb 与其它直通工具一样，由 ToolManager 统一在 tke 同目录定位
+        let adb_path = ToolManager::resolve("adb")?;
         Ok(Self {
             device_id,
-            adb_manager,
+            adb_path,
         })
     }
     
@@ -31,7 +27,7 @@ impl AdbDriver {
     
     // 获取连接的设备列表
     pub fn get_devices(&self) -> Result<Vec<String>> {
-        let output = Command::new(self.adb_manager.adb_path())
+        let output = Command::new(&self.adb_path)
             .arg("devices")
             .output()
             .map_err(|e| TkeError::AdbError(format!("执行adb devices失败: {}", e)))?;
@@ -360,7 +356,7 @@ impl AdbDriver {
     
     // 执行ADB命令
     fn run_adb_command(&self, args: &[&str]) -> Result<()> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
         
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {
@@ -382,7 +378,7 @@ impl AdbDriver {
     
     // 执行ADB命令并获取输出
     fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
         
         // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {

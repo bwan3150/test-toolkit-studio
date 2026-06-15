@@ -1,8 +1,9 @@
-// Controller - 设备驱动分发层
-// 按设备 ID 选择驱动，上层（原子方法/解释器）API 完全一致：
-//   -d <android序列号>      → AdbDriver  (Android, adb)
-//   -d web[:会话名]         → WebDriver  (网页, chromedriver + Chrome for Testing)
-//   -d <iOS UDID>/wda:xxx  → WdaDriver  (iOS, WebDriverAgent)
+// Drivers 模块 - 设备/协议对接层（最底层）+ Controller 分发（管理层）
+// 每个子模块只负责对接一种设备的协议，互不依赖；Controller 按设备 ID 选择驱动，
+// 向上层（原子方法/解释器）暴露完全一致的 API：
+//   -d <android序列号>      → adb::AdbDriver  (Android, adb)
+//   -d web[:会话名]         → web::WebDriver  (网页, chromedriver + Chrome for Testing)
+//   -d <iOS UDID>/wda:xxx  → wda::WdaDriver  (iOS, WebDriverAgent)
 
 mod adb;
 mod wda;

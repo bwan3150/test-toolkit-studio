@@ -233,22 +233,30 @@ tke element add "帮助菜单" --at 786,57 --desc "顶部导航 Help" -d web -c 
 无文本的图标类元素自动对 crop 图跑 OCR 兜底。已有元素则合并更新（img/ocr 已有值
 时不覆盖，`--force` 强制；落库即可被 recognize/脚本 `{元素名}` 引用）。
 
-## src 目录结构（四大模块）
+## src 目录结构（按职责分层，自底向上）
 
 ```
 src/
-├── passthrough/   ① 直通: ToolManager(通用二进制透传) + adb/aapt 路径管理
-├── atomic/        ② 原子: refresh/fetch/recognize/control
-│   ├── controller/    设备驱动 (adb / wda / web)
-│   ├── fetcher/       UI XML 解析 (元素提取/xpath 生成)
-│   └── recognizer/    元素识别引擎 (xml/ocr/图像三通道)
-├── workflow/      ③ 工作流: run/steps/case + 产物/事件
-│   └── runner/        .tks 解析器 + 解释器
-├── tools/         ④ 自有工具: ocr/file/app/device/element
-├── models/  utils/(workarea/config/json_output)
-├── handlers/      CLI 命令处理器（镜像四大块分目录）
+├── models/  utils/      数据模型 / 基础设施(workarea/config/json_output)
+├── passthrough/         ① 直通: ToolManager 唯一二进制定位器(resolve/passthrough/list, 所有同目录工具共用)
+├── drivers/            【对接层】设备/协议驱动 + Controller 分发(管理层)
+│   ├── mod.rs              Controller: 按 -d 选驱动, 向上暴露统一 API
+│   ├── adb.rs             Android 驱动 (adb)
+│   ├── wda/               iOS: mod.rs(WDA协议) + infra.rs(go-ios) + normalize.rs(XCUI→XML)
+│   └── web/               Web: mod.rs(W3C协议) + infra.rs(chromedriver) + normalize.rs(DOM→XML)
+├── engines/           【引擎层】纯逻辑(无设备IO)
+│   ├── fetcher/           UI XML 解析 (元素提取/xpath 生成)
+│   ├── recognizer/        元素识别引擎 (xml/ocr/image/text 通道)
+│   └── ocr/               OCR 引擎 (离线 tesseract / 在线 API)
+├── atomic/             ② 原子: refresh/fetch/recognize/control (编排 drivers+engines)
+├── workflow/           ③ 工作流: run/steps/case + 产物/事件
+│   └── runner/            .tks 解析器 + 解释器
+├── tools/              ④ 自有工具: file/app/device/element
+├── cli/               【翻译层】CLI 命令翻译(只解析参数→调库) + help 渲染
 ├── lib.rs  main.rs
 ```
+
+分层职责：**对接**=`drivers`(每驱动只对接一种协议)+`passthrough`；**管理**=`drivers/mod.rs`分发、`passthrough`二进制定位；**纯逻辑**=`engines`；**编排**=`atomic`/`workflow`；**CLI翻译**=`cli`。
 
 `tke --help` = 原子指令 + 工作流 + 自有工具（静态）+ 当前二进制目录下
 所有可直通二进制（动态扫描，末尾列出）；不存在的二进制会提示

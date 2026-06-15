@@ -4,7 +4,7 @@ mod constants;
 mod parameter_parser;
 mod syntax_highlight;
 
-pub use syntax_highlight::{SyntaxHighlight, TokenType, SyntaxHighlighter};
+pub use syntax_highlight::{SyntaxHighlight, SyntaxHighlighter};
 
 use crate::{Result, TksScript, TksStep, TksCommand};
 use constants::{create_command_map, create_direction_map};

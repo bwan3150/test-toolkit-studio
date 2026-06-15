@@ -2,9 +2,10 @@
 
 tke 原子指令在各端驱动下的底层实现对照，用于排查平台间行为差异。
 
-- **Android**: `src/atomic/controller/adb.rs`（adb，串号寻址 `-d <serial>`）
-- **iOS**: `src/atomic/controller/wda.rs`（WebDriverAgent HTTP 协议，`-d <UDID>` 或 `-d wda:<UDID>`，UDID 格式自动识别）
-- **Web**: `src/atomic/controller/web.rs`（chromedriver + Chrome for Testing，W3C WebDriver HTTP 协议，`-d web`）
+- **Android**: `src/drivers/adb.rs`（adb，串号寻址 `-d <serial>`）
+- **iOS**: `src/drivers/wda/`（WebDriverAgent HTTP 协议，`-d <UDID>` 或 `-d wda:<UDID>`，UDID 格式自动识别；mod=协议 / infra=go-ios / normalize=XCUI→XML）
+- **Web**: `src/drivers/web/`（chromedriver + Chrome for Testing，W3C WebDriver HTTP 协议，`-d web`；mod=协议 / infra=chromedriver生命周期 / normalize=DOM→XML）
+- 驱动分发：`src/drivers/mod.rs`（Controller 按 `-d` 选驱动，向上层暴露统一 API）
 
 ## 会话与基础设施
 

@@ -2,28 +2,28 @@
 
 use crate::Result;
 use crate::models::{AppInfo, CurrentFocus};
-use crate::AdbManager;
+use crate::ToolManager;
 use crate::TkeError;
 use std::process::Command;
 
 pub struct AppManager {
     device_id: Option<String>,
-    adb_manager: AdbManager,
+    adb_path: std::path::PathBuf,
 }
 
 impl AppManager {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        let adb_manager = AdbManager::new()?;
+        let adb_path = ToolManager::resolve("adb")?;
         Ok(Self {
             device_id,
-            adb_manager,
+            adb_path,
         })
     }
 
     /// 获取设备上所有第三方应用的列表(包含版本信息)
     pub async fn list_third_party_apps(&self) -> Result<Vec<AppInfo>> {
         // 构建 adb 命令
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         // 如果指定了设备ID，添加 -s 参数
         if let Some(ref device) = self.device_id {
@@ -73,7 +73,7 @@ impl AppManager {
     /// 获取单个应用的详细信息
     async fn get_app_info(&self, package_name: &str) -> Result<AppInfo> {
         // 构建 adb 命令
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         // 如果指定了设备ID，添加 -s 参数
         if let Some(ref device) = self.device_id {
@@ -159,7 +159,7 @@ impl AppManager {
     /// 返回: (success, message)
     pub async fn uninstall_app(&self, package_name: &str) -> Result<(bool, String)> {
         // 构建 adb 命令
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         // 如果指定了设备ID，添加 -s 参数
         if let Some(ref device) = self.device_id {
@@ -195,7 +195,7 @@ impl AppManager {
     /// 返回当前显示在前台的应用的包名和 Activity 名称
     pub async fn get_current_focus(&self) -> Result<CurrentFocus> {
         // 构建 adb 命令
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         // 如果指定了设备ID，添加 -s 参数
         if let Some(ref device) = self.device_id {
@@ -250,7 +250,7 @@ impl AppManager {
     /// 启动应用
     /// 使用 am start 命令启动应用
     pub async fn launch_app(&self, package_name: &str, activity_name: &str) -> Result<(bool, String)> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         if let Some(ref device) = self.device_id {
             cmd.arg("-s").arg(device);
@@ -277,7 +277,7 @@ impl AppManager {
     /// 关闭应用
     /// 使用 am force-stop 命令强制停止应用
     pub async fn stop_app(&self, package_name: &str) -> Result<(bool, String)> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         if let Some(ref device) = self.device_id {
             cmd.arg("-s").arg(device);

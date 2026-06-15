@@ -1,4 +1,8 @@
 // WebDriver - 网页驱动（chromedriver + Chrome for Testing, W3C WebDriver 协议）
+// 本文件只负责 W3C 协议对接：会话管理 + 请求 + 操作 + 信息。
+// 支撑职责拆到同目录子模块：
+//   infra      chromedriver 进程生命周期 / 会话文件 / Chrome 定位 / 孤儿收割（见 infra.rs）
+//   normalize  DOM 可见元素 → uiautomator 风格 XML（纯转换，见 normalize.rs）
 //
 // 会话持久化：tke 每条指令是短命进程，浏览器必须跨进程存活——
 // 会话信息（端口/session_id/pid）存 $TMPDIR/tke/web/<设备ID>.json，
@@ -7,11 +11,13 @@
 // 坐标系：对外统一使用截图像素坐标（与 Android 一致，标注/ocr/img 通道对齐），
 // 内部按 devicePixelRatio 换算为 CSS 坐标执行操作。
 
+mod infra;
+mod normalize;
+
 use crate::{Result, TkeError, DeviceInfo};
 use crate::utils::Workarea;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
@@ -74,214 +80,6 @@ impl WebDriver {
         let conn = Self::start_new_session(&self.device_id)?;
         *self.conn.lock().unwrap() = Some(conn.clone());
         Ok(conn)
-    }
-
-    // ===== 会话管理 =====
-
-    fn session_file(device_id: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join("tke").join("web");
-        let _ = std::fs::create_dir_all(&dir);
-        let key: String = device_id
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-            .collect();
-        dir.join(format!("{}.json", key))
-    }
-
-    fn load_session(device_id: &str) -> Option<SessionInfo> {
-        let content = std::fs::read_to_string(Self::session_file(device_id)).ok()?;
-        serde_json::from_str(&content).ok()
-    }
-
-    fn session_alive(base: &str, session_id: &str) -> bool {
-        ureq::get(&format!("{}/session/{}/url", base, session_id))
-            .timeout(Duration::from_millis(1500))
-            .call()
-            .is_ok()
-    }
-
-    /// 本设备的 profile 目录前缀（孤儿识别特征）
-    fn profile_prefix(device_id: &str) -> PathBuf {
-        let key: String = device_id
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-            .collect();
-        std::env::temp_dir().join("tke").join("web").join(format!("profile-{}", key))
-    }
-
-    /// 收割本设备遗留的孤儿 Chrome（脚本中断/创建失败留下的），并清理旧 profile
-    fn reap_orphans(device_id: &str) {
-        let prefix = Self::profile_prefix(device_id);
-        // 按 user-data-dir 特征杀掉遗留 Chrome 进程
-        let _ = Command::new("pkill")
-            .arg("-f")
-            .arg(format!("user-data-dir={}", prefix.to_string_lossy()))
-            .output();
-        // 清理旧 profile 目录
-        if let (Some(parent), Some(stem)) = (prefix.parent(), prefix.file_name()) {
-            if let Ok(entries) = std::fs::read_dir(parent) {
-                for entry in entries.flatten() {
-                    if entry.file_name().to_string_lossy().starts_with(&*stem.to_string_lossy()) {
-                        let _ = std::fs::remove_dir_all(entry.path());
-                    }
-                }
-            }
-        }
-    }
-
-    /// 拉起 chromedriver 并创建新会话
-    fn start_new_session(device_id: &str) -> Result<Conn> {
-        // 先收割上次遗留的孤儿进程/profile
-        Self::reap_orphans(device_id);
-
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-            .ok_or_else(|| TkeError::InvalidArgument("无法获取 tke 所在目录".to_string()))?;
-
-        // chromedriver 必须与 tke 同目录
-        let chromedriver = exe_dir.join("chromedriver");
-        if !chromedriver.exists() {
-            return Err(TkeError::InvalidArgument(
-                "chromedriver 可执行文件缺失或不完整：请将其放在与 tke 相同的目录下".to_string(),
-            ));
-        }
-
-        // 找空闲端口
-        let port = std::net::TcpListener::bind("127.0.0.1:0")
-            .and_then(|l| l.local_addr())
-            .map(|a| a.port())
-            .map_err(|e| TkeError::DeviceError(format!("无法分配端口: {}", e)))?;
-
-        // 后台拉起 chromedriver（日志落盘便于排查）
-        // 清洗环境变量 + 脱离终端进程组：避免继承终端模拟器（如 Ghostty）注入的
-        // 环境导致 Chrome 启动崩溃（Mach rendezvous failed / BUS_ADRALN）
-        let log_path = std::env::temp_dir()
-            .join("tke").join("web")
-            .join(format!("chromedriver-{}.log", port));
-        let mut cmd = Command::new(&chromedriver);
-        cmd.arg(format!("--port={}", port))
-            .arg("--verbose")
-            .arg(format!("--log-path={}", log_path.to_string_lossy()))
-            .env_clear();
-        // 只保留必要的环境变量
-        for key in ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG"] {
-            if let Ok(v) = std::env::var(key) {
-                cmd.env(key, v);
-            }
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0); // 新进程组，脱离终端会话
-        }
-        let child = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| TkeError::DeviceError(format!("启动 chromedriver 失败: {}", e)))?;
-        let driver_pid = child.id();
-
-        let base = format!("http://127.0.0.1:{}", port);
-
-        // 等待服务就绪（最多 10s）
-        let ready = (0..50).any(|_| {
-            std::thread::sleep(Duration::from_millis(200));
-            ureq::get(&format!("{}/status", base))
-                .timeout(Duration::from_millis(500))
-                .call()
-                .is_ok()
-        });
-        if !ready {
-            return Err(TkeError::DeviceError("chromedriver 启动超时".to_string()));
-        }
-
-        // 创建会话（优先使用配套的 Chrome for Testing，保证与 chromedriver 版本配对）
-        // 注意: Chrome.app 不能放在 ~/Documents 等 TCC 受保护目录下（会卡死在授权），
-        // 查找顺序: tke 同目录 → ~/Library/Application Support/tke/
-        // 固定窗口尺寸 + 强制缩放因子 1：保证不同机器/显示器（视网膜或否）下
-        // 渲染完全一致，截图尺寸与坐标系确定（脚本中的像素坐标可移植）
-        // profile 用自有目录（带时间戳=每会话全新状态，同时是孤儿收割的识别特征）
-        let profile_dir = format!(
-            "{}-{}",
-            Self::profile_prefix(device_id).to_string_lossy(),
-            chrono::Local::now().format("%H%M%S")
-        );
-        let mut chrome_options = serde_json::json!({
-            "args": [
-                "--window-size=1280,900",
-                "--force-device-scale-factor=1",
-                "--disable-infobars",
-                "--no-first-run",
-                "--no-default-browser-check",
-                format!("--user-data-dir={}", profile_dir)
-            ]
-        });
-        if let Some(cft) = Self::find_chrome_binary(&exe_dir) {
-            chrome_options["binary"] = serde_json::json!(cft.to_string_lossy());
-        }
-
-        let session_req = ureq::post(&format!("{}/session", base))
-            .timeout(Duration::from_secs(90))
-            .send_json(serde_json::json!({
-                "capabilities": {
-                    "alwaysMatch": {
-                        "browserName": "chrome",
-                        "goog:chromeOptions": chrome_options
-                    }
-                }
-            }));
-
-        let resp: serde_json::Value = match session_req {
-            Ok(r) => r.into_json()
-                .map_err(|e| TkeError::DeviceError(format!("会话响应解析失败: {}", e)))?,
-            Err(e) => {
-                // 失败时回收孤儿 chromedriver，并带上具体错误信息
-                let _ = Command::new("kill").arg(driver_pid.to_string()).output();
-                let detail = match e {
-                    ureq::Error::Status(_, resp) => resp
-                        .into_json::<serde_json::Value>()
-                        .ok()
-                        .and_then(|v| v["value"]["message"].as_str().map(|m| {
-                            m.lines().next().unwrap_or(m).to_string()
-                        }))
-                        .unwrap_or_else(|| "未知错误".to_string()),
-                    other => other.to_string(),
-                };
-                return Err(TkeError::DeviceError(format!(
-                    "创建浏览器会话失败: {} (日志: {})", detail, log_path.display()
-                )));
-            }
-        };
-
-        let session_id = resp["value"]["sessionId"]
-            .as_str()
-            .ok_or_else(|| TkeError::DeviceError(format!("会话响应缺少 sessionId: {}", resp)))?
-            .to_string();
-
-        // 持久化会话信息
-        let info = SessionInfo { port, session_id: session_id.clone(), driver_pid };
-        let _ = std::fs::write(
-            Self::session_file(device_id),
-            serde_json::to_string(&info).unwrap_or_default(),
-        );
-
-        Ok(Conn { base, session_id })
-    }
-
-    /// 查找 Chrome for Testing 二进制
-    /// 顺序: tke 同目录 → ~/Library/Application Support/tke/；找不到则交给
-    /// chromedriver 用系统 Chrome（存在版本不配对风险）
-    fn find_chrome_binary(exe_dir: &std::path::Path) -> Option<PathBuf> {
-        const MAC_APP_PATH: &str =
-            "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
-
-        let mut candidates = vec![exe_dir.join(MAC_APP_PATH)];
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join("Library/Application Support/tke").join(MAC_APP_PATH));
-        }
-
-        candidates.into_iter().find(|p| p.exists())
     }
 
     /// 销毁会话：关闭浏览器 + 结束 chromedriver + 删除会话文件
@@ -403,70 +201,9 @@ impl WebDriver {
     /// 网页元素与 App 元素进入同一套解析/识别/标注体系
     /// （resource-id=DOM id, content-desc=aria-label, bounds=截图像素坐标）
     fn capture_dom_xml(&self, workarea: &Workarea) -> Result<()> {
-        // 一次 JS 调用提取全部可见元素
-        let script = r#"
-const dpr = window.devicePixelRatio || 1;
-const out = [];
-const walk = (el) => {
-  for (const child of el.children) {
-    const r = child.getBoundingClientRect();
-    const style = getComputedStyle(child);
-    const visible = r.width > 0 && r.height > 0 &&
-      style.visibility !== 'hidden' && style.display !== 'none' &&
-      r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
-    if (visible) {
-      // 仅取直接文本（不含子元素文本），避免父容器吞掉所有文字
-      let ownText = '';
-      for (const n of child.childNodes) {
-        if (n.nodeType === 3) ownText += n.textContent;
-      }
-      ownText = ownText.trim().slice(0, 120);
-      // 输入框取 placeholder/value 兜底
-      if (!ownText && (child.tagName === 'INPUT' || child.tagName === 'TEXTAREA')) {
-        ownText = (child.value || child.placeholder || '').slice(0, 120);
-      }
-      const clickable = ['A','BUTTON','SELECT'].includes(child.tagName) ||
-        ['INPUT','TEXTAREA'].includes(child.tagName) ||
-        child.onclick != null || style.cursor === 'pointer' ||
-        child.getAttribute('role') === 'button';
-      out.push({
-        tag: child.tagName.toLowerCase(),
-        id: child.id || '',
-        aria: child.getAttribute('aria-label') || '',
-        text: ownText,
-        clickable: clickable,
-        x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
-        x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
-      });
-    }
-    walk(child);
-  }
-};
-walk(document.body);
-return out;
-"#;
-        let elements = self.execute(script, serde_json::json!([]))?;
-        let empty = vec![];
-        let list = elements.as_array().unwrap_or(&empty);
-
-        // 归一化为 uiautomator 风格 XML
-        let mut xml = String::from("<?xml version='1.0' encoding='UTF-8'?>\n<hierarchy rotation=\"0\">\n");
-        for e in list {
-            xml.push_str(&format!(
-                "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" clickable=\"{}\" enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
-                xml_escape(e["tag"].as_str().unwrap_or("")),
-                xml_escape(e["id"].as_str().unwrap_or("")),
-                xml_escape(e["aria"].as_str().unwrap_or("")),
-                xml_escape(e["text"].as_str().unwrap_or("")),
-                e["clickable"].as_bool().unwrap_or(false),
-                e["x1"].as_i64().unwrap_or(0),
-                e["y1"].as_i64().unwrap_or(0),
-                e["x2"].as_i64().unwrap_or(0),
-                e["y2"].as_i64().unwrap_or(0),
-            ));
-        }
-        xml.push_str("</hierarchy>\n");
-
+        // 注入脚本提取可见元素，再归一化为 uiautomator 风格 XML（逻辑见 normalize 子模块）
+        let elements = self.execute(normalize::DOM_WALK_JS, serde_json::json!([]))?;
+        let xml = normalize::dom_elements_to_xml(&elements);
         std::fs::write(workarea.ui_tree_path(), xml).map_err(TkeError::IoError)?;
         Ok(())
     }
@@ -646,13 +383,4 @@ return false;
             network: None,
         })
     }
-}
-
-/// XML 属性转义
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\n', " ")
 }

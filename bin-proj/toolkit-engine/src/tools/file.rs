@@ -1,9 +1,8 @@
 // File 模块 - Android 设备文件系统管理核心逻辑
 
-use crate::{Result, TkeError, AdbManager};
+use crate::{Result, TkeError, ToolManager};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
-use image::GenericImageView;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileInfo {
@@ -23,20 +22,16 @@ struct TreeNode {
 
 pub struct FileManager {
     device_id: Option<String>,
-    adb_manager: AdbManager,
+    adb_path: std::path::PathBuf,
 }
 
 impl FileManager {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-        // 使用 AdbManager 获取 ADB
-        let adb_manager = AdbManager::new()?;
-
-        // 验证 ADB 可用性
-        adb_manager.verify_adb()?;
-
+        // adb 由 ToolManager 统一在 tke 同目录定位
+        let adb_path = ToolManager::resolve("adb")?;
         Ok(Self {
             device_id,
-            adb_manager,
+            adb_path,
         })
     }
 
@@ -246,27 +241,6 @@ impl FileManager {
         self.exec_shell(&cmd)
     }
 
-    /// 执行 ADB 命令并获取原始二进制输出 (用于pull文件等操作)
-    fn run_adb_command_raw(&self, args: &[&str]) -> Result<Vec<u8>> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
-
-        // 如果指定了设备ID,添加-s参数
-        if let Some(ref device_id) = self.device_id {
-            cmd.arg("-s").arg(device_id);
-        }
-
-        cmd.args(args);
-
-        let output = cmd.output()
-            .map_err(|e| TkeError::AdbError(format!("执行ADB命令失败: {}", e)))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
-        }
-
-        Ok(output.stdout)
-    }
 
     // ========== 修改操作 ==========
 
@@ -329,7 +303,7 @@ impl FileManager {
 
     /// 执行 ADB 命令并获取输出
     fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
-        let mut cmd = Command::new(self.adb_manager.adb_path());
+        let mut cmd = Command::new(&self.adb_path);
 
         // 如果指定了设备ID,添加-s参数
         if let Some(ref device_id) = self.device_id {

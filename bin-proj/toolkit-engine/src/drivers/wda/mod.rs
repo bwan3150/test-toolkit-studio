@@ -1,16 +1,17 @@
 // WdaDriver - iOS 驱动（WebDriverAgent, W3C WebDriver 系协议）
-//
-// 基础设施全部由 tke 通过 go-ios（与 tke 同目录的单文件二进制）自动管理:
-//   ① go-ios tunnel start --userspace   iOS 17+ 隧道（全设备共用一个守护进程）
-//   ② go-ios runwda --udid <udid>       经 testmanagerd 拉起设备上的 WDA（无需 Xcode）
-//   ③ go-ios forward <port> 8100        USB 端口转发
-// 唯一前置条件: 设备已用 Xcode 装过 WebDriverAgent App（一次性，见 docs/setup-notes.md）。
+// 本文件只负责 WDA HTTP 协议对接：会话管理 + 请求 + 操作 + 信息。
+// 支撑职责拆到同目录子模块：
+//   infra      go-ios 进程/隧道/端口转发（基础设施自动拉起，见 infra.rs）
+//   normalize  XCUI 元素树 → uiautomator 风格 XML（纯转换，见 normalize.rs）
 //
 // 会话持久化：与 web 驱动同款——tke 每条指令是短命进程，
 // 转发端口/会话/后台进程信息存 $TMPDIR/tke/ios/<udid>.json，每次命令读取复用。
 //
 // 坐标系：对外统一使用截图像素坐标（与 Android/Web 一致），
 // WDA 协议使用逻辑点（point），内部按 scale（视网膜倍率，如 iPhone 12 = 3）换算。
+
+mod infra;
+mod normalize;
 
 use crate::{Result, TkeError, DeviceInfo};
 use crate::utils::Workarea;
@@ -20,7 +21,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-/// 持久化的转发/会话信息
+/// 持久化的转发/会话信息（字段对 infra 子模块可见）
 #[derive(Debug, Serialize, Deserialize)]
 struct WdaState {
     /// go-ios forward 本地转发端口
@@ -51,9 +52,6 @@ pub struct WdaDriver {
     conn: std::sync::Mutex<Option<Conn>>,
 }
 
-/// WDA 在设备上的监听端口（WebDriverAgent 默认值）
-const WDA_DEVICE_PORT: u16 = 8100;
-
 impl WdaDriver {
     pub fn new(device_id: String) -> Result<Self> {
         let udid = device_id.strip_prefix("wda:").unwrap_or(&device_id).to_string();
@@ -78,154 +76,6 @@ impl WdaDriver {
             Self::state_file(udid),
             serde_json::to_string(state).unwrap_or_default(),
         );
-    }
-
-    // ===== 基础设施（go-ios: 转发/隧道/runwda） =====
-
-    /// WDA /status 是否可达
-    fn wda_ready(base: &str) -> bool {
-        ureq::get(&format!("{}/status", base))
-            .timeout(Duration::from_millis(1500))
-            .call()
-            .is_ok()
-    }
-
-    /// 确保 USB 转发就绪且 WDA 可达，返回 (base_url, 已有状态)
-    /// WDA 不可达时自动经 go-ios（隧道 + runwda）拉起
-    fn ensure_forward(&self) -> Result<(String, WdaState)> {
-        // 复用已有转发
-        if let Some(state) = Self::load_state(&self.udid) {
-            let base = format!("http://127.0.0.1:{}", state.port);
-            if Self::wda_ready(&base) {
-                return Ok((base, state));
-            }
-        }
-
-        let goios = Self::find_goios()?;
-
-        // 收割本设备遗留的转发进程，再新开
-        let _ = Command::new("pkill")
-            .arg("-f")
-            .arg(format!("go-ios forward.*{}", self.udid))
-            .output();
-
-        let port = std::net::TcpListener::bind("127.0.0.1:0")
-            .and_then(|l| l.local_addr())
-            .map(|a| a.port())
-            .map_err(|e| TkeError::DeviceError(format!("无法分配端口: {}", e)))?;
-
-        let forward_pid = Self::spawn_daemon(
-            &goios,
-            &[&port.to_string(), &WDA_DEVICE_PORT.to_string(), "--udid", &self.udid],
-            "forward",
-            &format!("forward-{}.log", self.udid),
-        )?;
-
-        let base = format!("http://127.0.0.1:{}", port);
-
-        // 转发建立很快; WDA 没跑则自动拉起
-        let mut runwda_pid = None;
-        let ready = (0..6).any(|_| {
-            std::thread::sleep(Duration::from_millis(300));
-            Self::wda_ready(&base)
-        });
-        if !ready {
-            runwda_pid = Some(self.start_wda(&goios, &base, forward_pid)?);
-        }
-
-        let state = WdaState { port, forward_pid, runwda_pid, session_id: None, scale: None };
-        Self::save_state(&self.udid, &state);
-        Ok((base, state))
-    }
-
-    /// 经 go-ios 拉起设备上的 WDA：确保隧道守护进程 → runwda → 等待就绪
-    /// 返回 runwda 进程 pid
-    fn start_wda(&self, goios: &std::path::Path, base: &str, forward_pid: u32) -> Result<u32> {
-        // ① 隧道守护进程（iOS 17+ 必需; 全设备共用, 已在跑则跳过）
-        let tunnel_running = Command::new("pgrep")
-            .arg("-f")
-            .arg("go-ios tunnel start")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        if !tunnel_running {
-            Self::spawn_daemon(goios, &["start", "--userspace"], "tunnel", "tunnel.log")?;
-            std::thread::sleep(Duration::from_secs(3)); // 等隧道协商
-        }
-
-        // ② 收割旧 runwda 后拉起（同设备只能有一个 XCTest 会话）
-        let _ = Command::new("pkill")
-            .arg("-f")
-            .arg(format!("go-ios runwda.*{}", self.udid))
-            .output();
-        let runwda_pid = Self::spawn_daemon(
-            goios,
-            &["--udid", &self.udid],
-            "runwda",
-            &format!("runwda-{}.log", self.udid),
-        )?;
-
-        // ③ 等 WDA 就绪（设备上 App 启动 + 服务监听，首次可能较慢）
-        let ready = (0..40).any(|_| {
-            std::thread::sleep(Duration::from_millis(1500));
-            Self::wda_ready(base)
-        });
-        if !ready {
-            let log = Self::log_dir().join(format!("runwda-{}.log", self.udid));
-            let _ = Command::new("kill").arg(runwda_pid.to_string()).output();
-            let _ = Command::new("kill").arg(forward_pid.to_string()).output();
-            return Err(TkeError::DeviceError(format!(
-                "自动启动 WebDriverAgent 失败：请确认设备 {} 已连接并解锁、\
-                 已用 Xcode 安装过 WebDriverAgent（一次性，见 docs/setup-notes.md）。\
-                 日志: {}",
-                self.udid,
-                log.display()
-            )));
-        }
-        Ok(runwda_pid)
-    }
-
-    fn log_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join("tke").join("ios");
-        let _ = std::fs::create_dir_all(&dir);
-        dir
-    }
-
-    /// 拉起 go-ios 后台守护进程（脱离终端进程组，跨 tke 进程存活，日志落盘）
-    fn spawn_daemon(goios: &std::path::Path, args: &[&str], subcmd: &str, log_name: &str) -> Result<u32> {
-        let log = std::fs::File::create(Self::log_dir().join(log_name))
-            .map_err(TkeError::IoError)?;
-        let mut cmd = Command::new(goios);
-        // go-ios 会把配对身份文件（selfIdentity.plist）写到 cwd，
-        // 固定到状态目录，避免污染用户的项目目录
-        cmd.arg(subcmd).args(args).current_dir(Self::log_dir());
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0); // 脱离终端进程组，跨 tke 进程存活
-        }
-        let child = cmd
-            .stdout(std::process::Stdio::null())
-            .stderr(log)
-            .spawn()
-            .map_err(|e| TkeError::DeviceError(format!("启动 go-ios {} 失败: {}", subcmd, e)))?;
-        Ok(child.id())
-    }
-
-    /// 查找 go-ios: tke 同目录 → PATH
-    fn find_goios() -> Result<PathBuf> {
-        if let Some(exe_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf())) {
-            let local = exe_dir.join("go-ios");
-            if local.exists() {
-                return Ok(local);
-            }
-        }
-        which::which("go-ios").map_err(|_| {
-            TkeError::InvalidArgument(
-                "go-ios 可执行文件缺失或不完整：请将其放在与 tke 相同的目录下\
-                 （下载: https://github.com/danielpaulus/go-ios/releases）".to_string(),
-            )
-        })
     }
 
     // ===== 会话管理 =====
@@ -419,10 +269,7 @@ impl WdaDriver {
         Ok(())
     }
 
-    /// 抓取 XCUI 元素树并归一化为 uiautomator 风格 XML：
-    /// iOS 元素与 App/Web 元素进入同一套解析/识别/标注体系
-    /// (class=XCUIElementType*, resource-id=name, content-desc=label,
-    ///  text=value|label, bounds=截图像素坐标)
+    /// 抓取 XCUI 元素树并归一化为 uiautomator 风格 XML（归一化逻辑见 normalize 子模块）
     fn capture_xcui_xml(&self, workarea: &Workarea) -> Result<()> {
         let conn = self.ensure_existing()?;
         let resp = self.get("/source")?;
@@ -430,7 +277,7 @@ impl WdaDriver {
             .as_str()
             .ok_or_else(|| TkeError::DeviceError("UI 结构响应无数据".to_string()))?;
 
-        let xml = normalize_xcui_xml(source, conn.scale)?;
+        let xml = normalize::normalize_xcui_xml(source, conn.scale)?;
         std::fs::write(workarea.ui_tree_path(), xml).map_err(TkeError::IoError)?;
         Ok(())
     }
@@ -586,99 +433,4 @@ impl WdaDriver {
             network: None,
         })
     }
-}
-
-/// XCUI 元素树 → uiautomator 风格扁平 XML（仅可见元素，bounds 换算为像素）
-fn normalize_xcui_xml(source: &str, scale: f64) -> Result<String> {
-    use quick_xml::events::Event;
-    use quick_xml::Reader;
-
-    let mut reader = Reader::from_str(source);
-    reader.config_mut().trim_text(true);
-
-    let mut xml = String::from("<?xml version='1.0' encoding='UTF-8'?>\n<hierarchy rotation=\"0\">\n");
-    let mut buf = Vec::new();
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                let mut typ = String::new();
-                let mut name = String::new();
-                let mut label = String::new();
-                let mut value = String::new();
-                let mut visible = false;
-                let mut accessible = false;
-                let (mut x, mut y, mut w, mut h) = (0i64, 0i64, 0i64, 0i64);
-
-                for attr in e.attributes().flatten() {
-                    let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
-                    let val = attr.unescape_value().unwrap_or_default().to_string();
-                    match key.as_str() {
-                        "type" => typ = val,
-                        "name" => name = val,
-                        "label" => label = val,
-                        "value" => value = val,
-                        "visible" => visible = val == "true",
-                        "accessible" => accessible = val == "true",
-                        "x" => x = val.parse().unwrap_or(0),
-                        "y" => y = val.parse().unwrap_or(0),
-                        "width" => w = val.parse().unwrap_or(0),
-                        "height" => h = val.parse().unwrap_or(0),
-                        _ => {}
-                    }
-                }
-
-                // 只保留可见且有面积的元素；跳过 Application/Window 等纯容器
-                let is_container = matches!(
-                    typ.as_str(),
-                    "XCUIElementTypeApplication" | "XCUIElementTypeWindow" | "XCUIElementTypeOther"
-                ) && name.is_empty() && label.is_empty() && value.is_empty();
-                if !visible || w <= 0 || h <= 0 || is_container {
-                    buf.clear();
-                    continue;
-                }
-
-                // 可交互类型（uiautomator clickable 语义）
-                let clickable = matches!(
-                    typ.as_str(),
-                    "XCUIElementTypeButton" | "XCUIElementTypeCell" | "XCUIElementTypeLink"
-                        | "XCUIElementTypeSwitch" | "XCUIElementTypeTextField"
-                        | "XCUIElementTypeSecureTextField" | "XCUIElementTypeSearchField"
-                        | "XCUIElementTypeTabBar" | "XCUIElementTypeSegmentedControl"
-                ) || accessible;
-
-                let text = if !value.is_empty() { value.as_str() } else { label.as_str() };
-                xml.push_str(&format!(
-                    "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" clickable=\"{}\" enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
-                    xml_escape(&typ),
-                    xml_escape(&name),
-                    xml_escape(&label),
-                    xml_escape(text),
-                    clickable,
-                    (x as f64 * scale) as i64,
-                    (y as f64 * scale) as i64,
-                    ((x + w) as f64 * scale) as i64,
-                    ((y + h) as f64 * scale) as i64,
-                ));
-            }
-            Ok(Event::Eof) => break,
-            Err(e) => {
-                return Err(TkeError::DeviceError(format!("XCUI XML 解析失败: {}", e)));
-            }
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    xml.push_str("</hierarchy>\n");
-    Ok(xml)
-}
-
-/// XML 属性转义
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\n', " ")
 }

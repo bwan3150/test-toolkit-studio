@@ -43,15 +43,8 @@ pub fn find_by_image(
 
 /// 调用 tke-opencv（与 tke 同目录）进行模板匹配
 fn opencv_match(screenshot_path: &Path, template_path: &Path, threshold: f32) -> Result<Point> {
-    let current_exe = std::env::current_exe()
-        .map_err(|e| TkeError::IoError(e))?;
-    let exe_dir = current_exe.parent()
-        .ok_or_else(|| TkeError::InvalidArgument("无法获取可执行文件目录".to_string()))?;
-    let opencv_bin = exe_dir.join("tke-opencv");
-
-    if !opencv_bin.exists() {
-        return Err(TkeError::ElementNotFound("找不到 tke-opencv 模块".to_string()));
-    }
+    // 与其它同目录工具一样，由统一的 ToolManager 定位
+    let opencv_bin = crate::ToolManager::resolve("tke-opencv")?;
 
     let output = Command::new(&opencv_bin)
         .arg(screenshot_path.to_str().unwrap_or_default())

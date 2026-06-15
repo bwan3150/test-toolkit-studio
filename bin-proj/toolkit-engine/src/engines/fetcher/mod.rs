@@ -3,14 +3,10 @@
 use crate::{Result, TkeError, UIElement, Bounds};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
-use std::collections::HashSet;
 use std::path::PathBuf;
 use tracing::debug;
 
 pub struct Fetcher {
-    // 有意义的属性集合
-    meaningful_attributes: HashSet<String>,
-    meaningful_bool_attributes: HashSet<String>,
     // 需要过滤的系统UI元素
     filtered_resource_ids: Vec<String>,
     // 屏幕尺寸
@@ -20,30 +16,14 @@ pub struct Fetcher {
 
 impl Fetcher {
     pub fn new() -> Self {
-        let mut meaningful_attributes = HashSet::new();
-        meaningful_attributes.insert("text".to_string());
-        meaningful_attributes.insert("content-desc".to_string());
-        meaningful_attributes.insert("hint".to_string());
-        meaningful_attributes.insert("hintText".to_string());
-        meaningful_attributes.insert("title".to_string());
-        meaningful_attributes.insert("accessibilityText".to_string());
-        
-        let mut meaningful_bool_attributes = HashSet::new();
-        meaningful_bool_attributes.insert("clickable".to_string());
-        meaningful_bool_attributes.insert("checkable".to_string());
-        meaningful_bool_attributes.insert("focusable".to_string());
-        meaningful_bool_attributes.insert("selectable".to_string());
-        
         let filtered_resource_ids = vec![
             "status_bar_container".to_string(),
             "status_bar_launch_animation_container".to_string(),
             "navigationBarBackground".to_string(),
             "navigation_bar".to_string(),
         ];
-        
+
         Self {
-            meaningful_attributes,
-            meaningful_bool_attributes,
             filtered_resource_ids,
             screen_width: 1080,
             screen_height: 1920,
@@ -65,7 +45,6 @@ impl Fetcher {
     
     // 从XML字符串中提取所有UI元素 - 递归解析版本
     pub fn fetch_elements_from_xml(&self, xml_content: &str) -> Result<Vec<UIElement>> {
-        use quick_xml::events::Event;
         use quick_xml::Reader;
 
         let mut reader = Reader::from_str(xml_content);
@@ -140,31 +119,6 @@ impl Fetcher {
                 _ => {}
             }
 
-            buf.clear();
-        }
-
-        Ok(())
-    }
-
-    // 跳过不需要的元素及其子节点
-    fn skip_element(&self, reader: &mut Reader<&[u8]>, buf: &mut Vec<u8>) -> Result<()> {
-        let mut depth = 1;
-
-        loop {
-            match reader.read_event_into(buf) {
-                Ok(Event::Start(ref e)) if e.name().as_ref() == b"node" => {
-                    depth += 1;
-                }
-                Ok(Event::End(ref e)) if e.name().as_ref() == b"node" => {
-                    depth -= 1;
-                    if depth == 0 {
-                        break;
-                    }
-                }
-                Ok(Event::Eof) => break,
-                Err(e) => return Err(TkeError::XmlError(format!("跳过元素失败: {}", e))),
-                _ => {}
-            }
             buf.clear();
         }
 
@@ -318,35 +272,6 @@ impl Fetcher {
         }
         
         false
-    }
-    
-    // 判断是否应该包含该元素（原版方法，保留作备用）
-    fn should_include_element(&self, element: &UIElement) -> bool {
-        // 检查是否是需要过滤的系统UI
-        if let Some(ref resource_id) = element.resource_id {
-            for filtered_id in &self.filtered_resource_ids {
-                if resource_id.contains(filtered_id) {
-                    return false;
-                }
-            }
-        }
-        
-        // 检查是否可见
-        if !element.is_visible() {
-            return false;
-        }
-        
-        // 检查是否在屏幕范围内
-        if element.bounds.x1 >= self.screen_width as i32 || 
-           element.bounds.y1 >= self.screen_height as i32 {
-            return false;
-        }
-        
-        if element.bounds.x2 <= 0 || element.bounds.y2 <= 0 {
-            return false;
-        }
-        
-        true
     }
     
     // 根据条件过滤元素
