@@ -12,14 +12,17 @@ pub mod script;
 use std::path::Path;
 
 use crate::workflow::step_to_source;
-use crate::{ControlAction, LocatorStrategy, Point, Result, TkeError, TksCommand, TksParam, TksStep, UIElement};
+use crate::{ActionTrace, ControlAction, LocatorStrategy, Point, Result, TkeError, TksCommand, TksParam, TksStep, UIElement};
 
 use super::tools::AgentAction;
 use super::transcript::Transcript;
 use device::exec;
 use library::save_element;
 
-/// 执行一个设备动作：返回 (.tks 行, 执行详情)
+/// 执行一个设备动作：返回 (.tks 行, 执行详情, 执行轨迹)
+///
+/// 轨迹（ActionTrace）含本步点击点 + 目标元素 bounds，供 RunArtifacts 标注截图
+/// （元素红框 + 点击蓝点），与 `tke run` 同构，便于事后核对 AI 实际点到哪。
 ///
 /// 注意：仅处理"设备动作"；控制流动作（要图/反问/finish）由 runner 主循环拦截，不进此处。
 pub async fn apply(
@@ -30,14 +33,14 @@ pub async fn apply(
     shot_path: &Path,
     tx: &mut Transcript,
     round: usize,
-) -> Result<(String, String)> {
+) -> Result<(String, String, ActionTrace)> {
     match action {
         AgentAction::Click { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             save_element(device, element_path, name, desc, c.x, c.y, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
-            Ok((line(TksCommand::Click, vec![el_param(name)]), detail))
+            Ok((line(TksCommand::Click, vec![el_param(name)]), detail, el_trace(c, el, name)))
         }
         AgentAction::Input { element_id, name, desc, text } => {
             let el = lookup(elements, *element_id)?;
@@ -48,7 +51,7 @@ pub async fn apply(
                 ControlAction::Input { text: text.clone(), point: Some(c) },
             )
             .await?;
-            Ok((line(TksCommand::Input, vec![el_param(name), TksParam::Text(text.clone())]), detail))
+            Ok((line(TksCommand::Input, vec![el_param(name), TksParam::Text(text.clone())]), detail, el_trace(c, el, name)))
         }
         AgentAction::LongPress { element_id, name, desc, duration_ms } => {
             let el = lookup(elements, *element_id)?;
@@ -59,7 +62,7 @@ pub async fn apply(
                 ControlAction::Press { point: c, duration_ms: *duration_ms as u32 },
             )
             .await?;
-            Ok((line(TksCommand::Press, vec![el_param(name), TksParam::Number(*duration_ms as i32)]), detail))
+            Ok((line(TksCommand::Press, vec![el_param(name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, name)))
         }
         AgentAction::Clear { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
@@ -68,32 +71,36 @@ pub async fn apply(
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
             let _ = exec(device, ControlAction::Click { point: c }).await?;
             let detail = exec(device, ControlAction::Clear).await?;
-            Ok((line(TksCommand::Clear, vec![el_param(name)]), detail))
+            Ok((line(TksCommand::Clear, vec![el_param(name)]), detail, el_trace(c, el, name)))
         }
         AgentAction::SwipeDir { direction, distance } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
             let (cx, cy) = (w as i32 / 2, h as i32 / 2);
             let dist = distance.unwrap_or((h as i32) * 5 / 10);
+            let from = Point::new(cx, cy);
+            let to = swipe_end(from, direction, dist);
             let detail = exec(
                 device,
                 ControlAction::SwipeDir {
-                    from: Point::new(cx, cy),
+                    from,
                     direction: direction.clone(),
                     distance: dist,
                     duration_ms: 300,
                 },
             )
             .await?;
+            let trace = ActionTrace { captured: false, points: vec![from, to], bounds: None, element_name: None };
             Ok((
                 line(
                     TksCommand::DirectionalSwipe,
                     vec![
-                        TksParam::Coordinate(Point::new(cx, cy)),
+                        TksParam::Coordinate(from),
                         TksParam::Direction(direction.clone()),
                         TksParam::Number(dist),
                     ],
                 ),
                 detail,
+                trace,
             ))
         }
         AgentAction::Launch { target, activity } => {
@@ -109,30 +116,30 @@ pub async fn apply(
             if let Some(act) = activity {
                 params.push(TksParam::Text(act.clone()));
             }
-            Ok((line(TksCommand::Launch, params), detail))
+            Ok((line(TksCommand::Launch, params), detail, ActionTrace::default()))
         }
         AgentAction::Close { target } => {
             let detail = exec(device, ControlAction::Close { package: target.clone() }).await?;
-            Ok((line(TksCommand::Close, vec![TksParam::Text(target.clone())]), detail))
+            Ok((line(TksCommand::Close, vec![TksParam::Text(target.clone())]), detail, ActionTrace::default()))
         }
         AgentAction::Back => {
             let detail = exec(device, ControlAction::Back).await?;
-            Ok((line(TksCommand::Back, vec![]), detail))
+            Ok((line(TksCommand::Back, vec![]), detail, ActionTrace::default()))
         }
         AgentAction::HideKeyboard => {
             let detail = exec(device, ControlAction::HideKeyboard).await?;
-            Ok((line(TksCommand::HideKeyboard, vec![]), detail))
+            Ok((line(TksCommand::HideKeyboard, vec![]), detail, ActionTrace::default()))
         }
         AgentAction::Wait { ms, element } => {
             if let Some(ms) = ms {
                 tokio::time::sleep(tokio::time::Duration::from_millis(*ms)).await;
-                Ok((line(TksCommand::Wait, vec![TksParam::Number(*ms as i32)]), format!("等待 {}ms", ms)))
+                Ok((line(TksCommand::Wait, vec![TksParam::Number(*ms as i32)]), format!("等待 {}ms", ms), ActionTrace::default()))
             } else if let Some(elem) = element {
                 // v1：仅记录可回放的 .tks 行，实时不阻塞（下一轮采集会反映新状态）
-                Ok((line(TksCommand::Wait, vec![el_param(elem)]), format!("记录等待元素出现: {}", elem)))
+                Ok((line(TksCommand::Wait, vec![el_param(elem)]), format!("记录等待元素出现: {}", elem), ActionTrace::default()))
             } else {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                Ok((line(TksCommand::Wait, vec![TksParam::Number(1000)]), "等待 1000ms".to_string()))
+                Ok((line(TksCommand::Wait, vec![TksParam::Number(1000)]), "等待 1000ms".to_string(), ActionTrace::default()))
             }
         }
         // 控制流动作不在此处理（由主循环拦截）
@@ -141,6 +148,27 @@ pub async fn apply(
         | AgentAction::Finish { .. } => {
             Err(TkeError::ScriptExecuteError("控制流动作不应进入执行器".to_string()))
         }
+    }
+}
+
+/// 元素动作的轨迹：点击点 + 元素实时 bounds（用于截图画框 + 蓝点）
+fn el_trace(c: Point, el: &UIElement, name: &str) -> ActionTrace {
+    ActionTrace {
+        captured: false,
+        points: vec![c],
+        bounds: Some(el.bounds.clone()),
+        element_name: Some(name.to_string()),
+    }
+}
+
+/// 由起点+方向+距离推出定向滑动终点（与 execute_action 内一致）
+fn swipe_end(from: Point, direction: &str, distance: i32) -> Point {
+    match direction {
+        "up" => Point::new(from.x, from.y - distance),
+        "down" => Point::new(from.x, from.y + distance),
+        "left" => Point::new(from.x - distance, from.y),
+        "right" => Point::new(from.x + distance, from.y),
+        _ => from,
     }
 }
 

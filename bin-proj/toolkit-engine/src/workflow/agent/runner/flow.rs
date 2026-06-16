@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use crate::{ActionTrace, Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
+use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
 
 use super::super::execution;
 use super::super::interaction::read_user_line;
@@ -179,12 +179,13 @@ pub async fn drive(
                     )
                     .await
                     {
-                        Ok((line, detail)) => {
+                        Ok((line, detail, trace)) => {
                             eprintln!("  ✓ {}  〔{}〕", line, detail);
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
+                            // trace 带点击点+元素 bounds → 截图标注红框+蓝点，可核对 AI 实际点到哪
                             let step_index = steps.len();
                             let (screenshot, xml) =
-                                ctx.artifacts.save_step(ctx.workarea, step_index, &ActionTrace::default(), &line, true);
+                                ctx.artifacts.save_step(ctx.workarea, step_index, &trace, &line, true);
                             tx.log(
                                 "tks_step",
                                 serde_json::json!({ "round": round, "step": step_index + 1, "line": line.clone(), "exec": detail.clone(), "screenshot": screenshot.clone(), "xml": xml.clone() }),
