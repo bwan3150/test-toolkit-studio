@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
-/// 元素库默认查找路径（相对当前目录）
-const DEFAULT_ELEMENT_PATHS: &[&str] = &["element.json", "locator/element.json"];
+// 元素库默认查找已收敛到参数层 utils::params（单一来源）；
+// Recognizer 只接收解析好的库路径（None 表示无元素库，仅坐标/文本定位可用）。
 
 /// 元素识别器
 pub struct Recognizer {
@@ -30,16 +30,9 @@ pub struct Recognizer {
 
 impl Recognizer {
     /// 创建识别器
-    /// element_path 为 None 时按默认路径查找（./element.json → ./locator/element.json），
-    /// 找不到元素库则为空库（仅坐标/文本定位可用）
+    /// element_path 由参数层解析好（含默认查找）；None 表示无元素库（仅坐标/文本定位可用）
     pub fn new(element_path: Option<&Path>, workarea: Workarea, platform: Platform) -> Result<Self> {
-        let resolved = match element_path {
-            Some(p) => Some(p.to_path_buf()),
-            None => DEFAULT_ELEMENT_PATHS
-                .iter()
-                .map(PathBuf::from)
-                .find(|p| p.exists()),
-        };
+        let resolved = element_path.map(|p| p.to_path_buf());
 
         let (element_dir, locators) = match resolved {
             Some(path) => {

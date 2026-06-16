@@ -8,24 +8,9 @@
 
 use crate::{Result, TkeError, Controller, Fetcher, Platform, UIElement};
 use crate::utils::Workarea;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-/// 元素库默认查找路径（与 Recognizer 一致）
-const DEFAULT_ELEMENT_PATHS: &[&str] = &["element.json", "locator/element.json"];
-
-/// 解析元素库路径：--element 指定的直接用；缺省按默认路径找，都不存在则用第一个默认值新建
-fn resolve_library_path(element_path: Option<&Path>) -> PathBuf {
-    if let Some(p) = element_path {
-        return p.to_path_buf();
-    }
-    for p in DEFAULT_ELEMENT_PATHS {
-        let path = PathBuf::from(p);
-        if path.exists() {
-            return path;
-        }
-    }
-    PathBuf::from(DEFAULT_ELEMENT_PATHS[0])
-}
+// 元素库默认查找已收敛到参数层 utils::params（单一来源）；本模块只接收解析好的库路径。
 
 /// 元素名 → 安全文件名（保留中文/字母/数字，其余替换为 _）
 fn safe_filename(name: &str) -> String {
@@ -109,7 +94,7 @@ fn ocr_via_subprocess(image_path: &Path) -> Option<String> {
 /// 返回结果 JSON（含落库内容摘要）
 pub async fn add_element(
     device_id: String,
-    element_path: Option<&Path>,
+    lib_path: &Path,
     name: &str,
     desc: Option<String>,
     x: i32,
@@ -166,8 +151,7 @@ pub async fn add_element(
     // 3. 结构通道
     let (channel_key, channel_value) = build_channel(platform, target);
 
-    // 4. img 通道：从截图 crop 元素模板图
-    let lib_path = resolve_library_path(element_path);
+    // 4. img 通道：从截图 crop 元素模板图（lib_path 为参数层解析好的库路径）
     let lib_dir = lib_path.parent().unwrap_or(Path::new(".")).to_path_buf();
     let img_dir = lib_dir.join("img");
     std::fs::create_dir_all(&img_dir).map_err(TkeError::IoError)?;
@@ -196,7 +180,7 @@ pub async fn add_element(
     }
 
     // 6. 读取/新建元素库，合并写入（preserve_order 保持文件原有元素顺序）
-    let mut lib: serde_json::Value = match std::fs::read_to_string(&lib_path) {
+    let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
         Ok(content) => serde_json::from_str(&content)
             .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
         Err(_) => serde_json::json!({ "elements": {} }),
@@ -245,7 +229,7 @@ pub async fn add_element(
     }
 
     let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
-    std::fs::write(&lib_path, pretty).map_err(TkeError::IoError)?;
+    std::fs::write(lib_path, pretty).map_err(TkeError::IoError)?;
 
     let mut result = serde_json::json!({
         "success": true,

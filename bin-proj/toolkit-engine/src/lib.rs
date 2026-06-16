@@ -33,7 +33,7 @@ pub mod tools;
 // ===== 统一导出（保持 crate 根路径简洁） =====
 
 // 基础设施
-pub use utils::{JsonOutput, Workarea, TkeConfig, AiConfig, KnowledgeConfig};
+pub use utils::{JsonOutput, Workarea, TkeConfig, AiConfig, KnowledgeConfig, Params};
 
 // ① 直通 + 二进制定位
 pub use passthrough::ToolManager;

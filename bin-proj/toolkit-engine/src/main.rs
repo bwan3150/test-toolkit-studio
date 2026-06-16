@@ -38,6 +38,10 @@ struct Cli {
     #[arg(long, global = true)]
     log: Option<PathBuf>,
 
+    /// 脚本输出目录（case 生成的 .tks 落点；缺省用 config 或 --script 显式路径）
+    #[arg(long, global = true)]
+    scripts: Option<PathBuf>,
+
     /// 配置文件（缺省自动读 tke 同目录的 config.toml；CLI 显式参数优先于配置）
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
@@ -168,9 +172,10 @@ async fn main() -> tke::Result<()> {
         }
     };
 
-    let device = cli.device.or(config.device);
-    let element = cli.element.or(config.element);
-    let log = cli.log.or(config.log);
+    // 参数层：CLI + config 解析一次，形成统一参数表；后续从 params 取参（取代逐层透传）
+    let params = tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.json, config);
+    // 进程级设置在线 OCR 地址（识别引擎深处查询）
+    tke::utils::params::set_ocr_url(params.ocr_url.clone());
 
     // 便捷路由: tke <path.tks|path.toml> 等价于 tke run <path>
     let tool_is_script = matches!(&cli.command, Commands::Tool(args)
@@ -206,54 +211,54 @@ async fn main() -> tke::Result<()> {
             .init();
     }
 
-    // 路由到对应的 handler
+    // 路由到对应的 handler —— 全局参数统一从 params 取（取代逐层透传）
     match cli.command {
         // ② 原子方法
         Commands::Refresh { args } => {
-            atomic::refresh::handle(args, device).await
+            atomic::refresh::handle(args, params.device()).await
         }
         Commands::Fetch { args } => {
-            atomic::fetch::handle(args, device).await
+            atomic::fetch::handle(args, params.device()).await
         }
         Commands::Recognize { args } => {
-            atomic::recognize::handle(args, device, element).await
+            atomic::recognize::handle(args, params.device(), params.element_lib()).await
         }
         Commands::Control { action } => {
-            atomic::control::handle(action, device).await
+            atomic::control::handle(action, params.device()).await
         }
         // ③ 工作流
         Commands::Run { args } => {
-            workflow::run::handle(args, device, element, log, cli.json).await
+            workflow::run::handle(args, params.device(), params.element_lib(), params.log.clone(), params.json).await
         }
         Commands::Steps { args } => {
-            workflow::steps::handle(args, device, element, log, cli.json).await
+            workflow::steps::handle(args, params.device(), params.element_lib(), params.log.clone(), params.json).await
         }
         Commands::Case { args } => {
-            workflow::case::handle(args, device, element, log, config.ai, config.knowledge).await
+            workflow::case::handle(args, params.device(), params.element_lib(), params.log.clone(), params.ai.clone(), params.knowledge.clone()).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {
             tools::ocr::handle(image, online, url, lang).await
         }
         Commands::File { action } => {
-            tools::file::handle(action, device).await
+            tools::file::handle(action, params.device()).await
         }
         Commands::App { action } => {
-            tools::app::handle(action, device).await
+            tools::app::handle(action, params.device()).await
         }
         Commands::Device { action } => {
-            tools::device::handle(action, device)
+            tools::device::handle(action, params.device())
         }
         Commands::Element { action } => {
-            tools::element::handle(action, device, element).await
+            tools::element::handle(action, params.device(), params.element_lib_for_write()).await
         }
         // ① 直通（.tks/.toml 路径自动转 run）
         Commands::Tool(args) => {
             if tool_is_script {
                 let path = PathBuf::from(&args[0]);
-                workflow::run::handle(RunArgs { path }, device, element, log, cli.json).await
+                workflow::run::handle(RunArgs { path }, params.device(), params.element_lib(), params.log.clone(), params.json).await
             } else {
-                passthrough::handle(args, device).await
+                passthrough::handle(args, params.device()).await
             }
         }
     }

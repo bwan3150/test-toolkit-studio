@@ -6,8 +6,7 @@ use crate::engines::ocr::{ocr, OcrResult};
 use std::path::Path;
 use tracing::debug;
 
-/// OCR 服务 URL
-const OCR_URL: &str = "https://ocr.test-toolkit.app/ocr";
+// OCR 服务地址改由参数层提供（决策 5：可配；默认在 utils::params）
 
 /// 通过 OCR 在线识别查找元素
 pub async fn find_by_ocr(
@@ -30,8 +29,9 @@ pub async fn find_by_ocr(
     let image_data = std::fs::read(screenshot_path)
         .map_err(|e| TkeError::IoError(e))?;
 
-    // 调用在线 OCR
-    let result = ocr(&image_data, true, OCR_URL).await
+    // 调用在线 OCR（地址来自参数层，单一来源、可配）
+    let ocr_url = crate::utils::params::ocr_url();
+    let result = ocr(&image_data, true, &ocr_url).await
         .map_err(|e| TkeError::OcrError(format!("OCR 识别失败: {}", e)))?;
 
     debug!("OCR 识别到 {} 个文字区域", result.texts.len());

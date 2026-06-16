@@ -18,6 +18,10 @@ pub struct TkeConfig {
     pub element: Option<PathBuf>,
     /// 产物输出目录
     pub log: Option<PathBuf>,
+    /// 脚本输出目录（case 生成的 .tks 落点；CLI/显式参数优先）
+    pub scripts: Option<PathBuf>,
+    /// 在线 OCR 服务地址（缺省用内置默认；私有部署/换服务时配置）
+    pub ocr_url: Option<String>,
     /// AI 配置（tke case 探索测试用）：[ai] 段
     #[serde(default)]
     pub ai: AiConfig,
@@ -68,6 +72,7 @@ impl TkeConfig {
         let base = path.parent().unwrap_or(Path::new("."));
         config.element = config.element.map(|p| resolve(base, p));
         config.log = config.log.map(|p| resolve(base, p));
+        config.scripts = config.scripts.map(|p| resolve(base, p));
 
         Ok(config)
     }

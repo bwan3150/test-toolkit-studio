@@ -39,10 +39,11 @@ fn parse_at(s: &str) -> Result<(i32, i32)> {
 }
 
 /// 处理 Element 相关命令（必须指定 -d/--device）
+/// element_lib 为参数层解析好的元素库路径（写入语义：含默认创建路径）
 pub async fn handle(
     action: ElementCommands,
     device_id: Option<String>,
-    element_path: Option<PathBuf>,
+    element_lib: PathBuf,
 ) -> Result<()> {
     match action {
         ElementCommands::Add { name, at, desc, cached, force } => {
@@ -50,7 +51,7 @@ pub async fn handle(
                 .unwrap_or_else(|| JsonOutput::error("element add 必须指定设备: -d/--device <设备ID>"));
             let (x, y) = parse_at(&at)?;
             let result = tke::tools::element::add_element(
-                device, element_path.as_deref(), &name, desc, x, y, cached, force,
+                device, &element_lib, &name, desc, x, y, cached, force,
             )
             .await?;
             JsonOutput::print(result);

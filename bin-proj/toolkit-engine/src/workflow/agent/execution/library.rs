@@ -17,7 +17,7 @@ pub async fn save_element(
 ) {
     match crate::tools::element::add_element(
         device.to_string(),
-        Some(element_path),
+        element_path,
         name,
         desc.clone(),
         x,
