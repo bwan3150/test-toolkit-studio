@@ -1,6 +1,6 @@
 // 运行产物管理 - 每次运行留下完整记录用于定位问题
 // 仅在指定 --log <dir> 时启用，目录结构：
-// <log>/<时间戳>_<脚本名>/
+// <log>/<脚本名>_<时间戳>/
 //   ├── log.json              完整执行日志（脚本path、时间戳、每步成败/报错/耗时）
 //   ├── screenshots/
 //   │   └── step_001.png      每步标注截图（顶部横幅=操作内容/成败 + 元素框 + 点击坐标点）
@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 /// 单次运行的产物目录
 pub struct RunArtifacts {
-    /// 运行根目录 <log>/<时间戳>_<名称>/
+    /// 运行根目录 <log>/<名称>_<时间戳>/
     pub run_dir: PathBuf,
     /// 截图序列目录
     screenshots_dir: PathBuf,
@@ -32,9 +32,15 @@ pub struct RunArtifacts {
 
 impl RunArtifacts {
     /// 在 log 根目录下创建本次运行的产物目录
+    /// 命名统一为 `<名>_<时间戳>`（无名则纯 `<时间戳>`），run/steps/flow/case 一致
     pub fn create(log_root: &Path, name: &str) -> Result<Self> {
         let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
-        let run_dir = log_root.join(format!("{}_{}", timestamp, sanitize(name)));
+        let dir_name = if name.trim().is_empty() {
+            timestamp
+        } else {
+            format!("{}_{}", sanitize(name), timestamp)
+        };
+        let run_dir = log_root.join(dir_name);
         Self::create_at(run_dir)
     }
 

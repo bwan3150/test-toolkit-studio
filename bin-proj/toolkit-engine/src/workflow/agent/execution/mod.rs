@@ -1,8 +1,9 @@
 // 【执行】把一个 AgentAction 落地：设备执行 + 元素落库 + 生成可回放的 .tks 行
-//   device   执行原语（ControlAction → 设备）
+//   device   执行原语（ControlAction → 设备，经统一 execute_action）
 //   library  按坐标落库
-//   script   .tks 文本工具 + 写出
-// apply() 负责按动作类型编排这三者，返回 (.tks 行, 执行详情)。
+//   script   .tks 写出
+// apply() 编排三者，.tks 行经 Phase 2 序列化器生成（构造 TksStep → step_to_source），
+// 保证产出与 parser 同构、可被 run 回放，不再手拼字符串。
 
 pub mod device;
 pub mod library;
@@ -10,13 +11,13 @@ pub mod script;
 
 use std::path::Path;
 
-use crate::{ControlAction, Point, Result, TkeError, UIElement};
+use crate::workflow::step_to_source;
+use crate::{ControlAction, LocatorStrategy, Point, Result, TkeError, TksCommand, TksParam, TksStep, UIElement};
 
 use super::tools::AgentAction;
 use super::transcript::Transcript;
 use device::exec;
 use library::save_element;
-use script::{direction_cn, escape_text};
 
 /// 执行一个设备动作：返回 (.tks 行, 执行详情)
 ///
@@ -36,7 +37,7 @@ pub async fn apply(
             let c = el.center();
             save_element(device, element_path, name, desc, c.x, c.y, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
-            Ok((format!("点击 [{{{}}}]", name), detail))
+            Ok((line(TksCommand::Click, vec![el_param(name)]), detail))
         }
         AgentAction::Input { element_id, name, desc, text } => {
             let el = lookup(elements, *element_id)?;
@@ -47,7 +48,7 @@ pub async fn apply(
                 ControlAction::Input { text: text.clone(), point: Some(c) },
             )
             .await?;
-            Ok((format!("输入 [{{{}}}, \"{}\"]", name, escape_text(text)), detail))
+            Ok((line(TksCommand::Input, vec![el_param(name), TksParam::Text(text.clone())]), detail))
         }
         AgentAction::LongPress { element_id, name, desc, duration_ms } => {
             let el = lookup(elements, *element_id)?;
@@ -58,7 +59,7 @@ pub async fn apply(
                 ControlAction::Press { point: c, duration_ms: *duration_ms as u32 },
             )
             .await?;
-            Ok((format!("按压 [{{{}}}, {}]", name, duration_ms), detail))
+            Ok((line(TksCommand::Press, vec![el_param(name), TksParam::Number(*duration_ms as i32)]), detail))
         }
         AgentAction::Clear { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
@@ -67,7 +68,7 @@ pub async fn apply(
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
             let _ = exec(device, ControlAction::Click { point: c }).await?;
             let detail = exec(device, ControlAction::Clear).await?;
-            Ok((format!("清理 [{{{}}}]", name), detail))
+            Ok((line(TksCommand::Clear, vec![el_param(name)]), detail))
         }
         AgentAction::SwipeDir { direction, distance } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
@@ -83,8 +84,17 @@ pub async fn apply(
                 },
             )
             .await?;
-            let dir_cn = direction_cn(direction);
-            Ok((format!("定向滑动 [{{{}, {}}}, {}, {}]", cx, cy, dir_cn, dist), detail))
+            Ok((
+                line(
+                    TksCommand::DirectionalSwipe,
+                    vec![
+                        TksParam::Coordinate(Point::new(cx, cy)),
+                        TksParam::Direction(direction.clone()),
+                        TksParam::Number(dist),
+                    ],
+                ),
+                detail,
+            ))
         }
         AgentAction::Launch { target, activity } => {
             let detail = exec(
@@ -95,34 +105,34 @@ pub async fn apply(
                 },
             )
             .await?;
-            let line = match activity {
-                Some(act) => format!("启动 [{}, {}]", target, act),
-                None => format!("启动 [{}]", target),
-            };
-            Ok((line, detail))
+            let mut params = vec![TksParam::Text(target.clone())];
+            if let Some(act) = activity {
+                params.push(TksParam::Text(act.clone()));
+            }
+            Ok((line(TksCommand::Launch, params), detail))
         }
         AgentAction::Close { target } => {
             let detail = exec(device, ControlAction::Close { package: target.clone() }).await?;
-            Ok((format!("关闭 [{}]", target), detail))
+            Ok((line(TksCommand::Close, vec![TksParam::Text(target.clone())]), detail))
         }
         AgentAction::Back => {
             let detail = exec(device, ControlAction::Back).await?;
-            Ok(("返回".to_string(), detail))
+            Ok((line(TksCommand::Back, vec![]), detail))
         }
         AgentAction::HideKeyboard => {
             let detail = exec(device, ControlAction::HideKeyboard).await?;
-            Ok(("隐藏键盘".to_string(), detail))
+            Ok((line(TksCommand::HideKeyboard, vec![]), detail))
         }
         AgentAction::Wait { ms, element } => {
             if let Some(ms) = ms {
                 tokio::time::sleep(tokio::time::Duration::from_millis(*ms)).await;
-                Ok((format!("等待 [{}]", ms), format!("等待 {}ms", ms)))
+                Ok((line(TksCommand::Wait, vec![TksParam::Number(*ms as i32)]), format!("等待 {}ms", ms)))
             } else if let Some(elem) = element {
                 // v1：仅记录可回放的 .tks 行，实时不阻塞（下一轮采集会反映新状态）
-                Ok((format!("等待 [{{{}}}]", elem), format!("记录等待元素出现: {}", elem)))
+                Ok((line(TksCommand::Wait, vec![el_param(elem)]), format!("记录等待元素出现: {}", elem)))
             } else {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                Ok(("等待 [1000]".to_string(), "等待 1000ms".to_string()))
+                Ok((line(TksCommand::Wait, vec![TksParam::Number(1000)]), "等待 1000ms".to_string()))
             }
         }
         // 控制流动作不在此处理（由主循环拦截）
@@ -132,6 +142,16 @@ pub async fn apply(
             Err(TkeError::ScriptExecuteError("控制流动作不应进入执行器".to_string()))
         }
     }
+}
+
+/// 构造 TksStep 并序列化成 .tks 行（统一经 Phase 2 序列化器，保证可回放）
+fn line(command: TksCommand, params: Vec<TksParam>) -> String {
+    step_to_source(&TksStep { command, params, raw: String::new(), line_number: 0 })
+}
+
+/// `{元素名}`（auto 策略）参数
+fn el_param(name: &str) -> TksParam {
+    TksParam::Element { name: name.to_string(), strategy: LocatorStrategy::Auto }
 }
 
 /// 取元素列表中第 id 个元素

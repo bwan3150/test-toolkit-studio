@@ -23,18 +23,4 @@ pub fn write_script(path: &Path, case: &str, lines: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// 方向英文 → .tks 用的中文（定向滑动参数）
-pub fn direction_cn(d: &str) -> &'static str {
-    match d {
-        "up" => "上",
-        "down" => "下",
-        "left" => "左",
-        "right" => "右",
-        _ => "上",
-    }
-}
-
-/// .tks 文本参数里的引号转义（简单处理：双引号→单引号）
-pub fn escape_text(s: &str) -> String {
-    s.replace('"', "'")
-}
+// 方向中英映射、文本转义已收敛到 Phase 2 序列化器（parser/serialize.rs），此处不再重复。
