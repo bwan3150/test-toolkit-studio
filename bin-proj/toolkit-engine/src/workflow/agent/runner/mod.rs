@@ -9,7 +9,7 @@ pub use options::{AgentResult, AgentRunOptions};
 use std::path::{Path, PathBuf};
 
 use crate::models::Platform;
-use crate::{Fetcher, LlmSession, Result, Workarea};
+use crate::{ExecutionResult, Fetcher, LlmSession, Result, RunArtifacts, Workarea};
 
 use super::execution::script::write_script;
 use super::knowledge::{Knowledge, KnowledgeOutcome};
@@ -26,24 +26,27 @@ impl AgentRunner {
         let device = opts.params.device().unwrap_or_default();
         let platform = Platform::from_device(Some(&device));
 
-        // —— 产物路径 ——（element 经参数层查表；缺省落 script 同级 element.json）
+        // 元素库（参数层查表；缺省落 script 同级 element.json）
         let element_path: PathBuf = opts.params.element_lib().unwrap_or_else(|| {
             opts.script_out
                 .parent()
                 .unwrap_or(Path::new("."))
                 .join("element.json")
         });
-        let conversation_path = opts.script_out.with_extension("conversation.jsonl");
+
+        // —— 产物目录：复用 RunArtifacts，与 tke run 同构 ——
+        // log 根：--log/config 优先；缺省落 script 同级（case 始终保留探索记录）
         let stem = opts
             .script_out
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "case".to_string());
-        let screens_dir = opts
-            .script_out
-            .parent()
-            .unwrap_or(Path::new("."))
-            .join(format!("{}.screens", stem));
+        let log_root = opts.params.log.clone().unwrap_or_else(|| {
+            opts.script_out.parent().unwrap_or(Path::new(".")).to_path_buf()
+        });
+        let artifacts = RunArtifacts::create(&log_root, &stem)?;
+        let run_dir = artifacts.run_dir.clone();
+        let conversation_path = run_dir.join("conversation.jsonl");
 
         let mut tx = Transcript::create(conversation_path.clone())?;
 
@@ -68,6 +71,7 @@ impl AgentRunner {
                 "provider": opts.ai.provider.clone().unwrap_or_else(|| "anthropic".into()),
                 "model": opts.ai.model.clone().unwrap_or_default(),
                 "element_library": element_path.to_string_lossy(),
+                "run_dir": run_dir.to_string_lossy(),
             }),
         );
 
@@ -80,17 +84,19 @@ impl AgentRunner {
         let workarea = Workarea::for_device(Some(&device))?;
         let fetcher = Fetcher::new();
         let max_rounds = opts.ai.max_rounds.unwrap_or(40) as usize;
+        let start_time = chrono::Local::now().to_rfc3339();
         let ctx = DriveCtx {
             device: &device,
             element_path: &element_path,
             workarea: &workarea,
             fetcher: &fetcher,
-            screens_dir: &screens_dir,
+            artifacts: &artifacts,
             max_rounds,
         };
         let outcome = drive(&mut sess, &mut tx, &ctx).await?;
+        let end_time = chrono::Local::now().to_rfc3339();
 
-        // —— 收尾：写出 .tks ——
+        // —— 收尾：写 .tks 脚本(--script) + log.json(ExecutionResult，与 run 同构) ——
         write_script(&opts.script_out, &opts.case, &outcome.lines)?;
         tx.log(
             "run_end",
@@ -98,10 +104,24 @@ impl AgentRunner {
                 "success": outcome.success,
                 "reason": outcome.reason.clone(),
                 "rounds": outcome.rounds,
-                "steps": outcome.lines.len(),
+                "steps": outcome.steps.len(),
                 "script": opts.script_out.to_string_lossy(),
             }),
         );
+
+        let exec_result = ExecutionResult {
+            success: outcome.success,
+            case_id: String::new(),
+            script_name: stem,
+            start_time,
+            end_time,
+            steps: outcome.steps,
+            error: if outcome.success { None } else { Some(outcome.reason.clone()) },
+            script_path: Some(opts.script_out.to_string_lossy().to_string()),
+            run_dir: Some(run_dir.to_string_lossy().to_string()),
+            launched_packages: Vec::new(),
+        };
+        let _ = artifacts.write_log(&exec_result);
 
         Ok(AgentResult {
             success: outcome.success,

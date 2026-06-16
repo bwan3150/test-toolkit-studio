@@ -1,8 +1,10 @@
 // 主循环：perceive → decide → apply → record（只编排，具体能力委托各子模块）
+// 产物经 RunArtifacts 统一保存：每个执行步存 screenshots/step_NNN + page/step_NNN，
+// 与 tke run 同构；conversation.jsonl（AI 原始对话）由 transcript 写在同一运行目录。
 
 use std::path::Path;
 
-use crate::{Fetcher, LlmReply, LlmSession, Result, Workarea};
+use crate::{ActionTrace, Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
 
 use super::super::execution;
 use super::super::interaction::read_user_line;
@@ -16,7 +18,7 @@ pub struct DriveCtx<'a> {
     pub element_path: &'a Path,
     pub workarea: &'a Workarea,
     pub fetcher: &'a Fetcher,
-    pub screens_dir: &'a Path,
+    pub artifacts: &'a RunArtifacts,
     pub max_rounds: usize,
 }
 
@@ -25,6 +27,7 @@ pub struct DriveOutcome {
     pub success: bool,
     pub reason: String,
     pub lines: Vec<String>,
+    pub steps: Vec<StepResult>,
     pub rounds: usize,
 }
 
@@ -36,6 +39,7 @@ pub async fn drive(
 ) -> Result<DriveOutcome> {
     let max_llm_calls = ctx.max_rounds * 4 + 10; // 含要图/反问等不前进的轮次
     let mut lines: Vec<String> = Vec::new();
+    let mut steps: Vec<StepResult> = Vec::new();
     let mut round = 0usize;
     let mut llm_calls = 0usize;
     let mut finish: Option<(bool, String)> = None;
@@ -44,7 +48,7 @@ pub async fn drive(
         round += 1;
 
         // 1) 采集页面
-        let p = match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.screens_dir, round).await {
+        let p = match capture(ctx.device, ctx.workarea, ctx.fetcher).await {
             Ok(p) => p,
             Err(e) => {
                 tx.log("perceive_error", serde_json::json!({ "round": round, "error": e.to_string() }));
@@ -58,7 +62,6 @@ pub async fn drive(
                 "round": round,
                 "element_count": p.elements.len(),
                 "elements": list_text.clone(),
-                "screenshot": p.saved_shot.as_ref().map(|p| p.to_string_lossy().to_string()),
                 "xml": p.xml_path.to_string_lossy(),
             }),
         );
@@ -124,7 +127,7 @@ pub async fn drive(
                     match sess.user_with_image("当前页面截图：", &p.shot_path) {
                         Ok(()) => tx.log(
                             "screenshot_sent",
-                            serde_json::json!({ "round": round, "screenshot": p.saved_shot.as_ref().map(|p| p.to_string_lossy().to_string()) }),
+                            serde_json::json!({ "round": round, "screenshot": p.shot_path.to_string_lossy() }),
                         ),
                         Err(e) => {
                             tx.log("screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
@@ -153,8 +156,25 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail)) => {
+                            // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
+                            let step_index = steps.len();
+                            let (screenshot, xml) =
+                                ctx.artifacts.save_step(ctx.workarea, step_index, &ActionTrace::default(), &line, true);
+                            tx.log(
+                                "tks_step",
+                                serde_json::json!({ "round": round, "step": step_index + 1, "line": line.clone(), "exec": detail.clone(), "screenshot": screenshot.clone(), "xml": xml.clone() }),
+                            );
+                            steps.push(StepResult {
+                                index: step_index,
+                                command: line.clone(),
+                                success: true,
+                                error: None,
+                                duration_ms: 0,
+                                line: None,
+                                screenshot,
+                                xml,
+                            });
                             lines.push(line.clone());
-                            tx.log("tks_step", serde_json::json!({ "round": round, "line": line.clone(), "exec": detail.clone() }));
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
@@ -170,5 +190,5 @@ pub async fn drive(
     }
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
-    Ok(DriveOutcome { success, reason, lines, rounds: round })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round })
 }
