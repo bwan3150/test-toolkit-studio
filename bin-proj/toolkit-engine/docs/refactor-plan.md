@@ -4,6 +4,20 @@
 > 底座是"规范的单一来源"——长在代码里，不靠各功能自觉遵守。
 > 本文是动手前的蓝图：决策 → 目标架构 → 分阶段实施 → 约束与风险。配合 `codebase-map.md` 使用。
 
+## 实施状态（2026-06-16）
+
+**Phase 0–3 全部完成**，四块共享底座（参数层 / 操作模型 / tks 契约 / RunArtifacts）已落地，全程编译+冒烟+往返测试通过、对外行为保持。
+
+| Phase | 状态 | commit |
+|------|------|--------|
+| 0 参数层 | ✅ | `44f2d07`（Params + element/ocr 单一来源）/ `56cc749`（编排层持 Arc<Params>） |
+| 1 操作模型统一 | ✅ | `74c0184` |
+| 2 tks 序列化（双向契约） | ✅ | `c224871` |
+| 3 RunArtifacts 复用 + case 接入 | ✅ | `06e0e3e`（命名+序列化器）/ `75b05bf`（case 产物同构） |
+| 4 清理（贯穿） | 🟡 部分 | 已随各阶段去重（DEFAULT_ELEMENT_PATHS / direction_cn 等）；vestigial 字段(TksScript.case_id/details)、Fetcher 疑似死方法待后续顺手清 |
+
+对外可见的行为变化仅两处：① run/steps/flow 产物目录名 `<时间戳>_<名>` → `<名>_<时间戳>`；② case 产物改用 RunArtifacts 运行目录（详见 Phase 3）。
+
 ---
 
 ## 0. 设计决策（已确认）
@@ -38,7 +52,7 @@
 
 ## 2. 分阶段实施（按依赖排序，每阶段独立可编译、不破坏现有命令）
 
-### Phase 0 — 参数层（地基中的地基）  [#3 #4 #5-url]
+### Phase 0 — 参数层（地基中的地基）  [#3 #4 #5-url]  ✅ 已完成
 
 **目标**：所有参数在一处解析，模块查表取参，取代 `device/element/log` 顺着函数签名层层透传。
 
@@ -63,7 +77,7 @@ ai: AiConfig, knowledge: KnowledgeConfig, …
 
 ---
 
-### Phase 1 — 统一操作模型  [#1]
+### Phase 1 — 统一操作模型  [#1]  ✅ 已完成
 
 **目标**：设备操作只有一套表示 + 一个执行器；tks 执行、`control` CLI、AI、录制都走它。
 
@@ -81,7 +95,7 @@ ai: AiConfig, knowledge: KnowledgeConfig, …
 
 ---
 
-### Phase 2 — tks 序列化（双向契约）  [#2]
+### Phase 2 — tks 序列化（双向契约）  [#2]  ✅ 已完成
 
 **目标**：`TksStep`/`TksScript` 可渲染回文本，与 parser 互逆。
 
@@ -97,7 +111,7 @@ ai: AiConfig, knowledge: KnowledgeConfig, …
 
 ---
 
-### Phase 3 — RunArtifacts 全功能复用 + case 接入  [#3 产物，消费 #1 #2]
+### Phase 3 — RunArtifacts 全功能复用 + case 接入  [#3 产物，消费 #1 #2]  ✅ 已完成
 
 **目标**：case 与 run 产物同构；命名统一 `<name>_<时间戳>`；脚本落 `scripts` 参数目录。
 
@@ -114,7 +128,7 @@ ai: AiConfig, knowledge: KnowledgeConfig, …
 
 ---
 
-### Phase 4 — 清理（贯穿各阶段）  [#6 #4 残项]
+### Phase 4 — 清理（贯穿各阶段）  [#6 #4 残项]  🟡 部分完成
 
 - grep 核验 Fetcher 疑似死方法（`optimize_ui_tree`/`generate_tree_string`/`extract_ui_elements_with_size`/`infer_screen_size_from_xml`/`filter_*`）与 `TksScript.case_id/details` → 确认死的删，预留件标 TODO。
 - 确认 `DEFAULT_ELEMENT_PATHS` 重复已随 Phase 0 消除。
