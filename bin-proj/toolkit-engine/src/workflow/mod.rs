@@ -15,7 +15,7 @@ pub mod runner;
 pub mod agent;
 
 pub use events::RunEvent;
-pub use runner::{Runner, ScriptParser, ScriptInterpreter, ActionTrace};
+pub use runner::{Runner, ScriptParser, ScriptInterpreter, ActionTrace, script_to_source, step_to_source};
 pub use artifacts::RunArtifacts;
 pub use script_runner::ScriptRunner;
 pub use flow::{FlowDef, FlowRunner, FlowResult};

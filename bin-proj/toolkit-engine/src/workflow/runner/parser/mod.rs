@@ -2,8 +2,10 @@
 
 mod constants;
 mod parameter_parser;
+mod serialize;
 mod syntax_highlight;
 
+pub use serialize::{script_to_source, step_to_source};
 pub use syntax_highlight::{SyntaxHighlight, SyntaxHighlighter};
 
 use crate::{Result, TksScript, TksStep, TksCommand};

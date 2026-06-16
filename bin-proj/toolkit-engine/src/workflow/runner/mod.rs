@@ -6,7 +6,7 @@ mod parser;
 mod interpreter;
 
 // 导出
-pub use parser::ScriptParser;
+pub use parser::{ScriptParser, script_to_source, step_to_source};
 pub use interpreter::{ScriptInterpreter, ActionTrace};
 
 use crate::{Result, TkeError, StepResult};
