@@ -8,7 +8,7 @@ use crate::{ActionTrace, Fetcher, LlmReply, LlmSession, Result, RunArtifacts, St
 
 use super::super::execution;
 use super::super::interaction::read_user_line;
-use super::super::perception::{capture, render_element_list};
+use super::super::perception::{capture, render_element_list, Perceived};
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
 
@@ -48,11 +48,20 @@ pub async fn drive(
         round += 1;
 
         // 1) 采集页面
-        let p = match capture(ctx.device, ctx.workarea, ctx.fetcher).await {
-            Ok(p) => p,
+        //    web/iOS 冷启动时尚无会话，采集会失败——此时降级为"空页面 + 提示先 launch"，
+        //    不中断循环；AI 调 launch 建会话后，下一轮采集即正常。
+        let (p, perceive_err) = match capture(ctx.device, ctx.workarea, ctx.fetcher).await {
+            Ok(p) => (p, None),
             Err(e) => {
                 tx.log("perceive_error", serde_json::json!({ "round": round, "error": e.to_string() }));
-                return Err(e);
+                (
+                    Perceived {
+                        elements: Vec::new(),
+                        shot_path: ctx.workarea.screenshot_path(),
+                        xml_path: ctx.workarea.ui_tree_path(),
+                    },
+                    Some(e.to_string()),
+                )
             }
         };
         let list_text = render_element_list(&p.elements);
@@ -63,11 +72,17 @@ pub async fn drive(
                 "element_count": p.elements.len(),
                 "elements": list_text.clone(),
                 "xml": p.xml_path.to_string_lossy(),
+                "perceive_error": perceive_err.clone(),
             }),
         );
+        let hint = if perceive_err.is_some() {
+            "\n（注意：未能采集到页面——若是 web/iOS 且尚未打开目标，请先调用 launch 打开应用/网址）"
+        } else {
+            ""
+        };
         sess.user(format!(
-            "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}\n请调用一个工具决定下一步。",
-            round, list_text
+            "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n请调用一个工具决定下一步。",
+            round, list_text, hint
         ));
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
