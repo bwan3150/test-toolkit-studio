@@ -3,7 +3,6 @@
 // 元素库由 --element 指定（缺省按 ./element.json → ./locator/element.json 查找）
 
 use tke::{Result, Recognize, JsonOutput, LocatorStrategy};
-use std::path::PathBuf;
 
 /// Recognize 命令参数
 #[derive(clap::Args)]
@@ -45,9 +44,10 @@ fn parse_strategy(s: &str) -> LocatorStrategy {
 /// 处理 Recognize 命令（必须指定 -d/--device）
 pub async fn handle(
     args: RecognizeArgs,
-    device_id: Option<String>,
-    element_path: Option<PathBuf>,
+    params: std::sync::Arc<tke::Params>,
 ) -> Result<()> {
+    let device_id = params.device();
+    let element_path = params.element_lib();
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("recognize 必须指定设备: -d/--device <设备ID>"));
 

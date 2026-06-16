@@ -3,7 +3,7 @@
 // 输出与 run 一致的 NDJSON 事件流；--log 时同样保存完整产物
 
 use tke::{Result, ScriptRunner, JsonOutput};
-use std::path::PathBuf;
+use std::sync::Arc;
 
 use super::EventPrinter;
 
@@ -18,16 +18,13 @@ pub struct StepsArgs {
 /// 处理 Steps 命令
 pub async fn handle(
     args: StepsArgs,
-    device_id: Option<String>,
-    element: Option<PathBuf>,
-    log: Option<PathBuf>,
-    json: bool,
+    params: Arc<tke::Params>,
 ) -> Result<()> {
-    let mut printer = EventPrinter::auto(json);
+    let mut printer = EventPrinter::auto(params.json);
     let mut emit = move |e: &tke::RunEvent| printer.print(e);
-    let runner = ScriptRunner::new(device_id, element);
+    let runner = ScriptRunner::new(params.clone());
     let result = runner
-        .run_lines(&args.lines, log.as_deref(), &mut emit)
+        .run_lines(&args.lines, params.log.as_deref(), &mut emit)
         .await
         .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 

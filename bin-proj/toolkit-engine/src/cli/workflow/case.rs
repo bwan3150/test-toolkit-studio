@@ -6,8 +6,9 @@
 // 敏感 key 建议放 -c 配置文件，避免出现在进程命令行。
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use tke::{AgentRunner, AgentRunOptions, AiConfig, JsonOutput, KnowledgeConfig, PromptSpec, Result};
+use tke::{AgentRunner, AgentRunOptions, AiConfig, JsonOutput, PromptSpec, Result};
 
 /// Case 命令参数
 #[derive(clap::Args)]
@@ -50,14 +51,12 @@ pub struct CaseArgs {
 /// 处理 Case 命令
 pub async fn handle(
     args: CaseArgs,
-    device_id: Option<String>,
-    element: Option<PathBuf>,
-    log: Option<PathBuf>,
-    ai: AiConfig,
-    knowledge: KnowledgeConfig,
+    params: Arc<tke::Params>,
 ) -> Result<()> {
-    let device = device_id
-        .unwrap_or_else(|| JsonOutput::error("case 必须指定设备: -d/--device <设备ID>"));
+    // 早期校验设备（AgentRunner 内部也经 params 查表）
+    if params.device().is_none() {
+        JsonOutput::error("case 必须指定设备: -d/--device <设备ID>");
+    }
 
     // 用例：文件则读取内容，否则当作文字
     let case_text = {
@@ -70,14 +69,14 @@ pub async fn handle(
         }
     };
 
-    // 合并 AI 配置：CLI 覆盖配置文件
+    // 合并 AI 配置：CLI --ai-* 覆盖 config [ai] 段（查 params.ai）
     let merged_ai = AiConfig {
-        provider: args.ai_provider.or(ai.provider),
-        model: args.ai_model.or(ai.model),
-        api_key: args.ai_key.or(ai.api_key),
-        base_url: args.ai_base_url.or(ai.base_url),
-        max_rounds: args.max_rounds.or(ai.max_rounds),
-        prompts_dir: ai.prompts_dir.clone(),
+        provider: args.ai_provider.or(params.ai.provider.clone()),
+        model: args.ai_model.or(params.ai.model.clone()),
+        api_key: args.ai_key.or(params.ai.api_key.clone()),
+        base_url: args.ai_base_url.or(params.ai.base_url.clone()),
+        max_rounds: args.max_rounds.or(params.ai.max_rounds),
+        prompts_dir: params.ai.prompts_dir.clone(),
     };
 
     // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir
@@ -91,13 +90,10 @@ pub async fn handle(
 
     let result = AgentRunner::run(AgentRunOptions {
         case: case_text,
-        device,
-        element,
         script_out: args.script.clone(),
-        log,
         ai: merged_ai,
-        knowledge,
         prompt,
+        params: params.clone(),
     })
     .await
     .unwrap_or_else(|e| JsonOutput::error(e.to_string()));

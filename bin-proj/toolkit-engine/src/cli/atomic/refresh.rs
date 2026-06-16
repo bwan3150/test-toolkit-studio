@@ -40,7 +40,8 @@ fn parse_crop(s: &str) -> Result<(u32, u32, u32, u32)> {
 }
 
 /// 处理 Refresh 命令（必须指定 -d/--device）
-pub async fn handle(args: RefreshArgs, device_id: Option<String>) -> Result<()> {
+pub async fn handle(args: RefreshArgs, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    let device_id = params.device();
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("refresh 必须指定设备: -d/--device <设备ID>"));
 

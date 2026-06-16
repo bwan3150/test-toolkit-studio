@@ -3,22 +3,21 @@
 // 指定 --log 时每步保存标注截图 + 页面结构文件，结束后写入完整 log.json
 // 工作区使用系统缓存临时目录，运行结束即删除；web 会话由脚本的 关闭 指令控制
 
-use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter};
+use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter, Params};
 use crate::utils::Workarea;
 use super::{RunEvent, RunArtifacts};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
-/// 脚本运行器
+/// 脚本运行器（持有参数表，device/element 查表取得）
 pub struct ScriptRunner {
-    device_id: Option<String>,
-    /// 元素库路径（None 按默认路径查找）
-    element_path: Option<PathBuf>,
+    params: Arc<Params>,
 }
 
 impl ScriptRunner {
-    pub fn new(device_id: Option<String>, element_path: Option<PathBuf>) -> Self {
-        Self { device_id, element_path }
+    pub fn new(params: Arc<Params>) -> Self {
+        Self { params }
     }
 
     /// 执行脚本文件
@@ -86,9 +85,10 @@ impl ScriptRunner {
 
         // 3. 临时工作区 + 解释器
         let workarea = Workarea::temp_for_run()?;
+        let element = self.params.element_lib();
         let mut interpreter = ScriptInterpreter::new(
-            self.device_id.clone(),
-            self.element_path.as_deref(),
+            self.params.device(),
+            element.as_deref(),
             workarea.clone(),
         )?;
 

@@ -23,11 +23,11 @@ pub struct AgentRunner;
 
 impl AgentRunner {
     pub async fn run(opts: AgentRunOptions) -> Result<AgentResult> {
-        let device = opts.device.clone();
+        let device = opts.params.device().unwrap_or_default();
         let platform = Platform::from_device(Some(&device));
 
-        // —— 产物路径 ——
-        let element_path: PathBuf = opts.element.clone().unwrap_or_else(|| {
+        // —— 产物路径 ——（element 经参数层查表；缺省落 script 同级 element.json）
+        let element_path: PathBuf = opts.params.element_lib().unwrap_or_else(|| {
             opts.script_out
                 .parent()
                 .unwrap_or(Path::new("."))
@@ -51,7 +51,7 @@ impl AgentRunner {
         let prompts = PromptSet::resolve(&opts.prompt)?;
 
         // —— 记忆 + 知识库（本期：未配置则跳过真实调用，记 skipped）——
-        let knowledge = Knowledge::new(&opts.knowledge);
+        let knowledge = Knowledge::new(&opts.params.knowledge);
         record_knowledge(&mut tx, "memory_query", knowledge.query_memory(&opts.case));
         record_knowledge(&mut tx, "rag_query", knowledge.query_rag(&opts.case));
 

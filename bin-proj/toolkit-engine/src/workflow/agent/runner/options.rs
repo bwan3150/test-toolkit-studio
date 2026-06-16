@@ -1,29 +1,25 @@
 // AgentRunner 的入参 / 结果
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use crate::{AiConfig, KnowledgeConfig};
+use crate::{AiConfig, Params};
 
 use super::super::prompt::PromptSpec;
 
 /// AgentRunner 入参
+/// device/element/log/knowledge 经 params 查表取得；ai 为 case 合并 --ai-* 覆盖后的结果
 pub struct AgentRunOptions {
     /// 测试用例文字（已从 .md 文件或命令行读出）
     pub case: String,
-    /// 目标设备
-    pub device: String,
-    /// 元素库路径（None 则默认放在 script 同级的 element.json）
-    pub element: Option<PathBuf>,
     /// 生成的 .tks 导出路径
     pub script_out: PathBuf,
-    /// 产物根目录（预留；当前 conversation/screens 落在 script 同级）
-    pub log: Option<PathBuf>,
-    /// AI 配置
+    /// AI 配置（已合并 CLI --ai-* 覆盖）
     pub ai: AiConfig,
-    /// 记忆/知识库配置
-    pub knowledge: KnowledgeConfig,
     /// 提示词来源（可自定义：注入文本 / .md 文件 / 目录）
     pub prompt: PromptSpec,
+    /// 统一参数表（device/element/log/knowledge 查表取参）
+    pub params: Arc<Params>,
 }
 
 /// AgentRunner 结果

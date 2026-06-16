@@ -103,7 +103,8 @@ pub enum FileCommands {
 }
 
 /// 处理 File 相关命令
-pub async fn handle(action: FileCommands, device_id: Option<String>) -> Result<()> {
+pub async fn handle(action: FileCommands, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    let device_id = params.device();
     let file_manager = FileManager::new(device_id)?;
 
     match action {

@@ -17,13 +17,10 @@ pub struct RunArgs {
 /// 处理 Run 命令
 pub async fn handle(
     run_args: RunArgs,
-    device_id: Option<String>,
-    element: Option<PathBuf>,
-    log: Option<PathBuf>,
-    json: bool,
+    params: std::sync::Arc<tke::Params>,
 ) -> Result<()> {
     let path = run_args.path;
-    let mut printer = EventPrinter::auto(json);
+    let mut printer = EventPrinter::auto(params.json);
     let mut emit = move |e: &tke::RunEvent| printer.print(e);
 
     match path.extension().and_then(|s| s.to_str()) {
@@ -31,9 +28,9 @@ pub async fn handle(
             tke::workflow::script_runner::validate_script_path(&path)
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
-            let runner = ScriptRunner::new(device_id, element);
+            let runner = ScriptRunner::new(params.clone());
             let result = runner
-                .run(&path, log.as_deref(), &mut emit)
+                .run(&path, params.log.as_deref(), &mut emit)
                 .await
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
@@ -45,9 +42,9 @@ pub async fn handle(
                 JsonOutput::error(format!("flow 文件不存在: {}", path.display()));
             }
 
-            let runner = FlowRunner::new(device_id, element);
+            let runner = FlowRunner::new(params.clone());
             let result = runner
-                .run(&path, log.as_deref(), &mut emit)
+                .run(&path, params.log.as_deref(), &mut emit)
                 .await
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 

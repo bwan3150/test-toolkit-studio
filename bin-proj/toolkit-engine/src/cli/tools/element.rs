@@ -1,7 +1,6 @@
 // Element 命令处理器 - 元素库管理
 
 use tke::{Result, JsonOutput};
-use std::path::PathBuf;
 
 /// Element 命令枚举
 #[derive(clap::Subcommand)]
@@ -42,9 +41,10 @@ fn parse_at(s: &str) -> Result<(i32, i32)> {
 /// element_lib 为参数层解析好的元素库路径（写入语义：含默认创建路径）
 pub async fn handle(
     action: ElementCommands,
-    device_id: Option<String>,
-    element_lib: PathBuf,
+    params: std::sync::Arc<tke::Params>,
 ) -> Result<()> {
+    let device_id = params.device();
+    let element_lib = params.element_lib_for_write();
     match action {
         ElementCommands::Add { name, at, desc, cached, force } => {
             let device = device_id

@@ -135,7 +135,8 @@ fn to_action(cmd: ControlCommands) -> Result<ControlAction> {
 }
 
 /// 处理 Control 命令（必须指定 -d/--device）
-pub async fn handle(cmd: ControlCommands, device_id: Option<String>) -> Result<()> {
+pub async fn handle(cmd: ControlCommands, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    let device_id = params.device();
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("control 必须指定设备: -d/--device <设备ID>"));
 

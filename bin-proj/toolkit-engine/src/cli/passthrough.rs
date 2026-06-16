@@ -6,7 +6,8 @@ use tke::{Result, ToolManager, JsonOutput};
 
 /// 处理通用工具直通命令
 /// args[0] = 工具名，其余为透传参数
-pub async fn handle(mut args: Vec<String>, device_id: Option<String>) -> Result<()> {
+pub async fn handle(mut args: Vec<String>, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    let device_id = params.device();
     if args.is_empty() {
         JsonOutput::error("缺少工具名称");
     }

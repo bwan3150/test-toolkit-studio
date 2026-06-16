@@ -9,11 +9,12 @@
 //   ├── flow.json             整个 flow 的汇总日志
 //   └── <脚本名>/              每个脚本一个子目录（log.json + screenshots/ + page/）
 
-use crate::{Result, TkeError, ExecutionResult};
+use crate::{Result, TkeError, ExecutionResult, Params};
 use super::{RunEvent, RunArtifacts, ScriptRunner};
 use super::script_runner::validate_script_path;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Flow 定义文件 (TOML)
 #[derive(Debug, Deserialize)]
@@ -40,13 +41,12 @@ pub struct FlowResult {
 
 /// Flow 运行器
 pub struct FlowRunner {
-    device_id: Option<String>,
-    element_path: Option<PathBuf>,
+    params: Arc<Params>,
 }
 
 impl FlowRunner {
-    pub fn new(device_id: Option<String>, element_path: Option<PathBuf>) -> Self {
-        Self { device_id, element_path }
+    pub fn new(params: Arc<Params>) -> Self {
+        Self { params }
     }
 
     /// 执行 flow 文件
@@ -94,7 +94,7 @@ impl FlowRunner {
         });
 
         // 3. 依次执行每个脚本
-        let runner = ScriptRunner::new(self.device_id.clone(), self.element_path.clone());
+        let runner = ScriptRunner::new(self.params.clone());
         let mut results: Vec<ExecutionResult> = Vec::new();
         let mut all_success = true;
 
@@ -163,10 +163,11 @@ impl FlowRunner {
         // flow 收尾清场（脚本间状态保留以便联动，整个 flow 结束统一还原）:
         //   web         → 销毁浏览器会话
         //   android/ios → 关闭 flow 期间启动过的所有 App（去重）; ios 再销毁 WDA 会话
-        let platform = crate::Platform::from_device(self.device_id.as_deref());
+        let device = self.params.device();
+        let platform = crate::Platform::from_device(device.as_deref());
         match platform {
             crate::Platform::Web => {
-                if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
+                if let Ok(controller) = crate::Controller::new(device.clone()) {
                     let _ = controller.stop_app("");
                 }
             }
@@ -179,7 +180,7 @@ impl FlowRunner {
                         }
                     }
                 }
-                if let Ok(controller) = crate::Controller::new(self.device_id.clone()) {
+                if let Ok(controller) = crate::Controller::new(device.clone()) {
                     for p in &packages {
                         let _ = controller.stop_app(p);
                     }

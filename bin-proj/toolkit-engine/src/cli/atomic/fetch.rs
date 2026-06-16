@@ -17,7 +17,8 @@ pub struct FetchArgs {
 }
 
 /// 处理 Fetch 命令（必须指定 -d/--device）
-pub async fn handle(args: FetchArgs, device_id: Option<String>) -> Result<()> {
+pub async fn handle(args: FetchArgs, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    let device_id = params.device();
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("fetch 必须指定设备: -d/--device <设备ID>"));
 

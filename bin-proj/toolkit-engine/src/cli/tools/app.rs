@@ -29,7 +29,8 @@ pub enum AppCommands {
 }
 
 /// 处理 App 相关命令
-pub async fn handle(action: AppCommands, device_id: Option<String>) -> Result<()> {
+pub async fn handle(action: AppCommands, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    let device_id = params.device();
     // app 工具是 adb 专属（list/uninstall/focus 依赖包管理器）；
     // iOS/Web 的 启动/关闭 用原子指令 control launch/close
     if tke::Platform::from_device(device_id.as_deref()) != tke::Platform::Android {

@@ -13,6 +13,7 @@
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod cli;
@@ -172,8 +173,8 @@ async fn main() -> tke::Result<()> {
         }
     };
 
-    // 参数层：CLI + config 解析一次，形成统一参数表；后续从 params 取参（取代逐层透传）
-    let params = tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.json, config);
+    // 参数层：CLI + config 解析一次，形成统一参数表（Arc 共享，编排层各模块持有并查表）
+    let params = Arc::new(tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.json, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
 
@@ -211,54 +212,54 @@ async fn main() -> tke::Result<()> {
             .init();
     }
 
-    // 路由到对应的 handler —— 全局参数统一从 params 取（取代逐层透传）
+    // 路由到对应的 handler —— 编排层持有 Arc<Params>，查表取参（取代逐层透传）
     match cli.command {
         // ② 原子方法
         Commands::Refresh { args } => {
-            atomic::refresh::handle(args, params.device()).await
+            atomic::refresh::handle(args, params.clone()).await
         }
         Commands::Fetch { args } => {
-            atomic::fetch::handle(args, params.device()).await
+            atomic::fetch::handle(args, params.clone()).await
         }
         Commands::Recognize { args } => {
-            atomic::recognize::handle(args, params.device(), params.element_lib()).await
+            atomic::recognize::handle(args, params.clone()).await
         }
         Commands::Control { action } => {
-            atomic::control::handle(action, params.device()).await
+            atomic::control::handle(action, params.clone()).await
         }
         // ③ 工作流
         Commands::Run { args } => {
-            workflow::run::handle(args, params.device(), params.element_lib(), params.log.clone(), params.json).await
+            workflow::run::handle(args, params.clone()).await
         }
         Commands::Steps { args } => {
-            workflow::steps::handle(args, params.device(), params.element_lib(), params.log.clone(), params.json).await
+            workflow::steps::handle(args, params.clone()).await
         }
         Commands::Case { args } => {
-            workflow::case::handle(args, params.device(), params.element_lib(), params.log.clone(), params.ai.clone(), params.knowledge.clone()).await
+            workflow::case::handle(args, params.clone()).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {
             tools::ocr::handle(image, online, url, lang).await
         }
         Commands::File { action } => {
-            tools::file::handle(action, params.device()).await
+            tools::file::handle(action, params.clone()).await
         }
         Commands::App { action } => {
-            tools::app::handle(action, params.device()).await
+            tools::app::handle(action, params.clone()).await
         }
         Commands::Device { action } => {
-            tools::device::handle(action, params.device())
+            tools::device::handle(action, params.clone())
         }
         Commands::Element { action } => {
-            tools::element::handle(action, params.device(), params.element_lib_for_write()).await
+            tools::element::handle(action, params.clone()).await
         }
         // ① 直通（.tks/.toml 路径自动转 run）
         Commands::Tool(args) => {
             if tool_is_script {
                 let path = PathBuf::from(&args[0]);
-                workflow::run::handle(RunArgs { path }, params.device(), params.element_lib(), params.log.clone(), params.json).await
+                workflow::run::handle(RunArgs { path }, params.clone()).await
             } else {
-                passthrough::handle(args, params.device()).await
+                passthrough::handle(args, params.clone()).await
             }
         }
     }
