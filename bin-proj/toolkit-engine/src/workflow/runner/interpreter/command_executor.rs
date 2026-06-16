@@ -1,6 +1,7 @@
 // 命令执行器模块 - 执行各种 TKS 命令
 
 use crate::{Result, TkeError, TksParam, Point, Controller, Recognizer, LocatorStrategy};
+use crate::atomic::control::{execute_action, ControlAction};
 use crate::utils::Workarea;
 use tracing::{debug, info};
 
@@ -49,7 +50,8 @@ impl<'a> CommandExecutor<'a> {
             String::new()
         };
 
-        self.controller.launch_app(&package, &activity)?;
+        // 设备操作走统一执行器；启动后的「记录包名 + 等待 + 刷新」是工作流额外动作，保留
+        execute_action(&*self.controller, ControlAction::Launch { package: package.clone(), activity }).await?;
 
         // 记录启动过的包/BundleID（flow 收尾统一关闭; web 的会话销毁不走这里）
         if self.recognizer.platform() != crate::Platform::Web
@@ -69,13 +71,13 @@ impl<'a> CommandExecutor<'a> {
     }
 
     /// 关闭: Android = [包名]；Web = [URL 或任意值]（销毁浏览器会话，与 URL 无关）
-    pub fn execute_close(&mut self, params: &[TksParam]) -> Result<()> {
+    pub async fn execute_close(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {
             return Err(TkeError::InvalidArgument(
                 "关闭命令需要目标: [包名] (Android) / [BundleID] (iOS) / [URL] (Web)".to_string()));
         }
         let package = ParamExtractor::extract_text(&params[0])?;
-        self.controller.stop_app(&package)
+        execute_action(&*self.controller, ControlAction::Close { package }).await.map(|_| ())
     }
 
     /// 点击操作
@@ -85,7 +87,7 @@ impl<'a> CommandExecutor<'a> {
         }
 
         let point = self.resolve_target(&params[0]).await?;
-        self.controller.tap(point.x, point.y)
+        execute_action(&*self.controller, ControlAction::Click { point }).await.map(|_| ())
     }
 
     /// 长按操作
@@ -101,7 +103,7 @@ impl<'a> CommandExecutor<'a> {
             1000 // 默认1秒
         };
 
-        self.controller.press(point.x, point.y, duration)
+        execute_action(&*self.controller, ControlAction::Press { point, duration_ms: duration }).await.map(|_| ())
     }
 
     /// 滑动操作
@@ -118,7 +120,7 @@ impl<'a> CommandExecutor<'a> {
             300 // 默认300ms
         };
 
-        self.controller.swipe(from_point.x, from_point.y, to_point.x, to_point.y, duration)
+        execute_action(&*self.controller, ControlAction::Swipe { from: from_point, to: to_point, duration_ms: duration }).await.map(|_| ())
     }
 
     /// 定向滑动操作
@@ -136,56 +138,41 @@ impl<'a> CommandExecutor<'a> {
             300 // 默认300ms
         };
 
-        let to_point = match direction.as_str() {
-            "up" => Point::new(from_point.x, from_point.y - distance),
-            "down" => Point::new(from_point.x, from_point.y + distance),
-            "left" => Point::new(from_point.x - distance, from_point.y),
-            "right" => Point::new(from_point.x + distance, from_point.y),
-            _ => return Err(TkeError::InvalidArgument(format!("无效的方向: {}", direction))),
-        };
-
-        self.controller.swipe(from_point.x, from_point.y, to_point.x, to_point.y, duration)
+        // 方向→终点的换算由 execute_action 内部统一处理
+        execute_action(&*self.controller, ControlAction::SwipeDir { from: from_point, direction, distance, duration_ms: duration }).await.map(|_| ())
     }
 
-    /// 输入文本
+    /// 输入文本（execute_action 的 Input 已含「点击聚焦 + 等待键盘 + 输入」）
     pub async fn execute_input(&mut self, params: &[TksParam]) -> Result<()> {
         if params.len() < 2 {
             return Err(TkeError::InvalidArgument("输入命令需要目标和文本".to_string()));
         }
 
-        // 先点击输入框
         let point = self.resolve_target(&params[0]).await?;
-        self.controller.tap(point.x, point.y)?;
-
-        // 等待键盘弹出
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        // 输入文本
         let text = ParamExtractor::extract_text(&params[1])?;
-        self.controller.input_text(&text)
+        execute_action(&*self.controller, ControlAction::Input { text, point: Some(point) }).await.map(|_| ())
     }
 
     /// 清理输入框
     pub async fn execute_clear(&mut self, params: &[TksParam]) -> Result<()> {
         if !params.is_empty() {
-            // 先点击输入框
+            // 先点击聚焦输入框 + 等待键盘（工作流额外动作）
             let point = self.resolve_target(&params[0]).await?;
-            self.controller.tap(point.x, point.y)?;
-
+            execute_action(&*self.controller, ControlAction::Click { point }).await?;
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
 
-        self.controller.clear_input()
+        execute_action(&*self.controller, ControlAction::Clear).await.map(|_| ())
     }
 
     /// 隐藏键盘
-    pub fn execute_hide_keyboard(&mut self) -> Result<()> {
-        self.controller.hide_keyboard()
+    pub async fn execute_hide_keyboard(&mut self) -> Result<()> {
+        execute_action(&*self.controller, ControlAction::HideKeyboard).await.map(|_| ())
     }
 
     /// 返回操作
-    pub fn execute_back(&mut self) -> Result<()> {
-        self.controller.back()
+    pub async fn execute_back(&mut self) -> Result<()> {
+        execute_action(&*self.controller, ControlAction::Back).await.map(|_| ())
     }
 
     /// 等待操作

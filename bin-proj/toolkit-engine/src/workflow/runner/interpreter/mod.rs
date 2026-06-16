@@ -82,15 +82,15 @@ impl ScriptInterpreter {
 
         match step.command {
             TksCommand::Launch => executor.execute_launch(&step.params).await,
-            TksCommand::Close => executor.execute_close(&step.params),
+            TksCommand::Close => executor.execute_close(&step.params).await,
             TksCommand::Click => executor.execute_click(&step.params).await,
             TksCommand::Press => executor.execute_press(&step.params).await,
             TksCommand::Swipe => executor.execute_swipe(&step.params).await,
             TksCommand::DirectionalSwipe => executor.execute_directional_swipe(&step.params).await,
             TksCommand::Input => executor.execute_input(&step.params).await,
             TksCommand::Clear => executor.execute_clear(&step.params).await,
-            TksCommand::HideKeyboard => executor.execute_hide_keyboard(),
-            TksCommand::Back => executor.execute_back(),
+            TksCommand::HideKeyboard => executor.execute_hide_keyboard().await,
+            TksCommand::Back => executor.execute_back().await,
             TksCommand::Wait => executor.execute_wait(&step.params).await,
             TksCommand::Assert => executor.execute_assert(&step.params).await,
         }
