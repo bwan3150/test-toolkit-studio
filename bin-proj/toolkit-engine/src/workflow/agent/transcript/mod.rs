@@ -12,9 +12,13 @@ use std::path::{Path, PathBuf};
 use crate::{Result, TkeError};
 
 /// 对话日志写入器
+/// 双输出：① conversation.jsonl —— 即写即 flush 的追加式流式日志（抗崩溃）；
+///        ② finalize() 结束时另导出 conversation.json —— 缩进美化的数组，给人阅读。
 pub struct Transcript {
     path: PathBuf,
     file: File,
+    /// 内存累积所有事件，用于结束时导出美化 JSON
+    events: Vec<serde_json::Value>,
 }
 
 impl Transcript {
@@ -24,7 +28,7 @@ impl Transcript {
             std::fs::create_dir_all(parent).map_err(TkeError::IoError)?;
         }
         let file = File::create(&path).map_err(TkeError::IoError)?;
-        Ok(Self { path, file })
+        Ok(Self { path, file, events: Vec::new() })
     }
 
     pub fn path(&self) -> &Path {
@@ -42,6 +46,14 @@ impl Transcript {
             let _ = writeln!(self.file, "{}", line);
             let _ = self.file.flush();
         }
+        self.events.push(data);
+    }
+
+    /// 结束时导出缩进美化的对话 JSON（数组），便于人工阅读
+    pub fn finalize(&self, pretty_path: &Path) -> Result<()> {
+        let json = serde_json::to_string_pretty(&self.events).map_err(TkeError::JsonError)?;
+        std::fs::write(pretty_path, json).map_err(TkeError::IoError)?;
+        Ok(())
     }
 }
 

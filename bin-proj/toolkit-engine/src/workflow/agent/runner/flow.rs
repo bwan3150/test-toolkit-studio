@@ -84,6 +84,12 @@ pub async fn drive(
             "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n请调用一个工具决定下一步。",
             round, list_text, hint
         ));
+        eprintln!(
+            "▶ 第 {} 轮 · {} 个元素{}",
+            round,
+            p.elements.len(),
+            if perceive_err.is_some() { " · 页面未就绪(待 launch)" } else { "" }
+        );
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
         loop {
@@ -104,6 +110,7 @@ pub async fn drive(
 
             let calls = match reply {
                 LlmReply::Text(t) => {
+                    eprintln!("  …AI 未调用工具，提示其用工具或 finish");
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
                     sess.user("请只通过调用工具来操作；若已完成或无法继续，请调用 finish。");
                     continue;
@@ -132,11 +139,13 @@ pub async fn drive(
 
             match action {
                 AgentAction::Finish { success, reason } => {
+                    eprintln!("■ 结束（{}）：{}", if success { "达成目标" } else { "未达成" }, reason);
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
                     finish = Some((success, reason));
                     break 'outer;
                 }
                 AgentAction::RequestScreenshot { reason } => {
+                    eprintln!("  📷 AI 请求查看截图：{}", reason);
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
                     match sess.user_with_image("当前页面截图：", &p.shot_path) {
@@ -171,6 +180,7 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail)) => {
+                            eprintln!("  ✓ {}  〔{}〕", line, detail);
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
                             let step_index = steps.len();
                             let (screenshot, xml) =
@@ -193,6 +203,7 @@ pub async fn drive(
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
+                            eprintln!("  ✗ 执行失败：{}", e);
                             tx.log("exec_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                             sess.tool_result(primary.call_id.as_str(), format!("执行失败: {}", e));
                             continue; // 同一页面重试

@@ -123,11 +123,15 @@ impl AgentRunner {
         };
         let _ = artifacts.write_log(&exec_result);
 
+        // 导出人类可读的 conversation.json（缩进美化数组）；conversation.jsonl 仍在（抗崩溃流式）
+        let conversation_json = run_dir.join("conversation.json");
+        let _ = tx.finalize(&conversation_json);
+
         Ok(AgentResult {
             success: outcome.success,
             rounds: outcome.rounds,
             script: opts.script_out.clone(),
-            conversation: conversation_path,
+            conversation: conversation_json,
             finish_reason: outcome.reason,
         })
     }
