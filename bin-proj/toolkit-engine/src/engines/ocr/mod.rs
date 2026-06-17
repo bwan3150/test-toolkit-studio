@@ -1,11 +1,13 @@
 //! OCR 模块 - 在线/离线文字识别
 
+mod enrich;
 #[cfg(feature = "ocr-offline")]
 mod offline;
 #[cfg(feature = "ocr-online")]
 mod online;
 mod types;
 
+pub use enrich::{enrich_with_ocr, resolve_ocr, OcrSource};
 pub use types::{OcrResult, OcrText};
 use std::error::Error as StdError;
 

@@ -91,6 +91,7 @@ impl AgentRunner {
             workarea: &workarea,
             fetcher: &fetcher,
             artifacts: &artifacts,
+            ocr: opts.ocr.as_ref(),
             max_rounds,
         };
         let outcome = drive(&mut sess, &mut tx, &ctx).await?;

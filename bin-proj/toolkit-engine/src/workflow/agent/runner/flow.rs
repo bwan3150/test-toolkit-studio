@@ -5,6 +5,7 @@
 use std::io::IsTerminal;
 use std::path::Path;
 
+use crate::engines::ocr::OcrSource;
 use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
 
 /// 终端着色：仅当 stderr 是 TTY 时输出 ANSI，管道/重定向为纯文本（与 tke run 一致）
@@ -40,6 +41,8 @@ pub struct DriveCtx<'a> {
     pub workarea: &'a Workarea,
     pub fetcher: &'a Fetcher,
     pub artifacts: &'a RunArtifacts,
+    /// OCR 增强来源（None=不跑 OCR，行为同此前）
+    pub ocr: Option<&'a OcrSource>,
     pub max_rounds: usize,
 }
 
@@ -72,7 +75,7 @@ pub async fn drive(
         // 1) 采集页面
         //    web/iOS 冷启动时尚无会话，采集会失败——此时降级为"空页面 + 提示先 launch"，
         //    不中断循环；AI 调 launch 建会话后，下一轮采集即正常。
-        let (p, perceive_err) = match capture(ctx.device, ctx.workarea, ctx.fetcher).await {
+        let (p, perceive_err) = match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
             Ok(p) => (p, None),
             Err(e) => {
                 tx.log("perceive_error", serde_json::json!({ "round": round, "error": e.to_string() }));

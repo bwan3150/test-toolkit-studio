@@ -36,6 +36,12 @@ pub struct CaseArgs {
     #[arg(long)]
     pub max_rounds: Option<u32>,
 
+    /// 用 OCR 文字增强每轮元素表（给无 text/content-desc 的图标补可读文字）：
+    /// offline=本地 tesseract；online=配置的在线服务；http(s)://...=指定在线服务 URL。
+    /// 不传则不跑 OCR（行为同此前）
+    #[arg(long)]
+    pub ocr: Option<String>,
+
     // ===== 提示词自定义（三选一，优先级从上到下）=====
     /// 直接注入主系统提示词文本（最高优先级）
     #[arg(long)]
@@ -88,11 +94,18 @@ pub async fn handle(
             .or_else(|| merged_ai.prompts_dir.clone().map(PathBuf::from)),
     };
 
+    // --ocr：解析来源（"online" 用配置的 ocr_url 兜底）；不传则不跑 OCR
+    let ocr = args
+        .ocr
+        .as_deref()
+        .and_then(|spec| tke::engines::ocr::resolve_ocr(spec, &tke::utils::params::ocr_url()));
+
     let result = AgentRunner::run(AgentRunOptions {
         case: case_text,
         script_out: args.script.clone(),
         ai: merged_ai,
         prompt,
+        ocr,
         params: params.clone(),
     })
     .await

@@ -3,6 +3,7 @@
 // --cached 直接用工作区已有状态（先 tke refresh 后多次 fetch 的场景）
 
 use crate::{Result, Controller, Fetcher, UIElement};
+use crate::engines::ocr::{enrich_with_ocr, OcrSource};
 use crate::utils::Workarea;
 
 /// fetch 原子方法
@@ -20,12 +21,22 @@ impl Fetch {
 
     /// 提取元素列表
     /// cached=false 时先采集最新页面状态（截图+XML）
-    pub async fn elements(&self, cached: bool) -> Result<Vec<UIElement>> {
+    /// ocr 为 Some 时，用 OCR 文字增强元素表（给无标签元素补可读文字）；失败则降级用原始表
+    pub async fn elements(&self, cached: bool, ocr: Option<&OcrSource>) -> Result<Vec<UIElement>> {
         if !cached {
             self.controller.capture_ui_state(&self.workarea).await?;
         }
 
         let fetcher = Fetcher::new();
-        fetcher.fetch_elements_from_file(&self.workarea.ui_tree_path())
+        let mut elements = fetcher.fetch_elements_from_file(&self.workarea.ui_tree_path())?;
+
+        if let Some(src) = ocr {
+            if let Ok(bytes) = std::fs::read(self.workarea.screenshot_path()) {
+                // OCR 失败不致命：保留原始元素表
+                let _ = enrich_with_ocr(&mut elements, &bytes, src).await;
+            }
+        }
+
+        Ok(elements)
     }
 }

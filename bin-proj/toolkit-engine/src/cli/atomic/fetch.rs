@@ -2,6 +2,7 @@
 // 提取当前页面的元素列表（含 xpath），直接输出 JSON 数组
 // 默认先刷新页面状态；--cached 用工作区已有状态
 
+use tke::engines::ocr::resolve_ocr;
 use tke::{Result, Fetch, JsonOutput};
 
 /// Fetch 命令参数
@@ -14,6 +15,11 @@ pub struct FetchArgs {
     /// 只输出可交互元素
     #[arg(long)]
     pub interactive: bool,
+
+    /// 用 OCR 文字增强元素表（给无 text/content-desc 的图标补可读文字）：
+    /// offline=本地 tesseract；online=配置的在线服务；http(s)://...=指定在线服务 URL
+    #[arg(long)]
+    pub ocr: Option<String>,
 }
 
 /// 处理 Fetch 命令（必须指定 -d/--device）
@@ -25,7 +31,13 @@ pub async fn handle(args: FetchArgs, params: std::sync::Arc<tke::Params>) -> Res
     let fetch = Fetch::new(device)
         .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
-    match fetch.elements(args.cached).await {
+    // --ocr：解析来源（"online" 用配置的 ocr_url 兜底）
+    let ocr_src = args
+        .ocr
+        .as_deref()
+        .and_then(|spec| resolve_ocr(spec, &tke::utils::params::ocr_url()));
+
+    match fetch.elements(args.cached, ocr_src.as_ref()).await {
         Ok(elements) => {
             let output = if args.interactive {
                 elements.into_iter().filter(|e| e.clickable).collect::<Vec<_>>()

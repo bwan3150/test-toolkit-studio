@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::engines::ocr::OcrSource;
 use crate::{AiConfig, Params};
 
 use super::super::prompt::PromptSpec;
@@ -18,6 +19,8 @@ pub struct AgentRunOptions {
     pub ai: AiConfig,
     /// 提示词来源（可自定义：注入文本 / .md 文件 / 目录）
     pub prompt: PromptSpec,
+    /// OCR 增强来源（None=不跑 OCR，行为同此前；--ocr 显式开启）
+    pub ocr: Option<OcrSource>,
     /// 统一参数表（device/element/log/knowledge 查表取参）
     pub params: Arc<Params>,
 }

@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use crate::engines::ocr::{enrich_with_ocr, OcrSource};
 use crate::{Fetcher, Refresh, RefreshOptions, Result, UIElement, Workarea};
 
 /// 一次采集的结果
@@ -15,14 +16,26 @@ pub struct Perceived {
     pub xml_path: PathBuf,
 }
 
-/// 采集一轮：刷新（截图 + XML）→ 解析元素
-pub async fn capture(device: &str, workarea: &Workarea, fetcher: &Fetcher) -> Result<Perceived> {
+/// 采集一轮：刷新（截图 + XML）→ 解析元素 →（可选）OCR 增强
+/// ocr 为 Some 时，用 OCR 文字给无标签元素补可读文字；失败降级用原始表。
+pub async fn capture(
+    device: &str,
+    workarea: &Workarea,
+    fetcher: &Fetcher,
+    ocr: Option<&OcrSource>,
+) -> Result<Perceived> {
     let refresh = Refresh::new(device.to_string())?;
     refresh.run(RefreshOptions::default()).await?;
 
     let xml_path = workarea.ui_tree_path();
     let shot_path = workarea.screenshot_path();
-    let elements = fetcher.fetch_elements_from_file(&xml_path)?;
+    let mut elements = fetcher.fetch_elements_from_file(&xml_path)?;
+
+    if let Some(src) = ocr {
+        if let Ok(bytes) = std::fs::read(&shot_path) {
+            let _ = enrich_with_ocr(&mut elements, &bytes, src).await;
+        }
+    }
 
     Ok(Perceived { elements, shot_path, xml_path })
 }
