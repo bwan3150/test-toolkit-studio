@@ -369,5 +369,7 @@ pub async fn add_element_target(
         "updated": existed,
         "created": !existed,
         "desc_updated": desc_updated,
+        "old_desc": old_desc,
+        "new_desc": desc,
     }))
 }

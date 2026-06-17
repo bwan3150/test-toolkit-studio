@@ -124,7 +124,8 @@ pub async fn drive(
     let mut finish: Option<(bool, String)> = None;
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
-    let mut updated: Vec<String> = Vec::new();
+    let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
+    let mut updated_names: Vec<String> = Vec::new(); // 去重用
 
     'outer: while round < ctx.max_rounds {
         if abort.load(Ordering::Relaxed) {
@@ -326,9 +327,16 @@ pub async fn drive(
                                     }
                                 } else if s.desc_updated
                                     && !created.contains(&s.name)
-                                    && !updated.contains(&s.name)
+                                    && !updated_names.contains(&s.name)
                                 {
-                                    updated.push(s.name.clone());
+                                    // 写出"哪个元素的 desc 从什么改成什么"
+                                    updated.push(format!(
+                                        "{} · desc：「{}」→「{}」",
+                                        s.name,
+                                        s.old_desc.as_deref().unwrap_or("（空）"),
+                                        s.new_desc.as_deref().unwrap_or("（空）"),
+                                    ));
+                                    updated_names.push(s.name.clone());
                                 }
                             }
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
@@ -397,11 +405,14 @@ pub async fn drive(
         paint(tty, "2", "新增"),
         if created.is_empty() { paint(tty, "2", "（无）") } else { paint(tty, "32", &created.join("、")) }
     );
-    eprintln!(
-        "  {}   {}",
-        paint(tty, "2", "更新"),
-        if updated.is_empty() { paint(tty, "2", "（无）") } else { paint(tty, "33", &updated.join("、")) }
-    );
+    if updated.is_empty() {
+        eprintln!("  {}   {}", paint(tty, "2", "更新"), paint(tty, "2", "（无）"));
+    } else {
+        eprintln!("  {}   {}", paint(tty, "2", "更新"), paint(tty, "33", &updated[0]));
+        for u in &updated[1..] {
+            eprintln!("         {}", paint(tty, "33", u)); // 对齐到值列
+        }
+    }
     if !created.is_empty() || !updated.is_empty() {
         eprintln!("  {}", paint(tty, "2", "（元素库已变更，请人工二次审核）"));
     }

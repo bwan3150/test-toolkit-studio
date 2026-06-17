@@ -18,6 +18,10 @@ pub struct SavedInfo {
     pub created: bool,
     /// 已有元素，但 AI 更正了其 desc → 本轮更新描述
     pub desc_updated: bool,
+    /// desc 更新前的旧值（desc_updated 时有）
+    pub old_desc: Option<String>,
+    /// desc 更新后的新值
+    pub new_desc: Option<String>,
 }
 
 /// 按已确定目标落库
@@ -49,10 +53,13 @@ pub async fn save_target(
     .await
     {
         Ok(info) => {
+            let str_field = |k: &str| info.get(k).and_then(|v| v.as_str()).map(|s| s.to_string());
             let saved = SavedInfo {
                 name: name.to_string(),
                 created: info.get("created").and_then(|v| v.as_bool()).unwrap_or(false),
                 desc_updated: info.get("desc_updated").and_then(|v| v.as_bool()).unwrap_or(false),
+                old_desc: str_field("old_desc"),
+                new_desc: str_field("new_desc"),
             };
             tx.log("element_saved", serde_json::json!({ "round": round, "name": name, "result": info }));
             Some(saved)
