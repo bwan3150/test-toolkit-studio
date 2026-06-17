@@ -42,7 +42,7 @@ async fn main() {
         sess.user("用一句话说明自动化测试的价值。");
         match sess.next().await {
             Ok(LlmReply::Text(t)) => println!("文本回复: {t}"),
-            Ok(LlmReply::ToolCalls(calls)) => println!("(意外)收到工具调用: {calls:?}"),
+            Ok(LlmReply::ToolCalls { calls, .. }) => println!("(意外)收到工具调用: {calls:?}"),
             Err(e) => {
                 eprintln!("请求失败: {e}");
                 std::process::exit(1);
@@ -81,7 +81,7 @@ async fn main() {
         };
         sess.user("请点击登录按钮。");
         match sess.next().await {
-            Ok(LlmReply::ToolCalls(calls)) => {
+            Ok(LlmReply::ToolCalls { calls, .. }) => {
                 for c in &calls {
                     println!(
                         "工具调用: name={} call_id={} args={}",

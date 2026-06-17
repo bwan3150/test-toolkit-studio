@@ -40,7 +40,9 @@ pub struct LlmToolCall {
 #[derive(Debug, Clone)]
 pub enum LlmReply {
     /// 模型决定调用工具（探索循环的主路径）
-    ToolCalls(Vec<LlmToolCall>),
+    /// text 为模型在调用工具时**同时**给出的思考/说明（多数模型可有，可空），
+    /// 用于在 CLI 实时展示"AI 在想什么"。
+    ToolCalls { text: Option<String>, calls: Vec<LlmToolCall> },
     /// 模型给出纯文本（如澄清说明、未走工具时的兜底）
     Text(String),
 }

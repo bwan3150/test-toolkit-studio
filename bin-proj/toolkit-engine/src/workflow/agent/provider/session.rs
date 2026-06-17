@@ -20,7 +20,7 @@ use super::types::{LlmReply, LlmTool, LlmToolCall};
 /// sess.user(test_case);
 /// loop {
 ///     match sess.next().await? {
-///         LlmReply::ToolCalls(calls) => {
+///         LlmReply::ToolCalls { calls, .. } => {
 ///             for c in &calls {
 ///                 let result = execute(c);
 ///                 sess.tool_result(&c.call_id, result);
@@ -117,6 +117,7 @@ impl LlmSession {
                 arguments: tc.fn_arguments,
             })
             .collect();
-        Ok(LlmReply::ToolCalls(mapped))
+        // text：模型调工具时同时给的思考文字（可空），供 CLI 展示
+        Ok(LlmReply::ToolCalls { text, calls: mapped })
     }
 }

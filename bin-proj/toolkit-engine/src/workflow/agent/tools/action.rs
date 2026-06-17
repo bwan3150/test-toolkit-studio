@@ -32,6 +32,21 @@ pub enum AgentAction {
 }
 
 impl AgentAction {
+    /// AI 为本步动作填写的意图说明（desc/reason/question），用于 CLI 实时展示。
+    /// 当模型未单独给出思考文字时，退而用此说明告诉用户"AI 想干啥"。
+    pub fn intent(&self) -> Option<&str> {
+        match self {
+            AgentAction::Click { desc, .. }
+            | AgentAction::Input { desc, .. }
+            | AgentAction::LongPress { desc, .. }
+            | AgentAction::Clear { desc, .. } => desc.as_deref(),
+            AgentAction::RequestScreenshot { reason }
+            | AgentAction::Finish { reason, .. } => Some(reason.as_str()),
+            AgentAction::AskUser { question } => Some(question.as_str()),
+            _ => None,
+        }
+    }
+
     /// 是否需要再次采集页面（执行了改变页面的设备动作后为 true）
     pub fn changes_page(&self) -> bool {
         !matches!(

@@ -2,9 +2,30 @@
 // 产物经 RunArtifacts 统一保存：每个执行步存 screenshots/step_NNN + page/step_NNN，
 // 与 tke run 同构；conversation.jsonl（AI 原始对话）由 transcript 写在同一运行目录。
 
+use std::io::IsTerminal;
 use std::path::Path;
 
 use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
+
+/// 终端着色：仅当 stderr 是 TTY 时输出 ANSI，管道/重定向为纯文本（与 tke run 一致）
+fn paint(tty: bool, code: &str, s: &str) -> String {
+    if tty {
+        format!("\x1b[{}m{}\x1b[0m", code, s)
+    } else {
+        s.to_string()
+    }
+}
+
+/// 取首个非空行并按字符数截断，避免模型长篇刷屏
+fn brief(s: &str, max: usize) -> String {
+    let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    if line.chars().count() > max {
+        let head: String = line.chars().take(max).collect();
+        format!("{}…", head)
+    } else {
+        line.to_string()
+    }
+}
 
 use super::super::execution;
 use super::super::interaction::read_user_line;
@@ -37,6 +58,7 @@ pub async fn drive(
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
 ) -> Result<DriveOutcome> {
+    let tty = std::io::stderr().is_terminal();
     let max_llm_calls = ctx.max_rounds * 4 + 10; // 含要图/反问等不前进的轮次
     let mut lines: Vec<String> = Vec::new();
     let mut steps: Vec<StepResult> = Vec::new();
@@ -85,10 +107,10 @@ pub async fn drive(
             round, list_text, hint
         ));
         eprintln!(
-            "▶ 第 {} 轮 · {} 个元素{}",
-            round,
+            "{}  {} 个元素{}",
+            paint(tty, "1", &format!("第 {} 轮", round)),
             p.elements.len(),
-            if perceive_err.is_some() { " · 页面未就绪(待 launch)" } else { "" }
+            if perceive_err.is_some() { "  (页面未就绪，待 launch)" } else { "" }
         );
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
@@ -108,14 +130,18 @@ pub async fn drive(
                 }
             };
 
-            let calls = match reply {
+            let (thinking, calls) = match reply {
                 LlmReply::Text(t) => {
-                    eprintln!("  …AI 未调用工具，提示其用工具或 finish");
+                    let b = brief(&t, 200);
+                    if !b.is_empty() {
+                        eprintln!("  {}  {}", paint(tty, "2", "AI"), b);
+                    }
+                    eprintln!("  {}", paint(tty, "2", "（未调用工具，已提示其用工具或 finish）"));
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
                     sess.user("请只通过调用工具来操作；若已完成或无法继续，请调用 finish。");
                     continue;
                 }
-                LlmReply::ToolCalls(calls) => calls,
+                LlmReply::ToolCalls { text, calls } => (text, calls),
             };
 
             // 协议要求：本轮所有 tool_call 都要有 tool_result。仅执行第一个，其余回执"已忽略"
@@ -137,15 +163,26 @@ pub async fn drive(
                 serde_json::json!({ "round": round, "tool": primary.name.clone(), "arguments": primary.arguments.clone() }),
             );
 
+            // 展示 AI 显式思考文字（模型在调工具时同时给的）；缺省时各分支用动作意图说明补
+            let thought = thinking.as_deref().map(|s| brief(s, 200)).filter(|s| !s.is_empty());
+            if let Some(s) = &thought {
+                eprintln!("  {}  {}", paint(tty, "2", "AI"), s);
+            }
+
             match action {
                 AgentAction::Finish { success, reason } => {
-                    eprintln!("■ 结束（{}）：{}", if success { "达成目标" } else { "未达成" }, reason);
+                    eprintln!(
+                        "{}  {}  {}",
+                        paint(tty, "1", "结束"),
+                        if success { paint(tty, "32", "达成") } else { paint(tty, "31", "未达成") },
+                        reason
+                    );
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
                     finish = Some((success, reason));
                     break 'outer;
                 }
                 AgentAction::RequestScreenshot { reason } => {
-                    eprintln!("  📷 AI 请求查看截图：{}", reason);
+                    eprintln!("  {}  {}", paint(tty, "2", "请求截图"), reason);
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
                     match sess.user_with_image("当前页面截图：", &p.shot_path) {
@@ -168,6 +205,15 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
+                    // 模型没给显式思考时，用动作的意图说明补上"AI 想干啥"
+                    if thought.is_none() {
+                        if let Some(s) = device_action.intent() {
+                            let b = brief(s, 200);
+                            if !b.is_empty() {
+                                eprintln!("  {}  {}", paint(tty, "2", "AI"), b);
+                            }
+                        }
+                    }
                     match execution::apply(
                         ctx.device,
                         ctx.element_path,
@@ -180,7 +226,7 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace)) => {
-                            eprintln!("  ✓ {}  〔{}〕", line, detail);
+                            eprintln!("  {}  {}", line, paint(tty, "32", "✓"));
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
                             // trace 带点击点+元素 bounds → 截图标注红框+蓝点，可核对 AI 实际点到哪
                             let step_index = steps.len();
@@ -204,7 +250,7 @@ pub async fn drive(
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
-                            eprintln!("  ✗ 执行失败：{}", e);
+                            eprintln!("  {} {}", paint(tty, "31", "✗ 执行失败:"), e);
                             tx.log("exec_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                             sess.tool_result(primary.call_id.as_str(), format!("执行失败: {}", e));
                             continue; // 同一页面重试
