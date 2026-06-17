@@ -103,6 +103,16 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             }),
         },
         ToolSchema { name: "back", schema: empty_schema() },
+        ToolSchema {
+            name: "switch",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string", "description": "web：要切到的标签页序号，或用新标签打开的 http(s) URL；移动端：要切到前台的 App 包名" }
+                },
+                "required": ["target"]
+            }),
+        },
         ToolSchema { name: "hide_keyboard", schema: empty_schema() },
         ToolSchema {
             name: "wait",

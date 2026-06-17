@@ -29,6 +29,8 @@ pub enum AgentAction {
     SwipeDir { direction: String, distance: Option<i32> },
     /// 返回
     Back,
+    /// 切换标签/App：web=标签序号 或 用新标签打开 URL；移动端=切到目标 App 包名
+    Switch { target: String },
     /// 隐藏键盘
     HideKeyboard,
     /// 等待：固定毫秒，或等某元素出现

@@ -163,6 +163,10 @@ pub async fn apply(
             let detail = exec(device, ControlAction::Back).await?;
             Ok((line(TksCommand::Back, vec![]), detail, ActionTrace::default(), None))
         }
+        AgentAction::Switch { target } => {
+            let detail = exec(device, ControlAction::Switch { target: target.clone() }).await?;
+            Ok((line(TksCommand::Switch, vec![TksParam::Text(target.clone())]), detail, ActionTrace::default(), None))
+        }
         AgentAction::HideKeyboard => {
             let detail = exec(device, ControlAction::HideKeyboard).await?;
             Ok((line(TksCommand::HideKeyboard, vec![]), detail, ActionTrace::default(), None))

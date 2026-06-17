@@ -31,6 +31,8 @@ pub enum ControlAction {
     Close { package: String },
     /// 按键事件 key KEYCODE_XXX
     Key { code: String },
+    /// 切换：web=目标标签序号 或 用新标签打开 URL；移动端=把目标 App 包名切到前台
+    Switch { target: String },
 }
 
 /// control 原子方法
@@ -47,6 +49,11 @@ impl Control {
     /// 执行操作，返回结果描述（用于 JSON 输出）
     pub async fn execute(&self, action: ControlAction) -> Result<serde_json::Value> {
         execute_action(&self.controller, action).await
+    }
+
+    /// 列出标签页（仅 web；其它平台为空）
+    pub fn list_tabs(&self) -> Vec<crate::TabInfo> {
+        self.controller.list_tabs()
     }
 }
 
@@ -129,6 +136,10 @@ pub async fn execute_action(controller: &Controller, action: ControlAction) -> R
         ControlAction::Key { code } => {
             controller.key_event(&code)?;
             Ok(serde_json::json!({ "action": "key", "code": code }))
+        }
+        ControlAction::Switch { target } => {
+            controller.switch(&target)?;
+            Ok(serde_json::json!({ "action": "switch", "target": target }))
         }
     }
 }

@@ -18,6 +18,7 @@ pub fn create_command_map() -> HashMap<String, TksCommand> {
     map.insert("返回".to_string(), TksCommand::Back);
     map.insert("等待".to_string(), TksCommand::Wait);
     map.insert("断言".to_string(), TksCommand::Assert);
+    map.insert("切换".to_string(), TksCommand::Switch);
     map
 }
 

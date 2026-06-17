@@ -39,4 +39,9 @@ impl Fetch {
 
         Ok(elements)
     }
+
+    /// 列出标签页（仅 web；其它平台为空）
+    pub fn list_tabs(&self) -> Vec<crate::TabInfo> {
+        self.controller.list_tabs()
+    }
 }

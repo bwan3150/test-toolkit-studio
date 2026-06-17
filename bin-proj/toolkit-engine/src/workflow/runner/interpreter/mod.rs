@@ -93,6 +93,7 @@ impl ScriptInterpreter {
             TksCommand::Back => executor.execute_back().await,
             TksCommand::Wait => executor.execute_wait(&step.params).await,
             TksCommand::Assert => executor.execute_assert(&step.params).await,
+            TksCommand::Switch => executor.execute_switch(&step.params).await,
         }
     }
 

@@ -49,6 +49,7 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             distance: opt_i32(a, "distance"),
         },
         "back" => AgentAction::Back,
+        "switch" => AgentAction::Switch { target: req_str(a, "target")? },
         "hide_keyboard" => AgentAction::HideKeyboard,
         "wait" => AgentAction::Wait {
             ms: opt_u64(a, "ms"),

@@ -166,6 +166,7 @@ pub async fn drive(
                         xml_path: ctx.workarea.ui_tree_path(),
                         ocr_filled: 0,
                         ocr_added: 0,
+                        tabs: Vec::new(),
                     },
                     Some(e.to_string()),
                 )
@@ -236,9 +237,12 @@ pub async fn drive(
         } else {
             String::new()
         };
+        // 标签页信息（web 多标签时），人和 AI 对称可见
+        let tabs_text = crate::format_tabs(&p.tabs);
+        let tabs_block = if tabs_text.is_empty() { String::new() } else { format!("{}\n", tabs_text) };
         sess.user_page(format!(
-            "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
-            round, list_text, hint
+            "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
+            tabs_block, round, list_text, hint
         ));
         // 卡得更死（连续 2 次没变 / 多页打转）：主动把截图塞给 AI，强制触发多模态读图
         if (no_progress >= 2 || revisits >= 3) && perceive_err.is_none() {
@@ -254,12 +258,18 @@ pub async fn drive(
         } else {
             String::new()
         };
+        let tab_tag = if p.tabs.len() > 1 {
+            paint(tty, "34", &format!("  {}标签页", p.tabs.len()))
+        } else {
+            String::new()
+        };
         eprintln!(
-            "{}  {} · {}{}{}",
+            "{}  {} · {}{}{}{}",
             paint(tty, "1", &format!("第 {} 轮", round)),
             paint(tty, "32", &format!("{} 个已知元素", n_known)),
             paint(tty, "2", &format!("{} 个未知元素", n_unknown)),
             ocr_tag,
+            tab_tag,
             if perceive_err.is_some() { paint(tty, "31", "  (页面未就绪，待 launch)") } else { String::new() }
         );
         if stuck {

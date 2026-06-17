@@ -84,6 +84,11 @@ pub enum ControlCommands {
     Key {
         code: String,
     },
+    /// 切换: control switch <标签序号|URL> (web) / control switch <包名> (App)
+    Switch {
+        /// web=标签序号 或 http(s) URL（新标签打开）；移动端=要切到前台的 App 包名
+        target: String,
+    },
 }
 
 /// 把 CLI 参数转换为 ControlAction
@@ -131,6 +136,7 @@ fn to_action(cmd: ControlCommands) -> Result<ControlAction> {
         },
         ControlCommands::Close { package } => ControlAction::Close { package },
         ControlCommands::Key { code } => ControlAction::Key { code },
+        ControlCommands::Switch { target } => ControlAction::Switch { target },
     })
 }
 

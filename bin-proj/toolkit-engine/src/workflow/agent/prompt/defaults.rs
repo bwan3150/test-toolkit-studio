@@ -24,6 +24,7 @@ pub fn default_tool_description(name: &str) -> &'static str {
         "click_visual" => include_str!("builtin/tools/click_visual.md"),
         "swipe_direction" => include_str!("builtin/tools/swipe_direction.md"),
         "back" => include_str!("builtin/tools/back.md"),
+        "switch" => include_str!("builtin/tools/switch.md"),
         "hide_keyboard" => include_str!("builtin/tools/hide_keyboard.md"),
         "wait" => include_str!("builtin/tools/wait.md"),
         "request_screenshot" => include_str!("builtin/tools/request_screenshot.md"),

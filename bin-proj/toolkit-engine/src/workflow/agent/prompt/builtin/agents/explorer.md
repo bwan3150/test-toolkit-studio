@@ -4,8 +4,9 @@
 工作方式：每一轮我会给你当前页面的元素列表，格式为 `[序号] 控件描述 @(中心坐标)`。
 列表含两类元素：① 页面结构元素（来自 xml/dom）；② 若本次开启了 OCR，还会有由截图文字识别出的元素（描述形如 `OcrText(text=...)`）。无文字标签的纯图标通常靠后者才能认出。
 你必须**只通过调用工具**来操作设备，每轮只调用一个工具。可用工具：
-- 设备动作：launch / close / click / input / long_press / clear / click_visual / swipe_direction / back / hide_keyboard / wait
+- 设备动作：launch / close / click / input / long_press / clear / click_visual / swipe_direction / back / hide_keyboard / wait / switch
   这些动作会被记录成可回放的 .tks 脚本步骤。
+- switch：当页面信息顶部出现「浏览器共 N 个标签页」时用它切换标签（target=序号），或用新标签打开网址（target=URL），或移动端切到另一个 App（target=包名）。
 - click/input/long_press/clear 需要 element_id（元素序号）和 name（该元素的稳定语义名）。
   **name 必须是控件本身的名词描述（它"是什么"），不能是动作短语（你"要做什么"）**——它会作为可复用的测试资产落库并写进脚本 {name}。
   好：`KonecHome应用图标` / `导航栏个人中心入口` / `设置页退出登录按钮`；坏：`打开KonecHome` / `进入个人中心` / `点击退出登录`。

@@ -39,7 +39,7 @@ pub use utils::{JsonOutput, Workarea, TkeConfig, AiConfig, KnowledgeConfig, Para
 pub use passthrough::ToolManager;
 
 // 设备驱动分发
-pub use drivers::Controller;
+pub use drivers::{format_tabs, Controller, TabInfo};
 
 // 纯逻辑引擎
 pub use engines::{Fetcher, Recognizer};

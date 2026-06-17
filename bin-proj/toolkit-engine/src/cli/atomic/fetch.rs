@@ -37,6 +37,13 @@ pub async fn handle(args: FetchArgs, params: std::sync::Arc<tke::Params>) -> Res
         .as_deref()
         .and_then(|spec| resolve_ocr(spec, &tke::utils::params::ocr_url()));
 
+    // 标签页信息打到 stderr（人可见，不污染给 Electron 的 stdout JSON）
+    let tabs = fetch.list_tabs();
+    let tabs_text = tke::format_tabs(&tabs);
+    if !tabs_text.is_empty() {
+        eprintln!("{}", tabs_text);
+    }
+
     match fetch.elements(args.cached, ocr_src.as_ref()).await {
         Ok(elements) => {
             let output = if args.interactive {

@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::engines::ocr::{enrich_with_ocr, OcrSource};
-use crate::{Fetcher, Refresh, RefreshOptions, Result, UIElement, Workarea};
+use crate::{Control, Fetcher, Platform, Refresh, RefreshOptions, Result, TabInfo, UIElement, Workarea};
 
 /// 一次采集的结果
 pub struct Perceived {
@@ -18,6 +18,8 @@ pub struct Perceived {
     pub ocr_filled: usize,
     /// OCR 新增伪元素的个数（XML 漏掉的文字）
     pub ocr_added: usize,
+    /// 浏览器标签页（仅 web；其它平台为空）
+    pub tabs: Vec<TabInfo>,
 }
 
 /// 采集一轮：刷新（截图 + XML）→ 解析元素 →（可选）OCR 增强
@@ -45,5 +47,12 @@ pub async fn capture(
         }
     }
 
-    Ok(Perceived { elements, shot_path, xml_path, ocr_filled, ocr_added })
+    // 标签页（仅 web；list_tabs 会逐个切换读标题再切回，故只在 web 调用）
+    let tabs = if Platform::from_device(Some(device)) == Platform::Web {
+        Control::new(device.to_string()).map(|c| c.list_tabs()).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    Ok(Perceived { elements, shot_path, xml_path, ocr_filled, ocr_added, tabs })
 }

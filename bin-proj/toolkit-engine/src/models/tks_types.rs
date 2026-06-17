@@ -20,6 +20,7 @@ pub enum TksCommand {
     Back,             // 返回
     Wait,             // 等待
     Assert,           // 断言
+    Switch,           // 切换（web 标签 / App）
 }
 
 impl TksCommand {
@@ -38,6 +39,7 @@ impl TksCommand {
             "返回" => Some(Self::Back),
             "等待" => Some(Self::Wait),
             "断言" => Some(Self::Assert),
+            "切换" => Some(Self::Switch),
             _ => None,
         }
     }

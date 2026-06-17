@@ -80,6 +80,16 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::Close { package }).await.map(|_| ())
     }
 
+    /// 切换：web=标签序号 或 用新标签打开 URL；移动端=切到目标 App 包名
+    pub async fn execute_switch(&mut self, params: &[TksParam]) -> Result<()> {
+        if params.is_empty() {
+            return Err(TkeError::InvalidArgument(
+                "切换命令需要目标: [标签序号] / [URL] (Web) / [包名] (App)".to_string()));
+        }
+        let target = ParamExtractor::extract_text(&params[0])?;
+        execute_action(&*self.controller, ControlAction::Switch { target }).await.map(|_| ())
+    }
+
     /// 点击操作
     pub async fn execute_click(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {

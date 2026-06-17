@@ -176,24 +176,63 @@ impl WebDriver {
 
     /// 采集截图 + 归一化 DOM（写入工作区）
     pub fn capture_ui_state(&self, workarea: &Workarea) -> Result<()> {
-        // 采集前切到最新窗口/标签：点击若打开了新 tab（如查看 PDF），
-        // 否则会一直停在旧 tab 上看不到变化、AI 误以为没反应而反复点。
-        let _ = self.switch_to_latest_window();
         self.capture_screenshot(workarea)?;
         self.capture_dom_xml(workarea)?;
         Ok(())
     }
 
-    /// 切换到最新打开的窗口/标签（best-effort）；单标签时为空操作
-    fn switch_to_latest_window(&self) -> Result<()> {
+    /// 列出所有标签页（含标题/URL/是否当前）。会逐个切换读取标题再切回当前，
+    /// 故有一定开销——只在 fetch/采集时调用。无会话/出错返回空。
+    pub fn list_tabs(&self) -> Vec<crate::drivers::TabInfo> {
+        let handles: Vec<String> = match self.get("/window/handles") {
+            Ok(r) => r["value"]
+                .as_array()
+                .map(|a| a.iter().filter_map(|h| h.as_str().map(String::from)).collect())
+                .unwrap_or_default(),
+            Err(_) => return Vec::new(),
+        };
+        if handles.is_empty() {
+            return Vec::new();
+        }
+        let current = self.get("/window").ok().and_then(|r| r["value"].as_str().map(String::from));
+        let mut tabs = Vec::new();
+        for (i, h) in handles.iter().enumerate() {
+            let _ = self.post("/window", serde_json::json!({ "handle": h }));
+            let title = self.get("/title").ok().and_then(|r| r["value"].as_str().map(String::from)).unwrap_or_default();
+            let url = self.get("/url").ok().and_then(|r| r["value"].as_str().map(String::from)).unwrap_or_default();
+            tabs.push(crate::drivers::TabInfo {
+                index: i,
+                title,
+                url,
+                active: current.as_deref() == Some(h.as_str()),
+            });
+        }
+        // 切回原当前标签，避免列举副作用
+        if let Some(c) = &current {
+            let _ = self.post("/window", serde_json::json!({ "handle": c }));
+        }
+        tabs
+    }
+
+    /// 切换到第 index 个标签页
+    pub fn switch_tab(&self, index: usize) -> Result<()> {
         let resp = self.get("/window/handles")?;
         let handles = resp["value"].as_array().cloned().unwrap_or_default();
-        if handles.len() > 1 {
-            if let Some(last) = handles.last().and_then(|h| h.as_str()) {
-                let _ = self.post("/window", serde_json::json!({ "handle": last }));
-            }
-        }
+        let h = handles
+            .get(index)
+            .and_then(|h| h.as_str())
+            .ok_or_else(|| TkeError::DeviceError(format!("标签页序号越界: {}（共 {} 个）", index, handles.len())))?;
+        self.post("/window", serde_json::json!({ "handle": h }))?;
         Ok(())
+    }
+
+    /// 新开一个标签页并导航到 url
+    pub fn open_tab(&self, url: &str) -> Result<()> {
+        let resp = self.post("/window/new", serde_json::json!({ "type": "tab" }))?;
+        if let Some(h) = resp["value"]["handle"].as_str() {
+            self.post("/window", serde_json::json!({ "handle": h }))?;
+        }
+        self.navigate(url)
     }
 
     pub fn capture_xml_only(&self, workarea: &Workarea) -> Result<()> {

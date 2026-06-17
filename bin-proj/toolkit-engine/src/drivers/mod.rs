@@ -13,8 +13,38 @@ pub use adb::AdbDriver;
 pub use wda::WdaDriver;
 pub use web::WebDriver;
 
-use crate::{Result, DeviceInfo};
+use crate::{Result, DeviceInfo, TkeError};
 use crate::utils::Workarea;
+
+/// 一个标签页/窗口的信息（web）
+#[derive(Debug, Clone)]
+pub struct TabInfo {
+    pub index: usize,
+    pub title: String,
+    pub url: String,
+    pub active: bool,
+}
+
+/// 把标签页列表格式化成一段人/AI 都能读的文字（>1 个才有意义；≤1 返回空串）
+pub fn format_tabs(tabs: &[TabInfo]) -> String {
+    if tabs.len() <= 1 {
+        return String::new();
+    }
+    let items: Vec<String> = tabs
+        .iter()
+        .map(|t| {
+            let mark = if t.active { "✓当前" } else { "" };
+            let title = if t.title.trim().is_empty() { t.url.as_str() } else { t.title.as_str() };
+            let title: String = title.chars().take(40).collect();
+            format!("[{}]{} {}", t.index, mark, title)
+        })
+        .collect();
+    format!(
+        "【浏览器共 {} 个标签页】{}\n（switch [序号] 切到某标签；switch <URL> 用新标签打开）",
+        tabs.len(),
+        items.join("  ")
+    )
+}
 
 /// 设备驱动（统一入口）
 pub struct Controller {
@@ -110,6 +140,38 @@ impl Controller {
             Driver::Adb(d) => d.home(),
             Driver::Web(d) => d.home(),
             Driver::Wda(d) => d.home(),
+        }
+    }
+
+    // ===== 标签页/App 切换 =====
+
+    /// 列出标签页（仅 web 有；其它平台返回空）
+    pub fn list_tabs(&self) -> Vec<TabInfo> {
+        match &self.driver {
+            Driver::Web(d) => d.list_tabs(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// 切换：web=目标标签序号 或 用新标签打开 URL；移动端=把目标 App 包名切到前台。
+    pub fn switch(&self, target: &str) -> Result<()> {
+        let t = target.trim();
+        match &self.driver {
+            Driver::Web(d) => {
+                if let Ok(idx) = t.parse::<usize>() {
+                    d.switch_tab(idx)
+                } else if t.starts_with("http://") || t.starts_with("https://") {
+                    d.open_tab(t)
+                } else {
+                    Err(TkeError::InvalidArgument(format!(
+                        "web switch 目标应为标签序号或 http(s) URL，收到: {}",
+                        t
+                    )))
+                }
+            }
+            // 移动端：切到目标 App = 启动其包名（当前 App 自动退到后台）
+            Driver::Adb(d) => d.launch_app(t, ""),
+            Driver::Wda(d) => d.launch_app(t),
         }
     }
 
