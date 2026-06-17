@@ -41,11 +41,16 @@ pub struct LlmSession {
     total_usage: (i64, i64),
     /// 上一条"页面元素列表"消息在 messages 中的下标（用于进入新一轮时压缩它）
     last_page_idx: Option<usize>,
+    /// 上一条"截图"消息在 messages 中的下标（用于只保留 AI 当前请求的那一张）
+    last_image_idx: Option<usize>,
 }
 
 /// 历史页面元素被压缩后的占位文本（塞进 LLM 上下文，故只写对 AI 有用的话；
 /// AI 访问不了本地文件，不提 conversation.json）
 const PAGE_ELIDED: &str = "【上一轮页面元素已省略，请依据你已执行的步骤与当前页面判断】";
+
+/// 历史截图被压缩后的占位文本（截图只在 AI 当次要图时保留一张，用完即省略）
+const IMAGE_ELIDED: &str = "【上一张截图已省略，以当前页面为准】";
 
 impl LlmSession {
     /// 从 [ai] 配置构建会话：注入 system 提示词与工具集
@@ -68,7 +73,15 @@ impl LlmSession {
             req = req.with_tools(genai_tools);
         }
 
-        Ok(Self { client, model, req, last_usage: (0, 0), total_usage: (0, 0), last_page_idx: None })
+        Ok(Self {
+            client,
+            model,
+            req,
+            last_usage: (0, 0),
+            total_usage: (0, 0),
+            last_page_idx: None,
+            last_image_idx: None,
+        })
     }
 
     /// 当前使用的模型名（日志用）
@@ -101,17 +114,30 @@ impl LlmSession {
                 *msg = ChatMessage::user(PAGE_ELIDED);
             }
         }
+        // 进入新一轮：上一轮 AI 请求的截图也已用完，一并压缩（上下文不留旧图）
+        if let Some(i) = self.last_image_idx.take() {
+            if let Some(msg) = self.req.messages.get_mut(i) {
+                *msg = ChatMessage::user(IMAGE_ELIDED);
+            }
+        }
         self.req = self.req.clone().append_message(ChatMessage::user(text.into()));
         self.last_page_idx = Some(self.req.messages.len() - 1);
     }
 
-    /// 追加一条用户消息 + 图片：用于"AI 主动要图 → 系统真实传图"
+    /// 追加一条用户消息 + 图片：用于"AI 主动要图 → 系统真实传图"。
+    /// 同轮多次要图时压缩上一张，LLM 上下文只保留 AI 当前请求的这一张截图。
     pub fn user_with_image(&mut self, text: &str, image_path: &Path) -> Result<()> {
         let img = ContentPart::from_binary_file(image_path).map_err(|e| {
             TkeError::LlmError(format!("加载截图失败 {}: {}", image_path.display(), e))
         })?;
+        if let Some(i) = self.last_image_idx {
+            if let Some(msg) = self.req.messages.get_mut(i) {
+                *msg = ChatMessage::user(IMAGE_ELIDED);
+            }
+        }
         let msg = ChatMessage::user(vec![ContentPart::from_text(text.to_string()), img]);
         self.req = self.req.clone().append_message(msg);
+        self.last_image_idx = Some(self.req.messages.len() - 1);
         Ok(())
     }
 
