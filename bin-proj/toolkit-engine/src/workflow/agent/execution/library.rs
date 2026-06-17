@@ -10,10 +10,21 @@ use crate::{Bounds, UIElement};
 
 use super::super::transcript::Transcript;
 
+/// 一次落库的结果摘要（供结束时人工审核：哪些新增、哪些更新了描述）
+#[derive(Debug, Clone)]
+pub struct SavedInfo {
+    pub name: String,
+    /// 元素库中此前不存在 → 本轮新增
+    pub created: bool,
+    /// 已有元素，但 AI 更正了其 desc → 本轮更新描述
+    pub desc_updated: bool,
+}
+
 /// 按已确定目标落库
 /// - structure: Some=结构元素(写结构通道)；None=OCR/视觉元素(结构留空)
 /// - bounds: img 模板裁剪范围
 /// - ocr: ocr 通道写入方式
+/// 返回落库摘要（失败为 None）。
 pub async fn save_target(
     device: &str,
     element_path: &Path,
@@ -24,7 +35,7 @@ pub async fn save_target(
     ocr: OcrChannel,
     tx: &mut Transcript,
     round: usize,
-) {
+) -> Option<SavedInfo> {
     match add_element_target(
         device.to_string(),
         element_path,
@@ -37,13 +48,21 @@ pub async fn save_target(
     )
     .await
     {
-        Ok(info) => tx.log(
-            "element_saved",
-            serde_json::json!({ "round": round, "name": name, "result": info }),
-        ),
-        Err(e) => tx.log(
-            "element_save_error",
-            serde_json::json!({ "round": round, "name": name, "error": e.to_string() }),
-        ),
+        Ok(info) => {
+            let saved = SavedInfo {
+                name: name.to_string(),
+                created: info.get("created").and_then(|v| v.as_bool()).unwrap_or(false),
+                desc_updated: info.get("desc_updated").and_then(|v| v.as_bool()).unwrap_or(false),
+            };
+            tx.log("element_saved", serde_json::json!({ "round": round, "name": name, "result": info }));
+            Some(saved)
+        }
+        Err(e) => {
+            tx.log(
+                "element_save_error",
+                serde_json::json!({ "round": round, "name": name, "error": e.to_string() }),
+            );
+            None
+        }
     }
 }

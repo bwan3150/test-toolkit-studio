@@ -18,6 +18,7 @@ use crate::{ActionTrace, Bounds, ControlAction, LocatorStrategy, Point, Result, 
 use super::tools::AgentAction;
 use super::transcript::Transcript;
 use device::exec;
+pub use library::SavedInfo;
 use library::save_target;
 
 /// 执行一个设备动作：返回 (.tks 行, 执行详情, 执行轨迹)
@@ -35,53 +36,53 @@ pub async fn apply(
     shot_path: &Path,
     tx: &mut Transcript,
     round: usize,
-) -> Result<(String, String, ActionTrace)> {
+) -> Result<(String, String, ActionTrace, Option<SavedInfo>)> {
     match action {
         AgentAction::Click { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
-            Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, el_trace(c, el, &name)))
+            Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
         AgentAction::Input { element_id, name, desc, text } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Input { text: text.clone(), point: Some(c) },
             )
             .await?;
-            Ok((line(TksCommand::Input, vec![el_param(&name), TksParam::Text(text.clone())]), detail, el_trace(c, el, &name)))
+            Ok((line(TksCommand::Input, vec![el_param(&name), TksParam::Text(text.clone())]), detail, el_trace(c, el, &name), saved))
         }
         AgentAction::LongPress { element_id, name, desc, duration_ms } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Press { point: c, duration_ms: *duration_ms as u32 },
             )
             .await?;
-            Ok((line(TksCommand::Press, vec![el_param(&name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, &name)))
+            Ok((line(TksCommand::Press, vec![el_param(&name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, &name), saved))
         }
         AgentAction::Clear { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
             let _ = exec(device, ControlAction::Click { point: c }).await?;
             let detail = exec(device, ControlAction::Clear).await?;
-            Ok((line(TksCommand::Clear, vec![el_param(&name)]), detail, el_trace(c, el, &name)))
+            Ok((line(TksCommand::Clear, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
         AgentAction::ClickVisual { region, x, y, name, desc } => {
             // 看图后视觉点击：region 优先；否则 (x,y) 周围取屏宽 15% 方块
@@ -97,7 +98,7 @@ pub async fn apply(
             };
             let c = bounds.center();
             // 三级·仅视觉：结构空、ocr 空、仅 img 模板
-            save_target(device, element_path, name, desc, bounds.clone(), None, OcrChannel::None, tx, round).await;
+            let saved = save_target(device, element_path, name, desc, bounds.clone(), None, OcrChannel::None, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             let trace = ActionTrace {
                 captured: false,
@@ -105,7 +106,7 @@ pub async fn apply(
                 bounds: Some(bounds),
                 element_name: Some(name.clone()),
             };
-            Ok((line(TksCommand::Click, vec![el_param(name)]), detail, trace))
+            Ok((line(TksCommand::Click, vec![el_param(name)]), detail, trace, saved))
         }
         AgentAction::SwipeDir { direction, distance } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
@@ -135,6 +136,7 @@ pub async fn apply(
                 ),
                 detail,
                 trace,
+                None,
             ))
         }
         AgentAction::Launch { target, activity } => {
@@ -150,30 +152,30 @@ pub async fn apply(
             if let Some(act) = activity {
                 params.push(TksParam::Text(act.clone()));
             }
-            Ok((line(TksCommand::Launch, params), detail, ActionTrace::default()))
+            Ok((line(TksCommand::Launch, params), detail, ActionTrace::default(), None))
         }
         AgentAction::Close { target } => {
             let detail = exec(device, ControlAction::Close { package: target.clone() }).await?;
-            Ok((line(TksCommand::Close, vec![TksParam::Text(target.clone())]), detail, ActionTrace::default()))
+            Ok((line(TksCommand::Close, vec![TksParam::Text(target.clone())]), detail, ActionTrace::default(), None))
         }
         AgentAction::Back => {
             let detail = exec(device, ControlAction::Back).await?;
-            Ok((line(TksCommand::Back, vec![]), detail, ActionTrace::default()))
+            Ok((line(TksCommand::Back, vec![]), detail, ActionTrace::default(), None))
         }
         AgentAction::HideKeyboard => {
             let detail = exec(device, ControlAction::HideKeyboard).await?;
-            Ok((line(TksCommand::HideKeyboard, vec![]), detail, ActionTrace::default()))
+            Ok((line(TksCommand::HideKeyboard, vec![]), detail, ActionTrace::default(), None))
         }
         AgentAction::Wait { ms, element } => {
             if let Some(ms) = ms {
                 tokio::time::sleep(tokio::time::Duration::from_millis(*ms)).await;
-                Ok((line(TksCommand::Wait, vec![TksParam::Number(*ms as i32)]), format!("等待 {}ms", ms), ActionTrace::default()))
+                Ok((line(TksCommand::Wait, vec![TksParam::Number(*ms as i32)]), format!("等待 {}ms", ms), ActionTrace::default(), None))
             } else if let Some(elem) = element {
                 // v1：仅记录可回放的 .tks 行，实时不阻塞（下一轮采集会反映新状态）
-                Ok((line(TksCommand::Wait, vec![el_param(elem)]), format!("记录等待元素出现: {}", elem), ActionTrace::default()))
+                Ok((line(TksCommand::Wait, vec![el_param(elem)]), format!("记录等待元素出现: {}", elem), ActionTrace::default(), None))
             } else {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                Ok((line(TksCommand::Wait, vec![TksParam::Number(1000)]), "等待 1000ms".to_string(), ActionTrace::default()))
+                Ok((line(TksCommand::Wait, vec![TksParam::Number(1000)]), "等待 1000ms".to_string(), ActionTrace::default(), None))
             }
         }
         // 控制流动作不在此处理（由主循环拦截）

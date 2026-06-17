@@ -6,9 +6,16 @@ use std::path::Path;
 
 use crate::{Platform, UIElement};
 
-/// 对每个当前元素返回命中的库元素名（None=未知/库中没有）
-pub fn match_known(elements: &[UIElement], platform: Platform, lib_path: &Path) -> Vec<Option<String>> {
-    let none = || vec![None; elements.len()];
+/// 命中的库元素：name(资产名) + desc(元素描述，塞给 AI 帮助判断)
+#[derive(Debug, Clone)]
+pub struct KnownHit {
+    pub name: String,
+    pub desc: Option<String>,
+}
+
+/// 对每个当前元素返回命中的库元素（None=未知/库中没有）
+pub fn match_known(elements: &[UIElement], platform: Platform, lib_path: &Path) -> Vec<Option<KnownHit>> {
+    let none = || (0..elements.len()).map(|_| None).collect();
     let lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
         Ok(s) => match serde_json::from_str(&s) {
             Ok(v) => v,
@@ -28,9 +35,10 @@ pub fn match_known(elements: &[UIElement], platform: Platform, lib_path: &Path) 
     elements
         .iter()
         .map(|e| {
-            map.iter()
-                .find(|(_, def)| matches(e, def, chan))
-                .map(|(name, _)| name.clone())
+            map.iter().find(|(_, def)| matches(e, def, chan)).map(|(name, def)| KnownHit {
+                name: name.clone(),
+                desc: def.get("desc").and_then(|d| d.as_str()).filter(|s| !s.trim().is_empty()).map(|s| s.to_string()),
+            })
         })
         .collect()
 }

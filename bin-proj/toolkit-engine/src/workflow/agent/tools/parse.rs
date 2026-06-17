@@ -4,9 +4,11 @@ use crate::{LlmToolCall, Result, TkeError};
 
 use super::action::AgentAction;
 
-/// 把一次工具调用解析成强类型动作
-pub fn parse_tool_call(call: &LlmToolCall) -> Result<AgentAction> {
+/// 把一次工具调用解析成 (强类型动作, comment)
+/// comment 为 AI 这一步的思考（横切字段，所有动作类工具统一注入），与具体动作语义无关。
+pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String>)> {
     let a = &call.arguments;
+    let comment = opt_str(a, "comment");
     let action = match call.name.as_str() {
         "launch" => AgentAction::Launch {
             target: req_str(a, "target")?,
@@ -62,7 +64,7 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<AgentAction> {
             return Err(TkeError::ScriptExecuteError(format!("未知的工具调用: {}", other)));
         }
     };
-    Ok(action)
+    Ok((action, comment))
 }
 
 // ===== 参数提取小工具 =====

@@ -16,7 +16,7 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
         let mut base = serde_json::json!({
             "element_id": { "type": "integer", "description": "页面元素列表中的序号" },
             "name": { "type": "string", "description": "给该元素起的稳定语义名（落库并写进 .tks，如 '登录按钮'）" },
-            "desc": { "type": "string", "description": "可选：元素用途说明，便于日后检索" }
+            "desc": { "type": "string", "description": "这个元素本身是什么/有什么作用（出现在哪、点了会怎样），与本次测试过程无关，会落进元素库。未知元素请填；已知元素若发现库里描述不准可填以更正。" }
         });
         if let (Some(obj), Some(ex)) = (base.as_object_mut(), extra.as_object()) {
             for (k, v) in ex {
@@ -86,7 +86,7 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
                     "x": { "type": "integer", "description": "无 region 时给点击点 x（像素）" },
                     "y": { "type": "integer", "description": "无 region 时给点击点 y（像素）" },
                     "name": { "type": "string", "description": "给该目标起的稳定语义名（落库并写进 .tks）" },
-                    "desc": { "type": "string", "description": "可选：目标用途说明" }
+                    "desc": { "type": "string", "description": "这个目标本身是什么/有什么作用，与本次测试过程无关，会落进元素库" }
                 },
                 "required": ["name"]
             }),

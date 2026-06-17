@@ -42,15 +42,10 @@ pub enum AgentAction {
 }
 
 impl AgentAction {
-    /// AI 为本步动作填写的意图说明（desc/reason/question），用于 CLI 实时展示。
-    /// 当模型未单独给出思考文字时，退而用此说明告诉用户"AI 想干啥"。
+    /// 控制流动作自带的说明（finish/截图/反问的 reason/question），用于 CLI 展示兜底。
+    /// 设备动作的"这步为什么"由 comment 表达（横切字段，不在此），desc 是元素描述、不算意图。
     pub fn intent(&self) -> Option<&str> {
         match self {
-            AgentAction::Click { desc, .. }
-            | AgentAction::Input { desc, .. }
-            | AgentAction::LongPress { desc, .. }
-            | AgentAction::Clear { desc, .. }
-            | AgentAction::ClickVisual { desc, .. } => desc.as_deref(),
             AgentAction::RequestScreenshot { reason }
             | AgentAction::Finish { reason, .. } => Some(reason.as_str()),
             AgentAction::AskUser { question } => Some(question.as_str()),

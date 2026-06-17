@@ -112,6 +112,8 @@ impl AgentRunner {
                 "prompt_tokens": total_prompt,
                 "completion_tokens": total_completion,
                 "total_tokens": total_prompt + total_completion,
+                "elements_created": outcome.created.clone(),
+                "elements_updated": outcome.updated.clone(),
             }),
         );
 

@@ -7,5 +7,5 @@ pub mod known;
 pub mod render;
 
 pub use capture::{capture, Perceived};
-pub use known::match_known;
+pub use known::{match_known, KnownHit};
 pub use render::render_element_list;

@@ -321,6 +321,9 @@ pub async fn add_element_target(
         });
     }
     let entry = &mut lib["elements"][name];
+    // desc 更新检测：已有元素 + AI 给了与库里不同的 desc → 视为"更新描述"（供人工审核）
+    let old_desc = entry["desc"].as_str().map(|s| s.to_string());
+    let desc_updated = existed && desc.as_deref().is_some_and(|d| old_desc.as_deref() != Some(d));
     if let Some(d) = &desc {
         entry["desc"] = serde_json::json!(d);
     }
@@ -362,5 +365,7 @@ pub async fn add_element_target(
         "ocr": ocr_text,
         "bounds": bounds,
         "updated": existed,
+        "created": !existed,
+        "desc_updated": desc_updated,
     }))
 }

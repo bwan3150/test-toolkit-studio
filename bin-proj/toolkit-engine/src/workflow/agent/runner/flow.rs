@@ -55,6 +55,10 @@ pub struct DriveOutcome {
     pub lines: Vec<String>,
     pub steps: Vec<StepResult>,
     pub rounds: usize,
+    /// 本轮新增的元素名（人工审核用）
+    pub created: Vec<String>,
+    /// 本轮更新了描述的元素名（人工审核用）
+    pub updated: Vec<String>,
 }
 
 /// 驱动探索循环
@@ -70,6 +74,9 @@ pub async fn drive(
     let mut round = 0usize;
     let mut llm_calls = 0usize;
     let mut finish: Option<(bool, String)> = None;
+    // 本轮测试对元素库的变更（供结束时人工审核）
+    let mut created: Vec<String> = Vec::new();
+    let mut updated: Vec<String> = Vec::new();
 
     'outer: while round < ctx.max_rounds {
         round += 1;
@@ -96,6 +103,9 @@ pub async fn drive(
         let known = match_known(&p.elements, platform, ctx.element_path);
         let n_known = known.iter().filter(|k| k.is_some()).count();
         let n_unknown = p.elements.len() - n_known;
+        // 仅 name 的视图，供 apply 强制复用库名
+        let known_names: Vec<Option<String>> =
+            known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
 
         let list_text = render_element_list(&p.elements, &known);
         tx.log(
@@ -168,8 +178,8 @@ pub async fn drive(
                 sess.tool_result(extra.call_id.as_str(), "已忽略：每轮仅处理第一个工具调用");
             }
 
-            let action = match parse_tool_call(&primary) {
-                Ok(a) => a,
+            let (action, comment) = match parse_tool_call(&primary) {
+                Ok(v) => v,
                 Err(e) => {
                     tx.log("tool_parse_error", serde_json::json!({ "round": round, "tool": primary.name.clone(), "error": e.to_string() }));
                     sess.tool_result(primary.call_id.as_str(), format!("参数错误: {}", e));
@@ -178,14 +188,16 @@ pub async fn drive(
             };
             tx.log(
                 "llm_decision",
-                serde_json::json!({ "round": round, "tool": primary.name.clone(), "arguments": primary.arguments.clone() }),
+                serde_json::json!({ "round": round, "tool": primary.name.clone(), "comment": comment.clone(), "arguments": primary.arguments.clone() }),
             );
 
-            // 每次 LLM 调用打印一行 AI（带本次 token）：思考优先，否则动作意图，否则工具名
-            let say = thinking
+            // 每次 LLM 调用打印一行 AI（带本次 token）：AI 的 comment(这步思考)优先，
+            // 其次模型思考文字，再次控制流动作的 reason，最后工具名兜底
+            let say = comment
                 .as_deref()
                 .map(|s| brief(s, 200))
                 .filter(|s| !s.is_empty())
+                .or_else(|| thinking.as_deref().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
                 .or_else(|| action.intent().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
                 .unwrap_or_else(|| format!("调用 {}", primary.name));
             eprintln!("  {} {}  {}", paint(tty, "2", "AI"), toks, say);
@@ -229,15 +241,28 @@ pub async fn drive(
                         ctx.element_path,
                         &device_action,
                         &p.elements,
-                        &known,
+                        &known_names,
                         &p.shot_path,
                         tx,
                         round,
                     )
                     .await
                     {
-                        Ok((line, detail, trace)) => {
+                        Ok((line, detail, trace, saved)) => {
                             eprintln!("  {}  {}", line, paint(tty, "32", "✓"));
+                            // 记录元素库变更（去重），供结束时人工审核
+                            if let Some(s) = saved {
+                                if s.created {
+                                    if !created.contains(&s.name) {
+                                        created.push(s.name.clone());
+                                    }
+                                } else if s.desc_updated
+                                    && !created.contains(&s.name)
+                                    && !updated.contains(&s.name)
+                                {
+                                    updated.push(s.name.clone());
+                                }
+                            }
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
                             // trace 带点击点+元素 bounds → 截图标注红框+蓝点，可核对 AI 实际点到哪
                             let step_index = steps.len();
@@ -273,6 +298,20 @@ pub async fn drive(
         }
     }
 
+    // 元素库变更审核：本轮新增/更新了哪些元素，提示人工二次审核
+    if created.is_empty() && updated.is_empty() {
+        eprintln!("{}  无新增/更新", paint(tty, "1", "元素库变更"));
+    } else {
+        eprintln!(
+            "{}  新增 {}（{}）· 更新描述 {}（{}）  —— 请人工二次审核",
+            paint(tty, "1", "元素库变更"),
+            created.len(),
+            if created.is_empty() { "-".into() } else { created.join("、") },
+            updated.len(),
+            if updated.is_empty() { "-".into() } else { updated.join("、") },
+        );
+    }
+
     let (tp, tc) = sess.total_usage();
     eprintln!(
         "{}  模型 {} · 上行 {} · 下行 {} · 合计 {} tokens",
@@ -284,5 +323,5 @@ pub async fn drive(
     );
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated })
 }
