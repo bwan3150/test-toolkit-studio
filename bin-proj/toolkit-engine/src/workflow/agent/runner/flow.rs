@@ -133,13 +133,18 @@ pub async fn drive(
                 }
             };
 
+            // 本次 LLM 调用的 token 用量（上行/输入、下行/输出），逐次展示
+            let (pt, ct) = sess.last_usage();
+            let toks = paint(tty, "2", &format!("↑{} ↓{}", pt, ct));
+            tx.log("llm_usage", serde_json::json!({ "round": round, "seq": llm_calls, "prompt_tokens": pt, "completion_tokens": ct }));
+
             let (thinking, calls) = match reply {
                 LlmReply::Text(t) => {
                     let b = brief(&t, 200);
                     if !b.is_empty() {
                         eprintln!("  {}  {}", paint(tty, "2", "AI"), b);
                     }
-                    eprintln!("  {}", paint(tty, "2", "（未调用工具，已提示其用工具或 finish）"));
+                    eprintln!("  {}  {}", paint(tty, "2", "（未调用工具，已提示其用工具或 finish）"), toks);
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
                     sess.user("请只通过调用工具来操作；若已完成或无法继续，请调用 finish。");
                     continue;
@@ -175,17 +180,18 @@ pub async fn drive(
             match action {
                 AgentAction::Finish { success, reason } => {
                     eprintln!(
-                        "{}  {}  {}",
+                        "{}  {}  {}  {}",
                         paint(tty, "1", "结束"),
                         if success { paint(tty, "32", "达成") } else { paint(tty, "31", "未达成") },
-                        reason
+                        reason,
+                        toks
                     );
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
                     finish = Some((success, reason));
                     break 'outer;
                 }
                 AgentAction::RequestScreenshot { reason } => {
-                    eprintln!("  {}  {}", paint(tty, "2", "请求截图"), reason);
+                    eprintln!("  {}  {}  {}", paint(tty, "2", "请求截图"), reason, toks);
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
                     match sess.user_with_image("当前页面截图：", &p.shot_path) {
@@ -229,7 +235,7 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace)) => {
-                            eprintln!("  {}  {}", line, paint(tty, "32", "✓"));
+                            eprintln!("  {}  {}  {}", line, paint(tty, "32", "✓"), toks);
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
                             // trace 带点击点+元素 bounds → 截图标注红框+蓝点，可核对 AI 实际点到哪
                             let step_index = steps.len();
@@ -253,7 +259,7 @@ pub async fn drive(
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
-                            eprintln!("  {} {}", paint(tty, "31", "✗ 执行失败:"), e);
+                            eprintln!("  {} {}  {}", paint(tty, "31", "✗ 执行失败:"), e, toks);
                             tx.log("exec_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                             sess.tool_result(primary.call_id.as_str(), format!("执行失败: {}", e));
                             continue; // 同一页面重试
@@ -264,6 +270,16 @@ pub async fn drive(
             }
         }
     }
+
+    let (tp, tc) = sess.total_usage();
+    eprintln!(
+        "{}  模型 {} · 上行 {} · 下行 {} · 合计 {} tokens",
+        paint(tty, "1", "本次累计"),
+        sess.model(),
+        tp,
+        tc,
+        tp + tc
+    );
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
     Ok(DriveOutcome { success, reason, lines, steps, rounds: round })

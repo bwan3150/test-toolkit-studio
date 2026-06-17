@@ -35,6 +35,10 @@ pub struct LlmSession {
     model: String,
     /// 累积的对话请求（genai 以"整段 messages"为请求单位，逐轮 append）
     req: ChatRequest,
+    /// 最近一次 next() 的 token 用量 (上行/输入, 下行/输出)
+    last_usage: (i64, i64),
+    /// 本会话累计 token 用量 (上行总, 下行总)
+    total_usage: (i64, i64),
 }
 
 impl LlmSession {
@@ -58,12 +62,22 @@ impl LlmSession {
             req = req.with_tools(genai_tools);
         }
 
-        Ok(Self { client, model, req })
+        Ok(Self { client, model, req, last_usage: (0, 0), total_usage: (0, 0) })
     }
 
     /// 当前使用的模型名（日志用）
     pub fn model(&self) -> &str {
         &self.model
+    }
+
+    /// 最近一次 next() 的 token 用量 (上行/输入, 下行/输出)
+    pub fn last_usage(&self) -> (i64, i64) {
+        self.last_usage
+    }
+
+    /// 本会话累计 token 用量 (上行总, 下行总)
+    pub fn total_usage(&self) -> (i64, i64) {
+        self.total_usage
     }
 
     /// 追加一条用户消息（纯文本）：投喂用例、页面元素列表、用户答复等
@@ -97,6 +111,13 @@ impl LlmSession {
             .exec_chat(&self.model, self.req.clone(), None)
             .await
             .map_err(|e| TkeError::LlmError(e.to_string()))?;
+
+        // token 用量：累计 + 记录本次（部分 provider 可能不返回，按 0 处理）
+        let pt = res.usage.prompt_tokens.unwrap_or(0) as i64;
+        let ct = res.usage.completion_tokens.unwrap_or(0) as i64;
+        self.last_usage = (pt, ct);
+        self.total_usage.0 += pt;
+        self.total_usage.1 += ct;
 
         // first_text 借用 res，必须在 into_tool_calls 消费前取出
         let text = res.first_text().map(|s| s.to_string());

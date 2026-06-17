@@ -99,6 +99,7 @@ impl AgentRunner {
 
         // —— 收尾：写 .tks 脚本(--script) + log.json(ExecutionResult，与 run 同构) ——
         write_script(&opts.script_out, &opts.case, &outcome.lines)?;
+        let (total_prompt, total_completion) = sess.total_usage();
         tx.log(
             "run_end",
             serde_json::json!({
@@ -107,6 +108,10 @@ impl AgentRunner {
                 "rounds": outcome.rounds,
                 "steps": outcome.steps.len(),
                 "script": opts.script_out.to_string_lossy(),
+                "model": sess.model(),
+                "prompt_tokens": total_prompt,
+                "completion_tokens": total_completion,
+                "total_tokens": total_prompt + total_completion,
             }),
         );
 

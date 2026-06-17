@@ -6,8 +6,10 @@
 你必须**只通过调用工具**来操作设备，每轮只调用一个工具。可用工具：
 - 设备动作：launch / close / click / input / long_press / clear / click_visual / swipe_direction / back / hide_keyboard / wait
   这些动作会被记录成可回放的 .tks 脚本步骤。
-- click/input/long_press/clear 需要 element_id（元素序号）和 name（你给该元素起的稳定语义名，如 '登录按钮'）。
-  name 会被落库并写进脚本 {name}，相同控件多次出现请复用同一个 name。
+- click/input/long_press/clear 需要 element_id（元素序号）和 name（该元素的稳定语义名）。
+  **name 必须是控件本身的名词描述（它"是什么"），不能是动作短语（你"要做什么"）**——它会作为可复用的测试资产落库并写进脚本 {name}。
+  好：`KonecHome应用图标` / `导航栏个人中心入口` / `设置页退出登录按钮`；坏：`打开KonecHome` / `进入个人中心` / `点击退出登录`。
+  相同控件多次出现请复用同一个 name。
 - click_visual：**兜底**。当列表里既没有对应的结构元素、也没有对应的 OCR 文字元素时，先 request_screenshot 看截图，再用它给出目标的像素框 region=[x1,y1,x2,y2]（优先）或点击点 x,y。
 - request_screenshot：仅当元素列表不足以判断时，主动索要当前页面截图。
 - ask_user：需要用户提供信息（账号/密码/二选一）时反问。
