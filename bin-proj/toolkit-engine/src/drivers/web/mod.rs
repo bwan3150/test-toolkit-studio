@@ -176,8 +176,23 @@ impl WebDriver {
 
     /// 采集截图 + 归一化 DOM（写入工作区）
     pub fn capture_ui_state(&self, workarea: &Workarea) -> Result<()> {
+        // 采集前切到最新窗口/标签：点击若打开了新 tab（如查看 PDF），
+        // 否则会一直停在旧 tab 上看不到变化、AI 误以为没反应而反复点。
+        let _ = self.switch_to_latest_window();
         self.capture_screenshot(workarea)?;
         self.capture_dom_xml(workarea)?;
+        Ok(())
+    }
+
+    /// 切换到最新打开的窗口/标签（best-effort）；单标签时为空操作
+    fn switch_to_latest_window(&self) -> Result<()> {
+        let resp = self.get("/window/handles")?;
+        let handles = resp["value"].as_array().cloned().unwrap_or_default();
+        if handles.len() > 1 {
+            if let Some(last) = handles.last().and_then(|h| h.as_str()) {
+                let _ = self.post("/window", serde_json::json!({ "handle": last }));
+            }
+        }
         Ok(())
     }
 
