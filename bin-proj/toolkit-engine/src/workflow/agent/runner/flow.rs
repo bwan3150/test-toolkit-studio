@@ -131,7 +131,8 @@ pub async fn drive(
     };
 
     let mut aborted = false;
-    let mut page_sigs: Vec<u64> = Vec::new(); // 各轮页面签名，检测原地打转
+    let mut page_sigs: Vec<u64> = Vec::new(); // 各轮结构签名，检测原地打转
+    let mut no_progress = 0usize; // 连续多少轮页面无变化（上一步操作没生效）
     let max_llm_calls = ctx.max_rounds * 4 + 10; // 含要图/反问等不前进的轮次
     let mut lines: Vec<String> = Vec::new();
     let mut steps: Vec<StepResult> = Vec::new();
@@ -187,11 +188,25 @@ pub async fn drive(
 
         let list_text = render_element_list(&p.elements, &known);
 
-        // 原地打转检测：当前页面签名在最近若干轮里出现过几次
-        let sig = hash_str(&list_text);
-        let revisits = page_sigs.iter().rev().take(8).filter(|&&h| h == sig).count();
-        page_sigs.push(sig);
-        let stuck = revisits >= 1 && !p.elements.is_empty();
+        // 结构签名：只用真实元素的结构文本（排除易变的 OCR 伪元素如时钟、坐标），
+        // 用于判断"上一步操作有没有让页面变化"以及是否在多页间打转。
+        let struct_sig = hash_str(
+            &p.elements
+                .iter()
+                .filter(|e| e.class_name != "OcrText")
+                .map(|e| e.to_ai_text())
+                .collect::<Vec<_>>()
+                .join("|"),
+        );
+        let unchanged = page_sigs.last() == Some(&struct_sig); // 与上一轮完全相同 → 上一步没生效
+        let revisits = page_sigs.iter().rev().take(8).filter(|&&h| h == struct_sig).count();
+        page_sigs.push(struct_sig);
+        if unchanged {
+            no_progress += 1;
+        } else {
+            no_progress = 0;
+        }
+        let stuck = (no_progress >= 1 || revisits >= 2) && !p.elements.is_empty();
 
         tx.log(
             "page_snapshot",
@@ -207,18 +222,25 @@ pub async fn drive(
             }),
         );
         let hint = if perceive_err.is_some() {
-            "\n（注意：未能采集到页面——若是 web/iOS 且尚未打开目标，请先调用 launch 打开应用/网址）"
-        } else if stuck {
-            "\n（系统提示：你已多次回到这个相同页面、在原地打转。请**停止重复**之前无效的操作——要么 request_screenshot 看截图做视觉判断，要么换一条**完全不同**的路径/元素。）"
+            "\n（注意：未能采集到页面——若是 web/iOS 且尚未打开目标，请先调用 launch 打开应用/网址）".to_string()
+        } else if no_progress >= 1 {
+            format!(
+                "\n（重要：你上一步操作后，页面与操作前**完全相同**——说明该操作没有生效（已连续 {} 次）。\
+                 不要再重复同一个操作！它可能无效，或在新标签页/弹层中打开、或需要换一个元素/换一种方式。\
+                 请改用 request_screenshot 看截图，或换一个**完全不同**的目标/做法。）",
+                no_progress
+            )
+        } else if revisits >= 2 {
+            "\n（系统提示：你回到了之前出现过的页面、在多页间打转。请停止重复无效操作，换一条**完全不同**的路径。）".to_string()
         } else {
-            ""
+            String::new()
         };
         sess.user_page(format!(
             "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
             round, list_text, hint
         ));
-        // 卡得更死（同页第 3 次+）：主动把截图塞给 AI，强制触发多模态读图，别再干等它自己请求
-        if revisits >= 2 && perceive_err.is_none() {
+        // 卡得更死（连续 2 次没变 / 多页打转）：主动把截图塞给 AI，强制触发多模态读图
+        if (no_progress >= 2 || revisits >= 3) && perceive_err.is_none() {
             if let Err(e) = sess.user_with_image("（系统：你似乎卡住了，附上当前页面截图，请据图判断下一步该点哪里）", &p.shot_path) {
                 tx.log("auto_screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
             } else {
@@ -240,10 +262,12 @@ pub async fn drive(
             if perceive_err.is_some() { paint(tty, "31", "  (页面未就绪，待 launch)") } else { String::new() }
         );
         if stuck {
-            let msg = if revisits >= 2 {
-                "  ⚠ 检测到原地打转，已强制附截图让 AI 看图"
+            let msg = if no_progress >= 2 || revisits >= 3 {
+                "  ⚠ 上一步没生效/原地打转，已强制附截图让 AI 看图"
+            } else if no_progress >= 1 {
+                "  ⚠ 上一步操作后页面无变化（可能没生效），已提示 AI 换做法"
             } else {
-                "  ⚠ 检测到原地打转，已提示 AI 换路径 / 看图"
+                "  ⚠ 在多页间打转，已提示 AI 换路径"
             };
             eprintln!("{}", paint(tty, "33", msg));
         }
@@ -412,6 +436,8 @@ pub async fn drive(
                             continue; // 同一页面重试
                         }
                     }
+                    // settle：等页面切换动画/加载稳定再重新采集，避免抓到上一页或半截动画
+                    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
                     break; // 页面已变 → 重新采集
                 }
             }
