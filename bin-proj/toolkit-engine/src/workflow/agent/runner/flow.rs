@@ -19,6 +19,14 @@ fn paint(tty: bool, code: &str, s: &str) -> String {
     }
 }
 
+/// 页面签名哈希（用元素列表文本），检测"原地打转"用
+fn hash_str(s: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
 /// 从模型回复里抽出 JSON 对象（容忍前后多余文字 / ```json 围栏）
 fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
     let start = s.find('{')?;
@@ -123,6 +131,7 @@ pub async fn drive(
     };
 
     let mut aborted = false;
+    let mut page_sigs: Vec<u64> = Vec::new(); // 各轮页面签名，检测原地打转
     let max_llm_calls = ctx.max_rounds * 4 + 10; // 含要图/反问等不前进的轮次
     let mut lines: Vec<String> = Vec::new();
     let mut steps: Vec<StepResult> = Vec::new();
@@ -177,6 +186,13 @@ pub async fn drive(
             known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
 
         let list_text = render_element_list(&p.elements, &known);
+
+        // 原地打转检测：当前页面签名在最近若干轮里出现过几次
+        let sig = hash_str(&list_text);
+        let revisits = page_sigs.iter().rev().take(8).filter(|&&h| h == sig).count();
+        page_sigs.push(sig);
+        let stuck = revisits >= 1 && !p.elements.is_empty();
+
         tx.log(
             "page_snapshot",
             serde_json::json!({
@@ -184,6 +200,7 @@ pub async fn drive(
                 "element_count": p.elements.len(),
                 "known": n_known,
                 "unknown": n_unknown,
+                "revisits": revisits,
                 "elements": list_text.clone(),
                 "xml": p.xml_path.to_string_lossy(),
                 "perceive_error": perceive_err.clone(),
@@ -191,6 +208,8 @@ pub async fn drive(
         );
         let hint = if perceive_err.is_some() {
             "\n（注意：未能采集到页面——若是 web/iOS 且尚未打开目标，请先调用 launch 打开应用/网址）"
+        } else if stuck {
+            "\n（系统提示：你已多次回到这个相同页面、在原地打转。请**停止重复**之前无效的操作——要么 request_screenshot 看截图做视觉判断，要么换一条**完全不同**的路径/元素。）"
         } else {
             ""
         };
@@ -198,6 +217,14 @@ pub async fn drive(
             "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
             round, list_text, hint
         ));
+        // 卡得更死（同页第 3 次+）：主动把截图塞给 AI，强制触发多模态读图，别再干等它自己请求
+        if revisits >= 2 && perceive_err.is_none() {
+            if let Err(e) = sess.user_with_image("（系统：你似乎卡住了，附上当前页面截图，请据图判断下一步该点哪里）", &p.shot_path) {
+                tx.log("auto_screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
+            } else {
+                tx.log("auto_screenshot", serde_json::json!({ "round": round }));
+            }
+        }
         // OCR 贡献提示（回填/新增），让用户看出 OCR 是否在起作用
         let ocr_tag = if p.ocr_filled + p.ocr_added > 0 {
             paint(tty, "35", &format!("  OCR +{}", p.ocr_filled + p.ocr_added))
@@ -212,6 +239,14 @@ pub async fn drive(
             ocr_tag,
             if perceive_err.is_some() { paint(tty, "31", "  (页面未就绪，待 launch)") } else { String::new() }
         );
+        if stuck {
+            let msg = if revisits >= 2 {
+                "  ⚠ 检测到原地打转，已强制附截图让 AI 看图"
+            } else {
+                "  ⚠ 检测到原地打转，已提示 AI 换路径 / 看图"
+            };
+            eprintln!("{}", paint(tty, "33", msg));
+        }
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
         loop {
@@ -392,9 +427,13 @@ pub async fn drive(
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
 
     // approach A：探索结束后，据本轮各新建元素的实际作用统一生成 desc（创建时不写、不想当然）。
-    // 复用同一会话——它已知道每个元素被点击后发生了什么。
+    // 复用同一会话——它已知道每个元素被点击后发生了什么。中断时也生成（元素已被点过，丢了可惜），
+    // 给"退出中"提示；再按一次 Ctrl+C 会命中默认信号、强制退出。
     let mut generated: Vec<(String, String)> = Vec::new();
-    if !aborted && !created.is_empty() {
+    if !created.is_empty() {
+        if aborted {
+            eprintln!("{}", paint(tty, "33", "退出中：正在为新建元素生成描述…（再次 Ctrl+C 强制退出）"));
+        }
         sess.user(format!(
             "探索结束。请根据本次探索中这些元素被操作后的实际效果，为每个元素写一句准确的 desc\
              （描述该元素本身是什么、点了会怎样，与本次测试过程无关）。\
