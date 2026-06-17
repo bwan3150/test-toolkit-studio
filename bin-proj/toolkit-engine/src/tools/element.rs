@@ -216,13 +216,12 @@ pub async fn add_element(
     if !old_channel_valid {
         entry[channel_key] = channel_value.clone();
     }
-    // img/ocr 为通用通道：仅在为 null 时填充，--force 强制覆盖
+    // img/ocr 为通用通道：仅在为 null 时填充，--force 强制覆盖。
+    // 注意：不删 img_abs——文件名按元素名固定，重复 add 同名元素会把首次存好的模板误删。
+    // 已有元素时本次裁的图覆盖了同名文件（内容是当前页，无害），不更新 entry 即可。
     let img_written = force || entry["img"].is_null();
     if img_written {
         entry["img"] = serde_json::json!(img_file);
-    } else {
-        // 没落库则删掉刚 crop 的图，避免遗留孤儿文件
-        let _ = std::fs::remove_file(&img_abs);
     }
     let ocr_written = (force || entry["ocr"].is_null()) && ocr_text.is_some();
     if ocr_written {
@@ -295,49 +294,10 @@ pub async fn add_element_target(
 ) -> Result<serde_json::Value> {
     let platform = Platform::from_device(Some(&device_id));
     let workarea = Workarea::for_device(Some(&device_id))?;
-
-    // img 通道：按 bounds 从当前截图 crop 模板
     let lib_dir = lib_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    std::fs::create_dir_all(lib_dir.join("img")).map_err(TkeError::IoError)?;
 
-    let screenshot = image::open(workarea.screenshot_path())
-        .map_err(|e| TkeError::DeviceError(format!("读取工作区截图失败: {}", e)))?;
-    let (sw, sh) = (screenshot.width() as i32, screenshot.height() as i32);
-    // 归一化 bounds：纠正反向、保证最小尺寸——视觉点击/小图标(OCR bbox 仅几像素、
-    // 或 click_visual 给的退化 region)否则会裁成 1px 空白图，等于没存。
-    const MIN: i32 = 24;
-    let (mut x1, mut y1) = (bounds.x1.min(bounds.x2), bounds.y1.min(bounds.y2));
-    let (mut x2, mut y2) = (bounds.x1.max(bounds.x2), bounds.y1.max(bounds.y2));
-    if x2 - x1 < MIN {
-        let c = (x1 + x2) / 2;
-        x1 = c - MIN / 2;
-        x2 = c + MIN / 2;
-    }
-    if y2 - y1 < MIN {
-        let c = (y1 + y2) / 2;
-        y1 = c - MIN / 2;
-        y2 = c + MIN / 2;
-    }
-    let (cx1, cy1) = (x1.clamp(0, sw - 1), y1.clamp(0, sh - 1));
-    let (cx2, cy2) = (x2.clamp(cx1 + 1, sw), y2.clamp(cy1 + 1, sh));
-    let crop = screenshot.crop_imm(cx1 as u32, cy1 as u32, (cx2 - cx1) as u32, (cy2 - cy1) as u32);
-    let img_file = format!("img/{}.png", safe_filename(name));
-    let img_abs = lib_dir.join(&img_file);
-    crop.save(&img_abs)
-        .map_err(|e| TkeError::DeviceError(format!("保存元素模板图失败: {}", e)))?;
-
-    // ocr 通道
-    let ocr_text = match ocr {
-        OcrChannel::Text(t) => non_empty(&Some(t)),
-        OcrChannel::FromCrop => ocr_via_subprocess(&img_abs).filter(|t| t.chars().count() <= 60),
-        OcrChannel::None => Option::None,
-    };
-
-    // 结构通道（None=不写任何平台结构）
-    let channel = structure.map(|el| build_channel(platform, el));
-
-    // 读取/合并/写入元素库
-    // 空文件/空白（如库被清空）按空库处理，不报错——否则每次落库都失败
+    // 先读库——决定是否需要写 img/ocr，从而决定要不要裁剪。
+    // 空文件/空白（如库被清空）按空库处理，不报错——否则每次落库都失败。
     let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
         Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
             .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
@@ -347,6 +307,54 @@ pub async fn add_element_target(
         lib["elements"] = serde_json::json!({});
     }
     let existed = lib["elements"][name].is_object();
+    // img/ocr 仅在为 null 时填充（--force 覆盖）；不需写就**根本不裁剪、不碰文件**，
+    // 避免重复点击同名元素时把首次存好的模板图误删（同名覆盖+清理孤儿那个老 bug）。
+    let need_img = force || lib["elements"][name]["img"].is_null();
+
+    let img_file = format!("img/{}.png", safe_filename(name));
+    let img_abs = lib_dir.join(&img_file);
+
+    // 仅在需要写 img 时裁剪并保存
+    let mut img_px = serde_json::Value::Null;
+    if need_img {
+        std::fs::create_dir_all(lib_dir.join("img")).map_err(TkeError::IoError)?;
+        let screenshot = image::open(workarea.screenshot_path())
+            .map_err(|e| TkeError::DeviceError(format!("读取工作区截图失败: {}", e)))?;
+        let (sw, sh) = (screenshot.width() as i32, screenshot.height() as i32);
+        // 归一化 bounds：纠正反向、保证最小尺寸——视觉点击/小图标(OCR bbox 仅几像素、
+        // 或 click_visual 给的退化 region)否则会裁成 1px 空白图。
+        const MIN: i32 = 24;
+        let (mut x1, mut y1) = (bounds.x1.min(bounds.x2), bounds.y1.min(bounds.y2));
+        let (mut x2, mut y2) = (bounds.x1.max(bounds.x2), bounds.y1.max(bounds.y2));
+        if x2 - x1 < MIN {
+            let c = (x1 + x2) / 2;
+            x1 = c - MIN / 2;
+            x2 = c + MIN / 2;
+        }
+        if y2 - y1 < MIN {
+            let c = (y1 + y2) / 2;
+            y1 = c - MIN / 2;
+            y2 = c + MIN / 2;
+        }
+        let (cx1, cy1) = (x1.clamp(0, sw - 1), y1.clamp(0, sh - 1));
+        let (cx2, cy2) = (x2.clamp(cx1 + 1, sw), y2.clamp(cy1 + 1, sh));
+        let crop = screenshot.crop_imm(cx1 as u32, cy1 as u32, (cx2 - cx1) as u32, (cy2 - cy1) as u32);
+        crop.save(&img_abs)
+            .map_err(|e| TkeError::DeviceError(format!("保存元素模板图失败: {}", e)))?;
+        img_px = serde_json::json!([cx2 - cx1, cy2 - cy1]);
+    }
+
+    // ocr 通道（FromCrop 兜底仅在本次裁了图时可用）
+    let ocr_text = match ocr {
+        OcrChannel::Text(t) => non_empty(&Some(t)),
+        OcrChannel::FromCrop if need_img => ocr_via_subprocess(&img_abs).filter(|t| t.chars().count() <= 60),
+        _ => Option::None,
+    };
+
+    // 结构通道（None=不写任何平台结构）
+    let channel = structure.map(|el| build_channel(platform, el));
+
+    // 合并写入元素库
     if !existed {
         lib["elements"][name] = serde_json::json!({
             "desc": null, "android": null, "ios": null, "web": null, "img": null, "ocr": null,
@@ -369,11 +377,8 @@ pub async fn add_element_target(
             entry[*channel_key] = channel_value.clone();
         }
     }
-    let img_written = force || entry["img"].is_null();
-    if img_written {
+    if need_img {
         entry["img"] = serde_json::json!(img_file);
-    } else {
-        let _ = std::fs::remove_file(&img_abs);
     }
     let ocr_written = (force || entry["ocr"].is_null()) && ocr_text.is_some();
     if ocr_written {
@@ -393,8 +398,8 @@ pub async fn add_element_target(
         "element": name,
         "tier": tier,
         "channel": channel.as_ref().map(|(k, _)| *k),
-        "img": if img_written { serde_json::json!(img_file) } else { serde_json::Value::Null },
-        "img_px": [cx2 - cx1, cy2 - cy1],
+        "img": if need_img { serde_json::json!(img_file) } else { serde_json::Value::Null },
+        "img_px": img_px,
         "ocr": ocr_text,
         "bounds": bounds,
         "updated": existed,
