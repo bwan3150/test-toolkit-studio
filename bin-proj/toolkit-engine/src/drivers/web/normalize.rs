@@ -30,15 +30,22 @@ const walk = (el) => {
         ['INPUT','TEXTAREA'].includes(child.tagName) ||
         child.onclick != null || style.cursor === 'pointer' ||
         child.getAttribute('role') === 'button';
-      out.push({
-        tag: child.tagName.toLowerCase(),
-        id: child.id || '',
-        aria: child.getAttribute('aria-label') || '',
-        text: ownText,
-        clickable: clickable,
-        x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
-        x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
-      });
+      // 只收"有意义"的元素：可点击 / 有自身文字 / aria 标注 / 输入框；
+      // 纯包裹层(无文字、不可点的 div/svg/use 等)不入列表，避免噪音淹没 AI。
+      const aria = child.getAttribute('aria-label') || '';
+      const meaningful = clickable || ownText || aria ||
+        child.tagName === 'INPUT' || child.tagName === 'TEXTAREA';
+      if (meaningful) {
+        out.push({
+          tag: child.tagName.toLowerCase(),
+          id: child.id || '',
+          aria: aria,
+          text: ownText,
+          clickable: clickable,
+          x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
+          x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
+        });
+      }
     }
     walk(child);
   }
