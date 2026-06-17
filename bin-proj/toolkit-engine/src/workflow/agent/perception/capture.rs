@@ -14,6 +14,10 @@ pub struct Perceived {
     pub shot_path: PathBuf,
     /// 工作区当前 UI XML 路径
     pub xml_path: PathBuf,
+    /// OCR 给无标签元素回填文字的个数
+    pub ocr_filled: usize,
+    /// OCR 新增伪元素的个数（XML 漏掉的文字）
+    pub ocr_added: usize,
 }
 
 /// 采集一轮：刷新（截图 + XML）→ 解析元素 →（可选）OCR 增强
@@ -31,11 +35,15 @@ pub async fn capture(
     let shot_path = workarea.screenshot_path();
     let mut elements = fetcher.fetch_elements_from_file(&xml_path)?;
 
+    let (mut ocr_filled, mut ocr_added) = (0, 0);
     if let Some(src) = ocr {
         if let Ok(bytes) = std::fs::read(&shot_path) {
-            let _ = enrich_with_ocr(&mut elements, &bytes, src).await;
+            if let Ok((f, a)) = enrich_with_ocr(&mut elements, &bytes, src).await {
+                ocr_filled = f;
+                ocr_added = a;
+            }
         }
     }
 
-    Ok(Perceived { elements, shot_path, xml_path })
+    Ok(Perceived { elements, shot_path, xml_path, ocr_filled, ocr_added })
 }

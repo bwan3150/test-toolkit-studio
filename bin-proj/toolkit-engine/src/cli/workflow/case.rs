@@ -111,17 +111,9 @@ pub async fn handle(
     .await
     .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
-    // 人类可读摘要（状态：已终止 / 达成 / 未达成）
-    let status = if result.aborted {
-        "■ 已终止"
-    } else if result.success {
-        "✓ 探索结束"
-    } else {
-        "✗ 探索结束"
-    };
-    println!("{}（{} 轮）：{}", status, result.rounds, result.finish_reason);
-    println!("  脚本: {}", result.script.display());
-    println!("  对话日志: {}", result.conversation.display());
+    // 状态/依据/模型/token/元素变更已在探索结束的「结果」框中统一展示，这里只补产物路径
+    eprintln!("  脚本   {}", result.script.display());
+    eprintln!("  日志   {}", result.conversation.display());
 
     std::process::exit(if result.success { 0 } else { 1 });
 }

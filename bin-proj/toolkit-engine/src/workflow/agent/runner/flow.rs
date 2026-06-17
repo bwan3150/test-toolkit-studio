@@ -19,6 +19,17 @@ fn paint(tty: bool, code: &str, s: &str) -> String {
     }
 }
 
+/// 给 .tks 指令行着色：命令(青) + 元素/参数(黄)。`命令 [{元素}]` / `命令 [参数]`
+fn paint_line(tty: bool, line: &str) -> String {
+    match line.find(" [") {
+        Some(i) => {
+            let (verb, rest) = line.split_at(i);
+            format!("{} {}", paint(tty, "36", verb), paint(tty, "33", rest.trim_start()))
+        }
+        None => paint(tty, "36", line),
+    }
+}
+
 /// 取首个非空行并按字符数截断，避免模型长篇刷屏
 fn brief(s: &str, max: usize) -> String {
     let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
@@ -92,7 +103,7 @@ pub async fn drive(
             let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
             let mut i = 0usize;
             while !stop.load(Ordering::Relaxed) {
-                eprint!("\r{} 正在启动探索（采集首屏…）", frames[i % frames.len()]);
+                eprint!("\r{} 正在启动…", frames[i % frames.len()]);
                 let _ = std::io::stderr().flush();
                 i += 1;
                 tokio::time::sleep(std::time::Duration::from_millis(120)).await;
@@ -135,6 +146,8 @@ pub async fn drive(
                         elements: Vec::new(),
                         shot_path: ctx.workarea.screenshot_path(),
                         xml_path: ctx.workarea.ui_tree_path(),
+                        ocr_filled: 0,
+                        ocr_added: 0,
                     },
                     Some(e.to_string()),
                 )
@@ -177,13 +190,19 @@ pub async fn drive(
             "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
             round, list_text, hint
         ));
+        // OCR 贡献提示（回填/新增），让用户看出 OCR 是否在起作用
+        let ocr_tag = if p.ocr_filled + p.ocr_added > 0 {
+            paint(tty, "35", &format!("  OCR +{}", p.ocr_filled + p.ocr_added))
+        } else {
+            String::new()
+        };
         eprintln!(
-            "{}  {} 个元素（{} 已知 / {} 未知）{}",
+            "{}  {} · {}{}{}",
             paint(tty, "1", &format!("第 {} 轮", round)),
-            p.elements.len(),
-            n_known,
-            n_unknown,
-            if perceive_err.is_some() { "  (页面未就绪，待 launch)" } else { "" }
+            paint(tty, "32", &format!("{} 个已知元素", n_known)),
+            paint(tty, "2", &format!("{} 个未知元素", n_unknown)),
+            ocr_tag,
+            if perceive_err.is_some() { paint(tty, "31", "  (页面未就绪，待 launch)") } else { String::new() }
         );
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
@@ -257,11 +276,7 @@ pub async fn drive(
 
             match action {
                 AgentAction::Finish { success, reason } => {
-                    eprintln!(
-                        "{}  {}",
-                        paint(tty, "1", "结束"),
-                        if success { paint(tty, "32", "达成") } else { paint(tty, "31", "未达成") },
-                    );
+                    // 结果在末尾统一 section 展示，这里只记录与收尾
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
                     finish = Some((success, reason));
                     break 'outer;
@@ -302,7 +317,7 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace, saved)) => {
-                            eprintln!("  {}  {}", line, paint(tty, "32", "✓"));
+                            eprintln!("  {} {}", paint(tty, "32", "✓"), paint_line(tty, &line));
                             // 记录元素库变更（去重），供结束时人工审核
                             if let Some(s) = saved {
                                 if s.created {
@@ -356,34 +371,41 @@ pub async fn drive(
         spin_stop.store(true, Ordering::Relaxed);
         let _ = h.await;
     }
-    if aborted {
-        eprintln!("{}", paint(tty, "31", "已终止（用户中断）"));
-    }
-
-    // 元素库变更审核：本轮新增/更新了哪些元素，提示人工二次审核
-    if created.is_empty() && updated.is_empty() {
-        eprintln!("{}  无新增/更新", paint(tty, "1", "元素库变更"));
-    } else {
-        eprintln!(
-            "{}  新增 {}（{}）· 更新描述 {}（{}）  —— 请人工二次审核",
-            paint(tty, "1", "元素库变更"),
-            created.len(),
-            if created.is_empty() { "-".into() } else { created.join("、") },
-            updated.len(),
-            if updated.is_empty() { "-".into() } else { updated.join("、") },
-        );
-    }
-
-    let (tp, tc) = sess.total_usage();
-    eprintln!(
-        "{}  模型 {} · 上行 {} · 下行 {} · 合计 {} tokens",
-        paint(tty, "1", "本次累计"),
-        sess.model(),
-        tp,
-        tc,
-        tp + tc
-    );
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
+    let (tp, tc) = sess.total_usage();
+
+    // —— 统一结果 section（带框）——
+    let status = if aborted {
+        paint(tty, "33", "■ 已终止")
+    } else if success {
+        paint(tty, "32", "✓ 达成")
+    } else {
+        paint(tty, "31", "✗ 未达成")
+    };
+    eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
+    eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, round);
+    eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
+    eprintln!("  {}   {}", paint(tty, "2", "模型"), sess.model());
+    eprintln!(
+        "  {}  {}",
+        paint(tty, "2", "Token"),
+        paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", tp, tc, tp + tc))
+    );
+    eprintln!(
+        "  {}   {}",
+        paint(tty, "2", "新增"),
+        if created.is_empty() { paint(tty, "2", "（无）") } else { paint(tty, "32", &created.join("、")) }
+    );
+    eprintln!(
+        "  {}   {}",
+        paint(tty, "2", "更新"),
+        if updated.is_empty() { paint(tty, "2", "（无）") } else { paint(tty, "33", &updated.join("、")) }
+    );
+    if !created.is_empty() || !updated.is_empty() {
+        eprintln!("  {}", paint(tty, "2", "（元素库已变更，请人工二次审核）"));
+    }
+    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+
     Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted })
 }
