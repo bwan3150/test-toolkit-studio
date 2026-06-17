@@ -115,7 +115,7 @@ pub async fn drive(
         } else {
             ""
         };
-        sess.user(format!(
+        sess.user_page(format!(
             "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
             round, list_text, hint
         ));

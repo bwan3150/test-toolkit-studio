@@ -39,7 +39,12 @@ pub struct LlmSession {
     last_usage: (i64, i64),
     /// 本会话累计 token 用量 (上行总, 下行总)
     total_usage: (i64, i64),
+    /// 上一条"页面元素列表"消息在 messages 中的下标（用于进入新一轮时压缩它）
+    last_page_idx: Option<usize>,
 }
+
+/// 历史页面元素被压缩后的占位文本（只在 LLM 上下文里精简，conversation.json 不受影响）
+const PAGE_ELIDED: &str = "【上一轮页面元素列表已省略——请依据你已执行的步骤与当前页面判断；完整页面记录见 conversation.json】";
 
 impl LlmSession {
     /// 从 [ai] 配置构建会话：注入 system 提示词与工具集
@@ -62,7 +67,7 @@ impl LlmSession {
             req = req.with_tools(genai_tools);
         }
 
-        Ok(Self { client, model, req, last_usage: (0, 0), total_usage: (0, 0) })
+        Ok(Self { client, model, req, last_usage: (0, 0), total_usage: (0, 0), last_page_idx: None })
     }
 
     /// 当前使用的模型名（日志用）
@@ -80,10 +85,23 @@ impl LlmSession {
         self.total_usage
     }
 
-    /// 追加一条用户消息（纯文本）：投喂用例、页面元素列表、用户答复等
+    /// 追加一条用户消息（纯文本）：投喂用例、用户答复、提示等
     pub fn user(&mut self, text: impl Into<String>) {
         let text: String = text.into();
         self.req = self.req.clone().append_message(ChatMessage::user(text));
+    }
+
+    /// 追加一条"页面元素列表"消息，并把上一轮的同类消息压缩为占位。
+    /// 这样 LLM 上下文只保留**当前轮**的完整页面元素，历史只剩 AI 的思考/决策与执行步骤，
+    /// 避免上下文随轮数暴涨、也避免历史页面干扰判断。conversation.json 仍完整记录（独立于此）。
+    pub fn user_page(&mut self, text: impl Into<String>) {
+        if let Some(i) = self.last_page_idx {
+            if let Some(msg) = self.req.messages.get_mut(i) {
+                *msg = ChatMessage::user(PAGE_ELIDED);
+            }
+        }
+        self.req = self.req.clone().append_message(ChatMessage::user(text.into()));
+        self.last_page_idx = Some(self.req.messages.len() - 1);
     }
 
     /// 追加一条用户消息 + 图片：用于"AI 主动要图 → 系统真实传图"
