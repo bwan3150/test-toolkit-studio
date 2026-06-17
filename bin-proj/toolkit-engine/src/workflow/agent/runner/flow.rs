@@ -391,6 +391,7 @@ pub async fn drive(
     } else {
         paint(tty, "31", "✗ 未达成")
     };
+    // —— section 1：结果 ——
     eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
     eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, round);
     eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
@@ -400,6 +401,10 @@ pub async fn drive(
         paint(tty, "2", "Token"),
         paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", tp, tc, tp + tc))
     );
+    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+
+    // —— section 2：元素库更新 ——
+    eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
     eprintln!(
         "  {}   {}",
         paint(tty, "2", "新增"),
@@ -414,7 +419,7 @@ pub async fn drive(
         }
     }
     if !created.is_empty() || !updated.is_empty() {
-        eprintln!("  {}", paint(tty, "2", "（元素库已变更，请人工二次审核）"));
+        eprintln!("  {}", paint(tty, "2", "（已变更，请人工二次审核）"));
     }
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
