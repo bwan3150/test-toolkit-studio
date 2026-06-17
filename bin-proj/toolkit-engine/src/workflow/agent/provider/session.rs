@@ -43,8 +43,9 @@ pub struct LlmSession {
     last_page_idx: Option<usize>,
 }
 
-/// 历史页面元素被压缩后的占位文本（只在 LLM 上下文里精简，conversation.json 不受影响）
-const PAGE_ELIDED: &str = "【上一轮页面元素列表已省略——请依据你已执行的步骤与当前页面判断；完整页面记录见 conversation.json】";
+/// 历史页面元素被压缩后的占位文本（塞进 LLM 上下文，故只写对 AI 有用的话；
+/// AI 访问不了本地文件，不提 conversation.json）
+const PAGE_ELIDED: &str = "【上一轮页面元素已省略，请依据你已执行的步骤与当前页面判断】";
 
 impl LlmSession {
     /// 从 [ai] 配置构建会话：注入 system 提示词与工具集
