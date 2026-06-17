@@ -32,4 +32,6 @@ pub struct AgentResult {
     pub script: PathBuf,
     pub conversation: PathBuf,
     pub finish_reason: String,
+    /// 是否被用户中断（Ctrl+C）
+    pub aborted: bool,
 }

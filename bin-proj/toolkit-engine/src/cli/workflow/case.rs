@@ -111,13 +111,15 @@ pub async fn handle(
     .await
     .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
-    // 人类可读摘要
-    println!(
-        "{} 探索结束（{} 轮）：{}",
-        if result.success { "✓" } else { "✗" },
-        result.rounds,
-        result.finish_reason
-    );
+    // 人类可读摘要（状态：已终止 / 达成 / 未达成）
+    let status = if result.aborted {
+        "■ 已终止"
+    } else if result.success {
+        "✓ 探索结束"
+    } else {
+        "✗ 探索结束"
+    };
+    println!("{}（{} 轮）：{}", status, result.rounds, result.finish_reason);
     println!("  脚本: {}", result.script.display());
     println!("  对话日志: {}", result.conversation.display());
 

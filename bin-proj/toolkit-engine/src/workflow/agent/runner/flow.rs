@@ -2,8 +2,10 @@
 // 产物经 RunArtifacts 统一保存：每个执行步存 screenshots/step_NNN + page/step_NNN，
 // 与 tke run 同构；conversation.jsonl（AI 原始对话）由 transcript 写在同一运行目录。
 
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::engines::ocr::OcrSource;
 use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
@@ -59,6 +61,8 @@ pub struct DriveOutcome {
     pub created: Vec<String>,
     /// 本轮更新了描述的元素名（人工审核用）
     pub updated: Vec<String>,
+    /// 是否被用户中断（Ctrl+C）
+    pub aborted: bool,
 }
 
 /// 驱动探索循环
@@ -68,6 +72,39 @@ pub async fn drive(
     ctx: &DriveCtx<'_>,
 ) -> Result<DriveOutcome> {
     let tty = std::io::stderr().is_terminal();
+
+    // 用户中断（Ctrl+C）：监听到则在下一个决策点优雅停止、照常出总结
+    let abort = Arc::new(AtomicBool::new(false));
+    {
+        let a = abort.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                a.store(true, Ordering::Relaxed);
+            }
+        });
+    }
+
+    // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY）
+    let spin_stop = Arc::new(AtomicBool::new(false));
+    let mut spin_handle = if tty {
+        let stop = spin_stop.clone();
+        Some(tokio::spawn(async move {
+            let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+            let mut i = 0usize;
+            while !stop.load(Ordering::Relaxed) {
+                eprint!("\r{} 正在启动探索（采集首屏…）", frames[i % frames.len()]);
+                let _ = std::io::stderr().flush();
+                i += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            }
+            eprint!("\r\x1b[K"); // 清除 spinner 行
+            let _ = std::io::stderr().flush();
+        }))
+    } else {
+        None
+    };
+
+    let mut aborted = false;
     let max_llm_calls = ctx.max_rounds * 4 + 10; // 含要图/反问等不前进的轮次
     let mut lines: Vec<String> = Vec::new();
     let mut steps: Vec<StepResult> = Vec::new();
@@ -79,6 +116,11 @@ pub async fn drive(
     let mut updated: Vec<String> = Vec::new();
 
     'outer: while round < ctx.max_rounds {
+        if abort.load(Ordering::Relaxed) {
+            aborted = true;
+            finish = Some((false, "已终止（用户中断 Ctrl+C）".to_string()));
+            break 'outer;
+        }
         round += 1;
 
         // 1) 采集页面
@@ -98,6 +140,12 @@ pub async fn drive(
                 )
             }
         };
+        // 首屏采集完毕，停掉加载动画
+        if let Some(h) = spin_handle.take() {
+            spin_stop.store(true, Ordering::Relaxed);
+            let _ = h.await;
+        }
+
         // 对照元素库：命中(结构/ocr)的标"已知"，让 AI 复用库名、不重复造
         let platform = Platform::from_device(Some(ctx.device));
         let known = match_known(&p.elements, platform, ctx.element_path);
@@ -140,6 +188,11 @@ pub async fn drive(
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
         loop {
+            if abort.load(Ordering::Relaxed) {
+                aborted = true;
+                finish = Some((false, "已终止（用户中断 Ctrl+C）".to_string()));
+                break 'outer;
+            }
             if llm_calls >= max_llm_calls {
                 finish = Some((false, format!("达到 LLM 调用上限({})，强制结束", max_llm_calls)));
                 break 'outer;
@@ -298,6 +351,15 @@ pub async fn drive(
         }
     }
 
+    // 收尾：确保加载动画已停（如中断发生在首屏采集之前）
+    if let Some(h) = spin_handle.take() {
+        spin_stop.store(true, Ordering::Relaxed);
+        let _ = h.await;
+    }
+    if aborted {
+        eprintln!("{}", paint(tty, "31", "已终止（用户中断）"));
+    }
+
     // 元素库变更审核：本轮新增/更新了哪些元素，提示人工二次审核
     if created.is_empty() && updated.is_empty() {
         eprintln!("{}  无新增/更新", paint(tty, "1", "元素库变更"));
@@ -323,5 +385,5 @@ pub async fn drive(
     );
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted })
 }

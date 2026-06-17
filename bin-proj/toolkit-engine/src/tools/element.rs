@@ -180,10 +180,11 @@ pub async fn add_element(
     }
 
     // 6. 读取/新建元素库，合并写入（preserve_order 保持文件原有元素顺序）
+    // 空文件/空白（如库被清空）按空库处理，不报错——否则每次落库都失败
     let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
-        Ok(content) => serde_json::from_str(&content)
+        Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
             .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
-        Err(_) => serde_json::json!({ "elements": {} }),
+        _ => serde_json::json!({ "elements": {} }),
     };
     if !lib["elements"].is_object() {
         lib["elements"] = serde_json::json!({});
@@ -306,10 +307,11 @@ pub async fn add_element_target(
     let channel = structure.map(|el| build_channel(platform, el));
 
     // 读取/合并/写入元素库
+    // 空文件/空白（如库被清空）按空库处理，不报错——否则每次落库都失败
     let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
-        Ok(content) => serde_json::from_str(&content)
+        Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
             .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
-        Err(_) => serde_json::json!({ "elements": {} }),
+        _ => serde_json::json!({ "elements": {} }),
     };
     if !lib["elements"].is_object() {
         lib["elements"] = serde_json::json!({});

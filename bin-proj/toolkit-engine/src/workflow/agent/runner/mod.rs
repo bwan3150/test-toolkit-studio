@@ -141,6 +141,7 @@ impl AgentRunner {
             script: opts.script_out.clone(),
             conversation: conversation_json,
             finish_reason: outcome.reason,
+            aborted: outcome.aborted,
         })
     }
 }
