@@ -31,6 +31,7 @@ pub async fn apply(
     element_path: &Path,
     action: &AgentAction,
     elements: &[UIElement],
+    known: &[Option<String>],
     shot_path: &Path,
     tx: &mut Transcript,
     round: usize,
@@ -39,44 +40,48 @@ pub async fn apply(
         AgentAction::Click { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
+            let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
-            Ok((line(TksCommand::Click, vec![el_param(name)]), detail, el_trace(c, el, name)))
+            Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, el_trace(c, el, &name)))
         }
         AgentAction::Input { element_id, name, desc, text } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
+            let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Input { text: text.clone(), point: Some(c) },
             )
             .await?;
-            Ok((line(TksCommand::Input, vec![el_param(name), TksParam::Text(text.clone())]), detail, el_trace(c, el, name)))
+            Ok((line(TksCommand::Input, vec![el_param(&name), TksParam::Text(text.clone())]), detail, el_trace(c, el, &name)))
         }
         AgentAction::LongPress { element_id, name, desc, duration_ms } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
+            let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Press { point: c, duration_ms: *duration_ms as u32 },
             )
             .await?;
-            Ok((line(TksCommand::Press, vec![el_param(name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, name)))
+            Ok((line(TksCommand::Press, vec![el_param(&name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, &name)))
         }
         AgentAction::Clear { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
+            let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
             let _ = exec(device, ControlAction::Click { point: c }).await?;
             let detail = exec(device, ControlAction::Clear).await?;
-            Ok((line(TksCommand::Clear, vec![el_param(name)]), detail, el_trace(c, el, name)))
+            Ok((line(TksCommand::Clear, vec![el_param(&name)]), detail, el_trace(c, el, &name)))
         }
         AgentAction::ClickVisual { region, x, y, name, desc } => {
             // 看图后视觉点击：region 优先；否则 (x,y) 周围取屏宽 15% 方块
@@ -178,6 +183,12 @@ pub async fn apply(
             Err(TkeError::ScriptExecuteError("控制流动作不应进入执行器".to_string()))
         }
     }
+}
+
+/// 已知元素强制复用库名：命中库(known[id])则用库名，否则用 AI 起的名。
+/// 避免 AI 每次给新名导致元素库重复膨胀。
+fn effective_name(known: &[Option<String>], id: usize, ai_name: &str) -> String {
+    known.get(id).and_then(|o| o.clone()).unwrap_or_else(|| ai_name.to_string())
 }
 
 /// 判断 AI 选中元素走哪级落库：

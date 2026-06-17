@@ -3,7 +3,9 @@
 //   render   元素列表 → 喂给 AI 的文本
 
 pub mod capture;
+pub mod known;
 pub mod render;
 
 pub use capture::{capture, Perceived};
+pub use known::match_known;
 pub use render::render_element_list;

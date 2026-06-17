@@ -28,9 +28,11 @@ fn brief(s: &str, max: usize) -> String {
     }
 }
 
+use crate::Platform;
+
 use super::super::execution;
 use super::super::interaction::read_user_line;
-use super::super::perception::{capture, render_element_list, Perceived};
+use super::super::perception::{capture, match_known, render_element_list, Perceived};
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
 
@@ -89,12 +91,20 @@ pub async fn drive(
                 )
             }
         };
-        let list_text = render_element_list(&p.elements);
+        // 对照元素库：命中(结构/ocr)的标"已知"，让 AI 复用库名、不重复造
+        let platform = Platform::from_device(Some(ctx.device));
+        let known = match_known(&p.elements, platform, ctx.element_path);
+        let n_known = known.iter().filter(|k| k.is_some()).count();
+        let n_unknown = p.elements.len() - n_known;
+
+        let list_text = render_element_list(&p.elements, &known);
         tx.log(
             "page_snapshot",
             serde_json::json!({
                 "round": round,
                 "element_count": p.elements.len(),
+                "known": n_known,
+                "unknown": n_unknown,
                 "elements": list_text.clone(),
                 "xml": p.xml_path.to_string_lossy(),
                 "perceive_error": perceive_err.clone(),
@@ -106,13 +116,15 @@ pub async fn drive(
             ""
         };
         sess.user(format!(
-            "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n请调用一个工具决定下一步。",
+            "【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
             round, list_text, hint
         ));
         eprintln!(
-            "{}  {} 个元素{}",
+            "{}  {} 个元素（{} 已知 / {} 未知）{}",
             paint(tty, "1", &format!("第 {} 轮", round)),
             p.elements.len(),
+            n_known,
+            n_unknown,
             if perceive_err.is_some() { "  (页面未就绪，待 launch)" } else { "" }
         );
 
@@ -141,10 +153,8 @@ pub async fn drive(
             let (thinking, calls) = match reply {
                 LlmReply::Text(t) => {
                     let b = brief(&t, 200);
-                    if !b.is_empty() {
-                        eprintln!("  {}  {}", paint(tty, "2", "AI"), b);
-                    }
-                    eprintln!("  {}  {}", paint(tty, "2", "（未调用工具，已提示其用工具或 finish）"), toks);
+                    let say = if b.is_empty() { "（未调用工具，已提示其用工具或 finish）".to_string() } else { b };
+                    eprintln!("  {} {}  {}", paint(tty, "2", "AI"), toks, say);
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
                     sess.user("请只通过调用工具来操作；若已完成或无法继续，请调用 finish。");
                     continue;
@@ -171,27 +181,27 @@ pub async fn drive(
                 serde_json::json!({ "round": round, "tool": primary.name.clone(), "arguments": primary.arguments.clone() }),
             );
 
-            // 展示 AI 显式思考文字（模型在调工具时同时给的）；缺省时各分支用动作意图说明补
-            let thought = thinking.as_deref().map(|s| brief(s, 200)).filter(|s| !s.is_empty());
-            if let Some(s) = &thought {
-                eprintln!("  {}  {}", paint(tty, "2", "AI"), s);
-            }
+            // 每次 LLM 调用打印一行 AI（带本次 token）：思考优先，否则动作意图，否则工具名
+            let say = thinking
+                .as_deref()
+                .map(|s| brief(s, 200))
+                .filter(|s| !s.is_empty())
+                .or_else(|| action.intent().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
+                .unwrap_or_else(|| format!("调用 {}", primary.name));
+            eprintln!("  {} {}  {}", paint(tty, "2", "AI"), toks, say);
 
             match action {
                 AgentAction::Finish { success, reason } => {
                     eprintln!(
-                        "{}  {}  {}  {}",
+                        "{}  {}",
                         paint(tty, "1", "结束"),
                         if success { paint(tty, "32", "达成") } else { paint(tty, "31", "未达成") },
-                        reason,
-                        toks
                     );
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
                     finish = Some((success, reason));
                     break 'outer;
                 }
                 AgentAction::RequestScreenshot { reason } => {
-                    eprintln!("  {}  {}  {}", paint(tty, "2", "请求截图"), reason, toks);
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
                     match sess.user_with_image("当前页面截图：", &p.shot_path) {
@@ -214,20 +224,12 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
-                    // 模型没给显式思考时，用动作的意图说明补上"AI 想干啥"
-                    if thought.is_none() {
-                        if let Some(s) = device_action.intent() {
-                            let b = brief(s, 200);
-                            if !b.is_empty() {
-                                eprintln!("  {}  {}", paint(tty, "2", "AI"), b);
-                            }
-                        }
-                    }
                     match execution::apply(
                         ctx.device,
                         ctx.element_path,
                         &device_action,
                         &p.elements,
+                        &known,
                         &p.shot_path,
                         tx,
                         round,
@@ -235,7 +237,7 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace)) => {
-                            eprintln!("  {}  {}  {}", line, paint(tty, "32", "✓"), toks);
+                            eprintln!("  {}  {}", line, paint(tty, "32", "✓"));
                             // 存本步产物（screenshots/step_NNN + page/step_NNN），与 run 同构
                             // trace 带点击点+元素 bounds → 截图标注红框+蓝点，可核对 AI 实际点到哪
                             let step_index = steps.len();
@@ -259,7 +261,7 @@ pub async fn drive(
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
-                            eprintln!("  {} {}  {}", paint(tty, "31", "✗ 执行失败:"), e, toks);
+                            eprintln!("  {} {}", paint(tty, "31", "✗ 执行失败:"), e);
                             tx.log("exec_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                             sess.tool_result(primary.call_id.as_str(), format!("执行失败: {}", e));
                             continue; // 同一页面重试
