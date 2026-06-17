@@ -228,16 +228,16 @@ pub async fn drive(
                 }
             };
 
-            // 本次 LLM 调用的 token 用量（上行/输入、下行/输出），逐次展示
+            // 本次 LLM 调用的 token 用量（上行/输入、下行/输出），着色、显示在 comment 之后
             let (pt, ct) = sess.last_usage();
-            let toks = paint(tty, "2", &format!("↑{} ↓{}", pt, ct));
+            let toks = paint(tty, "34", &format!("↑{} ↓{}", pt, ct));
             tx.log("llm_usage", serde_json::json!({ "round": round, "seq": llm_calls, "prompt_tokens": pt, "completion_tokens": ct }));
 
             let (thinking, calls) = match reply {
                 LlmReply::Text(t) => {
                     let b = brief(&t, 200);
                     let say = if b.is_empty() { "（未调用工具，已提示其用工具或 finish）".to_string() } else { b };
-                    eprintln!("  {} {}  {}", paint(tty, "2", "AI"), toks, say);
+                    eprintln!("  {}  {}", say, toks);
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
                     sess.user("请只通过调用工具来操作；若已完成或无法继续，请调用 finish。");
                     continue;
@@ -264,8 +264,8 @@ pub async fn drive(
                 serde_json::json!({ "round": round, "tool": primary.name.clone(), "comment": comment.clone(), "arguments": primary.arguments.clone() }),
             );
 
-            // 每次 LLM 调用打印一行 AI（带本次 token）：AI 的 comment(这步思考)优先，
-            // 其次模型思考文字，再次控制流动作的 reason，最后工具名兜底
+            // 每次 LLM 调用打印一行思考（comment 优先，其次模型文字，再次 reason，最后工具名）
+            // + token 着色在后；不显示"AI"标签
             let say = comment
                 .as_deref()
                 .map(|s| brief(s, 200))
@@ -273,7 +273,7 @@ pub async fn drive(
                 .or_else(|| thinking.as_deref().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
                 .or_else(|| action.intent().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
                 .unwrap_or_else(|| format!("调用 {}", primary.name));
-            eprintln!("  {} {}  {}", paint(tty, "2", "AI"), toks, say);
+            eprintln!("  {}  {}", say, toks);
 
             match action {
                 AgentAction::Finish { success, reason } => {
@@ -405,11 +405,14 @@ pub async fn drive(
 
     // —— section 2：元素库更新 ——
     eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
-    eprintln!(
-        "  {}   {}",
-        paint(tty, "2", "新增"),
-        if created.is_empty() { paint(tty, "2", "（无）") } else { paint(tty, "32", &created.join("、")) }
-    );
+    if created.is_empty() {
+        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
+    } else {
+        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &created[0]));
+        for c in &created[1..] {
+            eprintln!("         {}", paint(tty, "32", c)); // 每个元素单独一行，对齐到值列
+        }
+    }
     if updated.is_empty() {
         eprintln!("  {}   {}", paint(tty, "2", "更新"), paint(tty, "2", "（无）"));
     } else {
