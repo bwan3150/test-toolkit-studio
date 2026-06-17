@@ -303,8 +303,23 @@ pub async fn add_element_target(
     let screenshot = image::open(workarea.screenshot_path())
         .map_err(|e| TkeError::DeviceError(format!("读取工作区截图失败: {}", e)))?;
     let (sw, sh) = (screenshot.width() as i32, screenshot.height() as i32);
-    let (cx1, cy1) = (bounds.x1.clamp(0, sw - 1), bounds.y1.clamp(0, sh - 1));
-    let (cx2, cy2) = (bounds.x2.clamp(cx1 + 1, sw), bounds.y2.clamp(cy1 + 1, sh));
+    // 归一化 bounds：纠正反向、保证最小尺寸——视觉点击/小图标(OCR bbox 仅几像素、
+    // 或 click_visual 给的退化 region)否则会裁成 1px 空白图，等于没存。
+    const MIN: i32 = 24;
+    let (mut x1, mut y1) = (bounds.x1.min(bounds.x2), bounds.y1.min(bounds.y2));
+    let (mut x2, mut y2) = (bounds.x1.max(bounds.x2), bounds.y1.max(bounds.y2));
+    if x2 - x1 < MIN {
+        let c = (x1 + x2) / 2;
+        x1 = c - MIN / 2;
+        x2 = c + MIN / 2;
+    }
+    if y2 - y1 < MIN {
+        let c = (y1 + y2) / 2;
+        y1 = c - MIN / 2;
+        y2 = c + MIN / 2;
+    }
+    let (cx1, cy1) = (x1.clamp(0, sw - 1), y1.clamp(0, sh - 1));
+    let (cx2, cy2) = (x2.clamp(cx1 + 1, sw), y2.clamp(cy1 + 1, sh));
     let crop = screenshot.crop_imm(cx1 as u32, cy1 as u32, (cx2 - cx1) as u32, (cy2 - cy1) as u32);
     let img_file = format!("img/{}.png", safe_filename(name));
     let img_abs = lib_dir.join(&img_file);
@@ -379,6 +394,7 @@ pub async fn add_element_target(
         "tier": tier,
         "channel": channel.as_ref().map(|(k, _)| *k),
         "img": if img_written { serde_json::json!(img_file) } else { serde_json::Value::Null },
+        "img_px": [cx2 - cx1, cy2 - cy1],
         "ocr": ocr_text,
         "bounds": bounds,
         "updated": existed,
