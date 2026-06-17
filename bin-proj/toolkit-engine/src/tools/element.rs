@@ -6,7 +6,7 @@
 //   ③ ocr 通道：结构中的文本，无文本时对 crop 图跑 OCR 兜底
 // 已有元素则合并：只更新当前平台通道；img/ocr 仅在为 null 时填充（--force 强制覆盖）
 
-use crate::{Result, TkeError, Controller, Fetcher, Platform, UIElement};
+use crate::{Result, TkeError, Controller, Fetcher, Platform, UIElement, Bounds};
 use crate::utils::Workarea;
 use std::path::Path;
 
@@ -248,4 +248,119 @@ pub async fn add_element(
         );
     }
     Ok(result)
+}
+
+/// OCR 通道写入方式（add_element_target 用）
+pub enum OcrChannel {
+    /// 用显式文本（OCR 元素的识别文字）
+    Text(String),
+    /// 对裁剪图跑 OCR 兜底（结构元素无结构文本时）
+    FromCrop,
+    /// 不写 ocr（纯视觉元素）
+    None,
+}
+
+/// 按"已确定的目标"落库——AI case 三级降级用，**不回查 XML**：
+/// - `structure=Some(el)`：结构通道按平台写该元素；`None`：结构通道留空（OCR/视觉元素）
+/// - `bounds`：裁剪 img 模板的范围（结构=元素框；视觉=AI 给的框/方块）
+/// - `ocr`：ocr 通道写入方式
+///
+/// 三级对应：结构(Some + Text/FromCrop) / 仅OCR(None + Text) / 仅视觉(None + None)。
+/// img/ocr 仅在为 null 时填充，--force 强制覆盖；产出可被 find_auto 跨设备回放。
+pub async fn add_element_target(
+    device_id: String,
+    lib_path: &Path,
+    name: &str,
+    desc: Option<String>,
+    bounds: Bounds,
+    structure: Option<&UIElement>,
+    ocr: OcrChannel,
+    force: bool,
+) -> Result<serde_json::Value> {
+    let platform = Platform::from_device(Some(&device_id));
+    let workarea = Workarea::for_device(Some(&device_id))?;
+
+    // img 通道：按 bounds 从当前截图 crop 模板
+    let lib_dir = lib_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    std::fs::create_dir_all(lib_dir.join("img")).map_err(TkeError::IoError)?;
+
+    let screenshot = image::open(workarea.screenshot_path())
+        .map_err(|e| TkeError::DeviceError(format!("读取工作区截图失败: {}", e)))?;
+    let (sw, sh) = (screenshot.width() as i32, screenshot.height() as i32);
+    let (cx1, cy1) = (bounds.x1.clamp(0, sw - 1), bounds.y1.clamp(0, sh - 1));
+    let (cx2, cy2) = (bounds.x2.clamp(cx1 + 1, sw), bounds.y2.clamp(cy1 + 1, sh));
+    let crop = screenshot.crop_imm(cx1 as u32, cy1 as u32, (cx2 - cx1) as u32, (cy2 - cy1) as u32);
+    let img_file = format!("img/{}.png", safe_filename(name));
+    let img_abs = lib_dir.join(&img_file);
+    crop.save(&img_abs)
+        .map_err(|e| TkeError::DeviceError(format!("保存元素模板图失败: {}", e)))?;
+
+    // ocr 通道
+    let ocr_text = match ocr {
+        OcrChannel::Text(t) => non_empty(&Some(t)),
+        OcrChannel::FromCrop => ocr_via_subprocess(&img_abs).filter(|t| t.chars().count() <= 60),
+        OcrChannel::None => Option::None,
+    };
+
+    // 结构通道（None=不写任何平台结构）
+    let channel = structure.map(|el| build_channel(platform, el));
+
+    // 读取/合并/写入元素库
+    let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
+        Ok(content) => serde_json::from_str(&content)
+            .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
+        Err(_) => serde_json::json!({ "elements": {} }),
+    };
+    if !lib["elements"].is_object() {
+        lib["elements"] = serde_json::json!({});
+    }
+    let existed = lib["elements"][name].is_object();
+    if !existed {
+        lib["elements"][name] = serde_json::json!({
+            "desc": null, "android": null, "ios": null, "web": null, "img": null, "ocr": null,
+        });
+    }
+    let entry = &mut lib["elements"][name];
+    if let Some(d) = &desc {
+        entry["desc"] = serde_json::json!(d);
+    }
+    // 结构通道：仅有结构时写；不让无标识通道覆盖已有有效通道
+    if let Some((channel_key, channel_value)) = &channel {
+        let new_has_id = ["resource_id", "text", "content_desc", "name", "label", "value", "id", "aria", "xpath"]
+            .iter()
+            .any(|k| !channel_value[k].is_null());
+        let old_channel_valid = entry[*channel_key].is_object() && !new_has_id;
+        if !old_channel_valid {
+            entry[*channel_key] = channel_value.clone();
+        }
+    }
+    let img_written = force || entry["img"].is_null();
+    if img_written {
+        entry["img"] = serde_json::json!(img_file);
+    } else {
+        let _ = std::fs::remove_file(&img_abs);
+    }
+    let ocr_written = (force || entry["ocr"].is_null()) && ocr_text.is_some();
+    if ocr_written {
+        entry["ocr"] = serde_json::json!(ocr_text);
+    }
+
+    let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
+    std::fs::write(lib_path, pretty).map_err(TkeError::IoError)?;
+
+    let tier = match (&channel, &ocr_text) {
+        (Some(_), _) => "structural",
+        (None, Some(_)) => "ocr",
+        (None, None) => "visual",
+    };
+    Ok(serde_json::json!({
+        "success": true,
+        "element": name,
+        "tier": tier,
+        "channel": channel.as_ref().map(|(k, _)| *k),
+        "img": if img_written { serde_json::json!(img_file) } else { serde_json::Value::Null },
+        "ocr": ocr_text,
+        "bounds": bounds,
+        "updated": existed,
+    }))
 }

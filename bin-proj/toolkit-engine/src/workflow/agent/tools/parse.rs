@@ -35,6 +35,13 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<AgentAction> {
             name: req_str(a, "name")?,
             desc: opt_str(a, "desc"),
         },
+        "click_visual" => AgentAction::ClickVisual {
+            region: opt_region(a, "region"),
+            x: opt_i32(a, "x"),
+            y: opt_i32(a, "y"),
+            name: req_str(a, "name")?,
+            desc: opt_str(a, "desc"),
+        },
         "swipe_direction" => AgentAction::SwipeDir {
             direction: req_str(a, "direction")?,
             distance: opt_i32(a, "distance"),
@@ -87,4 +94,17 @@ fn opt_u64(v: &serde_json::Value, key: &str) -> Option<u64> {
 
 fn opt_i32(v: &serde_json::Value, key: &str) -> Option<i32> {
     v.get(key).and_then(|x| x.as_i64()).map(|n| n as i32)
+}
+
+/// 解析 [x1,y1,x2,y2] 像素框；非 4 元素数组返回 None
+fn opt_region(v: &serde_json::Value, key: &str) -> Option<[i32; 4]> {
+    let arr = v.get(key)?.as_array()?;
+    if arr.len() != 4 {
+        return None;
+    }
+    let mut out = [0i32; 4];
+    for (i, e) in arr.iter().enumerate() {
+        out[i] = e.as_i64()? as i32;
+    }
+    Some(out)
 }

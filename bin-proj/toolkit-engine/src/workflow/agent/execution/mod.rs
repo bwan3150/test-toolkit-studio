@@ -11,13 +11,14 @@ pub mod script;
 
 use std::path::Path;
 
+use crate::tools::element::OcrChannel;
 use crate::workflow::step_to_source;
-use crate::{ActionTrace, ControlAction, LocatorStrategy, Point, Result, TkeError, TksCommand, TksParam, TksStep, UIElement};
+use crate::{ActionTrace, Bounds, ControlAction, LocatorStrategy, Point, Result, TkeError, TksCommand, TksParam, TksStep, UIElement};
 
 use super::tools::AgentAction;
 use super::transcript::Transcript;
 use device::exec;
-use library::save_element;
+use library::save_target;
 
 /// 执行一个设备动作：返回 (.tks 行, 执行详情, 执行轨迹)
 ///
@@ -38,14 +39,16 @@ pub async fn apply(
         AgentAction::Click { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            save_element(device, element_path, name, desc, c.x, c.y, tx, round).await;
+            let (structure, ocr) = tier_for(el);
+            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             Ok((line(TksCommand::Click, vec![el_param(name)]), detail, el_trace(c, el, name)))
         }
         AgentAction::Input { element_id, name, desc, text } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            save_element(device, element_path, name, desc, c.x, c.y, tx, round).await;
+            let (structure, ocr) = tier_for(el);
+            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Input { text: text.clone(), point: Some(c) },
@@ -56,7 +59,8 @@ pub async fn apply(
         AgentAction::LongPress { element_id, name, desc, duration_ms } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            save_element(device, element_path, name, desc, c.x, c.y, tx, round).await;
+            let (structure, ocr) = tier_for(el);
+            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Press { point: c, duration_ms: *duration_ms as u32 },
@@ -67,11 +71,36 @@ pub async fn apply(
         AgentAction::Clear { element_id, name, desc } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            save_element(device, element_path, name, desc, c.x, c.y, tx, round).await;
+            let (structure, ocr) = tier_for(el);
+            save_target(device, element_path, name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
             let _ = exec(device, ControlAction::Click { point: c }).await?;
             let detail = exec(device, ControlAction::Clear).await?;
             Ok((line(TksCommand::Clear, vec![el_param(name)]), detail, el_trace(c, el, name)))
+        }
+        AgentAction::ClickVisual { region, x, y, name, desc } => {
+            // 看图后视觉点击：region 优先；否则 (x,y) 周围取屏宽 15% 方块
+            let (sw, sh) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
+            let bounds = match region {
+                Some([x1, y1, x2, y2]) => Bounds::new(*x1, *y1, *x2, *y2),
+                None => {
+                    let cx = x.unwrap_or(sw as i32 / 2);
+                    let cy = y.unwrap_or(sh as i32 / 2);
+                    let half = (sw as i32 * 15 / 100).max(20) / 2;
+                    Bounds::new(cx - half, cy - half, cx + half, cy + half)
+                }
+            };
+            let c = bounds.center();
+            // 三级·仅视觉：结构空、ocr 空、仅 img 模板
+            save_target(device, element_path, name, desc, bounds.clone(), None, OcrChannel::None, tx, round).await;
+            let detail = exec(device, ControlAction::Click { point: c }).await?;
+            let trace = ActionTrace {
+                captured: false,
+                points: vec![c],
+                bounds: Some(bounds),
+                element_name: Some(name.clone()),
+            };
+            Ok((line(TksCommand::Click, vec![el_param(name)]), detail, trace))
         }
         AgentAction::SwipeDir { direction, distance } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
@@ -148,6 +177,30 @@ pub async fn apply(
         | AgentAction::Finish { .. } => {
             Err(TkeError::ScriptExecuteError("控制流动作不应进入执行器".to_string()))
         }
+    }
+}
+
+/// 判断 AI 选中元素走哪级落库：
+/// - OCR 伪元素（class=OcrText，仅来自 OCR 增强）→ 结构空 + ocr 用其文字（二级）
+/// - 其它（真实结构元素，含被 OCR 回填文字的图标）→ 结构通道 + ocr(结构文本优先，否则裁剪图兜底)（一级）
+fn tier_for(el: &UIElement) -> (Option<&UIElement>, OcrChannel) {
+    if el.class_name == "OcrText" {
+        let ocr = el
+            .text
+            .clone()
+            .filter(|t| !t.trim().is_empty())
+            .map(OcrChannel::Text)
+            .unwrap_or(OcrChannel::FromCrop);
+        (None, ocr)
+    } else {
+        let ocr = el
+            .text
+            .clone()
+            .or_else(|| el.content_desc.clone())
+            .filter(|t| !t.trim().is_empty())
+            .map(OcrChannel::Text)
+            .unwrap_or(OcrChannel::FromCrop);
+        (Some(el), ocr)
     }
 }
 

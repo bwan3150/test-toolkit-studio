@@ -15,6 +15,16 @@ pub enum AgentAction {
     LongPress { element_id: usize, name: String, desc: Option<String>, duration_ms: u64 },
     /// 清空输入框
     Clear { element_id: usize, name: String, desc: Option<String> },
+    /// 看图后视觉点击：当结构元素与 OCR 都定位不到目标时，多模态 AI 看截图后
+    /// 给出目标框 region=[x1,y1,x2,y2]（优先）或点击点 (x,y)。
+    /// 落库为纯 img 元素（结构/ocr 通道空），换设备靠图像模板匹配回放。
+    ClickVisual {
+        region: Option<[i32; 4]>,
+        x: Option<i32>,
+        y: Option<i32>,
+        name: String,
+        desc: Option<String>,
+    },
     /// 定向滑动（up/down/left/right），从屏幕中心滑动
     SwipeDir { direction: String, distance: Option<i32> },
     /// 返回
@@ -39,7 +49,8 @@ impl AgentAction {
             AgentAction::Click { desc, .. }
             | AgentAction::Input { desc, .. }
             | AgentAction::LongPress { desc, .. }
-            | AgentAction::Clear { desc, .. } => desc.as_deref(),
+            | AgentAction::Clear { desc, .. }
+            | AgentAction::ClickVisual { desc, .. } => desc.as_deref(),
             AgentAction::RequestScreenshot { reason }
             | AgentAction::Finish { reason, .. } => Some(reason.as_str()),
             AgentAction::AskUser { question } => Some(question.as_str()),

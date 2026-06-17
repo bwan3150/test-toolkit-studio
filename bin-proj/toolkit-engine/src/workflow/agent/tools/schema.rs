@@ -73,6 +73,25 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             schema: obj(el_props(serde_json::json!({})), serde_json::json!(["element_id", "name"])),
         },
         ToolSchema {
+            name: "click_visual",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "region": {
+                        "type": "array",
+                        "items": { "type": "integer" },
+                        "minItems": 4, "maxItems": 4,
+                        "description": "目标在截图中的像素框 [x1,y1,x2,y2]（优先；越贴合目标越好）"
+                    },
+                    "x": { "type": "integer", "description": "无 region 时给点击点 x（像素）" },
+                    "y": { "type": "integer", "description": "无 region 时给点击点 y（像素）" },
+                    "name": { "type": "string", "description": "给该目标起的稳定语义名（落库并写进 .tks）" },
+                    "desc": { "type": "string", "description": "可选：目标用途说明" }
+                },
+                "required": ["name"]
+            }),
+        },
+        ToolSchema {
             name: "swipe_direction",
             schema: serde_json::json!({
                 "type": "object",
