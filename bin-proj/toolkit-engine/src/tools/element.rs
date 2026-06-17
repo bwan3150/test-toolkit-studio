@@ -251,6 +251,21 @@ pub async fn add_element(
     Ok(result)
 }
 
+/// 只更新某元素的 desc（探索结束后据实际作用统一回写）。元素不存在则跳过。
+pub fn set_element_desc(lib_path: &Path, name: &str, desc: &str) -> Result<()> {
+    let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
+        Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
+            .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
+        _ => return Ok(()), // 空库/无文件：无可更新元素
+    };
+    if lib["elements"][name].is_object() {
+        lib["elements"][name]["desc"] = serde_json::json!(desc);
+        let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
+        std::fs::write(lib_path, pretty).map_err(TkeError::IoError)?;
+    }
+    Ok(())
+}
+
 /// OCR 通道写入方式（add_element_target 用）
 pub enum OcrChannel {
     /// 用显式文本（OCR 元素的识别文字）

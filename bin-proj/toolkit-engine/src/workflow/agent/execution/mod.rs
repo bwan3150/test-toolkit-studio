@@ -38,21 +38,22 @@ pub async fn apply(
     round: usize,
 ) -> Result<(String, String, ActionTrace, Option<SavedInfo>)> {
     match action {
-        AgentAction::Click { element_id, name, desc } => {
+        // 注：desc 不在创建时写（approach A：避免想当然）；探索结束后据实际作用统一生成
+        AgentAction::Click { element_id, name, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::Input { element_id, name, desc, text } => {
+        AgentAction::Input { element_id, name, text, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Input { text: text.clone(), point: Some(c) },
@@ -60,12 +61,12 @@ pub async fn apply(
             .await?;
             Ok((line(TksCommand::Input, vec![el_param(&name), TksParam::Text(text.clone())]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::LongPress { element_id, name, desc, duration_ms } => {
+        AgentAction::LongPress { element_id, name, duration_ms, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
                 device,
                 ControlAction::Press { point: c, duration_ms: *duration_ms as u32 },
@@ -73,18 +74,18 @@ pub async fn apply(
             .await?;
             Ok((line(TksCommand::Press, vec![el_param(&name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::Clear { element_id, name, desc } => {
+        AgentAction::Clear { element_id, name, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
             let name = effective_name(known, *element_id, name);
             let (structure, ocr) = tier_for(el);
-            let saved = save_target(device, element_path, &name, desc, el.bounds.clone(), structure, ocr, tx, round).await;
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
             let _ = exec(device, ControlAction::Click { point: c }).await?;
             let detail = exec(device, ControlAction::Clear).await?;
             Ok((line(TksCommand::Clear, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::ClickVisual { region, x, y, name, desc } => {
+        AgentAction::ClickVisual { region, x, y, name, .. } => {
             // 看图后视觉点击：region 优先；否则 (x,y) 周围取屏宽 15% 方块
             let (sw, sh) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
             let bounds = match region {
@@ -98,7 +99,7 @@ pub async fn apply(
             };
             let c = bounds.center();
             // 三级·仅视觉：结构空、ocr 空、仅 img 模板
-            let saved = save_target(device, element_path, name, desc, bounds.clone(), None, OcrChannel::None, tx, round).await;
+            let saved = save_target(device, element_path, name, &None, bounds.clone(), None, OcrChannel::None, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             let trace = ActionTrace {
                 captured: false,

@@ -19,6 +19,13 @@ fn paint(tty: bool, code: &str, s: &str) -> String {
     }
 }
 
+/// 从模型回复里抽出 JSON 对象（容忍前后多余文字 / ```json 围栏）
+fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
+    let start = s.find('{')?;
+    let end = s.rfind('}')?;
+    serde_json::from_str(s.get(start..=end)?).ok()
+}
+
 /// 给 .tks 指令行着色：命令(青) + 元素/参数(黄)。`命令 [{元素}]` / `命令 [参数]`
 fn paint_line(tty: bool, line: &str) -> String {
     match line.find(" [") {
@@ -277,6 +284,8 @@ pub async fn drive(
 
             match action {
                 AgentAction::Finish { success, reason } => {
+                    // 回执 finish 的 tool_result，避免后续 desc 生成轮因悬空 tool_call 被 API 拒
+                    sess.tool_result(primary.call_id.as_str(), "已结束探索");
                     // 结果在末尾统一 section 展示，这里只记录与收尾
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
                     finish = Some((success, reason));
@@ -381,6 +390,33 @@ pub async fn drive(
     }
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));
+
+    // approach A：探索结束后，据本轮各新建元素的实际作用统一生成 desc（创建时不写、不想当然）。
+    // 复用同一会话——它已知道每个元素被点击后发生了什么。
+    let mut generated: Vec<(String, String)> = Vec::new();
+    if !aborted && !created.is_empty() {
+        sess.user(format!(
+            "探索结束。请根据本次探索中这些元素被操作后的实际效果，为每个元素写一句准确的 desc\
+             （描述该元素本身是什么、点了会怎样，与本次测试过程无关）。\
+             只返回一个 JSON 对象，键为元素名、值为其 desc；不要调用工具、不要 ``` 围栏或多余文字。\n元素：{}",
+            created.join("、")
+        ));
+        if let Ok(LlmReply::Text(t)) = sess.next().await {
+            tx.log("desc_pass", serde_json::json!({ "content": t.clone() }));
+            if let Some(obj) = parse_desc_json(&t) {
+                for name in &created {
+                    if let Some(d) = obj.get(name).and_then(|v| v.as_str()).map(str::trim) {
+                        if !d.is_empty()
+                            && crate::tools::element::set_element_desc(ctx.element_path, name, d).is_ok()
+                        {
+                            generated.push((name.clone(), d.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let (tp, tc) = sess.total_usage();
 
     // —— 统一结果 section（带框）——
@@ -408,21 +444,16 @@ pub async fn drive(
     if created.is_empty() {
         eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
     } else {
-        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &created[0]));
+        // 每个新建元素单独一行，附带据实际作用生成的 desc（若有）
+        let line_for = |c: &String| match generated.iter().find(|(k, _)| k == c) {
+            Some((_, d)) => format!("{} · {}", c, brief(d, 80)),
+            None => c.clone(),
+        };
+        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &line_for(&created[0])));
         for c in &created[1..] {
-            eprintln!("         {}", paint(tty, "32", c)); // 每个元素单独一行，对齐到值列
+            eprintln!("         {}", paint(tty, "32", &line_for(c)));
         }
-    }
-    if updated.is_empty() {
-        eprintln!("  {}   {}", paint(tty, "2", "更新"), paint(tty, "2", "（无）"));
-    } else {
-        eprintln!("  {}   {}", paint(tty, "2", "更新"), paint(tty, "33", &updated[0]));
-        for u in &updated[1..] {
-            eprintln!("         {}", paint(tty, "33", u)); // 对齐到值列
-        }
-    }
-    if !created.is_empty() || !updated.is_empty() {
-        eprintln!("  {}", paint(tty, "2", "（已变更，请人工二次审核）"));
+        eprintln!("  {}", paint(tty, "2", "（已新增，desc 据实际作用生成，请人工二次审核）"));
     }
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
