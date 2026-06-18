@@ -1,7 +1,6 @@
 // 【编排】AgentRunner：装配各子模块（提示词/会话/感知/执行/记忆/日志）并驱动循环
 // 本文件只做"装配 + 收尾"，循环逻辑在 flow.rs。
 
-pub mod distill;
 pub mod flow;
 pub mod options;
 pub mod verify;
@@ -119,13 +118,9 @@ impl AgentRunner {
             .unwrap_or_else(|| slug(&opts.case, 40));
         let script_path = unique_script_path(&opts.script_dir, &base);
 
-        // —— 先提炼：探索达成后，把试错流水账提炼成最短干净脚本(+目标断言)，再去验证 ——
-        // （未达成/中断的半成品不提炼，原样保留进度）
-        let final_lines = if outcome.success && !outcome.aborted {
-            distill::distill_script(&mut sess, &mut tx, &outcome.lines, &opts.case, &element_path).await
-        } else {
-            outcome.lines.clone()
-        };
+        // 先落探索原始脚本；提炼(删冗余步)在 verify 阶段做——靠"删一步就重跑验证"
+        // 来决定能不能删，而不是对着文本想当然，避免删掉必需步把脚本搞断。
+        let final_lines = outcome.lines.clone();
         write_script(&script_path, &opts.case, &final_lines)?;
         // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
         let tty = std::io::stderr().is_terminal();

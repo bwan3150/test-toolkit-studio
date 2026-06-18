@@ -303,11 +303,16 @@ pub fn remove_elements(lib_path: &Path, names: &[String]) -> Result<usize> {
             .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
         _ => return Ok(0),
     };
+    // 元素的 img 路径相对元素库所在目录；删条目时一并删掉截图文件，不留孤儿图片
+    let lib_dir = lib_path.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let mut removed = 0usize;
     if let Some(obj) = lib["elements"].as_object_mut() {
         for n in names {
-            if obj.remove(n).is_some() {
+            if let Some(entry) = obj.remove(n) {
                 removed += 1;
+                if let Some(img_rel) = entry["img"].as_str() {
+                    let _ = std::fs::remove_file(lib_dir.join(img_rel));
+                }
             }
         }
     }
