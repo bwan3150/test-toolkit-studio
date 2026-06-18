@@ -3,6 +3,7 @@
 
 pub mod flow;
 pub mod options;
+pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
 
@@ -107,16 +108,41 @@ impl AgentRunner {
             ocr: opts.ocr.as_ref(),
             max_rounds,
         };
-        let outcome = drive(&mut sess, &mut tx, &ctx).await?;
+        let outcome = drive(&mut sess, &mut tx, &ctx, true).await?;
         let end_time = chrono::Local::now().to_rfc3339();
 
-        // —— 收尾：写 .tks 脚本(--script) + log.json(ExecutionResult，与 run 同构) ——
+        // —— 收尾：写 .tks 脚本(--script) ——（先落初版，供 --verify 回放）
         write_script(&opts.script_out, &opts.case, &outcome.lines)?;
+
+        // —— --verify：生成后自检 + 自修复（重启净化→整脚本回放→失败让 AI 续接修复→连过 2 次）——
+        // 未被中断且确实有 --script 产出时才跑；verify 内部会把最终脚本写回 script_out。
+        let verified = if opts.verify && !outcome.aborted {
+            let (_final_lines, rep) = verify::verify_and_repair(
+                &mut sess,
+                &mut tx,
+                &ctx,
+                &opts.params,
+                &opts.script_out,
+                &opts.case,
+                None, // 回放产物不另存（失败信息已记入 conversation 的 verify_replay）
+                outcome.lines.clone(),
+            )
+            .await;
+            Some(rep)
+        } else {
+            None
+        };
+        // 最终成败：探索达成 且（未自检 或 自检稳定通过）
+        let stable = verified.as_ref().map(|r| r.passed);
+        let overall_success = outcome.success && stable.unwrap_or(true);
+
+        // —— log.json(ExecutionResult，与 run 同构) ——
         let (total_prompt, total_completion) = sess.total_usage();
         tx.log(
             "run_end",
             serde_json::json!({
-                "success": outcome.success,
+                "success": overall_success,
+                "explore_success": outcome.success,
                 "reason": outcome.reason.clone(),
                 "rounds": outcome.rounds,
                 "steps": outcome.steps.len(),
@@ -127,17 +153,20 @@ impl AgentRunner {
                 "total_tokens": total_prompt + total_completion,
                 "elements_created": outcome.created.clone(),
                 "elements_updated": outcome.updated.clone(),
+                "verify": verified.as_ref().map(|r| serde_json::json!({
+                    "ran": r.ran, "passed": r.passed, "repairs": r.repairs
+                })),
             }),
         );
 
         let exec_result = ExecutionResult {
-            success: outcome.success,
+            success: overall_success,
             case_id: String::new(),
             script_name: stem,
             start_time,
             end_time,
             steps: outcome.steps,
-            error: if outcome.success { None } else { Some(outcome.reason.clone()) },
+            error: if overall_success { None } else { Some(outcome.reason.clone()) },
             script_path: Some(opts.script_out.to_string_lossy().to_string()),
             run_dir: Some(run_dir.to_string_lossy().to_string()),
             launched_packages: Vec::new(),
@@ -149,7 +178,7 @@ impl AgentRunner {
         let _ = tx.finalize(&conversation_json);
 
         Ok(AgentResult {
-            success: outcome.success,
+            success: overall_success,
             rounds: outcome.rounds,
             script: opts.script_out.clone(),
             conversation: conversation_json,

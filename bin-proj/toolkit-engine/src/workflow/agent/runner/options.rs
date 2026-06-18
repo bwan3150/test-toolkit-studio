@@ -21,8 +21,22 @@ pub struct AgentRunOptions {
     pub prompt: PromptSpec,
     /// OCR 增强来源（None=不跑 OCR，行为同此前；--ocr 显式开启）
     pub ocr: Option<OcrSource>,
+    /// 生成脚本后自检+自修复：重启净化→整脚本 tke run 回放→失败让 AI 从失败步续接修复，
+    /// 直到连续通过 2 次。`--verify` 显式开启（默认关）。
+    pub verify: bool,
     /// 统一参数表（device/element/log/knowledge 查表取参）
     pub params: Arc<Params>,
+}
+
+/// AgentResult 里附带的自检结果（仅 --verify 时有意义）
+#[derive(Default)]
+pub struct VerifyReport {
+    /// 是否跑了自检
+    pub ran: bool,
+    /// 最终是否稳定通过（连续 2 次干净回放）
+    pub passed: bool,
+    /// 触发的修复次数
+    pub repairs: usize,
 }
 
 /// AgentRunner 结果

@@ -42,6 +42,11 @@ pub struct HarnessArgs {
     #[arg(long)]
     pub ocr: Option<String>,
 
+    /// 生成脚本后自检+自修复：重启净化→从头 tke run 回放生成的 .tks→失败则让 AI 从
+    /// 失败步重新探索续接，直到连续通过 2 次。需配合 --script 使用。
+    #[arg(long)]
+    pub verify: bool,
+
     // ===== 提示词自定义（三选一，优先级从上到下）=====
     /// 直接注入主系统提示词文本（最高优先级）
     #[arg(long)]
@@ -106,6 +111,7 @@ pub async fn handle(
         ai: merged_ai,
         prompt,
         ocr,
+        verify: args.verify,
         params: params.clone(),
     })
     .await

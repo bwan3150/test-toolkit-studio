@@ -11,7 +11,7 @@ use crate::engines::ocr::OcrSource;
 use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
 
 /// 终端着色：仅当 stderr 是 TTY 时输出 ANSI，管道/重定向为纯文本（与 tke run 一致）
-fn paint(tty: bool, code: &str, s: &str) -> String {
+pub(crate) fn paint(tty: bool, code: &str, s: &str) -> String {
     if tty {
         format!("\x1b[{}m{}\x1b[0m", code, s)
     } else {
@@ -36,7 +36,7 @@ fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
 
 /// 动作行的友好显示：去掉 .tks 的 `[{ }]` 括号噪声，纯文本不上色（仅前面的 ✓/✗ 带色）。
 /// 如 `点击 [{登录按钮}]` → `点击 登录按钮`、`定向滑动 [{640, 406}, 上, 406]` → `定向滑动 640, 406, 上, 406`
-fn friendly(line: &str) -> String {
+pub(crate) fn friendly(line: &str) -> String {
     line.replace("[{", "").replace("}]", "").replace(['[', ']', '{', '}'], "")
         .split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -53,7 +53,7 @@ fn fmt_tokens(n: i64) -> String {
 }
 
 /// 取首个非空行并按字符数截断，避免模型长篇刷屏
-fn brief(s: &str, max: usize) -> String {
+pub(crate) fn brief(s: &str, max: usize) -> String {
     let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     if line.chars().count() > max {
         let head: String = line.chars().take(max).collect();
@@ -99,10 +99,15 @@ pub struct DriveOutcome {
 }
 
 /// 驱动探索循环
+///
+/// `report=true`：完整探索——含启动 spinner 与结束「结果/元素库」框（初次 harness 用）。
+/// `report=false`：修复续接——复用同一循环从当前实时页面继续探索生成修正步骤，
+///   不打 spinner、不打结果框（由外层 verify 统一汇报）。调用前由调用方先 `sess.user(开场白)`。
 pub async fn drive(
     sess: &mut LlmSession,
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
+    report: bool,
 ) -> Result<DriveOutcome> {
     let tty = std::io::stderr().is_terminal();
 
@@ -117,9 +122,9 @@ pub async fn drive(
         });
     }
 
-    // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY）
+    // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY、且 report 模式）
     let spin_stop = Arc::new(AtomicBool::new(false));
-    let mut spin_handle = if tty {
+    let mut spin_handle = if report && tty {
         let stop = spin_stop.clone();
         Some(tokio::spawn(async move {
             let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -508,43 +513,45 @@ pub async fn drive(
 
     let (tp, tc) = sess.total_usage();
 
-    // —— 统一结果 section（带框）——
-    let status = if aborted {
-        paint(tty, "33", "■ 已终止")
-    } else if success {
-        paint(tty, "32", "✓ 达成")
-    } else {
-        paint(tty, "31", "✗ 未达成")
-    };
-    // —— section 1：结果 ——
-    eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
-    eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, round);
-    eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
-    eprintln!("  {}   {}", paint(tty, "2", "模型"), sess.model());
-    eprintln!(
-        "  {}  {}",
-        paint(tty, "2", "Token"),
-        paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tp), fmt_tokens(tc), fmt_tokens(tp + tc)))
-    );
-    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
-
-    // —— section 2：元素库更新 ——
-    eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
-    if created.is_empty() {
-        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
-    } else {
-        // 每个新建元素单独一行，附带据实际作用生成的 desc（若有）
-        let line_for = |c: &String| match generated.iter().find(|(k, _)| k == c) {
-            Some((_, d)) => format!("{} · {}", c, brief(d, 80)),
-            None => c.clone(),
+    // —— 统一结果 section（带框）；report=false（修复续接）时不打，外层 verify 统一汇报 ——
+    if report {
+        let status = if aborted {
+            paint(tty, "33", "■ 已终止")
+        } else if success {
+            paint(tty, "32", "✓ 达成")
+        } else {
+            paint(tty, "31", "✗ 未达成")
         };
-        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &line_for(&created[0])));
-        for c in &created[1..] {
-            eprintln!("         {}", paint(tty, "32", &line_for(c)));
+        // —— section 1：结果 ——
+        eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
+        eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, round);
+        eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
+        eprintln!("  {}   {}", paint(tty, "2", "模型"), sess.model());
+        eprintln!(
+            "  {}  {}",
+            paint(tty, "2", "Token"),
+            paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tp), fmt_tokens(tc), fmt_tokens(tp + tc)))
+        );
+        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+
+        // —— section 2：元素库更新 ——
+        eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
+        if created.is_empty() {
+            eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
+        } else {
+            // 每个新建元素单独一行，附带据实际作用生成的 desc（若有）
+            let line_for = |c: &String| match generated.iter().find(|(k, _)| k == c) {
+                Some((_, d)) => format!("{} · {}", c, brief(d, 80)),
+                None => c.clone(),
+            };
+            eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &line_for(&created[0])));
+            for c in &created[1..] {
+                eprintln!("         {}", paint(tty, "32", &line_for(c)));
+            }
+            eprintln!("  {}", paint(tty, "2", "（已新增，desc 据实际作用生成，请人工二次审核）"));
         }
-        eprintln!("  {}", paint(tty, "2", "（已新增，desc 据实际作用生成，请人工二次审核）"));
+        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
     }
-    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
     Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted })
 }

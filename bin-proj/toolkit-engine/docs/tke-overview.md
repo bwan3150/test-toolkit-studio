@@ -124,8 +124,10 @@ tke run <path.tks>      # 单脚本（按扩展名识别）
 tke run <path.toml>     # flow 多脚本顺序执行（同上）
 tke steps "启动 [...]" "点击 [{登录按钮}]" "断言 [{首页}, 存在]"
                         # 不落文件执行一串指令（编辑器逐行调试 / AI 循环用）
-tke harness <用例.md|"用例文字"> --script <导出.tks路径>
-                        # AI 探索测试并生成脚本（透传 tester-ai 实现）
+tke harness <用例.md|"用例文字"> --script <导出.tks路径> [--verify]
+                        # AI 探索测试并生成脚本（内置 AI 闭环）
+                        # --verify：生成后重启净化→从头 tke run 回放→失败让 AI 从失败步
+                        #           续接修复，直到连续通过 2 次（自检 + 自修复）
 ```
 
 flow 为 TOML：
