@@ -217,6 +217,10 @@ pub async fn drive(
                 "known": n_known,
                 "unknown": n_unknown,
                 "revisits": revisits,
+                "tab_count": p.tabs.len(),
+                "tabs": p.tabs.iter().map(|t| serde_json::json!({
+                    "index": t.index, "title": t.title, "url": t.url, "active": t.active
+                })).collect::<Vec<_>>(),
                 "elements": list_text.clone(),
                 "xml": p.xml_path.to_string_lossy(),
                 "perceive_error": perceive_err.clone(),
