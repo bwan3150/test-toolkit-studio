@@ -280,7 +280,21 @@ impl WebDriver {
 
     pub fn tap(&self, x: i32, y: i32) -> Result<()> {
         let dpr = self.device_pixel_ratio()?;
-        let (cx, cy) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
+        let (mut cx, mut cy) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
+        // 目标若在视口外（回放时滚动位置与录制略有出入），先纵向滚动使其居中，
+        // 再点击居中位置——避免 WebDriver "move target out of bounds"。
+        if let Ok(dims) = self.execute("return [window.innerWidth, window.innerHeight];", serde_json::json!([])) {
+            let iw = dims["value"][0].as_i64().unwrap_or(0);
+            let ih = dims["value"][1].as_i64().unwrap_or(0);
+            if ih > 0 && (cy < 0 || cy >= ih) {
+                let dy = cy - ih / 2;
+                let _ = self.execute(&format!("window.scrollBy(0, {}); return null;", dy), serde_json::json!([]));
+                cy = ih / 2;
+            }
+            if iw > 0 {
+                cx = cx.clamp(0, iw - 1);
+            }
+        }
         self.pointer_actions(serde_json::json!([
             { "type": "pointerMove", "duration": 0, "x": cx, "y": cy },
             { "type": "pointerDown", "button": 0 },

@@ -57,28 +57,35 @@ impl<'a> TargetResolver<'a> {
         Ok(point)
     }
 
-    /// 解析元素定位
+    /// 解析元素定位（带隐式等待：找不到就重新采集重试，应对页面尚未加载完）
     async fn resolve_element(&mut self, name: &str, strategy: &LocatorStrategy) -> Result<Point> {
-        // 刷新UI状态
-        if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
-            error!("刷新UI状态失败: {}", e);
-            return Err(e);
-        }
-        self.trace.captured = true;
         self.trace.element_name = Some(name.to_string());
-
-        match self.recognizer.find_element_detailed(name, strategy.clone()).await {
-            Ok((point, bounds)) => {
-                info!("找到元素 '{}' 位置: ({}, {})", name, point.x, point.y);
-                // 记录实时边界框（来自当前页面实际匹配到的元素）
-                self.trace.bounds = Some(bounds);
-                Ok(point)
+        // 最多 ~6s（12 次 × 500ms），覆盖慢加载/切换动画
+        const MAX_TRIES: usize = 12;
+        let mut last_err = None;
+        for attempt in 0..MAX_TRIES {
+            if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
+                error!("刷新UI状态失败: {}", e);
+                return Err(e);
             }
-            Err(e) => {
-                error!("查找元素 '{}' 失败: {}", name, e);
-                Err(e)
+            self.trace.captured = true;
+            match self.recognizer.find_element_detailed(name, strategy.clone()).await {
+                Ok((point, bounds)) => {
+                    info!("找到元素 '{}' 位置: ({}, {})", name, point.x, point.y);
+                    self.trace.bounds = Some(bounds);
+                    return Ok(point);
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt + 1 < MAX_TRIES {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    }
+                }
             }
         }
+        let e = last_err.unwrap();
+        error!("查找元素 '{}' 失败（重试 {} 次后）: {}", name, MAX_TRIES, e);
+        Err(e)
     }
 
     /// 解析文本查找

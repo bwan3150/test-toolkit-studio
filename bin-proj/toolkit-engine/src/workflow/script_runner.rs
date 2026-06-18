@@ -131,6 +131,10 @@ impl ScriptRunner {
             let exec_result = interpreter.interpret_step(step).await;
             let duration_ms = step_start.elapsed().as_millis() as u64;
 
+            // settle：执行后给页面切换/渲染留时间，避免下一步在动画中/旧页面上执行
+            // （元素类步骤的解析还有隐式等待兜底；这里主要稳住纯坐标/滑动后的渲染）
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
             let (success, error) = match exec_result {
                 Ok(()) => (true, None),
                 Err(e) => (false, Some(e.to_string())),
