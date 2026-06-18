@@ -142,6 +142,17 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             }),
         },
         ToolSchema {
+            name: "rename_element",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "old_name": { "type": "string", "description": "当前已知元素的（错误）名字" },
+                    "new_name": { "type": "string", "description": "改成的正确名字（名词、指代该元素本身）" }
+                },
+                "required": ["old_name", "new_name"]
+            }),
+        },
+        ToolSchema {
             name: "finish",
             schema: serde_json::json!({
                 "type": "object",

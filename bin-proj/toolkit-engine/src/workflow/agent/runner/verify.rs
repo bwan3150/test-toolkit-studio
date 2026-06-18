@@ -147,7 +147,7 @@ pub async fn verify_and_repair(
                 report.repairs += 1;
 
                 // 3) 失败续接：前 k 步可信保留，AI 从当前实时页面续接修复
-                let prefix: Vec<String> = lines[..k].to_vec();
+                let mut prefix: Vec<String> = lines[..k].to_vec();
                 // 全景记录：AI 介入修复的交接点
                 tx.log(
                     "verify_repair",
@@ -194,6 +194,15 @@ pub async fn verify_and_repair(
                 if tail.aborted {
                     eprintln!("  {}", paint(tty, "33", "已终止（用户中断）"));
                     break;
+                }
+                // 修复阶段若改了某元素名，前缀里的引用也要同步（库 key 已变，否则回放找不到）
+                for (old, new) in &tail.renames {
+                    let (from, to) = (format!("{{{}}}", old), format!("{{{}}}", new));
+                    for l in prefix.iter_mut() {
+                        if l.contains(&from) {
+                            *l = l.replace(&from, &to);
+                        }
+                    }
                 }
                 // 拼接：可信前缀 + 修复尾部
                 lines = prefix;

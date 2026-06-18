@@ -98,6 +98,8 @@ pub struct DriveOutcome {
     pub aborted: bool,
     /// AI 在 finish 时给生成脚本起的简短文件名（不含扩展名）；None 则由上层兜底
     pub script_name: Option<String>,
+    /// 本次发生的元素改名 (旧名, 新名)，供上层把前缀脚本里的引用同步改掉
+    pub renames: Vec<(String, String)>,
 }
 
 /// 驱动探索循环
@@ -156,6 +158,7 @@ pub async fn drive(
     let mut llm_calls = 0usize;
     let mut finish: Option<(bool, String)> = None;
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
+    let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -200,8 +203,8 @@ pub async fn drive(
         let known = match_known(&p.elements, platform, ctx.element_path);
         let n_known = known.iter().filter(|k| k.is_some()).count();
         let n_unknown = p.elements.len() - n_known;
-        // 仅 name 的视图，供 apply 强制复用库名
-        let known_names: Vec<Option<String>> =
+        // 仅 name 的视图，供 apply 强制复用库名（rename 后会就地更新）
+        let mut known_names: Vec<Option<String>> =
             known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
 
         let list_text = render_element_list(&p.elements, &known);
@@ -421,6 +424,40 @@ pub async fn drive(
                     sess.tool_result(primary.call_id.as_str(), format!("用户答复：{}", answer));
                     continue; // 不前进，重新询问
                 }
+                AgentAction::Rename { old_name, new_name } => {
+                    // 纠正起错的已知元素名：改库 + 同步已生成的 .tks 引用 + 当前轮已知名映射
+                    let ok = crate::tools::element::rename_element(ctx.element_path, &old_name, &new_name)
+                        .unwrap_or(false);
+                    if ok {
+                        let from = format!("{{{}}}", old_name);
+                        let to = format!("{{{}}}", new_name);
+                        for l in lines.iter_mut() {
+                            if l.contains(&from) {
+                                *l = l.replace(&from, &to);
+                            }
+                        }
+                        for k in known_names.iter_mut() {
+                            if k.as_deref() == Some(old_name.as_str()) {
+                                *k = Some(new_name.clone());
+                            }
+                        }
+                        for c in created.iter_mut() {
+                            if *c == old_name {
+                                *c = new_name.clone();
+                            }
+                        }
+                        renames.push((old_name.clone(), new_name.clone()));
+                        tx.log("rename_element", serde_json::json!({ "round": round, "old": old_name.clone(), "new": new_name.clone() }));
+                        eprintln!("  {}", paint(tty, "35", &format!("✎ 改名：{} → {}", old_name, new_name)));
+                        sess.tool_result(primary.call_id.as_str(), format!("已改名：{} → {}（库与脚本引用已同步）", old_name, new_name));
+                    } else {
+                        sess.tool_result(
+                            primary.call_id.as_str(),
+                            format!("改名未生效：{} 不存在或 {} 已被占用，请换个新名或确认旧名", old_name, new_name),
+                        );
+                    }
+                    continue; // 不前进，重新询问
+                }
                 device_action => {
                     match execution::apply(
                         ctx.device,
@@ -529,5 +566,5 @@ pub async fn drive(
         }
     }
 
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames })
 }

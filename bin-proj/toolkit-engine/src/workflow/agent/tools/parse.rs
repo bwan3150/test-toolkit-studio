@@ -63,6 +63,10 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             reason: req_str(a, "reason")?,
             script_name: opt_str(a, "script_name"),
         },
+        "rename_element" => AgentAction::Rename {
+            old_name: req_str(a, "old_name")?,
+            new_name: req_str(a, "new_name")?,
+        },
         other => {
             return Err(TkeError::ScriptExecuteError(format!("未知的工具调用: {}", other)));
         }

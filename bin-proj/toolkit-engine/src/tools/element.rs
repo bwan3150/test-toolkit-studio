@@ -265,6 +265,32 @@ pub fn set_element_desc(lib_path: &Path, name: &str, desc: &str) -> Result<()> {
     Ok(())
 }
 
+/// 元素改名：把库里 old 这一项移到 new 名下（保留其全部通道/截图/desc）。
+/// 返回 true=改名成功；old 不存在或 new 已被占用则返回 false（不覆盖已有元素）。
+/// 用于 AI 在运行/验证时发现某已知元素当初起错了名（如把 logo 当成导航选项），就地纠正。
+pub fn rename_element(lib_path: &Path, old: &str, new: &str) -> Result<bool> {
+    if old == new || new.trim().is_empty() {
+        return Ok(false);
+    }
+    let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
+        Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
+            .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
+        _ => return Ok(false),
+    };
+    let elements = &mut lib["elements"];
+    if !elements[old].is_object() || elements[new].is_object() {
+        return Ok(false); // old 不存在 或 new 已占用
+    }
+    if let Some(obj) = elements.as_object_mut() {
+        if let Some(entry) = obj.remove(old) {
+            obj.insert(new.to_string(), entry);
+        }
+    }
+    let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
+    std::fs::write(lib_path, pretty).map_err(TkeError::IoError)?;
+    Ok(true)
+}
+
 /// OCR 通道写入方式（add_element_target 用）
 pub enum OcrChannel {
     /// 用显式文本（OCR 元素的识别文字）

@@ -197,7 +197,8 @@ pub async fn apply(
         // 控制流动作不在此处理（由主循环拦截）
         AgentAction::RequestScreenshot { .. }
         | AgentAction::AskUser { .. }
-        | AgentAction::Finish { .. } => {
+        | AgentAction::Finish { .. }
+        | AgentAction::Rename { .. } => {
             Err(TkeError::ScriptExecuteError("控制流动作不应进入执行器".to_string()))
         }
     }
