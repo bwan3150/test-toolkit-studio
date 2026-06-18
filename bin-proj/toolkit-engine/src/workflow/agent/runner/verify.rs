@@ -1,11 +1,16 @@
-// 【生成后自检 + 自修复】(--verify)
+// 【生成后自检 + 自修复】(--verify) —— 同时是验证阶段的全景记录器
 //
 // harness 探索产出 .tks 后，验证它能否被 `tke run` 稳定回放：
-//   1) 重启净化：关掉目标（web 销毁会话 / 移动 force-stop），让脚本的「启动」从零开始
-//   2) 整脚本从头回放一次（复用 ScriptRunner，即 tke run 的执行路径）
+//   1) 重启净化：关闭并重新启动目标（web 销毁会话后重开/移动 force-stop 后拉起），刷新到干净初始态
+//   2) 整脚本从头回放一次（复用 ScriptRunner，即 tke run 的执行路径，**零 token**）
 //   3) 失败：前 k 步可信保留，把失败步+错误+当前实时页面交回同一 AI 会话，
-//      让它从失败处「续接修复」(drive report=false)，产出修正尾部并拼接
+//      让它从失败处「续接修复」(drive spinner=false)，产出修正尾部并拼接
 //   4) 成功：连续通过 NEED_PASS 次（默认 2）才算稳定，期间每次都重启净化以验证可重复性
+//
+// 全景记录（conversation.json）：除 AI 交互外，验证阶段还记下——
+//   verify_start（初始脚本）/ verify_replay（每次回放的逐步执行轨迹+哪步失败，零 token）/
+//   verify_repair（AI 介入修复的交接：保留前缀、从哪步起重导航）/ verify_end（最终结论）。
+//   这样能复盘：一开始脚本哪里错了（攒经验）、AI 的介入与修正是否正确。
 //
 // 状态延续依据：web 会话按设备 ID 持久化（与 workarea 无关）、移动端 device 本身即状态，
 // 因此回放失败后设备就停在失败页，AI 直接 perceive 即可，无需重放前缀。
@@ -14,7 +19,7 @@ use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::{ControlAction, ExecutionResult, LlmSession, Params, Result, RunEvent, ScriptParser, ScriptRunner, TksCommand, TksParam};
+use crate::{ControlAction, ExecutionResult, LlmSession, Params, Result, RunEvent, ScriptParser, ScriptRunner, StepResult, TksCommand, TksParam};
 
 use super::super::execution::device::exec;
 use super::super::execution::script::write_script;
@@ -26,6 +31,7 @@ const NEED_PASS: usize = 2; // 连续干净回放通过几次算「稳定」
 const MAX_REPAIRS: usize = 6; // 修复尝试上限（兜底，避免反复修不好时无限循环）
 
 /// 自检并尝试修复，返回（最终脚本步骤, 自检报告）。会把最终版本写回 script_path。
+/// `verify_log`：回放产物（标注截图/页面结构）落点；None 则只记文本轨迹、不存图。
 pub async fn verify_and_repair(
     sess: &mut LlmSession,
     tx: &mut Transcript,
@@ -33,16 +39,22 @@ pub async fn verify_and_repair(
     params: &Arc<Params>,
     script_path: &Path,
     case: &str,
-    log_root: Option<&Path>,
+    verify_log: Option<&Path>,
     mut lines: Vec<String>,
 ) -> (Vec<String>, VerifyReport) {
     let tty = std::io::stderr().is_terminal();
-    let mut report = VerifyReport { ran: true, passed: false, repairs: 0 };
+    let mut report = VerifyReport { ran: true, passed: false, repairs: 0, created: Vec::new(), updated: Vec::new() };
 
     if lines.is_empty() {
         eprintln!("{}", paint(tty, "33", "自检跳过：没有生成可回放的步骤"));
         return (lines, report);
     }
+
+    // 全景记录：初始脚本
+    tx.log(
+        "verify_start",
+        serde_json::json!({ "need_pass": NEED_PASS, "max_repairs": MAX_REPAIRS, "script_lines": lines.clone() }),
+    );
 
     eprintln!("{}", paint(tty, "1", "╭─ 自检回放 ──────────────────────────"));
 
@@ -54,7 +66,7 @@ pub async fn verify_and_repair(
         // 2) 写回当前版本并整脚本回放
         let _ = write_script(script_path, case, &lines);
         replay_no += 1;
-        let result = replay(params, script_path, log_root).await;
+        let result = replay(params, script_path, verify_log).await;
 
         match result {
             // —— 干净通过 ——
@@ -62,7 +74,11 @@ pub async fn verify_and_repair(
                 streak += 1;
                 tx.log(
                     "verify_replay",
-                    serde_json::json!({ "replay": replay_no, "success": true, "streak": streak, "steps": r.steps.len() }),
+                    serde_json::json!({
+                        "replay": replay_no, "engine": "tke run", "tokens": 0,
+                        "success": true, "streak": streak, "total_steps": r.steps.len(),
+                        "steps": steps_json(&r.steps),
+                    }),
                 );
                 eprintln!(
                     "  第 {} 次回放：{} 全部 {} 步通过（连续 {}/{}）",
@@ -90,7 +106,11 @@ pub async fn verify_and_repair(
                 let err = r.error.clone().unwrap_or_else(|| "未知错误".into());
                 tx.log(
                     "verify_replay",
-                    serde_json::json!({ "replay": replay_no, "success": false, "failed_step": k + 1, "failed_line": failed, "error": err }),
+                    serde_json::json!({
+                        "replay": replay_no, "engine": "tke run", "tokens": 0,
+                        "success": false, "failed_step": k + 1, "failed_line": failed, "error": err,
+                        "total_steps": r.steps.len(), "steps": steps_json(&r.steps),
+                    }),
                 );
                 eprintln!(
                     "  第 {} 次回放：{} 第 {} 步失败 {} — {}",
@@ -109,6 +129,14 @@ pub async fn verify_and_repair(
 
                 // 3) 失败续接：前 k 步可信保留，AI 从当前实时页面续接修复
                 let prefix: Vec<String> = lines[..k].to_vec();
+                // 全景记录：AI 介入修复的交接点
+                tx.log(
+                    "verify_repair",
+                    serde_json::json!({
+                        "repair": report.repairs, "from_step": k + 1, "failed_line": failed,
+                        "error": err, "kept_prefix_steps": k,
+                    }),
+                );
                 eprintln!(
                     "  {}",
                     paint(tty, "2", &format!("→ 让 AI 从第 {} 步修复（第 {} 次修复）…", k + 1, report.repairs))
@@ -132,6 +160,17 @@ pub async fn verify_and_repair(
                         break;
                     }
                 };
+                // 累计修复阶段的元素变更，供最终「元素库更新」框合并展示
+                for c in tail.created {
+                    if !report.created.contains(&c) {
+                        report.created.push(c);
+                    }
+                }
+                for u in tail.updated {
+                    if !report.updated.contains(&u) {
+                        report.updated.push(u);
+                    }
+                }
                 if tail.aborted {
                     eprintln!("  {}", paint(tty, "33", "已终止（用户中断）"));
                     break;
@@ -148,7 +187,7 @@ pub async fn verify_and_repair(
             Err(e) => {
                 tx.log(
                     "verify_replay",
-                    serde_json::json!({ "replay": replay_no, "success": false, "error": e.to_string() }),
+                    serde_json::json!({ "replay": replay_no, "engine": "tke run", "tokens": 0, "success": false, "error": e.to_string() }),
                 );
                 eprintln!("  第 {} 次回放：{} 无法执行 — {}", replay_no, paint(tty, "31", "✗"), e);
                 break;
@@ -158,6 +197,10 @@ pub async fn verify_and_repair(
 
     // 落盘最终版本
     let _ = write_script(script_path, case, &lines);
+    tx.log(
+        "verify_end",
+        serde_json::json!({ "passed": report.passed, "repairs": report.repairs, "replays": replay_no }),
+    );
 
     let summary = if report.passed {
         paint(tty, "32", &format!("✓ 稳定通过（连续 {} 次干净回放，修复 {} 次）", NEED_PASS, report.repairs))
@@ -168,6 +211,25 @@ pub async fn verify_and_repair(
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
     (lines, report)
+}
+
+/// 把回放的逐步执行结果转成全景记录用的 JSON 数组（命令/成败/错误/截图，零 token）。
+fn steps_json(steps: &[StepResult]) -> serde_json::Value {
+    serde_json::Value::Array(
+        steps
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "step": s.index + 1,
+                    "command": s.command,
+                    "success": s.success,
+                    "error": s.error,
+                    "duration_ms": s.duration_ms,
+                    "screenshot": s.screenshot,
+                })
+            })
+            .collect(),
+    )
 }
 
 /// 重启净化：关掉目标后**重新启动**，把状态刷新到干净初始态，再开始回放。

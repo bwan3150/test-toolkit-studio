@@ -37,6 +37,10 @@ pub struct VerifyReport {
     pub passed: bool,
     /// 触发的修复次数
     pub repairs: usize,
+    /// 修复阶段新建的元素名（与探索阶段合并后展示）
+    pub created: Vec<String>,
+    /// 修复阶段更新描述的元素差异行
+    pub updated: Vec<String>,
 }
 
 /// AgentRunner 结果

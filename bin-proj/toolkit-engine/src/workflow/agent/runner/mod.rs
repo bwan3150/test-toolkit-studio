@@ -7,6 +7,7 @@ pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
 
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use crate::models::Platform;
@@ -123,6 +124,8 @@ impl AgentRunner {
         // —— --verify：生成后自检 + 自修复（重启净化→整脚本回放→失败让 AI 续接修复→连过 2 次）——
         // 未被中断时才跑；verify 内部会把最终脚本写回 script_path。
         let verified = if opts.verify && !outcome.aborted {
+            // 回放产物（标注截图/页面结构）落在 run_dir/verify 下，便于复盘哪步怎么错
+            let verify_log = run_dir.join("verify");
             let (_final_lines, rep) = verify::verify_and_repair(
                 &mut sess,
                 &mut tx,
@@ -130,7 +133,7 @@ impl AgentRunner {
                 &opts.params,
                 &script_path,
                 &opts.case,
-                None, // 回放产物不另存（失败信息已记入 conversation 的 verify_replay）
+                Some(&verify_log),
                 outcome.lines.clone(),
             )
             .await;
@@ -183,6 +186,29 @@ impl AgentRunner {
         let conversation_json = run_dir.join("conversation.json");
         let _ = tx.finalize(&conversation_json);
 
+        // —— 统一在最末尾渲染「结果 + 元素库」框：放到 verify 之后，
+        //    token 总量才覆盖探索+验证+修复全程；并多给一行「验证状态」——
+        let mut all_created = outcome.created.clone();
+        if let Some(r) = &verified {
+            for c in &r.created {
+                if !all_created.contains(c) {
+                    all_created.push(c.clone());
+                }
+            }
+        }
+        render_summary(
+            outcome.success,
+            outcome.aborted,
+            &outcome.reason,
+            outcome.rounds,
+            verified.as_ref(),
+            sess.model(),
+            total_prompt,
+            total_completion,
+            &all_created,
+            &element_path,
+        );
+
         Ok(AgentResult {
             success: overall_success,
             rounds: outcome.rounds,
@@ -192,6 +218,80 @@ impl AgentRunner {
             aborted: outcome.aborted,
         })
     }
+}
+
+/// 末尾统一渲染「结果 + 元素库更新」框（在 verify 之后调用，token 覆盖全程）。
+/// 「验证」一行：未配 --verify=未验证；配了则 验证通过/验证失败。
+#[allow(clippy::too_many_arguments)]
+fn render_summary(
+    success: bool,
+    aborted: bool,
+    reason: &str,
+    rounds: usize,
+    verified: Option<&options::VerifyReport>,
+    model: &str,
+    tp: i64,
+    tc: i64,
+    created: &[String],
+    element_path: &Path,
+) {
+    use flow::{brief, fmt_tokens, paint};
+    let tty = std::io::stderr().is_terminal();
+
+    let status = if aborted {
+        paint(tty, "33", "■ 已终止")
+    } else if success {
+        paint(tty, "32", "✓ 达成")
+    } else {
+        paint(tty, "31", "✗ 未达成")
+    };
+    let verify_status = match verified {
+        None => paint(tty, "2", "未验证"),
+        Some(r) if r.passed => paint(tty, "32", "✓ 验证通过"),
+        Some(_) => paint(tty, "31", "✗ 验证失败"),
+    };
+
+    eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
+    eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, rounds);
+    eprintln!("  {}   {}", paint(tty, "2", "验证"), verify_status);
+    eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(reason, 200));
+    eprintln!("  {}   {}", paint(tty, "2", "模型"), model);
+    eprintln!(
+        "  {}  {}",
+        paint(tty, "2", "Token"),
+        paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tp), fmt_tokens(tc), fmt_tokens(tp + tc)))
+    );
+    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+
+    // 元素库更新：合并探索+修复阶段新增，desc 从库里读（探索/修复各自的 desc-pass 已写入）
+    let descs = read_descs(element_path, created);
+    eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
+    if created.is_empty() {
+        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
+    } else {
+        let line_for = |c: &String| match descs.get(c) {
+            Some(Some(d)) => format!("{} · {}", c, brief(d, 80)),
+            _ => c.clone(),
+        };
+        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &line_for(&created[0])));
+        for c in &created[1..] {
+            eprintln!("         {}", paint(tty, "32", &line_for(c)));
+        }
+        eprintln!("  {}", paint(tty, "2", "（已新增，desc 据实际作用生成，请人工二次审核）"));
+    }
+    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+}
+
+/// 从 element.json 读出若干元素的 desc（用于最终汇总展示）
+fn read_descs(lib_path: &Path, names: &[String]) -> std::collections::HashMap<String, Option<String>> {
+    let lib: serde_json::Value = std::fs::read_to_string(lib_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    names
+        .iter()
+        .map(|name| (name.clone(), lib["elements"][name]["desc"].as_str().map(|s| s.to_string())))
+        .collect()
 }
 
 /// 记录一次知识检索结果

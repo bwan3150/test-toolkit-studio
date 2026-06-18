@@ -42,7 +42,7 @@ pub(crate) fn friendly(line: &str) -> String {
 }
 
 /// 紧凑 token 显示：4443→4.4k、148693→149k、<1000 原样，避免大数字刷屏
-fn fmt_tokens(n: i64) -> String {
+pub(crate) fn fmt_tokens(n: i64) -> String {
     if n < 1000 {
         n.to_string()
     } else if n < 100_000 {
@@ -102,14 +102,15 @@ pub struct DriveOutcome {
 
 /// 驱动探索循环
 ///
-/// `report=true`：完整探索——含启动 spinner 与结束「结果/元素库」框（初次 harness 用）。
-/// `report=false`：修复续接——复用同一循环从当前实时页面继续探索生成修正步骤，
-///   不打 spinner、不打结果框（由外层 verify 统一汇报）。调用前由调用方先 `sess.user(开场白)`。
+/// `spinner=true`：初次探索——开头转个「正在启动…」动画（首屏采集前的空窗）。
+/// `spinner=false`：修复续接——复用同一循环从当前实时页面继续探索生成修正步骤，不转动画。
+/// 注意：本函数**不再打印结果/元素库框**——汇总在 verify 全部跑完后由上层统一渲染，
+///   以便把验证/修复阶段的 token 也算进总量。修复模式调用前请先 `sess.user(开场白)`。
 pub async fn drive(
     sess: &mut LlmSession,
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
-    report: bool,
+    spinner: bool,
 ) -> Result<DriveOutcome> {
     let tty = std::io::stderr().is_terminal();
 
@@ -124,9 +125,9 @@ pub async fn drive(
         });
     }
 
-    // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY、且 report 模式）
+    // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY、且初次探索）
     let spin_stop = Arc::new(AtomicBool::new(false));
-    let mut spin_handle = if report && tty {
+    let mut spin_handle = if spinner && tty {
         let stop = spin_stop.clone();
         Some(tokio::spawn(async move {
             let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -490,7 +491,7 @@ pub async fn drive(
     // approach A：探索结束后，据本轮各新建元素的实际作用统一生成 desc（创建时不写、不想当然）。
     // 复用同一会话——它已知道每个元素被点击后发生了什么。中断时也生成（元素已被点过，丢了可惜），
     // 给"退出中"提示；再按一次 Ctrl+C 会命中默认信号、强制退出。
-    let mut generated: Vec<(String, String)> = Vec::new();
+    // desc 写进 element.json（持久化）；最终「元素库更新」框由上层据库中 desc 渲染。
     if !created.is_empty() {
         if aborted {
             eprintln!("{}", paint(tty, "33", "退出中：正在为新建元素生成描述…（再次 Ctrl+C 强制退出）"));
@@ -506,57 +507,13 @@ pub async fn drive(
             if let Some(obj) = parse_desc_json(&t) {
                 for name in &created {
                     if let Some(d) = obj.get(name).and_then(|v| v.as_str()).map(str::trim) {
-                        if !d.is_empty()
-                            && crate::tools::element::set_element_desc(ctx.element_path, name, d).is_ok()
-                        {
-                            generated.push((name.clone(), d.to_string()));
+                        if !d.is_empty() {
+                            let _ = crate::tools::element::set_element_desc(ctx.element_path, name, d);
                         }
                     }
                 }
             }
         }
-    }
-
-    let (tp, tc) = sess.total_usage();
-
-    // —— 统一结果 section（带框）；report=false（修复续接）时不打，外层 verify 统一汇报 ——
-    if report {
-        let status = if aborted {
-            paint(tty, "33", "■ 已终止")
-        } else if success {
-            paint(tty, "32", "✓ 达成")
-        } else {
-            paint(tty, "31", "✗ 未达成")
-        };
-        // —— section 1：结果 ——
-        eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
-        eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, round);
-        eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
-        eprintln!("  {}   {}", paint(tty, "2", "模型"), sess.model());
-        eprintln!(
-            "  {}  {}",
-            paint(tty, "2", "Token"),
-            paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tp), fmt_tokens(tc), fmt_tokens(tp + tc)))
-        );
-        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
-
-        // —— section 2：元素库更新 ——
-        eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
-        if created.is_empty() {
-            eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
-        } else {
-            // 每个新建元素单独一行，附带据实际作用生成的 desc（若有）
-            let line_for = |c: &String| match generated.iter().find(|(k, _)| k == c) {
-                Some((_, d)) => format!("{} · {}", c, brief(d, 80)),
-                None => c.clone(),
-            };
-            eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &line_for(&created[0])));
-            for c in &created[1..] {
-                eprintln!("         {}", paint(tty, "32", &line_for(c)));
-            }
-            eprintln!("  {}", paint(tty, "2", "（已新增，desc 据实际作用生成，请人工二次审核）"));
-        }
-        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
     }
 
     Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name })
