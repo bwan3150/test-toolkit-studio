@@ -195,6 +195,13 @@ pub async fn verify_and_repair(
                     eprintln!("  {}", paint(tty, "33", "已终止（用户中断）"));
                     break;
                 }
+                // 修复本身没达成目标（AI 卡死/超轮，自己 success=false）：别把"能跑通但没真的
+                // 完成目标"的步骤拼进去当通过——那是假阳性。直接判验证失败。
+                if !tail.success {
+                    tx.log("verify_repair_failed", serde_json::json!({ "repair": report.repairs, "reason": tail.reason }));
+                    eprintln!("  {}", paint(tty, "33", "修复未能达成测试目标（AI 也没走通），判定验证失败"));
+                    break;
+                }
                 // 修复阶段若改了某元素名，前缀里的引用也要同步（库 key 已变，否则回放找不到）
                 for (old, new) in &tail.renames {
                     let (from, to) = (format!("{{{}}}", old), format!("{{{}}}", new));

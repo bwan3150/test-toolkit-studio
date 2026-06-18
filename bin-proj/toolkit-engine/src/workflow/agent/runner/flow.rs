@@ -160,6 +160,7 @@ pub async fn drive(
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
     let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
+    let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -228,6 +229,14 @@ pub async fn drive(
         } else {
             no_progress = 0;
         }
+        // 剔除"空滑"：上一步是滑动但页面纹丝未动（已到边界/没滚起来）——这种步无用，
+        // 且回放时它往往会真的滚动，导致整段脚本滑过头到底部、错过目标元素。从脚本里删掉。
+        if unchanged && last_was_swipe {
+            if let Some(dropped) = lines.pop() {
+                tx.log("prune_noop_swipe", serde_json::json!({ "round": round, "dropped": dropped }));
+            }
+        }
+
         // 真打转 = "反复做同一操作" 且 "页面始终不变" **两者都满足**。
         // 只看其一会误杀：同一滑动但页面在翻新内容=在前进；试不同元素但页面没变=在尝试。都不算打转。
         let repeated_same = lines.len() >= 2 && lines[lines.len() - 1] == lines[lines.len() - 2];
@@ -476,6 +485,7 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
+                    let is_swipe = matches!(&device_action, AgentAction::SwipeDir { .. });
                     match execution::apply(
                         ctx.device,
                         ctx.element_path,
@@ -530,6 +540,7 @@ pub async fn drive(
                                 xml,
                             });
                             lines.push(line.clone());
+                            last_was_swipe = is_swipe; // 记下这步是不是滑动，供下一轮判定空滑
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
