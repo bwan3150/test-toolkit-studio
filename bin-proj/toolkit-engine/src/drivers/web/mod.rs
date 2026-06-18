@@ -214,10 +214,17 @@ impl WebDriver {
         tabs
     }
 
-    /// 切换到第 index 个标签页
+    /// 切换到第 index 个标签页。
+    /// 回放时上一步点击可能刚触发新标签页、尚未就绪——轮询等待目标序号出现（最多 ~3s），
+    /// 避免「切换 N」抢在新标签打开前执行而报越界（这是脚本回放最常见的时序失败）。
     pub fn switch_tab(&self, index: usize) -> Result<()> {
-        let resp = self.get("/window/handles")?;
-        let handles = resp["value"].as_array().cloned().unwrap_or_default();
+        let mut handles = self.get("/window/handles")?["value"].as_array().cloned().unwrap_or_default();
+        let mut tries = 0;
+        while handles.len() <= index && tries < 15 {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            handles = self.get("/window/handles")?["value"].as_array().cloned().unwrap_or_default();
+            tries += 1;
+        }
         let h = handles
             .get(index)
             .and_then(|h| h.as_str())

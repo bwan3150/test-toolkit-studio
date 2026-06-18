@@ -223,6 +223,18 @@ pub async fn drive(
         } else {
             no_progress = 0;
         }
+        // 硬止损：连续多轮页面完全不变 = 真卡死（反复点同一无效元素），自动停止，
+        // 不再无限烧 token。前面已在 no_progress>=2 自动塞过截图、给过换做法提示，仍无效即止。
+        const STUCK_ABORT: usize = 5;
+        if no_progress >= STUCK_ABORT && !p.elements.is_empty() {
+            tx.log("stuck_abort", serde_json::json!({ "round": round, "no_progress": no_progress }));
+            eprintln!(
+                "{}",
+                paint(tty, "31", &format!("  连续 {} 轮页面无任何变化，判定卡死，自动停止（避免空烧 token）", no_progress))
+            );
+            finish = Some((false, format!("连续 {} 轮页面无变化、判定卡死并自动停止", no_progress)));
+            break 'outer;
+        }
         let stuck = (no_progress >= 1 || revisits >= 2) && !p.elements.is_empty();
 
         tx.log(
