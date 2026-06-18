@@ -13,8 +13,8 @@ use super::super::prompt::PromptSpec;
 pub struct AgentRunOptions {
     /// 测试用例文字（已从 .md 文件或命令行读出）
     pub case: String,
-    /// 生成的 .tks 导出路径
-    pub script_out: PathBuf,
+    /// 脚本输出目录（生成的 .tks 落点；文件名由 AI 在 finish 时起，落库去重不覆盖旧脚本）
+    pub script_dir: PathBuf,
     /// AI 配置（已合并 CLI --ai-* 覆盖）
     pub ai: AiConfig,
     /// 提示词来源（可自定义：注入文本 / .md 文件 / 目录）

@@ -16,10 +16,6 @@ pub struct HarnessArgs {
     /// 测试用例: .md/.txt 文件路径，或一段文字描述
     pub case: String,
 
-    /// 生成的 .tks 脚本导出路径
-    #[arg(long)]
-    pub script: PathBuf,
-
     /// 覆盖 [ai].provider（anthropic/openai/gemini/deepseek/doubao/qwen）
     #[arg(long)]
     pub ai_provider: Option<String>,
@@ -43,7 +39,7 @@ pub struct HarnessArgs {
     pub ocr: Option<String>,
 
     /// 生成脚本后自检+自修复：重启净化→从头 tke run 回放生成的 .tks→失败则让 AI 从
-    /// 失败步重新探索续接，直到连续通过 2 次。需配合 --script 使用。
+    /// 失败步重新探索续接，直到连续通过 2 次。
     #[arg(long)]
     pub verify: bool,
 
@@ -68,6 +64,11 @@ pub async fn handle(
     if params.device().is_none() {
         JsonOutput::error("harness 必须指定设备: -d/--device <设备ID>");
     }
+
+    // 脚本输出目录：来自 --scripts 或 config 的 scripts；文件名由 AI 起、自动去重不覆盖
+    let script_dir = params.scripts.clone().unwrap_or_else(|| {
+        JsonOutput::error("harness 必须指定脚本输出目录: --scripts <目录>（也可写入 config 的 scripts）")
+    });
 
     // 用例：文件则读取内容，否则当作文字
     let case_text = {
@@ -107,7 +108,7 @@ pub async fn handle(
 
     let result = AgentRunner::run(AgentRunOptions {
         case: case_text,
-        script_out: args.script.clone(),
+        script_dir,
         ai: merged_ai,
         prompt,
         ocr,

@@ -40,8 +40,8 @@ pub enum AgentAction {
     RequestScreenshot { reason: String },
     /// 向用户反问
     AskUser { question: String },
-    /// 结束探索（给出成功与否及依据）
-    Finish { success: bool, reason: String },
+    /// 结束探索（给出成功与否及依据）；script_name=给生成脚本起的简短文件名（不含扩展名）
+    Finish { success: bool, reason: String, script_name: Option<String> },
 }
 
 impl AgentAction {

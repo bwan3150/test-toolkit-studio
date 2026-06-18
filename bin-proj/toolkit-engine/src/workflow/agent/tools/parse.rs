@@ -61,6 +61,7 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
         "finish" => AgentAction::Finish {
             success: a.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
             reason: req_str(a, "reason")?,
+            script_name: opt_str(a, "script_name"),
         },
         other => {
             return Err(TkeError::ScriptExecuteError(format!("未知的工具调用: {}", other)));

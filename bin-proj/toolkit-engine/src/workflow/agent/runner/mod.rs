@@ -27,24 +27,20 @@ impl AgentRunner {
         let device = opts.params.device().unwrap_or_default();
         let platform = Platform::from_device(Some(&device));
 
-        // 元素库（参数层查表；缺省落 script 同级 element.json）
-        let element_path: PathBuf = opts.params.element_lib().unwrap_or_else(|| {
-            opts.script_out
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join("element.json")
-        });
+        // 脚本输出目录确保存在（.tks 文件名由 AI 在 finish 起、落库时去重）
+        std::fs::create_dir_all(&opts.script_dir).ok();
+
+        // 元素库（参数层查表；缺省落脚本目录下的 element.json，整目录脚本共享一份库）
+        let element_path: PathBuf = opts
+            .params
+            .element_lib()
+            .unwrap_or_else(|| opts.script_dir.join("element.json"));
 
         // —— 产物目录：复用 RunArtifacts，与 tke run 同构 ——
-        // log 根：--log/config 优先；缺省落 script 同级（harness 始终保留探索记录）
-        let stem = opts
-            .script_out
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "harness".to_string());
-        let log_root = opts.params.log.clone().unwrap_or_else(|| {
-            opts.script_out.parent().unwrap_or(Path::new(".")).to_path_buf()
-        });
+        // log 根：--log/config 优先；缺省落脚本目录下（harness 始终保留探索记录）。
+        // run_dir 名用「用例 slug」（最终 .tks 文件名由 AI 起，两者解耦，run_end 里有脚本路径）
+        let stem = slug(&opts.case, 30);
+        let log_root = opts.params.log.clone().unwrap_or_else(|| opts.script_dir.clone());
         let artifacts = RunArtifacts::create(&log_root, &stem)?;
         let run_dir = artifacts.run_dir.clone();
         let conversation_path = run_dir.join("conversation.jsonl");
@@ -111,18 +107,28 @@ impl AgentRunner {
         let outcome = drive(&mut sess, &mut tx, &ctx, true).await?;
         let end_time = chrono::Local::now().to_rfc3339();
 
-        // —— 收尾：写 .tks 脚本(--script) ——（先落初版，供 --verify 回放）
-        write_script(&opts.script_out, &opts.case, &outcome.lines)?;
+        // —— 脚本文件名：用 AI 在 finish 起的名（概括本次测试），兜底用例 slug；
+        //    在脚本目录内去重，绝不覆盖已有脚本 ——
+        let base = outcome
+            .script_name
+            .as_deref()
+            .map(|s| slug(s, 50))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| slug(&opts.case, 40));
+        let script_path = unique_script_path(&opts.script_dir, &base);
+
+        // 写 .tks（先落初版，供 --verify 回放）
+        write_script(&script_path, &opts.case, &outcome.lines)?;
 
         // —— --verify：生成后自检 + 自修复（重启净化→整脚本回放→失败让 AI 续接修复→连过 2 次）——
-        // 未被中断且确实有 --script 产出时才跑；verify 内部会把最终脚本写回 script_out。
+        // 未被中断时才跑；verify 内部会把最终脚本写回 script_path。
         let verified = if opts.verify && !outcome.aborted {
             let (_final_lines, rep) = verify::verify_and_repair(
                 &mut sess,
                 &mut tx,
                 &ctx,
                 &opts.params,
-                &opts.script_out,
+                &script_path,
                 &opts.case,
                 None, // 回放产物不另存（失败信息已记入 conversation 的 verify_replay）
                 outcome.lines.clone(),
@@ -146,7 +152,7 @@ impl AgentRunner {
                 "reason": outcome.reason.clone(),
                 "rounds": outcome.rounds,
                 "steps": outcome.steps.len(),
-                "script": opts.script_out.to_string_lossy(),
+                "script": script_path.to_string_lossy(),
                 "model": sess.model(),
                 "prompt_tokens": total_prompt,
                 "completion_tokens": total_completion,
@@ -167,7 +173,7 @@ impl AgentRunner {
             end_time,
             steps: outcome.steps,
             error: if overall_success { None } else { Some(outcome.reason.clone()) },
-            script_path: Some(opts.script_out.to_string_lossy().to_string()),
+            script_path: Some(script_path.to_string_lossy().to_string()),
             run_dir: Some(run_dir.to_string_lossy().to_string()),
             launched_packages: Vec::new(),
         };
@@ -180,7 +186,7 @@ impl AgentRunner {
         Ok(AgentResult {
             success: overall_success,
             rounds: outcome.rounds,
-            script: opts.script_out.clone(),
+            script: script_path,
             conversation: conversation_json,
             finish_reason: outcome.reason,
             aborted: outcome.aborted,
@@ -193,5 +199,47 @@ fn record_knowledge(tx: &mut Transcript, kind: &str, outcome: KnowledgeOutcome) 
     match outcome {
         KnowledgeOutcome::Hit(ctx) => tx.log(kind, serde_json::json!({ "hit": true, "context": ctx })),
         KnowledgeOutcome::Skipped(why) => tx.log(kind, serde_json::json!({ "hit": false, "skipped": why })),
+    }
+}
+
+/// 把任意文字压成适合做文件名的 slug：保留字母数字（含中日韩），其余转连字符，小写、去重、限长。
+fn slug(s: &str, max: usize) -> String {
+    let s = s.trim().lines().next().unwrap_or("").trim();
+    let s = s.strip_suffix(".tks").unwrap_or(s);
+    let mut out = String::new();
+    let mut prev_dash = false;
+    for c in s.chars() {
+        if out.chars().count() >= max {
+            break;
+        }
+        if c.is_alphanumeric() {
+            out.extend(c.to_lowercase());
+            prev_dash = false;
+        } else if !prev_dash && !out.is_empty() {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    let out = out.trim_matches('-').to_string();
+    if out.is_empty() {
+        "harness".to_string()
+    } else {
+        out
+    }
+}
+
+/// 在目录内生成不冲突的 .tks 路径：base.tks 被占则 base-2.tks、base-3.tks…，绝不覆盖旧脚本。
+fn unique_script_path(dir: &Path, base: &str) -> PathBuf {
+    let first = dir.join(format!("{}.tks", base));
+    if !first.exists() {
+        return first;
+    }
+    let mut n = 2;
+    loop {
+        let p = dir.join(format!("{}-{}.tks", base, n));
+        if !p.exists() {
+            return p;
+        }
+        n += 1;
     }
 }

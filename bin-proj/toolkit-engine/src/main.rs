@@ -39,7 +39,7 @@ struct Cli {
     #[arg(long, global = true)]
     log: Option<PathBuf>,
 
-    /// 脚本输出目录（harness 生成的 .tks 落点；缺省用 config 或 --script 显式路径）
+    /// 脚本输出目录（harness 生成的 .tks 落点；文件名由 AI 起、目录内去重。可写入 config 固定）
     #[arg(long, global = true)]
     scripts: Option<PathBuf>,
 
@@ -91,7 +91,7 @@ enum Commands {
         #[command(flatten)]
         args: StepsArgs,
     },
-    /// [工作流] AI 根据文字用例探索测试并生成 .tks: tke harness <用例.md|文字> --script <导出路径>
+    /// [工作流] AI 根据文字用例探索测试并生成 .tks: tke harness <用例.md|文字> --scripts <输出目录>（文件名由 AI 起）
     // 方向已转向"测试 harness"，功能不变；harn 为简写
     #[command(visible_alias = "harn")]
     Harness {

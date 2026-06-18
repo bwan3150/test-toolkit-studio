@@ -96,6 +96,8 @@ pub struct DriveOutcome {
     pub updated: Vec<String>,
     /// 是否被用户中断（Ctrl+C）
     pub aborted: bool,
+    /// AI 在 finish 时给生成脚本起的简短文件名（不含扩展名）；None 则由上层兜底
+    pub script_name: Option<String>,
 }
 
 /// 驱动探索循环
@@ -151,6 +153,7 @@ pub async fn drive(
     let mut round = 0usize;
     let mut llm_calls = 0usize;
     let mut finish: Option<(bool, String)> = None;
+    let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -269,6 +272,8 @@ pub async fn drive(
                 tx.log("auto_screenshot", serde_json::json!({ "round": round }));
             }
         }
+        // 轮与轮之间空一行，分隔更清楚
+        eprintln!();
         // 轮次头：左侧"第 N 轮"做锚点，右侧次要统计(已知/未知/OCR/标签页)整体淡色，
         // 不与下面的「思考 + 动作」主内容抢眼。OCR/标签页有值才显示。
         let mut stat = vec![format!("{} 已知", n_known), format!("{} 未知", n_unknown)];
@@ -371,11 +376,12 @@ pub async fn drive(
             eprintln!("  {}  {}", say, toks);
 
             match action {
-                AgentAction::Finish { success, reason } => {
+                AgentAction::Finish { success, reason, script_name: sn } => {
                     // 回执 finish 的 tool_result，避免后续 desc 生成轮因悬空 tool_call 被 API 拒
                     sess.tool_result(primary.call_id.as_str(), "已结束探索");
                     // 结果在末尾统一 section 展示，这里只记录与收尾
-                    tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone() }));
+                    tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone(), "script_name": sn.clone() }));
+                    script_name = sn;
                     finish = Some((success, reason));
                     break 'outer;
                 }
@@ -553,5 +559,5 @@ pub async fn drive(
         eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
     }
 
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name })
 }

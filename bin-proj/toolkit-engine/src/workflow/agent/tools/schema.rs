@@ -147,7 +147,8 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
                 "type": "object",
                 "properties": {
                     "success": { "type": "boolean", "description": "是否达成测试用例目标" },
-                    "reason": { "type": "string", "description": "结束依据（达成/失败的判断理由）" }
+                    "reason": { "type": "string", "description": "结束依据（达成/失败的判断理由）" },
+                    "script_name": { "type": "string", "description": "给本次生成的回放脚本起一个简短的文件名（不含扩展名）：小写英文或拼音、用连字符分隔、概括本次测试做了什么，如 login-flow、product-pdf-view、cart-checkout。" }
                 },
                 "required": ["success", "reason"]
             }),
