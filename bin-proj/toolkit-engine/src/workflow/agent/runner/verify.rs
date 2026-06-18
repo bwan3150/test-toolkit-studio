@@ -19,7 +19,7 @@ use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::{ControlAction, ExecutionResult, LlmSession, Params, Result, RunEvent, ScriptParser, ScriptRunner, StepResult, TksCommand, TksParam};
+use crate::{ControlAction, LlmSession, Params, RunEvent, ScriptParser, ScriptRunner, StepResult, TksCommand, TksParam};
 
 use super::super::execution::device::exec;
 use super::super::execution::script::write_script;
@@ -63,10 +63,33 @@ pub async fn verify_and_repair(
     loop {
         // 1) 重启净化
         reset_state(ctx.device, &lines).await;
-        // 2) 写回当前版本并整脚本回放
+        // 2) 写回当前版本并整脚本回放——逐步实时显示（像 tke run，看得到第几步、哪步红了）
         let _ = write_script(script_path, case, &lines);
         replay_no += 1;
-        let result = replay(params, script_path, verify_log).await;
+        eprintln!("  {}", paint(tty, "1", &format!("第 {} 次验证回放", replay_no)));
+        let result = {
+            let mut total = 0usize;
+            let mut sink = |e: &RunEvent| match e {
+                RunEvent::RunStart { total_steps, .. } => total = *total_steps,
+                RunEvent::StepEnd { index, command, success, error, .. } => {
+                    if *success {
+                        eprintln!(
+                            "    {}  {}",
+                            paint(tty, "2", &format!("步 {}/{}", index + 1, total)),
+                            paint(tty, "2", &friendly(command))
+                        );
+                    } else {
+                        eprintln!(
+                            "    {}  {}",
+                            paint(tty, "31", &format!("✗ 步 {}/{} {}", index + 1, total, friendly(command))),
+                            paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 100)))
+                        );
+                    }
+                }
+                _ => {}
+            };
+            ScriptRunner::new(params.clone()).run(script_path, verify_log, &mut sink).await
+        };
 
         match result {
             // —— 干净通过 ——
@@ -81,8 +104,7 @@ pub async fn verify_and_repair(
                     }),
                 );
                 eprintln!(
-                    "  第 {} 次回放：{} 全部 {} 步通过（连续 {}/{}）",
-                    replay_no,
+                    "  {} 全部 {} 步通过（连续 {}/{}）",
                     paint(tty, "32", "✓"),
                     r.steps.len(),
                     streak,
@@ -112,15 +134,7 @@ pub async fn verify_and_repair(
                         "total_steps": r.steps.len(), "steps": steps_json(&r.steps),
                     }),
                 );
-                eprintln!(
-                    "  第 {} 次回放：{} 第 {} 步失败 {} — {}",
-                    replay_no,
-                    paint(tty, "31", "✗"),
-                    k + 1,
-                    friendly(&failed),
-                    brief(&err, 120)
-                );
-
+                // 失败步已在上面的逐步流里标红；这里只决定是否继续修复
                 if report.repairs >= MAX_REPAIRS {
                     eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止自检", MAX_REPAIRS)));
                     break;
@@ -139,7 +153,7 @@ pub async fn verify_and_repair(
                 );
                 eprintln!(
                     "  {}",
-                    paint(tty, "2", &format!("→ 让 AI 从第 {} 步修复（第 {} 次修复）…", k + 1, report.repairs))
+                    paint(tty, "33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
                 );
                 let preamble = format!(
                     "现在进入【回放修复】。我把你刚生成的脚本从头跑了一遍，前 {} 步都成功了，\
@@ -153,7 +167,7 @@ pub async fn verify_and_repair(
                     case
                 );
                 sess.user(preamble);
-                let tail = match drive(sess, tx, ctx, false).await {
+                let tail = match drive(sess, tx, ctx, false, "修复·").await {
                     Ok(o) => o,
                     Err(e) => {
                         eprintln!("  {}", paint(tty, "31", &format!("修复过程出错：{}", e)));
@@ -269,9 +283,3 @@ fn launch_spec(lines: &[String]) -> Option<(String, String)> {
     None
 }
 
-/// 整脚本从头回放一次（复用 tke run 的 ScriptRunner）。事件吞掉，只取最终结果。
-async fn replay(params: &Arc<Params>, script_path: &Path, log_root: Option<&Path>) -> Result<ExecutionResult> {
-    let runner = ScriptRunner::new(params.clone());
-    let mut sink = |_: &RunEvent| {};
-    runner.run(script_path, log_root, &mut sink).await
-}

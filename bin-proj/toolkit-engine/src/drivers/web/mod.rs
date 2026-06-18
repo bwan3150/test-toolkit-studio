@@ -287,9 +287,20 @@ impl WebDriver {
 
     pub fn tap(&self, x: i32, y: i32) -> Result<()> {
         let dpr = self.device_pixel_ratio()?;
-        let (mut cx, mut cy) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
-        // 目标若在视口外（回放时滚动位置与录制略有出入），先纵向滚动使其居中，
-        // 再点击居中位置——避免 WebDriver "move target out of bounds"。
+        let (cx0, cy0) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
+        // 第一次：滚动入视(若需要)+夹紧后点击；失败再夹紧重试一次。
+        let (cx, cy) = self.center_into_viewport(cx0, cy0);
+        if self.click_at(cx, cy).is_ok() {
+            return Ok(());
+        }
+        // 兜底重试：重新读视口、滚动到中部、夹紧，再点一次
+        let (cx, cy) = self.center_into_viewport(cx0, cy0);
+        self.click_at(cx, cy)
+    }
+
+    /// 把目标坐标滚动到视口纵向中部（仅当其在视口外时），并**夹紧**进视口范围。
+    /// 夹紧是关键：杜绝 WebDriver "move target out of bounds" 硬失败——回放点击最大杀手。
+    fn center_into_viewport(&self, mut cx: i64, mut cy: i64) -> (i64, i64) {
         if let Ok(dims) = self.execute("return [window.innerWidth, window.innerHeight];", serde_json::json!([])) {
             let iw = dims["value"][0].as_i64().unwrap_or(0);
             let ih = dims["value"][1].as_i64().unwrap_or(0);
@@ -298,10 +309,18 @@ impl WebDriver {
                 let _ = self.execute(&format!("window.scrollBy(0, {}); return null;", dy), serde_json::json!([]));
                 cy = ih / 2;
             }
+            if ih > 0 {
+                cy = cy.clamp(0, ih - 1);
+            }
             if iw > 0 {
                 cx = cx.clamp(0, iw - 1);
             }
         }
+        (cx, cy)
+    }
+
+    /// 在视口坐标 (cx,cy) 处单击
+    fn click_at(&self, cx: i64, cy: i64) -> Result<()> {
         self.pointer_actions(serde_json::json!([
             { "type": "pointerMove", "duration": 0, "x": cx, "y": cy },
             { "type": "pointerDown", "button": 0 },

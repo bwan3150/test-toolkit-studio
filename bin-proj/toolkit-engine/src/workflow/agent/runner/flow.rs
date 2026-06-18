@@ -111,6 +111,7 @@ pub async fn drive(
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     spinner: bool,
+    round_prefix: &str,
 ) -> Result<DriveOutcome> {
     let tty = std::io::stderr().is_terminal();
 
@@ -303,7 +304,7 @@ pub async fn drive(
         };
         eprintln!(
             "{}  {}{}",
-            paint(tty, "2", &format!("第 {} 轮", round)),
+            paint(tty, "2", &format!("{}第 {} 轮", round_prefix, round)),
             paint(tty, "2", &stat.join(" · ")),
             notready
         );

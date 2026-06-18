@@ -105,7 +105,7 @@ impl AgentRunner {
             ocr: opts.ocr.as_ref(),
             max_rounds,
         };
-        let outcome = drive(&mut sess, &mut tx, &ctx, true).await?;
+        let outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
         let end_time = chrono::Local::now().to_rfc3339();
 
         // —— 脚本文件名：用 AI 在 finish 起的名（概括本次测试），兜底用例 slug；
