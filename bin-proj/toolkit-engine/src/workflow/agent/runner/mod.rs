@@ -76,6 +76,19 @@ impl AgentRunner {
         );
 
         let tools = build_tools(&prompts);
+        // 工具定义全集（AI 每轮实际收到的输入的一部分：名字 + description 提示词 + 参数 schema，
+        // 含统一注入的 comment 字段）。记进 transcript，使 conversation.json 不漏 AI 所见的任何输入。
+        tx.log(
+            "tools",
+            serde_json::json!({
+                "count": tools.len(),
+                "tools": tools.iter().map(|t| serde_json::json!({
+                    "name": t.name,
+                    "description": t.description,
+                    "schema": t.schema,
+                })).collect::<Vec<_>>(),
+            }),
+        );
         let mut sess = LlmSession::new(&opts.ai, system_prompt, tools)?;
         tx.log("model", serde_json::json!({ "model": sess.model() }));
         sess.user(format!("测试用例：\n{}\n\n请开始探索测试。", opts.case));
