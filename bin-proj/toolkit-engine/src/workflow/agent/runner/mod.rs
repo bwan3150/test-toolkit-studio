@@ -120,25 +120,23 @@ impl AgentRunner {
 
         // 写 .tks（先落初版，供 --verify 回放）
         write_script(&script_path, &opts.case, &outcome.lines)?;
-        // 明确标出"脚本生成完毕"，与后续验证阶段分开（不再把生成完成信息混在步骤里）
+        // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
+        // 探索达成 → 脚本完整；未达成/中断 → 脚本不完整，下面也不会去验证。
         let tty = std::io::stderr().is_terminal();
+        let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         eprintln!();
-        eprintln!(
-            "{}",
-            flow::paint(
-                tty,
-                "1;32",
-                &format!(
-                    "✓ 脚本生成完毕：{}（{} 步）",
-                    script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-                    outcome.lines.len()
-                )
-            )
-        );
+        if outcome.success {
+            eprintln!("{}", flow::paint(tty, "1;32", &format!("✓ 脚本生成完毕：{}（{} 步）", fname, outcome.lines.len())));
+        } else {
+            eprintln!(
+                "{}",
+                flow::paint(tty, "1;33", &format!("⚠ 探索未达成，脚本不完整：{}（{} 步，已保存当前进度，跳过验证）", fname, outcome.lines.len()))
+            );
+        }
 
         // —— --verify：生成后自检 + 自修复（重启净化→整脚本回放→失败让 AI 续接修复→连过 2 次）——
-        // 未被中断时才跑；verify 内部会把最终脚本写回 script_path。
-        let verified = if opts.verify && !outcome.aborted {
+        // 仅当探索**达成且未被中断**时才验证：脚本没完成就别去验证一个半成品。
+        let verified = if opts.verify && outcome.success && !outcome.aborted {
             // 回放产物（标注截图/页面结构）落在 run_dir/verify 下，便于复盘哪步怎么错
             let verify_log = run_dir.join("verify");
             let (_final_lines, rep) = verify::verify_and_repair(
