@@ -1,6 +1,7 @@
 // 【编排】AgentRunner：装配各子模块（提示词/会话/感知/执行/记忆/日志）并驱动循环
 // 本文件只做"装配 + 收尾"，循环逻辑在 flow.rs。
 
+pub mod distill;
 pub mod flow;
 pub mod options;
 pub mod verify;
@@ -118,23 +119,28 @@ impl AgentRunner {
             .unwrap_or_else(|| slug(&opts.case, 40));
         let script_path = unique_script_path(&opts.script_dir, &base);
 
-        // 写 .tks（先落初版，供 --verify 回放）
-        write_script(&script_path, &opts.case, &outcome.lines)?;
+        // —— 先提炼：探索达成后，把试错流水账提炼成最短干净脚本(+目标断言)，再去验证 ——
+        // （未达成/中断的半成品不提炼，原样保留进度）
+        let final_lines = if outcome.success && !outcome.aborted {
+            distill::distill_script(&mut sess, &mut tx, &outcome.lines, &opts.case, &element_path).await
+        } else {
+            outcome.lines.clone()
+        };
+        write_script(&script_path, &opts.case, &final_lines)?;
         // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
-        // 探索达成 → 脚本完整；未达成/中断 → 脚本不完整，下面也不会去验证。
         let tty = std::io::stderr().is_terminal();
         let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         eprintln!();
         if outcome.success {
-            eprintln!("{}", flow::paint(tty, "1;32", &format!("✓ 脚本生成完毕：{}（{} 步）", fname, outcome.lines.len())));
+            eprintln!("{}", flow::paint(tty, "1;32", &format!("✓ 脚本生成完毕：{}（{} 步）", fname, final_lines.len())));
         } else {
             eprintln!(
                 "{}",
-                flow::paint(tty, "1;33", &format!("⚠ 探索未达成，脚本不完整：{}（{} 步，已保存当前进度，跳过验证）", fname, outcome.lines.len()))
+                flow::paint(tty, "1;33", &format!("⚠ 探索未达成，脚本不完整：{}（{} 步，已保存当前进度，跳过验证）", fname, final_lines.len()))
             );
         }
 
-        // —— --verify：生成后自检 + 自修复（重启净化→整脚本回放→失败让 AI 续接修复→连过 2 次）——
+        // —— 再验证：回放提炼后的脚本，失败让 AI 续接修复，连过 2 次才算稳定 ——
         // 仅当探索**达成且未被中断**时才验证：脚本没完成就别去验证一个半成品。
         let verified = if opts.verify && outcome.success && !outcome.aborted {
             // 回放产物（标注截图/页面结构）落在 run_dir/verify 下，便于复盘哪步怎么错
@@ -147,7 +153,7 @@ impl AgentRunner {
                 &script_path,
                 &opts.case,
                 Some(&verify_log),
-                outcome.lines.clone(),
+                final_lines.clone(),
             )
             .await;
             Some(rep)

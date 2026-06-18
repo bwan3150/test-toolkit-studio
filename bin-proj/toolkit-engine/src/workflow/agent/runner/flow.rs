@@ -28,7 +28,7 @@ fn hash_str(s: &str) -> u64 {
 }
 
 /// 从模型回复里抽出 JSON 对象（容忍前后多余文字 / ```json 围栏）
-fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
+pub(crate) fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
     let start = s.find('{')?;
     let end = s.rfind('}')?;
     serde_json::from_str(s.get(start..=end)?).ok()
