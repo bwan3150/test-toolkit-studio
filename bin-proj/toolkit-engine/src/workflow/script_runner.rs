@@ -128,7 +128,21 @@ impl ScriptRunner {
             });
 
             let step_start = Instant::now();
-            let exec_result = interpreter.interpret_step(step).await;
+            // 每步硬超时：元素反复重试/页面无响应时不再无限卡（实测能卡几分钟），
+            // 超时即判该步失败——回放上层据此停止或交由 AI 介入修复。
+            const STEP_TIMEOUT_SECS: u64 = 45;
+            let exec_result = match tokio::time::timeout(
+                std::time::Duration::from_secs(STEP_TIMEOUT_SECS),
+                interpreter.interpret_step(step),
+            )
+            .await
+            {
+                Ok(r) => r,
+                Err(_) => Err(TkeError::DeviceError(format!(
+                    "执行超时（>{}s）：元素反复重试或页面无响应",
+                    STEP_TIMEOUT_SECS
+                ))),
+            };
             let duration_ms = step_start.elapsed().as_millis() as u64;
 
             // settle：执行后给页面切换/渲染留时间，避免下一步在动画中/旧页面上执行

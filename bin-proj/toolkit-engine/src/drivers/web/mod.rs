@@ -288,14 +288,46 @@ impl WebDriver {
     pub fn tap(&self, x: i32, y: i32) -> Result<()> {
         let dpr = self.device_pixel_ratio()?;
         let (cx0, cy0) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
+        let before = self.handle_count();
         // 第一次：滚动入视(若需要)+夹紧后点击；失败再夹紧重试一次。
         let (cx, cy) = self.center_into_viewport(cx0, cy0);
-        if self.click_at(cx, cy).is_ok() {
-            return Ok(());
+        let clicked = self.click_at(cx, cy).or_else(|_| {
+            // 兜底重试：重新读视口、滚动到中部、夹紧，再点一次
+            let (cx, cy) = self.center_into_viewport(cx0, cy0);
+            self.click_at(cx, cy)
+        });
+        // 点击若打开了新标签页，自动切过去并停留（模拟真实浏览器 target=_blank 前台打开，
+        // 对 AI/人都友好；否则浏览器会停在原页、新页在后台，列举标签时还会"闪一下又跳回"）
+        self.focus_new_tab_if_opened(before);
+        clicked
+    }
+
+    /// 当前窗口/标签页数量（失败按 0 计）
+    fn handle_count(&self) -> usize {
+        self.get("/window/handles")
+            .ok()
+            .and_then(|r| r["value"].as_array().map(|a| a.len()))
+            .unwrap_or(0)
+    }
+
+    /// 若标签页数比 `before` 多（点击开了新标签页），切到最新标签页并停留。
+    /// 先即时查一次（同步打开的立刻命中）；没有再等 200ms 查一次（兜异步打开）。
+    /// 无新标签时最多多花 ~200ms，不阻塞正常点击。
+    fn focus_new_tab_if_opened(&self, before: usize) {
+        for i in 0..2 {
+            if i > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            if let Ok(resp) = self.get("/window/handles") {
+                let handles = resp["value"].as_array().cloned().unwrap_or_default();
+                if handles.len() > before {
+                    if let Some(h) = handles.last().and_then(|h| h.as_str()) {
+                        let _ = self.post("/window", serde_json::json!({ "handle": h }));
+                    }
+                    return;
+                }
+            }
         }
-        // 兜底重试：重新读视口、滚动到中部、夹紧，再点一次
-        let (cx, cy) = self.center_into_viewport(cx0, cy0);
-        self.click_at(cx, cy)
     }
 
     /// 把目标坐标滚动到视口纵向中部（仅当其在视口外时），并**夹紧**进视口范围。

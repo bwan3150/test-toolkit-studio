@@ -120,6 +120,21 @@ impl AgentRunner {
 
         // 写 .tks（先落初版，供 --verify 回放）
         write_script(&script_path, &opts.case, &outcome.lines)?;
+        // 明确标出"脚本生成完毕"，与后续验证阶段分开（不再把生成完成信息混在步骤里）
+        let tty = std::io::stderr().is_terminal();
+        eprintln!();
+        eprintln!(
+            "{}",
+            flow::paint(
+                tty,
+                "1;32",
+                &format!(
+                    "✓ 脚本生成完毕：{}（{} 步）",
+                    script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+                    outcome.lines.len()
+                )
+            )
+        );
 
         // —— --verify：生成后自检 + 自修复（重启净化→整脚本回放→失败让 AI 续接修复→连过 2 次）——
         // 未被中断时才跑；verify 内部会把最终脚本写回 script_path。
