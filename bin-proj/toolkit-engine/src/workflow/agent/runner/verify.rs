@@ -59,12 +59,19 @@ pub async fn verify_and_repair(
     eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 自检（提炼也是验证的一部分）─────────"));
 
+    // 失败记忆：跨阶段记录"哪条操作在回放反复失败"，逼修复 AI 换路、别重蹈覆辙
+    let mut failures: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut replay_no = 0usize;
+
     // —— 阶段①：先修到基线达标（完整脚本能跑通并真到达目标）。基线不达标就让 AI 续接修复，
     //    修不好就失败——绝不在"基线就错"的情况下继续往下提炼/验证。——
     eprintln!();
     eprintln!("  {}", paint(tty, "1;36", "① 基线：完整脚本须能跑通并到达目标"));
     let mut baseline_ok = false;
     loop {
+        replay_no += 1;
+        eprintln!();
+        eprintln!("  {}", paint(tty, "1;36", &format!("▶ 第 {} 次回放验证（重启净化中…）", replay_no)));
         let (reached, k, failed, err) = goal_probe(ctx, params, script_path, case, &lines, &marker, true).await;
         if reached {
             eprintln!("  {}", paint(tty, "32", "✓ 基线达标"));
@@ -76,7 +83,7 @@ pub async fn verify_and_repair(
             break;
         }
         report.repairs += 1;
-        match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report).await {
+        match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report, &mut failures).await {
             Some(l) => lines = l,
             None => break,
         }
@@ -92,6 +99,9 @@ pub async fn verify_and_repair(
         eprintln!("  {}", paint(tty, "1;36", &format!("③ 稳定性：连续 {} 次回放都须到达目标", NEED_PASS)));
         let mut streak = 0usize;
         loop {
+            replay_no += 1;
+            eprintln!();
+            eprintln!("  {}", paint(tty, "1;36", &format!("▶ 第 {} 次回放验证（重启净化中…）", replay_no)));
             let (reached, k, failed, err) = goal_probe(ctx, params, script_path, case, &lines, &marker, true).await;
             if reached {
                 streak += 1;
@@ -108,7 +118,7 @@ pub async fn verify_and_repair(
                 break;
             }
             report.repairs += 1;
-            match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report).await {
+            match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report, &mut failures).await {
                 Some(l) => lines = l,
                 None => break,
             }
@@ -200,24 +210,47 @@ async fn repair_once(
     failed: &str,
     err: &str,
     report: &mut VerifyReport,
+    failures: &mut std::collections::HashMap<String, usize>,
 ) -> Option<Vec<String>> {
     let tty = std::io::stderr().is_terminal();
     let k = k.min(lines.len());
     let mut prefix: Vec<String> = lines[..k].to_vec();
+    // 失败记忆：同一个操作在回放时反复失败 → 逼 AI 换路/换点法，别再重蹈覆辙
+    let n = {
+        let c = failures.entry(failed.to_string()).or_insert(0);
+        *c += 1;
+        *c
+    };
     tx.log(
         "verify_repair",
-        serde_json::json!({ "repair": report.repairs, "from_step": k + 1, "failed_line": failed, "error": err, "kept_prefix_steps": k }),
+        serde_json::json!({ "repair": report.repairs, "from_step": k + 1, "failed_line": failed, "error": err, "kept_prefix_steps": k, "fail_count": n }),
     );
     eprintln!();
     eprintln!(
         "  {}",
         paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
     );
+    if n >= 2 {
+        eprintln!("  {}", paint(tty, "33", &format!("  （这一步已连续失败 {} 次，要求 AI 换条路/换点法）", n)));
+    }
+    // 第 2 次起强力警告：这条路/这个元素回放时不可靠，必须换做法
+    let avoid = if n >= 2 {
+        format!(
+            "\n\n⚠ 特别注意：这一步「{}」在**回放时已经连续失败 {} 次**（错误：{}）。\
+             说明这个元素 / 这种点法在回放里**根本不可靠**，再用一次还会失败。\
+             你**绝对不能**再产出点击同一个元素的步骤——必须换一条**完全不同**的做法：\
+             比如改用 click_visual 看截图直接点目标的像素位置、点它**相邻的另一个可点元素**、\
+             或换一条到达目标的路径。先 request_screenshot 看清楚再决定。",
+            friendly(failed), n, err
+        )
+    } else {
+        String::new()
+    };
     let preamble = format!(
         "现在进入【回放修复】。我把脚本从头跑了一遍，前 {} 步都成功了，但第 {} 步「{}」没达成：{}。\
          设备此刻就停在那一步该发生的页面上。请从当前页面出发重新找到正确做法、把剩下的测试目标走完，\
-         最后 finish。（只需产出从这一步往后的操作，前面成功的步骤会自动保留。）整体测试目标：{}",
-        k, k + 1, friendly(failed), err, case
+         最后 finish。（只需产出从这一步往后的操作，前面成功的步骤会自动保留。）整体测试目标：{}{}",
+        k, k + 1, friendly(failed), err, case, avoid
     );
     sess.user(preamble);
     let tail = match drive(sess, tx, ctx, false, "修复·").await {
@@ -255,10 +288,14 @@ async fn repair_once(
             }
         }
     }
+    let tail_len = tail.lines.len();
     prefix.extend(tail.lines);
     if prefix.is_empty() {
         return None;
     }
+    // 修复完毕单独成行 + 空行，与下一步验证回放分开
+    eprintln!("  {}", paint(tty, "1;32", &format!("✓ 修复完毕：续接 {} 步，新脚本共 {} 步", tail_len, prefix.len())));
+    eprintln!();
     Some(prefix)
 }
 

@@ -347,24 +347,25 @@ impl WebDriver {
         }
     }
 
-    /// 把目标坐标滚动到视口纵向中部（仅当其在视口外时），并**夹紧**进视口范围。
-    /// 夹紧是关键：杜绝 WebDriver "move target out of bounds" 硬失败——回放点击最大杀手。
+    /// 把目标坐标滚动到视口纵向中部（在视口外时），并**永远夹紧**进视口范围。
+    /// 夹紧是杜绝 WebDriver "move target out of bounds" 硬失败的关键——回放点击最大杀手。
+    /// 取不到视口尺寸（导航/渲染瞬间 innerHeight 可能为 0 或取失败）也用默认值兜底夹紧，
+    /// 绝不把可能越界的原始坐标直接抛给 /actions。
     fn center_into_viewport(&self, mut cx: i64, mut cy: i64) -> (i64, i64) {
+        // 默认视口兜底
+        let (mut iw, mut ih) = (1280i64, 800i64);
         if let Ok(dims) = self.execute("return [window.innerWidth, window.innerHeight];", serde_json::json!([])) {
-            let iw = dims["value"][0].as_i64().unwrap_or(0);
-            let ih = dims["value"][1].as_i64().unwrap_or(0);
-            if ih > 0 && (cy < 0 || cy >= ih) {
-                let dy = cy - ih / 2;
-                let _ = self.execute(&format!("window.scrollBy(0, {}); return null;", dy), serde_json::json!([]));
-                cy = ih / 2;
-            }
-            if ih > 0 {
-                cy = cy.clamp(0, ih - 1);
-            }
-            if iw > 0 {
-                cx = cx.clamp(0, iw - 1);
-            }
+            iw = dims["value"][0].as_i64().filter(|&v| v > 0).unwrap_or(iw);
+            ih = dims["value"][1].as_i64().filter(|&v| v > 0).unwrap_or(ih);
         }
+        if cy < 0 || cy >= ih {
+            let dy = cy - ih / 2;
+            let _ = self.execute(&format!("window.scrollBy(0, {}); return null;", dy), serde_json::json!([]));
+            cy = ih / 2;
+        }
+        // 无条件夹紧（含 dims 取不到时）
+        cy = cy.clamp(0, ih - 1);
+        cx = cx.clamp(0, iw - 1);
         (cx, cy)
     }
 
