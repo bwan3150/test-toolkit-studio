@@ -170,25 +170,37 @@ pub async fn verify_and_repair(
     (lines, report)
 }
 
-/// 重启净化：关掉目标，让脚本的「启动」从零开始。web=销毁会话；移动=force-stop 包名。
-/// 仅当脚本自身有「启动」步时才关——否则关了就没法从头起（脚本假定目标已开着）。
+/// 重启净化：关掉目标后**重新启动**，把状态刷新到干净初始态，再开始回放。
+/// web=销毁会话后重开并导航；移动=force-stop 后重新拉起。
+/// 这样脚本里即便没有「启动」步也没关系——这里已经重启过了；脚本若自带「启动」，
+/// 那只是再导航/拉起一次（幂等，仍是干净态）。仅当连启动目标都解析不到时才跳过。
 async fn reset_state(device: &str, lines: &[String]) {
-    let Some(package) = launch_target(lines) else { return };
-    let _ = exec(device, ControlAction::Close { package }).await;
-    // 给关闭/进程退出留点时间，避免下一步「启动」抢在旧会话销毁前
-    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+    let Some((target, activity)) = launch_spec(lines) else { return };
+    // 1) 关闭：清掉旧会话/进程
+    let _ = exec(device, ControlAction::Close { package: target.clone() }).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // 2) 重新启动：刷新到干净初始状态
+    let _ = exec(device, ControlAction::Launch { package: target, activity }).await;
+    // 给启动 / 页面加载留时间，再开始回放
+    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
 }
 
-/// 从脚本里解析首个「启动」步骤的目标（包名 / URL）；web 用不上（Close 忽略包）。
-fn launch_target(lines: &[String]) -> Option<String> {
+/// 解析脚本首个「启动」步骤的 (目标, activity)。目标=包名/URL；activity 缺省空串。
+fn launch_spec(lines: &[String]) -> Option<(String, String)> {
     let content = format!("步骤:\n{}", lines.join("\n"));
     let script = ScriptParser::new().parse(&content).ok()?;
     for step in &script.steps {
         if step.command == TksCommand::Launch {
-            for p in &step.params {
-                if let TksParam::Text(t) = p {
-                    return Some(t.clone());
-                }
+            let texts: Vec<String> = step
+                .params
+                .iter()
+                .filter_map(|p| match p {
+                    TksParam::Text(t) => Some(t.clone()),
+                    _ => None,
+                })
+                .collect();
+            if let Some(target) = texts.first().cloned() {
+                return Some((target, texts.get(1).cloned().unwrap_or_default()));
             }
         }
     }
