@@ -291,6 +291,33 @@ pub fn rename_element(lib_path: &Path, old: &str, new: &str) -> Result<bool> {
     Ok(true)
 }
 
+/// 从元素库删除若干元素（按 name），返回实际删除个数。
+/// 用于运行未成功（探索未达成 / 验证未通过）时回滚本次**新建**的元素，
+/// 避免错误脚本造出的垃圾元素（含被起错的名字）污染共享元素库、骗到下次的 AI。
+pub fn remove_elements(lib_path: &Path, names: &[String]) -> Result<usize> {
+    if names.is_empty() {
+        return Ok(0);
+    }
+    let mut lib: serde_json::Value = match std::fs::read_to_string(lib_path) {
+        Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
+            .map_err(|e| TkeError::InvalidArgument(format!("元素库解析失败 {}: {}", lib_path.display(), e)))?,
+        _ => return Ok(0),
+    };
+    let mut removed = 0usize;
+    if let Some(obj) = lib["elements"].as_object_mut() {
+        for n in names {
+            if obj.remove(n).is_some() {
+                removed += 1;
+            }
+        }
+    }
+    if removed > 0 {
+        let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
+        std::fs::write(lib_path, pretty).map_err(TkeError::IoError)?;
+    }
+    Ok(removed)
+}
+
 /// OCR 通道写入方式（add_element_target 用）
 pub enum OcrChannel {
     /// 用显式文本（OCR 元素的识别文字）

@@ -209,6 +209,13 @@ impl AgentRunner {
                 }
             }
         }
+        // 防污染：运行未成功（探索未达成 / 验证未通过）就回滚本次新建的元素，
+        // 不让错误脚本的垃圾元素留在共享元素库里骗下次的 AI。成功才保留、沉淀复用。
+        let rolled_back = if !overall_success && !all_created.is_empty() {
+            crate::tools::element::remove_elements(&element_path, &all_created).unwrap_or(0)
+        } else {
+            0
+        };
         render_summary(
             outcome.success,
             outcome.aborted,
@@ -219,6 +226,7 @@ impl AgentRunner {
             total_prompt,
             total_completion,
             &all_created,
+            rolled_back,
             &element_path,
         );
 
@@ -246,6 +254,7 @@ fn render_summary(
     tp: i64,
     tc: i64,
     created: &[String],
+    rolled_back: usize,
     element_path: &Path,
 ) {
     use flow::{brief, fmt_tokens, paint};
@@ -278,9 +287,18 @@ fn render_summary(
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
     // 元素库更新：合并探索+修复阶段新增，desc 从库里读（探索/修复各自的 desc-pass 已写入）
-    let descs = read_descs(element_path, created);
     eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
+    if rolled_back > 0 {
+        // 运行未成功：本次新建已回滚清理，不污染元素库
+        eprintln!(
+            "  {}",
+            paint(tty, "33", &format!("运行未成功，已清理本次新建的 {} 个元素（未污染元素库）", rolled_back))
+        );
+        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+        return;
+    }
+    let descs = read_descs(element_path, created);
     if created.is_empty() {
         eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
     } else {

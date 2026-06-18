@@ -159,8 +159,7 @@ pub async fn drive(
     let mut finish: Option<(bool, String)> = None;
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
-    let mut prev_action_line: Option<String> = None; // 上一条执行的 .tks 行
-    let mut same_action_count = 0usize; // 连续重复同一操作的次数（真打转信号）
+    let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -229,9 +228,25 @@ pub async fn drive(
         } else {
             no_progress = 0;
         }
-        // 兜底止损：页面长时间完全不前进（哪怕在试不同元素也始终没进展）。阈值放宽，
-        // 给"做不同尝试"留足空间——真正的"反复同一操作"止损在执行处另算（见 same_action）。
-        const NO_PROGRESS_BACKSTOP: usize = 10;
+        // 真打转 = "反复做同一操作" 且 "页面始终不变" **两者都满足**。
+        // 只看其一会误杀：同一滑动但页面在翻新内容=在前进；试不同元素但页面没变=在尝试。都不算打转。
+        let repeated_same = lines.len() >= 2 && lines[lines.len() - 1] == lines[lines.len() - 2];
+        if unchanged && repeated_same {
+            loop_streak += 1;
+        } else {
+            loop_streak = 0;
+        }
+        const LOOP_ABORT: usize = 3;
+        if loop_streak >= LOOP_ABORT && !p.elements.is_empty() {
+            let act = lines.last().map(|l| friendly(l)).unwrap_or_default();
+            tx.log("stuck_abort", serde_json::json!({ "round": round, "loop_streak": loop_streak, "kind": "same_action_no_change", "action": act }));
+            eprintln!("{}", paint(tty, "31", &format!("  反复执行同一无效操作「{}」且页面始终不变，自动停止", act)));
+            finish = Some((false, format!("反复执行同一无效操作「{}」、自动停止", act)));
+            break 'outer;
+        }
+        // 兜底止损：页面极长时间完全不前进（哪怕一直在试不同元素），最终也停（措辞不叫"重复"）。
+        // 阈值放宽，给"逐步在正确道路上"的尝试留足空间。
+        const NO_PROGRESS_BACKSTOP: usize = 12;
         if no_progress >= NO_PROGRESS_BACKSTOP && !p.elements.is_empty() {
             tx.log("stuck_abort", serde_json::json!({ "round": round, "no_progress": no_progress, "kind": "no_progress" }));
             eprintln!(
@@ -516,23 +531,6 @@ pub async fn drive(
                             });
                             lines.push(line.clone());
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
-                            // 真打转 = 连续重复**同一操作**（不是"页面没变"，那可能是在试不同元素）
-                            if prev_action_line.as_deref() == Some(line.as_str()) {
-                                same_action_count += 1;
-                            } else {
-                                same_action_count = 1;
-                                prev_action_line = Some(line.clone());
-                            }
-                            const SAME_ACTION_ABORT: usize = 4;
-                            if same_action_count >= SAME_ACTION_ABORT {
-                                tx.log("stuck_abort", serde_json::json!({ "round": round, "repeats": same_action_count, "kind": "same_action", "line": line.clone() }));
-                                eprintln!(
-                                    "{}",
-                                    paint(tty, "31", &format!("  连续 {} 次重复同一操作「{}」无效，自动停止（避免空烧 token）", same_action_count, friendly(&line)))
-                                );
-                                finish = Some((false, format!("连续 {} 次重复同一操作「{}」、自动停止", same_action_count, friendly(&line))));
-                                break 'outer;
-                            }
                         }
                         Err(e) => {
                             eprintln!("  {} {}", paint(tty, "31", "✗ 执行失败:"), e);
