@@ -10,7 +10,7 @@ pub fn write_script(path: &Path, case: &str, lines: &[String]) -> Result<()> {
         std::fs::create_dir_all(parent).map_err(TkeError::IoError)?;
     }
     let mut content = String::new();
-    content.push_str("# 由 tke case 自动生成\n");
+    content.push_str("# 由 tke harness 自动生成\n");
     for l in case.lines() {
         content.push_str(&format!("# 用例: {}\n", l));
     }

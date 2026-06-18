@@ -5,7 +5,7 @@
 //   drivers               设备/协议对接层 (adb/wda/web) + Controller 分发
 //   engines               纯逻辑引擎: fetcher(解析) / recognizer(识别) / ocr
 //   atomic                ② 原子方法: refresh / fetch / recognize / control（编排 drivers+engines）
-//   workflow              ③ 工作流: run / steps / case + 脚本解析执行引擎
+//   workflow              ③ 工作流: run / steps / harness + 脚本解析执行引擎
 //   tools                 ④ 自有工具: file / app / device / element
 
 // 基础设施
@@ -57,7 +57,7 @@ pub use workflow::{
     RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult,
     Runner, ScriptParser, ScriptInterpreter, ActionTrace,
 };
-// ③ 工作流 - AI 探索（tke case）
+// ③ 工作流 - AI 探索（tke harness）
 pub use workflow::agent::{
     LlmSession, LlmTool, LlmToolCall, LlmReply,
     AgentRunner, AgentRunOptions, AgentResult,

@@ -1,4 +1,4 @@
-// AI 探索测试（tke case 的内部实现，替代已废弃的 tester-ai 子项目）
+// AI 探索测试（tke harness 的内部实现，替代已废弃的 tester-ai 子项目）
 // 闭环：感知页面 → AI 决策(toolcall) → 执行+落库+记 .tks → 再感知 → … → AI 判定结束
 //
 // 多层子模块，单文件单职责（自顶向下）：

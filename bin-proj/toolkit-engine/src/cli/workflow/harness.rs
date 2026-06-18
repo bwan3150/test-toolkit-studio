@@ -1,5 +1,5 @@
-// Case 命令处理器（③ 工作流）
-// tke case <用例.md|"用例文字"> --script <导出.tks路径> [-d 设备] [-c 配置]
+// Harness 命令处理器（③ 工作流）
+// tke harness <用例.md|"用例文字"> --script <导出.tks路径> [-d 设备] [-c 配置]
 // AI 在真机上探索测试并生成 .tks 脚本（tke 内置 AI 闭环，已替代废弃的 tester-ai）
 //
 // 参数来源优先级：CLI 显式 --ai-* / --system-prompt* > 配置文件 [ai] 段。
@@ -10,9 +10,9 @@ use std::sync::Arc;
 
 use tke::{AgentRunner, AgentRunOptions, AiConfig, JsonOutput, PromptSpec, Result};
 
-/// Case 命令参数
+/// Harness 命令参数
 #[derive(clap::Args)]
-pub struct CaseArgs {
+pub struct HarnessArgs {
     /// 测试用例: .md/.txt 文件路径，或一段文字描述
     pub case: String,
 
@@ -54,14 +54,14 @@ pub struct CaseArgs {
     pub prompts_dir: Option<PathBuf>,
 }
 
-/// 处理 Case 命令
+/// 处理 Harness 命令
 pub async fn handle(
-    args: CaseArgs,
+    args: HarnessArgs,
     params: Arc<tke::Params>,
 ) -> Result<()> {
     // 早期校验设备（AgentRunner 内部也经 params 查表）
     if params.device().is_none() {
-        JsonOutput::error("case 必须指定设备: -d/--device <设备ID>");
+        JsonOutput::error("harness 必须指定设备: -d/--device <设备ID>");
     }
 
     // 用例：文件则读取内容，否则当作文字

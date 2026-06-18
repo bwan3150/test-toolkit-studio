@@ -275,7 +275,7 @@ pub enum OcrChannel {
     None,
 }
 
-/// 按"已确定的目标"落库——AI case 三级降级用，**不回查 XML**：
+/// 按"已确定的目标"落库——AI harness 三级降级用，**不回查 XML**：
 /// - `structure=Some(el)`：结构通道按平台写该元素；`None`：结构通道留空（OCR/视觉元素）
 /// - `bounds`：裁剪 img 模板的范围（结构=元素框；视觉=AI 给的框/方块）
 /// - `ocr`：ocr 通道写入方式

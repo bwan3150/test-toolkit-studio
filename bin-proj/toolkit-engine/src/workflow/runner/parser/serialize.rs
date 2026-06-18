@@ -1,6 +1,6 @@
 // tks 序列化 - AST → 文本行，与 parser 互为逆操作。
 // 语法单一来源：命令/方向的中英映射复用 constants（与解析器同一份），避免漂移。
-// 生产者（AI case / 未来录制）构造 TksStep 后调 step_to_source，保证产出可被 run 回放。
+// 生产者（AI harness / 未来录制）构造 TksStep 后调 step_to_source，保证产出可被 run 回放。
 
 use crate::{LocatorStrategy, TksCommand, TksParam, TksStep};
 

@@ -11,7 +11,7 @@ pub mod flow;
 // 脚本执行引擎（.tks 解析器 + 解释器）
 pub mod runner;
 
-// AI 探索测试（tke case）：内置 AI 闭环，逐轮决策生成 .tks
+// AI 探索测试（tke harness）：内置 AI 闭环，逐轮决策生成 .tks
 pub mod agent;
 
 pub use events::RunEvent;

@@ -35,12 +35,12 @@ impl AgentRunner {
         });
 
         // —— 产物目录：复用 RunArtifacts，与 tke run 同构 ——
-        // log 根：--log/config 优先；缺省落 script 同级（case 始终保留探索记录）
+        // log 根：--log/config 优先；缺省落 script 同级（harness 始终保留探索记录）
         let stem = opts
             .script_out
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "case".to_string());
+            .unwrap_or_else(|| "harness".to_string());
         let log_root = opts.params.log.clone().unwrap_or_else(|| {
             opts.script_out.parent().unwrap_or(Path::new(".")).to_path_buf()
         });

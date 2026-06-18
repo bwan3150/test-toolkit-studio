@@ -2,7 +2,7 @@
 // tke = 所有测试工具的统一入口/协调器，四大块：
 //   ① 直通      tke <二进制名> <原生指令>（同目录二进制自动可用，零代码扩展）
 //   ② 原子方法  tke refresh / fetch / recognize / control（必带 -d/--device）
-//   ③ 工作流    tke run <x.tks|x.toml> / tke steps "指令"... / tke case <用例> --script <出>
+//   ③ 工作流    tke run <x.tks|x.toml> / tke steps "指令"... / tke harness <用例> --script <出>
 //   ④ 自有工具  tke ocr / file / app / device
 //
 // 全局参数（均可放入 --config 指定的 tke.toml，CLI 显式参数优先）：
@@ -39,7 +39,7 @@ struct Cli {
     #[arg(long, global = true)]
     log: Option<PathBuf>,
 
-    /// 脚本输出目录（case 生成的 .tks 落点；缺省用 config 或 --script 显式路径）
+    /// 脚本输出目录（harness 生成的 .tks 落点；缺省用 config 或 --script 显式路径）
     #[arg(long, global = true)]
     scripts: Option<PathBuf>,
 
@@ -91,10 +91,12 @@ enum Commands {
         #[command(flatten)]
         args: StepsArgs,
     },
-    /// [工作流] AI 根据文字用例探索测试并生成 .tks: tke case <用例.md|文字> --script <导出路径>
-    Case {
+    /// [工作流] AI 根据文字用例探索测试并生成 .tks: tke harness <用例.md|文字> --script <导出路径>
+    // 方向已转向"测试 harness"，功能不变；harn 为简写
+    #[command(visible_alias = "harn")]
+    Harness {
         #[command(flatten)]
-        args: CaseArgs,
+        args: HarnessArgs,
     },
 
     // ==================== ④ 自有工具 ====================
@@ -186,7 +188,7 @@ async fn main() -> tke::Result<()> {
         }).unwrap_or(false));
 
     // 直通命令：完全跳过日志初始化，保持原生工具体验
-    // 注：case 已改为内置 AI 闭环（不再透传 tester-ai），因此走正常日志初始化
+    // 注：harness 已改为内置 AI 闭环（不再透传 tester-ai），因此走正常日志初始化
     let is_passthrough_command = !tool_is_script && matches!(
         cli.command,
         Commands::Tool(_)
@@ -234,8 +236,8 @@ async fn main() -> tke::Result<()> {
         Commands::Steps { args } => {
             workflow::steps::handle(args, params.clone()).await
         }
-        Commands::Case { args } => {
-            workflow::case::handle(args, params.clone()).await
+        Commands::Harness { args } => {
+            workflow::harness::handle(args, params.clone()).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {

@@ -9,7 +9,7 @@ use crate::{AiConfig, Params};
 use super::super::prompt::PromptSpec;
 
 /// AgentRunner 入参
-/// device/element/log/knowledge 经 params 查表取得；ai 为 case 合并 --ai-* 覆盖后的结果
+/// device/element/log/knowledge 经 params 查表取得；ai 为 harness 合并 --ai-* 覆盖后的结果
 pub struct AgentRunOptions {
     /// 测试用例文字（已从 .md 文件或命令行读出）
     pub case: String,

@@ -44,7 +44,7 @@ pub struct Params {
     element: Option<PathBuf>,
     /// 产物输出根目录（不设则 run/steps 不保存产物）
     pub log: Option<PathBuf>,
-    /// 脚本输出目录（case 生成 .tks 落点）
+    /// 脚本输出目录（harness 生成 .tks 落点）
     pub scripts: Option<PathBuf>,
     /// 强制 NDJSON 输出
     pub json: bool,
@@ -85,7 +85,7 @@ impl Params {
     }
 
     /// 元素库路径（**读取语义**）：显式 > 默认查找已存在的 > None
-    /// 用于 recognize / run / case 等"读元素库"的场景；None 表示无元素库（仅坐标可用）
+    /// 用于 recognize / run / harness 等"读元素库"的场景；None 表示无元素库（仅坐标可用）
     pub fn element_lib(&self) -> Option<PathBuf> {
         if let Some(p) = &self.element {
             return Some(p.clone());

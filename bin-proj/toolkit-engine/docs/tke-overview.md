@@ -16,7 +16,7 @@ CLI / CI / Electron App
 │  tke adb ...         tke refresh           tke run x.tks  │
 │  tke aapt ...        tke fetch             tke run x.toml │
 │  tke k6 ...          tke recognize         tke steps ...  │
-│  tke ffmpeg ...      tke control           tke case ...   │
+│  tke ffmpeg ...      tke control           tke harness ...│
 │  (放进 bin/ 即可用)                                        │
 └───────────────────────────────────────────────────────────┘
           │
@@ -124,7 +124,7 @@ tke run <path.tks>      # 单脚本（按扩展名识别）
 tke run <path.toml>     # flow 多脚本顺序执行（同上）
 tke steps "启动 [...]" "点击 [{登录按钮}]" "断言 [{首页}, 存在]"
                         # 不落文件执行一串指令（编辑器逐行调试 / AI 循环用）
-tke case <用例.md|"用例文字"> --script <导出.tks路径>
+tke harness <用例.md|"用例文字"> --script <导出.tks路径>
                         # AI 探索测试并生成脚本（透传 tester-ai 实现）
 ```
 

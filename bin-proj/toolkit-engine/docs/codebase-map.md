@@ -14,7 +14,7 @@ tke = **所有自动化测试工具的统一入口/协调器**。一个 Rust CLI
 |----|------|--------|
 | ① 直通 | `tke adb …` / `tke k6 …` / `tke ffmpeg …` | `passthrough`（透传同目录二进制，零代码扩展） |
 | ② 原子方法 | `tke refresh / fetch / recognize / control`（必带 `-d`） | `atomic`（编排 drivers+engines 完成单步动作） |
-| ③ 工作流 | `tke run x.tks / x.toml` / `tke steps …` / `tke case …` | `workflow`（组合原子能力跑脚本 / AI 探索） |
+| ③ 工作流 | `tke run x.tks / x.toml` / `tke steps …` / `tke harness …` | `workflow`（组合原子能力跑脚本 / AI 探索） |
 | ④ 自有工具 | `tke ocr / file / app / device / element` | `tools`（tke 内置实用工具） |
 
 设计主线：**tks 脚本是中心契约**——手写 / AI 生成（未来：录制）三种方式*生产* tks，`run` 唯一*回放* tks。
@@ -135,7 +135,7 @@ tke = **所有自动化测试工具的统一入口/协调器**。一个 Rust CLI
 | `runner/interpreter/command_executor.rs` | `CommandExecutor`：每个 `TksCommand` → 直接调 `Controller` 方法（execute_launch/click/press/swipe/input/wait/assert…） |
 | `runner/interpreter/target_resolver.rs` | `TargetResolver`：`TksParam` → `Point`（元素→先 capture_ui_state 再 `recognizer.find_element_detailed`，记 bounds 到 trace） |
 | `runner/interpreter/param_extractor.rs` | `ParamExtractor`：从 `TksParam` 提取 text/number/duration/direction |
-| `agent/` | ③ AI 探索（`tke case`）。多层子模块：provider(genai 对接)/prompt(可自定义提示词)/tools/perception/execution/knowledge/transcript/interaction/runner。详见 agent 模块自身的 mod.rs 注释 |
+| `agent/` | ③ AI 探索（`tke harness`）。多层子模块：provider(genai 对接)/prompt(可自定义提示词)/tools/perception/execution/knowledge/transcript/interaction/runner。详见 agent 模块自身的 mod.rs 注释 |
 
 ### tools/（④ 自有工具）
 | 文件 | 职责 |

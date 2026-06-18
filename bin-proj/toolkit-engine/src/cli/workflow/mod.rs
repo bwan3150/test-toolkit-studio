@@ -2,10 +2,10 @@
 
 pub mod run;
 pub mod steps;
-pub mod case;
+pub mod harness;
 pub mod printer;
 
 pub use run::RunArgs;
 pub use steps::StepsArgs;
-pub use case::CaseArgs;
+pub use harness::HarnessArgs;
 pub use printer::EventPrinter;

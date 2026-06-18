@@ -32,7 +32,7 @@ pub struct RunArtifacts {
 
 impl RunArtifacts {
     /// 在 log 根目录下创建本次运行的产物目录
-    /// 命名统一为 `<名>_<时间戳>`（无名则纯 `<时间戳>`），run/steps/flow/case 一致
+    /// 命名统一为 `<名>_<时间戳>`（无名则纯 `<时间戳>`），run/steps/flow/harness 一致
     pub fn create(log_root: &Path, name: &str) -> Result<Self> {
         let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
         let dir_name = if name.trim().is_empty() {

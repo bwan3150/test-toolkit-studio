@@ -18,11 +18,11 @@ pub struct TkeConfig {
     pub element: Option<PathBuf>,
     /// 产物输出目录
     pub log: Option<PathBuf>,
-    /// 脚本输出目录（case 生成的 .tks 落点；CLI/显式参数优先）
+    /// 脚本输出目录（harness 生成的 .tks 落点；CLI/显式参数优先）
     pub scripts: Option<PathBuf>,
     /// 在线 OCR 服务地址（缺省用内置默认；私有部署/换服务时配置）
     pub ocr_url: Option<String>,
-    /// AI 配置（tke case 探索测试用）：[ai] 段
+    /// AI 配置（tke harness 探索测试用）：[ai] 段
     #[serde(default)]
     pub ai: AiConfig,
     /// 记忆/知识库配置：[knowledge] 段（本期留口子，未配置则跳过真实调用）
