@@ -128,9 +128,9 @@ impl ScriptRunner {
             });
 
             let step_start = Instant::now();
-            // 每步硬超时：元素反复重试/页面无响应时不再无限卡（实测能卡几分钟），
-            // 超时即判该步失败——回放上层据此停止或交由 AI 介入修复。
-            const STEP_TIMEOUT_SECS: u64 = 45;
+            // 每步硬超时：元素反复重试/页面无响应时不再干等（视觉元素图像匹配尤其慢）。
+            // 超时即判该步失败——回放上层据此让 AI 早点介入修复，而不是傻等。
+            const STEP_TIMEOUT_SECS: u64 = 20;
             let exec_result = match tokio::time::timeout(
                 std::time::Duration::from_secs(STEP_TIMEOUT_SECS),
                 interpreter.interpret_step(step),

@@ -19,7 +19,7 @@ use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::{ControlAction, ExecutionResult, LlmReply, LlmSession, Params, Result, RunEvent, ScriptParser, ScriptRunner, StepResult, TksCommand, TksParam};
+use crate::{ControlAction, ExecutionResult, LlmReply, LlmSession, Params, Result, RunEvent, ScriptParser, ScriptRunner, TksCommand, TksParam};
 
 use super::super::execution::device::exec;
 use super::super::execution::script::write_script;
@@ -51,193 +51,78 @@ pub async fn verify_and_repair(
         return (lines, report);
     }
 
-    // —— 先提炼：逐个删候选步、每删一步都重启重跑验证是否仍达成目标。删了仍达标才真删，
-    //    删了到不了目标就还原。靠重跑判定，不对着文本想当然，AI 删错也会被挡回。——
-    //    marker=目标标志文本，后面稳定性验证也用它强制确认"真到达目标"，杜绝"瞎跑也算过"。
-    let marker;
-    (lines, marker) = minimize(sess, tx, ctx, params, script_path, case, lines).await;
+    // 目标标志(强制确认真到达目标，杜绝瞎跑也算过) + 可删候选(提炼用)
+    let (marker, candidates) = ask_minimize_plan(sess, tx, &lines, case).await.unwrap_or((String::new(), Vec::new()));
+    let _ = verify_log; // 提炼/验证会反复回放，不另存逐步产物
 
-    // 全景记录：初始脚本（提炼后）
-    tx.log(
-        "verify_start",
-        serde_json::json!({ "need_pass": NEED_PASS, "max_repairs": MAX_REPAIRS, "script_lines": lines.clone() }),
-    );
-
+    tx.log("verify_start", serde_json::json!({ "need_pass": NEED_PASS, "max_repairs": MAX_REPAIRS, "marker": marker, "script_lines": lines.clone() }));
     eprintln!();
-    eprintln!("{}", paint(tty, "1", "╭─ 自检回放 ──────────────────────────"));
+    eprintln!("{}", paint(tty, "1", "╭─ 自检（提炼也是验证的一部分）─────────"));
 
-    let mut streak = 0usize; // 连续"到达目标"的次数
-    let mut replay_no = 0usize;
+    // —— 阶段①：先修到基线达标（完整脚本能跑通并真到达目标）。基线不达标就让 AI 续接修复，
+    //    修不好就失败——绝不在"基线就错"的情况下继续往下提炼/验证。——
+    eprintln!();
+    eprintln!("  {}", paint(tty, "1;36", "① 基线：完整脚本须能跑通并到达目标"));
+    let mut baseline_ok = false;
     loop {
-        // 回放时去掉结尾"关闭"步（关了就看不到目标页，没法校验目标标志）；最终落盘仍含关闭。
-        let check = strip_trailing_close(&lines);
-        // 1) 重启净化
-        reset_state(ctx.device, &check).await;
-        // 2) 写回并逐步实时回放（像 tke run，看得到第几步、哪步红了）
-        let _ = write_script(script_path, case, &check);
-        replay_no += 1;
-        eprintln!();
-        eprintln!("  {}", paint(tty, "1;36", &format!("第 {} 次验证回放", replay_no)));
-        let result = {
-            let mut total = 0usize;
-            let mut sink = |e: &RunEvent| match e {
-                RunEvent::RunStart { total_steps, .. } => total = *total_steps,
-                RunEvent::StepEnd { index, command, success, error, .. } => {
-                    if *success {
-                        eprintln!(
-                            "    {}  {}  {}",
-                            paint(tty, "32", "✓"),
-                            paint(tty, "2", &format!("步 {}/{}", index + 1, total)),
-                            friendly(command)
-                        );
-                    } else {
-                        eprintln!(
-                            "    {}  {}",
-                            paint(tty, "31", &format!("✗ 步 {}/{}  {}", index + 1, total, friendly(command))),
-                            paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 100)))
-                        );
-                    }
-                }
-                _ => {}
-            };
-            ScriptRunner::new(params.clone()).run(script_path, verify_log, &mut sink).await
-        };
-
-        // 判定本次回放结果：reached=真到达目标；否则给出失败步 k 供修复
-        let (reached, k, failed, err) = match &result {
-            Ok(r) if r.success => {
-                // 全部步骤无报错，但还要**确认真到达目标**（目标标志出现），否则"瞎跑也算过"
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                let goal_ok = marker.is_empty()
-                    || matches!(capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await, Ok(p) if page_contains(&p, &marker));
-                if goal_ok {
-                    (true, 0usize, String::new(), String::new())
-                } else {
-                    // 跑完没到目标 → 从最后一步起让 AI 续接，把目标走完
-                    eprintln!("  {}  目标标志未出现：{}", paint(tty, "31", "✗ 未达目标"), brief(&marker, 40));
-                    (false, check.len(), "（目标标志未出现）".to_string(), format!("脚本跑完但未到达目标标志「{}」", marker))
-                }
-            }
-            Ok(r) => {
-                let k = r.steps.iter().position(|s| !s.success).unwrap_or_else(|| r.steps.len().saturating_sub(1));
-                (false, k, check.get(k).cloned().unwrap_or_default(), r.error.clone().unwrap_or_else(|| "未知错误".into()))
-            }
-            Err(e) => {
-                tx.log("verify_replay", serde_json::json!({ "replay": replay_no, "engine": "tke run", "tokens": 0, "success": false, "error": e.to_string() }));
-                eprintln!("  第 {} 次回放：{} 无法执行 — {}", replay_no, paint(tty, "31", "✗"), e);
-                break;
-            }
-        };
-        let total_steps = result.as_ref().map(|r| r.steps.len()).unwrap_or(0);
-        let steps_log = result.as_ref().map(|r| steps_json(&r.steps)).unwrap_or(serde_json::Value::Null);
-
+        let (reached, k, failed, err) = goal_probe(ctx, params, script_path, case, &lines, &marker, true).await;
         if reached {
-            streak += 1;
-            tx.log("verify_replay", serde_json::json!({ "replay": replay_no, "engine": "tke run", "tokens": 0, "success": true, "reached_goal": true, "streak": streak, "total_steps": total_steps, "steps": steps_log }));
-            eprintln!("  {} 全部 {} 步通过且到达目标（连续 {}/{}）", paint(tty, "32", "✓"), total_steps, streak, NEED_PASS);
-            if streak >= NEED_PASS {
-                report.passed = true;
-                break;
-            }
-            continue; // 再跑一遍确认稳定
+            eprintln!("  {}", paint(tty, "32", "✓ 基线达标"));
+            baseline_ok = true;
+            break;
         }
-
-        // —— 未到达目标（某步失败 或 跑完没到目标）：交 AI 续接修复 ——
-        {
-            streak = 0;
-            tx.log("verify_replay", serde_json::json!({ "replay": replay_no, "engine": "tke run", "tokens": 0, "success": false, "failed_step": k + 1, "failed_line": failed, "error": err, "total_steps": total_steps, "steps": steps_log }));
-            if report.repairs >= MAX_REPAIRS {
-                    eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止自检", MAX_REPAIRS)));
-                    break;
-                }
-                report.repairs += 1;
-
-                // 3) 失败续接：前 k 步可信保留，AI 从当前实时页面续接修复
-                let mut prefix: Vec<String> = lines[..k].to_vec();
-                // 全景记录：AI 介入修复的交接点
-                tx.log(
-                    "verify_repair",
-                    serde_json::json!({
-                        "repair": report.repairs, "from_step": k + 1, "failed_line": failed,
-                        "error": err, "kept_prefix_steps": k,
-                    }),
-                );
-                eprintln!();
-                eprintln!(
-                    "  {}",
-                    paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
-                );
-                let preamble = format!(
-                    "现在进入【回放修复】。我把你刚生成的脚本从头跑了一遍，前 {} 步都成功了，\
-                     但第 {} 步「{}」失败：{}。设备此刻就停在那一步该发生的页面上。\
-                     请从当前页面出发重新找到正确做法、把剩下的测试目标走完，最后 finish。\
-                     （只需产出从这一步往后的操作，前面成功的步骤会自动保留。）整体测试目标：{}",
-                    k,
-                    k + 1,
-                    friendly(&failed),
-                    err,
-                    case
-                );
-                sess.user(preamble);
-                let tail = match drive(sess, tx, ctx, false, "修复·").await {
-                    Ok(o) => o,
-                    Err(e) => {
-                        eprintln!("  {}", paint(tty, "31", &format!("修复过程出错：{}", e)));
-                        break;
-                    }
-                };
-                // 累计修复阶段的元素变更，供最终「元素库更新」框合并展示
-                for c in tail.created {
-                    if !report.created.contains(&c) {
-                        report.created.push(c);
-                    }
-                }
-                for u in tail.updated {
-                    if !report.updated.contains(&u) {
-                        report.updated.push(u);
-                    }
-                }
-                if tail.aborted {
-                    eprintln!("  {}", paint(tty, "33", "已终止（用户中断）"));
-                    break;
-                }
-                // 修复本身没达成目标（AI 卡死/超轮，自己 success=false）：别把"能跑通但没真的
-                // 完成目标"的步骤拼进去当通过——那是假阳性。直接判验证失败。
-                if !tail.success {
-                    tx.log("verify_repair_failed", serde_json::json!({ "repair": report.repairs, "reason": tail.reason }));
-                    eprintln!("  {}", paint(tty, "33", "修复未能达成测试目标（AI 也没走通），判定验证失败"));
-                    break;
-                }
-                // 修复阶段若改了某元素名，前缀里的引用也要同步（库 key 已变，否则回放找不到）
-                for (old, new) in &tail.renames {
-                    let (from, to) = (format!("{{{}}}", old), format!("{{{}}}", new));
-                    for l in prefix.iter_mut() {
-                        if l.contains(&from) {
-                            *l = l.replace(&from, &to);
-                        }
-                    }
-                }
-                // 拼接：可信前缀 + 修复尾部
-                lines = prefix;
-                lines.extend(tail.lines);
-                if lines.is_empty() {
-                    eprintln!("  {}", paint(tty, "33", "修复未产出有效步骤，停止自检"));
-                    break;
-                }
+        if report.repairs >= MAX_REPAIRS {
+            eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，基线仍不达标，验证失败", MAX_REPAIRS)));
+            break;
+        }
+        report.repairs += 1;
+        match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report).await {
+            Some(l) => lines = l,
+            None => break,
         }
     }
 
-    // 落盘最终版本
+    if baseline_ok {
+        // —— 阶段②：提炼（基线已达标，逐个删候选步、删了仍达标才真删）——
+        if !candidates.is_empty() {
+            lines = minimize_candidates(tx, ctx, params, script_path, case, lines, &marker, candidates, tty).await;
+        }
+        // —— 阶段③：稳定性（连续 NEED_PASS 次回放都到达目标）——
+        eprintln!();
+        eprintln!("  {}", paint(tty, "1;36", &format!("③ 稳定性：连续 {} 次回放都须到达目标", NEED_PASS)));
+        let mut streak = 0usize;
+        loop {
+            let (reached, k, failed, err) = goal_probe(ctx, params, script_path, case, &lines, &marker, true).await;
+            if reached {
+                streak += 1;
+                eprintln!("  {} 到达目标（连续 {}/{}）", paint(tty, "32", "✓"), streak, NEED_PASS);
+                if streak >= NEED_PASS {
+                    report.passed = true;
+                    break;
+                }
+                continue;
+            }
+            streak = 0;
+            if report.repairs >= MAX_REPAIRS {
+                eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止", MAX_REPAIRS)));
+                break;
+            }
+            report.repairs += 1;
+            match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report).await {
+                Some(l) => lines = l,
+                None => break,
+            }
+        }
+    }
+
+    // 落盘最终版本（含结尾关闭）
     let _ = write_script(script_path, case, &lines);
-    tx.log(
-        "verify_end",
-        serde_json::json!({ "passed": report.passed, "repairs": report.repairs, "replays": replay_no }),
-    );
+    tx.log("verify_end", serde_json::json!({ "passed": report.passed, "repairs": report.repairs }));
 
     let summary = if report.passed {
-        paint(tty, "32", &format!("✓ 稳定通过（连续 {} 次干净回放，修复 {} 次）", NEED_PASS, report.repairs))
+        paint(tty, "32", &format!("✓ 稳定通过（连续 {} 次到达目标，修复 {} 次）", NEED_PASS, report.repairs))
     } else {
-        paint(tty, "33", &format!("■ 未达稳定（修复 {} 次后仍未连续通过，已保留当前最好版本）", report.repairs))
+        paint(tty, "33", &format!("■ 未达稳定（修复 {} 次后仍未通过，已保留当前最好版本）", report.repairs))
     };
     eprintln!();
     eprintln!("  {}   {}", paint(tty, "2", "结果"), summary);
@@ -246,73 +131,25 @@ pub async fn verify_and_repair(
     (lines, report)
 }
 
-/// 把回放的逐步执行结果转成全景记录用的 JSON 数组（命令/成败/错误/截图，零 token）。
-fn steps_json(steps: &[StepResult]) -> serde_json::Value {
-    serde_json::Value::Array(
-        steps
-            .iter()
-            .map(|s| {
-                serde_json::json!({
-                    "step": s.index + 1,
-                    "command": s.command,
-                    "success": s.success,
-                    "error": s.error,
-                    "duration_ms": s.duration_ms,
-                    "screenshot": s.screenshot,
-                })
-            })
-            .collect(),
-    )
-}
-
 /// 【脚本提炼】逐个删候选步、每删一步都重跑验证是否仍达成目标，删了仍达标才真删。
-/// 不对着 .tks 文本想当然——靠"删了再重跑"判定，AI 删错也会被重跑挡回、自动还原。
-async fn minimize(
-    sess: &mut LlmSession,
+/// 调用前基线必须已达标（由阶段一保证）。靠"删了再重跑"判定，AI 删错也会被挡回、自动还原。
+async fn minimize_candidates(
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
     script_path: &Path,
     case: &str,
     lines: Vec<String>,
-) -> (Vec<String>, String) {
-    let tty = std::io::stderr().is_terminal();
-    if lines.len() < 3 {
-        return (lines, String::new());
-    }
-    // 1) 问 AI：目标标志文本(自动校验用) + 它认为可删的候选步(大胆列，逐个验证)
-    let (marker, candidates) = match ask_minimize_plan(sess, tx, &lines, case).await {
-        Some(v) => v,
-        None => return (lines, String::new()),
-    };
-    if marker.is_empty() {
-        let _ = write_script(script_path, case, &lines);
-        return (lines, String::new());
-    }
-
+    marker: &str,
+    candidates: Vec<usize>,
+    tty: bool,
+) -> Vec<String> {
     eprintln!();
     eprintln!(
-        "{}",
-        paint(tty, "1;36", &format!("▶ 脚本提炼：逐步删冗余并重跑验证（目标标志「{}」）", brief(&marker, 24)))
+        "  {}",
+        paint(tty, "1;36", &format!("② 提炼：删冗余步（删一步→重跑→仍达标才真删；目标标志「{}」）", brief(marker, 18)))
     );
-
-    // 2) 基线：完整脚本回放后仍能到达目标？**逐步可见**，让人能看到脚本怎么跑、有没有真到目标。
-    //    到不了就不提炼（保留全量，交给后面的验证；若标志是 AI 写错，验证也会暴露）。
-    eprintln!("  {}", paint(tty, "2", "基线回放（验证完整脚本能到达目标）："));
-    if !reaches_goal(ctx, params, script_path, case, &lines, &marker, true).await {
-        eprintln!("  {}", paint(tty, "33", "完整脚本回放未到达目标标志，跳过提炼（保留全量，交验证）"));
-        tx.log("minimize_skip", serde_json::json!({ "reason": "baseline_miss", "marker": marker }));
-        let _ = write_script(script_path, case, &lines);
-        return (lines, marker);
-    }
-    eprintln!("  {}", paint(tty, "32", "✓ 基线达标，开始逐步删冗余（删一步→重跑→仍达标才真删）"));
-
-    if candidates.is_empty() {
-        let _ = write_script(script_path, case, &lines);
-        return (lines, marker);
-    }
-
-    // 3) 先一次性删掉所有候选——能到目标就全删（省去逐个重跑）
+    // 先一次性删掉所有候选——能到目标就全删（省去逐个重跑）
     let cand_set: std::collections::HashSet<usize> = candidates.iter().copied().collect();
     let all_trial: Vec<String> = lines
         .iter()
@@ -320,15 +157,14 @@ async fn minimize(
         .filter(|(i, _)| !cand_set.contains(&(i + 1)))
         .map(|(_, l)| l.clone())
         .collect();
-    if !all_trial.is_empty() && all_trial.len() < lines.len() && reaches_goal(ctx, params, script_path, case, &all_trial, &marker, false).await {
+    if !all_trial.is_empty() && all_trial.len() < lines.len() && goal_probe(ctx, params, script_path, case, &all_trial, marker, false).await.0 {
         eprintln!("  {}", paint(tty, "2", &format!("一次性删除 {} 个冗余步后仍达标", lines.len() - all_trial.len())));
         eprintln!("  {}", paint(tty, "1;36", &format!("提炼完成：{} 步 → {} 步", lines.len(), all_trial.len())));
         tx.log("minimize_result", serde_json::json!({ "from": lines.len(), "to": all_trial.len(), "mode": "batch" }));
         let _ = write_script(script_path, case, &all_trial);
-        return (all_trial, marker);
+        return all_trial;
     }
-
-    // 4) 批量删不行 → 逐个删（编号从大到小，删除不影响更小编号），删了仍达标才真删
+    // 批量删不行 → 逐个删（编号从大到小，删除不影响更小编号），删了仍达标才真删
     let mut current = lines.clone();
     let mut cand: Vec<usize> = candidates.into_iter().filter(|&i| i >= 1 && i <= lines.len()).collect();
     cand.sort_unstable_by(|a, b| b.cmp(a));
@@ -339,7 +175,7 @@ async fn minimize(
         }
         let mut trial = current.clone();
         let dropped = trial.remove(idx - 1);
-        if reaches_goal(ctx, params, script_path, case, &trial, &marker, false).await {
+        if goal_probe(ctx, params, script_path, case, &trial, marker, false).await.0 {
             eprintln!("  {}  {}", paint(tty, "32", "✓ 删"), paint(tty, "2", &friendly(&dropped)));
             current = trial;
         } else {
@@ -349,7 +185,81 @@ async fn minimize(
     eprintln!("  {}", paint(tty, "1;36", &format!("提炼完成：{} 步 → {} 步", lines.len(), current.len())));
     tx.log("minimize_result", serde_json::json!({ "from": lines.len(), "to": current.len(), "mode": "one-by-one" }));
     let _ = write_script(script_path, case, &current);
-    (current, marker)
+    current
+}
+
+/// 一次修复：前 k 步可信保留，AI 从失败处当前实时页面续接，把目标走完。
+/// 成功返回拼接后的新脚本；放弃（出错/中断/AI 也没走通）返回 None。
+async fn repair_once(
+    sess: &mut LlmSession,
+    tx: &mut Transcript,
+    ctx: &DriveCtx<'_>,
+    case: &str,
+    lines: &[String],
+    k: usize,
+    failed: &str,
+    err: &str,
+    report: &mut VerifyReport,
+) -> Option<Vec<String>> {
+    let tty = std::io::stderr().is_terminal();
+    let k = k.min(lines.len());
+    let mut prefix: Vec<String> = lines[..k].to_vec();
+    tx.log(
+        "verify_repair",
+        serde_json::json!({ "repair": report.repairs, "from_step": k + 1, "failed_line": failed, "error": err, "kept_prefix_steps": k }),
+    );
+    eprintln!();
+    eprintln!(
+        "  {}",
+        paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
+    );
+    let preamble = format!(
+        "现在进入【回放修复】。我把脚本从头跑了一遍，前 {} 步都成功了，但第 {} 步「{}」没达成：{}。\
+         设备此刻就停在那一步该发生的页面上。请从当前页面出发重新找到正确做法、把剩下的测试目标走完，\
+         最后 finish。（只需产出从这一步往后的操作，前面成功的步骤会自动保留。）整体测试目标：{}",
+        k, k + 1, friendly(failed), err, case
+    );
+    sess.user(preamble);
+    let tail = match drive(sess, tx, ctx, false, "修复·").await {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("  {}", paint(tty, "31", &format!("修复过程出错：{}", e)));
+            return None;
+        }
+    };
+    for c in tail.created {
+        if !report.created.contains(&c) {
+            report.created.push(c);
+        }
+    }
+    for u in tail.updated {
+        if !report.updated.contains(&u) {
+            report.updated.push(u);
+        }
+    }
+    if tail.aborted {
+        eprintln!("  {}", paint(tty, "33", "已终止（用户中断）"));
+        return None;
+    }
+    if !tail.success {
+        tx.log("verify_repair_failed", serde_json::json!({ "repair": report.repairs, "reason": tail.reason }));
+        eprintln!("  {}", paint(tty, "33", "修复未能达成测试目标（AI 也没走通）"));
+        return None;
+    }
+    // 改名同步到前缀（库 key 已变，否则回放找不到）
+    for (old, new) in &tail.renames {
+        let (from, to) = (format!("{{{}}}", old), format!("{{{}}}", new));
+        for l in prefix.iter_mut() {
+            if l.contains(&from) {
+                *l = l.replace(&from, &to);
+            }
+        }
+    }
+    prefix.extend(tail.lines);
+    if prefix.is_empty() {
+        return None;
+    }
+    Some(prefix)
 }
 
 /// 问 AI 要：目标标志文本 + 可删候选步编号
@@ -385,9 +295,12 @@ async fn ask_minimize_plan(sess: &mut LlmSession, tx: &mut Transcript, lines: &[
     Some((marker, removable))
 }
 
-/// 回放 lines（去掉结尾"关闭"步，否则关了就看不到目标页），看最终页面是否出现目标标志文本。
-/// verbose=true 时逐步打印（像 tke run），让人看得到怎么跑、有没有真到目标。
-async fn reaches_goal(
+/// 回放探针：回放 lines（去掉结尾"关闭"步，否则关了就看不到目标页）并判定是否到达目标。
+/// 返回 (是否到达, 失败步号k, 失败步文本, 错误)。verbose=true 逐步打印（像 tke run）。
+/// - 某步执行失败 → reached=false，k=该步号
+/// - 全部跑完但目标标志没出现 → reached=false，k=最后（从尾部续接修复）
+/// - 到达目标 → reached=true
+async fn goal_probe(
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
     script_path: &Path,
@@ -395,58 +308,66 @@ async fn reaches_goal(
     lines: &[String],
     marker: &str,
     verbose: bool,
-) -> bool {
+) -> (bool, usize, String, String) {
+    let tty = std::io::stderr().is_terminal();
     let check = strip_trailing_close(lines);
     if check.is_empty() {
-        return false;
+        return (false, 0, String::new(), "空脚本".into());
     }
     let _ = write_script(script_path, case, &check);
     reset_state(ctx.device, &check).await;
-    let ok = if verbose {
-        replay_streamed(params, script_path).await
-    } else {
-        matches!(replay_quiet(params, script_path).await, Ok(r) if r.success)
-    };
-    if !ok {
-        return false;
-    }
-    // settle 后感知最终页面，匹配目标标志（含 OCR 文本）
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    let reached = match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
-        Ok(p) => page_contains(&p, marker),
-        Err(_) => false,
-    };
-    if verbose {
-        let tty = std::io::stderr().is_terminal();
-        if reached {
-            eprintln!("    {}  目标标志已出现：{}", paint(tty, "32", "✓ 到达目标"), brief(marker, 40));
-        } else {
-            eprintln!("    {}  跑完但未出现目标标志：{}", paint(tty, "31", "✗ 未达目标"), brief(marker, 40));
-        }
-    }
-    reached
-}
-
-/// 逐步流式回放（像 tke run），返回是否全部成功
-async fn replay_streamed(params: &Arc<Params>, script_path: &Path) -> bool {
-    let tty = std::io::stderr().is_terminal();
-    let mut total = 0usize;
-    let mut sink = |e: &RunEvent| match e {
-        RunEvent::RunStart { total_steps, .. } => total = *total_steps,
-        RunEvent::StepEnd { index, command, success, error, .. } => {
-            if *success {
-                eprintln!("    {}  {}  {}", paint(tty, "32", "✓"), paint(tty, "2", &format!("步 {}/{}", index + 1, total)), friendly(command));
+    let result = do_replay(params, script_path, verbose).await;
+    match result {
+        Ok(r) if r.success => {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let reached = marker.is_empty()
+                || matches!(capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await, Ok(p) if page_contains(&p, marker));
+            if verbose {
+                if reached {
+                    eprintln!("    {}  {}", paint(tty, "32", "✓ 到达目标"), brief(marker, 40));
+                } else {
+                    eprintln!("    {}  目标标志未出现：{}", paint(tty, "31", "✗ 未达目标"), brief(marker, 40));
+                }
+            }
+            if reached {
+                (true, 0, String::new(), String::new())
             } else {
-                eprintln!(
-                    "    {}  {}",
-                    paint(tty, "31", &format!("✗ 步 {}/{}  {}", index + 1, total, friendly(command))),
-                    paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 80)))
-                );
+                (false, check.len(), "（目标标志未出现）".into(), format!("脚本跑完但未到达目标标志「{}」", marker))
             }
         }
-        _ => {}
+        Ok(r) => {
+            let k = r.steps.iter().position(|s| !s.success).unwrap_or_else(|| r.steps.len().saturating_sub(1));
+            (false, k, check.get(k).cloned().unwrap_or_default(), r.error.unwrap_or_else(|| "未知错误".into()))
+        }
+        Err(e) => (false, 0, String::new(), e.to_string()),
+    }
+}
+
+/// 回放一遍：verbose=true 逐步流式打印（像 tke run）。
+async fn do_replay(params: &Arc<Params>, script_path: &Path, verbose: bool) -> Result<ExecutionResult> {
+    let tty = std::io::stderr().is_terminal();
+    let mut total = 0usize;
+    let mut sink = |e: &RunEvent| {
+        if !verbose {
+            return;
+        }
+        match e {
+            RunEvent::RunStart { total_steps, .. } => total = *total_steps,
+            RunEvent::StepEnd { index, command, success, error, .. } => {
+                if *success {
+                    eprintln!("    {}  {}  {}", paint(tty, "32", "✓"), paint(tty, "2", &format!("步 {}/{}", index + 1, total)), friendly(command));
+                } else {
+                    eprintln!(
+                        "    {}  {}",
+                        paint(tty, "31", &format!("✗ 步 {}/{}  {}", index + 1, total, friendly(command))),
+                        paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 80))),
+                    );
+                }
+            }
+            _ => {}
+        }
     };
-    matches!(ScriptRunner::new(params.clone()).run(script_path, None, &mut sink).await, Ok(r) if r.success)
+    ScriptRunner::new(params.clone()).run(script_path, None, &mut sink).await
 }
 
 /// 去掉结尾连续的"关闭"步
@@ -462,13 +383,6 @@ fn strip_trailing_close(lines: &[String]) -> Vec<String> {
 fn page_contains(p: &Perceived, marker: &str) -> bool {
     let m = marker.to_lowercase();
     p.elements.iter().any(|e| e.to_ai_text().to_lowercase().contains(&m))
-}
-
-/// 安静回放（不逐步打印），只取最终结果——提炼阶段会反复回放，不刷屏
-async fn replay_quiet(params: &Arc<Params>, script_path: &Path) -> Result<ExecutionResult> {
-    let runner = ScriptRunner::new(params.clone());
-    let mut sink = |_: &RunEvent| {};
-    runner.run(script_path, None, &mut sink).await
 }
 
 /// 重启净化：关掉目标后**重新启动**，把状态刷新到干净初始态，再开始回放。
