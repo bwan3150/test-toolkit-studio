@@ -303,17 +303,30 @@ pub async fn drive(
         // 标签页信息（web 多标签时），人和 AI 对称可见
         let tabs_text = crate::format_tabs(&p.tabs);
         let tabs_block = if tabs_text.is_empty() { String::new() } else { format!("{}\n", tabs_text) };
-        sess.user_page(format!(
-            "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
-            tabs_block, round, list_text, hint
-        ));
-        // 卡得更死（连续 2 次没变 / 多页打转）：主动把截图塞给 AI，强制触发多模态读图
-        if (no_progress >= 2 || revisits >= 3) && perceive_err.is_none() {
-            if let Err(e) = sess.user_with_image("（系统：你似乎卡住了，附上当前页面截图，请据图判断下一步该点哪里）", &p.shot_path) {
+        // 卡得更死（连续 2 次没变 / 多页打转）→ 进入**纯视觉**：元素列表已经帮不上忙了，
+        // 只发当前截图、不再带元素/OCR，让 AI 直接看图用 click_visual 决策（避免被无效元素继续误导）。
+        let go_visual = (no_progress >= 2 || revisits >= 3) && perceive_err.is_none();
+        if go_visual {
+            let prompt = format!(
+                "{}【第 {} 轮】基于元素列表已经无法推进（连续卡住）。现在**只给你当前页面截图**，\
+                 请直接看图判断下一步该点哪里，用 click_visual 给出像素位置（region=[x1,y1,x2,y2] 或 x,y）。{}",
+                tabs_block, round, hint
+            );
+            if let Err(e) = sess.user_with_image(&prompt, &p.shot_path) {
+                // 截图失败兜底：退回发元素列表
                 tx.log("auto_screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
+                sess.user_page(format!(
+                    "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
+                    tabs_block, round, list_text, hint
+                ));
             } else {
                 tx.log("auto_screenshot", serde_json::json!({ "round": round }));
             }
+        } else {
+            sess.user_page(format!(
+                "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
+                tabs_block, round, list_text, hint
+            ));
         }
         // 轮与轮之间空一行，分隔更清楚
         eprintln!();
@@ -431,7 +444,7 @@ pub async fn drive(
                 AgentAction::RequestScreenshot { reason } => {
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
-                    match sess.user_with_image("当前页面截图：", &p.shot_path) {
+                    match sess.user_with_image("当前页面截图——请直接看图判断该点哪里，用 click_visual 给像素位置（既然要看图，说明元素列表已不够用，以图为准）：", &p.shot_path) {
                         Ok(()) => tx.log(
                             "screenshot_sent",
                             serde_json::json!({ "round": round, "screenshot": p.shot_path.to_string_lossy() }),
