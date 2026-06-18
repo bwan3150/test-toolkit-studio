@@ -109,10 +109,21 @@ pub async fn apply(
             };
             Ok((line(TksCommand::Click, vec![el_param(name)]), detail, trace, saved))
         }
-        AgentAction::SwipeDir { direction, distance } => {
+        AgentAction::SwipeDir { direction, distance, amount } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
             let (cx, cy) = (w as i32 / 2, h as i32 / 2);
-            let dist = distance.unwrap_or((h as i32) * 5 / 10);
+            // 滑动幅度沿方向轴的屏幕尺寸：上下用高度，左右用宽度
+            let dim = match direction.as_str() {
+                "left" | "right" => w as i32,
+                _ => h as i32,
+            };
+            // amount(屏幕比例)优先；否则 distance(像素)；都没有则半屏
+            let dist = match amount.as_deref() {
+                Some("full") => dim * 4 / 5, // 整屏从中心只能滑 ~半，留边取 0.8 近整屏
+                Some("quarter") => dim / 4,
+                Some("half") => dim / 2,
+                _ => distance.unwrap_or(dim / 2),
+            };
             let from = Point::new(cx, cy);
             let to = swipe_end(from, direction, dist);
             let detail = exec(

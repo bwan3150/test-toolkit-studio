@@ -25,8 +25,9 @@ pub enum AgentAction {
         name: String,
         desc: Option<String>,
     },
-    /// 定向滑动（up/down/left/right），从屏幕中心滑动
-    SwipeDir { direction: String, distance: Option<i32> },
+    /// 定向滑动（up/down/left/right），从屏幕中心滑动。
+    /// amount=屏幕比例 full/half/quarter（推荐，免算像素）；distance=像素（兜底）
+    SwipeDir { direction: String, distance: Option<i32>, amount: Option<String> },
     /// 返回
     Back,
     /// 切换标签/App：web=标签序号 或 用新标签打开 URL；移动端=切到目标 App 包名

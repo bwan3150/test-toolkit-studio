@@ -96,8 +96,9 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "滑动方向" },
-                    "distance": { "type": "integer", "description": "可选：滑动像素距离" }
+                    "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "手势方向。up=向上滑→看页面更下方内容(往下翻)；down=向下滑→看更上方内容(回顶部)。要往下找内容用 up！" },
+                    "amount": { "type": "string", "enum": ["full", "half", "quarter"], "description": "滑动幅度=屏幕比例（推荐，免算像素）：full≈整屏、half≈半屏、quarter≈四分之一屏。默认 half。" },
+                    "distance": { "type": "integer", "description": "可选：直接给滑动像素距离（一般用 amount 即可，不用这个）" }
                 },
                 "required": ["direction"]
             }),

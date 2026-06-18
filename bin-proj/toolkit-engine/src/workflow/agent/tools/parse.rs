@@ -47,6 +47,7 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
         "swipe_direction" => AgentAction::SwipeDir {
             direction: req_str(a, "direction")?,
             distance: opt_i32(a, "distance"),
+            amount: opt_str(a, "amount"),
         },
         "back" => AgentAction::Back,
         "switch" => AgentAction::Switch { target: req_str(a, "target")? },
