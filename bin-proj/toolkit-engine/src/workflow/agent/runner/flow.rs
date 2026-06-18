@@ -34,14 +34,21 @@ fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
     serde_json::from_str(s.get(start..=end)?).ok()
 }
 
-/// 给 .tks 指令行着色：命令(青) + 元素/参数(黄)。`命令 [{元素}]` / `命令 [参数]`
-fn paint_line(tty: bool, line: &str) -> String {
-    match line.find(" [") {
-        Some(i) => {
-            let (verb, rest) = line.split_at(i);
-            format!("{} {}", paint(tty, "36", verb), paint(tty, "33", rest.trim_start()))
-        }
-        None => paint(tty, "36", line),
+/// 动作行的友好显示：去掉 .tks 的 `[{ }]` 括号噪声，纯文本不上色（仅前面的 ✓/✗ 带色）。
+/// 如 `点击 [{登录按钮}]` → `点击 登录按钮`、`定向滑动 [{640, 406}, 上, 406]` → `定向滑动 640, 406, 上, 406`
+fn friendly(line: &str) -> String {
+    line.replace("[{", "").replace("}]", "").replace(['[', ']', '{', '}'], "")
+        .split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// 紧凑 token 显示：4443→4.4k、148693→149k、<1000 原样，避免大数字刷屏
+fn fmt_tokens(n: i64) -> String {
+    if n < 1000 {
+        n.to_string()
+    } else if n < 100_000 {
+        format!("{:.1}k", n as f64 / 1000.0)
+    } else {
+        format!("{}k", (n + 500) / 1000)
     }
 }
 
@@ -257,33 +264,34 @@ pub async fn drive(
                 tx.log("auto_screenshot", serde_json::json!({ "round": round }));
             }
         }
-        // OCR 贡献提示（回填/新增），让用户看出 OCR 是否在起作用
-        let ocr_tag = if p.ocr_filled + p.ocr_added > 0 {
-            paint(tty, "35", &format!("  OCR +{}", p.ocr_filled + p.ocr_added))
-        } else {
-            String::new()
-        };
-        let tab_tag = if p.tabs.len() > 1 {
-            paint(tty, "34", &format!("  {}标签页", p.tabs.len()))
+        // 轮次头：左侧"第 N 轮"做锚点，右侧次要统计(已知/未知/OCR/标签页)整体淡色，
+        // 不与下面的「思考 + 动作」主内容抢眼。OCR/标签页有值才显示。
+        let mut stat = vec![format!("{} 已知", n_known), format!("{} 未知", n_unknown)];
+        if p.ocr_filled + p.ocr_added > 0 {
+            stat.push(format!("OCR+{}", p.ocr_filled + p.ocr_added));
+        }
+        if p.tabs.len() > 1 {
+            stat.push(format!("{} 标签页", p.tabs.len()));
+        }
+        let notready = if perceive_err.is_some() {
+            paint(tty, "33", "  · 页面未就绪，待 launch")
         } else {
             String::new()
         };
         eprintln!(
-            "{}  {} · {}{}{}{}",
-            paint(tty, "1", &format!("第 {} 轮", round)),
-            paint(tty, "32", &format!("{} 个已知元素", n_known)),
-            paint(tty, "2", &format!("{} 个未知元素", n_unknown)),
-            ocr_tag,
-            tab_tag,
-            if perceive_err.is_some() { paint(tty, "31", "  (页面未就绪，待 launch)") } else { String::new() }
+            "{}  {}{}",
+            paint(tty, "2", &format!("第 {} 轮", round)),
+            paint(tty, "2", &stat.join(" · ")),
+            notready
         );
+        // 卡住提示：淡黄一行，不用 emoji（与 ✓/✗ 状态色区分开）
         if stuck {
             let msg = if no_progress >= 2 || revisits >= 3 {
-                "  ⚠ 上一步没生效/原地打转，已强制附截图让 AI 看图"
+                "  上一步没生效/原地打转，已附截图让 AI 看图"
             } else if no_progress >= 1 {
-                "  ⚠ 上一步操作后页面无变化（可能没生效），已提示 AI 换做法"
+                "  上一步操作后页面无变化，已提示 AI 换做法"
             } else {
-                "  ⚠ 在多页间打转，已提示 AI 换路径"
+                "  在多页间打转，已提示 AI 换路径"
             };
             eprintln!("{}", paint(tty, "33", msg));
         }
@@ -312,7 +320,7 @@ pub async fn drive(
 
             // 本次 LLM 调用的 token 用量（上行/输入、下行/输出），着色、显示在 comment 之后
             let (pt, ct) = sess.last_usage();
-            let toks = paint(tty, "34", &format!("↑{} ↓{}", pt, ct));
+            let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pt), fmt_tokens(ct)));
             tx.log("llm_usage", serde_json::json!({ "round": round, "seq": llm_calls, "prompt_tokens": pt, "completion_tokens": ct }));
 
             let (thinking, calls) = match reply {
@@ -402,7 +410,7 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace, saved)) => {
-                            eprintln!("  {} {}", paint(tty, "32", "✓"), paint_line(tty, &line));
+                            eprintln!("  {} {}", paint(tty, "32", "✓"), friendly(&line));
                             // 记录元素库变更（去重），供结束时人工审核
                             if let Some(s) = saved {
                                 if s.created {
@@ -516,7 +524,7 @@ pub async fn drive(
     eprintln!(
         "  {}  {}",
         paint(tty, "2", "Token"),
-        paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", tp, tc, tp + tc))
+        paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tp), fmt_tokens(tc), fmt_tokens(tp + tc)))
     );
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
