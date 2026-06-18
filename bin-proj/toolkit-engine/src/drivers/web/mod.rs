@@ -282,7 +282,22 @@ impl WebDriver {
             format!("https://{}", url)
         };
         self.post("/url", serde_json::json!({ "url": url }))?;
+        self.wait_ready();
         Ok(())
+    }
+
+    /// 等页面就绪：轮询 document.readyState=='complete'（最多 ~4s）再加一小段渲染缓冲。
+    /// 回放时点击/导航后若不等加载就执行下一步，常会在空白/旧页上"跑过场"——这里挡住。
+    fn wait_ready(&self) {
+        for _ in 0..20 {
+            match self.execute("return document.readyState;", serde_json::json!([])) {
+                Ok(v) if v["value"].as_str() == Some("complete") => break,
+                Ok(_) => std::thread::sleep(std::time::Duration::from_millis(200)),
+                Err(_) => break, // 导航中/会话忙，退出轮询交由上层 settle 兜底
+            }
+        }
+        // SPA 客户端渲染常在 readyState complete 之后，再留一小段缓冲让内容落地
+        std::thread::sleep(std::time::Duration::from_millis(400));
     }
 
     pub fn tap(&self, x: i32, y: i32) -> Result<()> {
@@ -299,6 +314,8 @@ impl WebDriver {
         // 点击若打开了新标签页，自动切过去并停留（模拟真实浏览器 target=_blank 前台打开，
         // 对 AI/人都友好；否则浏览器会停在原页、新页在后台，列举标签时还会"闪一下又跳回"）
         self.focus_new_tab_if_opened(before);
+        // 点击可能触发导航/客户端渲染——等页面就绪再返回，避免下一步在旧页/空白页上跑过场
+        self.wait_ready();
         clicked
     }
 
