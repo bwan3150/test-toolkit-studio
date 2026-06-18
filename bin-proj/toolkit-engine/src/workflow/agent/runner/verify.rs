@@ -56,6 +56,7 @@ pub async fn verify_and_repair(
         serde_json::json!({ "need_pass": NEED_PASS, "max_repairs": MAX_REPAIRS, "script_lines": lines.clone() }),
     );
 
+    eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 自检回放 ──────────────────────────"));
 
     let mut streak = 0usize; // 连续干净通过次数
@@ -66,22 +67,26 @@ pub async fn verify_and_repair(
         // 2) 写回当前版本并整脚本回放——逐步实时显示（像 tke run，看得到第几步、哪步红了）
         let _ = write_script(script_path, case, &lines);
         replay_no += 1;
-        eprintln!("  {}", paint(tty, "1", &format!("第 {} 次验证回放", replay_no)));
+        eprintln!();
+        eprintln!("  {}", paint(tty, "1;36", &format!("第 {} 次验证回放", replay_no)));
         let result = {
             let mut total = 0usize;
             let mut sink = |e: &RunEvent| match e {
                 RunEvent::RunStart { total_steps, .. } => total = *total_steps,
                 RunEvent::StepEnd { index, command, success, error, .. } => {
                     if *success {
+                        // ✓ 绿 + 步号淡色 + 指令默认色
                         eprintln!(
-                            "    {}  {}",
+                            "    {}  {}  {}",
+                            paint(tty, "32", "✓"),
                             paint(tty, "2", &format!("步 {}/{}", index + 1, total)),
-                            paint(tty, "2", &friendly(command))
+                            friendly(command)
                         );
                     } else {
+                        // 失败整行红, 醒目
                         eprintln!(
                             "    {}  {}",
-                            paint(tty, "31", &format!("✗ 步 {}/{} {}", index + 1, total, friendly(command))),
+                            paint(tty, "31", &format!("✗ 步 {}/{}  {}", index + 1, total, friendly(command))),
                             paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 100)))
                         );
                     }
@@ -151,9 +156,10 @@ pub async fn verify_and_repair(
                         "error": err, "kept_prefix_steps": k,
                     }),
                 );
+                eprintln!();
                 eprintln!(
                     "  {}",
-                    paint(tty, "33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
+                    paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
                 );
                 let preamble = format!(
                     "现在进入【回放修复】。我把你刚生成的脚本从头跑了一遍，前 {} 步都成功了，\
@@ -221,6 +227,7 @@ pub async fn verify_and_repair(
     } else {
         paint(tty, "33", &format!("■ 未达稳定（修复 {} 次后仍未连续通过，已保留当前最好版本）", report.repairs))
     };
+    eprintln!();
     eprintln!("  {}   {}", paint(tty, "2", "结果"), summary);
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 

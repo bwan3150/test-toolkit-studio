@@ -251,6 +251,7 @@ fn render_summary(
         Some(_) => paint(tty, "31", "✗ 验证失败"),
     };
 
+    eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
     eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, rounds);
     eprintln!("  {}   {}", paint(tty, "2", "验证"), verify_status);
@@ -265,6 +266,7 @@ fn render_summary(
 
     // 元素库更新：合并探索+修复阶段新增，desc 从库里读（探索/修复各自的 desc-pass 已写入）
     let descs = read_descs(element_path, created);
+    eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
     if created.is_empty() {
         eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
