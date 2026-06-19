@@ -3,6 +3,7 @@
 
 pub mod doctor;
 pub mod flow;
+pub mod interrupt;
 pub mod options;
 pub mod reflect;
 pub mod verify;
@@ -27,6 +28,8 @@ pub struct AgentRunner;
 
 impl AgentRunner {
     pub async fn run(opts: AgentRunOptions) -> Result<AgentResult> {
+        // 统一中断：安装进程级 Ctrl+C 监听，探索/诊断/验证/医生各阶段共用同一中断标志
+        interrupt::install();
         let device = opts.params.device().unwrap_or_default();
         let platform = Platform::from_device(Some(&device));
 

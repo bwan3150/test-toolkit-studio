@@ -564,6 +564,10 @@ pub(super) async fn doctor_repair(
     let mut pending: Option<PendingReselect> = None; // reexplore 定位后暂存的实时页面（供 pick）
 
     for iter in 1..=params.harness.doctor_iters {
+        if super::interrupt::aborted() {
+            eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止医生修复"));
+            return best;
+        }
         eprintln!();
         eprintln!("  {}", paint(tty, "1;36", &format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter)));
         let diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;

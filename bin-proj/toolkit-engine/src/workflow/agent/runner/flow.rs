@@ -126,16 +126,8 @@ pub async fn drive(
     let tx = &mut *_ascope;
     let tty = std::io::stderr().is_terminal();
 
-    // 用户中断（Ctrl+C）：监听到则在下一个决策点优雅停止、照常出总结
-    let abort = Arc::new(AtomicBool::new(false));
-    {
-        let a = abort.clone();
-        tokio::spawn(async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                a.store(true, Ordering::Relaxed);
-            }
-        });
-    }
+    // 用户中断（Ctrl+C）：查进程级统一中断标志（由 interrupt::install 在运行开始时安装监听），
+    // 监听到则在下一个决策点优雅停止、照常出总结。
 
     // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY、且初次探索）
     let spin_stop = Arc::new(AtomicBool::new(false));
@@ -177,7 +169,7 @@ pub async fn drive(
     let mut updated_names: Vec<String> = Vec::new(); // 去重用
 
     'outer: while round < ctx.max_rounds {
-        if abort.load(Ordering::Relaxed) {
+        if super::interrupt::aborted() {
             aborted = true;
             finish = Some((false, "已终止（用户中断 Ctrl+C）".to_string()));
             break 'outer;
@@ -370,7 +362,7 @@ pub async fn drive(
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
         loop {
-            if abort.load(Ordering::Relaxed) {
+            if super::interrupt::aborted() {
                 aborted = true;
                 finish = Some((false, "已终止（用户中断 Ctrl+C）".to_string()));
                 break 'outer;

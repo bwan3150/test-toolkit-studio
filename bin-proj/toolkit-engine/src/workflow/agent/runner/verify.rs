@@ -99,6 +99,10 @@ pub async fn verify_and_repair(
     let mut streak = 0usize;
     let mut replay_no = 0usize;
     loop {
+        if super::interrupt::aborted() {
+            eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止稳定性测试"));
+            break;
+        }
         replay_no += 1;
         eprintln!();
         eprintln!("  {}", paint(tty, "1;36", &format!("▶ 第 {} 次稳定回放（重启净化中…）", replay_no)));
