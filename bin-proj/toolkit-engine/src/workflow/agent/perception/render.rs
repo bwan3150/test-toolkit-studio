@@ -8,8 +8,9 @@ use super::known::KnownHit;
 const MAX_ELEMENTS: usize = 120;
 
 /// 渲染元素列表：`[序号] 控件描述 @(中心坐标)`
-/// known[i] 为该元素在元素库中已存在的记录（命中结构/ocr）：标注其 name 让 AI 复用、
-/// 不重复造；并附上库里的 desc，帮 AI 判断这元素是干啥的、要不要操作它。
+/// known[i] 为该元素在元素库中已存在的记录（命中结构/ocr）：标注「已收录·库名」纯属**命名提示**——
+/// 你若操作它就沿用这个 name（别重复造名）；并附库里的 desc 帮你判断它是干啥的。
+/// **注意：标记只关乎命名，绝不代表该元素与当前目标相关、或应优先点它**（选择只看目标，见系统提示词）。
 pub fn render_element_list(elements: &[UIElement], known: &[Option<KnownHit>]) -> String {
     if elements.is_empty() {
         return "(当前页面未解析到任何元素)".to_string();
@@ -19,8 +20,8 @@ pub fn render_element_list(elements: &[UIElement], known: &[Option<KnownHit>]) -
         let c = el.center();
         let tag = match known.get(i).and_then(|k| k.as_ref()) {
             Some(hit) => match &hit.desc {
-                Some(d) => format!(" ←已知元素「{}」（{}），name 请复用它", hit.name, d),
-                None => format!(" ←已知元素「{}」，name 请复用它", hit.name),
+                Some(d) => format!(" ←已收录·库名「{}」（{}）", hit.name, d),
+                None => format!(" ←已收录·库名「{}」", hit.name),
             },
             None => String::new(),
         };

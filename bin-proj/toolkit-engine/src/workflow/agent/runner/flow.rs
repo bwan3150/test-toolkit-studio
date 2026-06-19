@@ -320,7 +320,7 @@ pub async fn drive(
                 // 截图失败兜底：退回发元素列表
                 tx.log("auto_screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                 sess.user_page(format!(
-                    "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
+                    "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已收录」的只是命名提示——要操作它才复用其 name；**该不该点只看当前目标，别因它已收录就偏向它/绕路点它**。请调用一个工具决定下一步。",
                     tabs_block, round, list_text, hint
                 ));
             } else {
@@ -328,7 +328,7 @@ pub async fn drive(
             }
         } else {
             sess.user_page(format!(
-                "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已知元素」的请复用其 name；请调用一个工具决定下一步。",
+                "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已收录」的只是命名提示——要操作它才复用其 name；**该不该点只看当前目标，别因它已收录就偏向它/绕路点它**。请调用一个工具决定下一步。",
                 tabs_block, round, list_text, hint
             ));
         }
