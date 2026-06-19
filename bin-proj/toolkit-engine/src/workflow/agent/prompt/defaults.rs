@@ -75,6 +75,7 @@ fn default_doctor_tool_description(name: &str) -> &'static str {
         "replace_line" => include_str!("builtin/tools/doctor/replace_line.md"),
         "insert_after" => include_str!("builtin/tools/doctor/insert_after.md"),
         "reexplore" => include_str!("builtin/tools/doctor/reexplore.md"),
+        "pick" => include_str!("builtin/tools/doctor/pick.md"),
         "run" => include_str!("builtin/tools/doctor/run.md"),
         "finish" => include_str!("builtin/tools/doctor/finish.md"),
         _ => "",

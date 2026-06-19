@@ -21,13 +21,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::engines::ocr::enrich_with_ocr;
-use crate::{AiConfig, LlmReply, LlmSession, LlmTool, LlmToolCall, Params, Platform, RunEvent, ScriptParser, ScriptRunner, TksParam};
+use crate::tools::element::{add_element_target, OcrChannel};
+use crate::workflow::step_to_source;
+use crate::{
+    AiConfig, LlmReply, LlmSession, LlmTool, LlmToolCall, LocatorStrategy, Params, Platform, RunEvent, ScriptParser, ScriptRunner,
+    TksCommand, TksParam, TksStep, UIElement,
+};
 
 use super::super::execution::script::write_script;
-use super::super::perception::{capture, render_element_list};
+use super::super::perception::{capture, match_known, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, drive, fmt_tokens, friendly, paint, DriveCtx};
+use super::flow::{brief, fmt_tokens, friendly, paint, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 
@@ -74,12 +79,26 @@ enum EditOp {
     Replace { line: usize, content: String },
     /// 在第 after 行之后插入 content(after=0 → 插到最前)
     Insert { after: usize, content: String },
-    /// 从第 from_line 步起活体重探(回放前缀定位设备 + 现场重新导航)
-    Reexplore { from_line: usize, reason: String },
+    /// 定位到第 step 步将操作的实时页面（重启+回放到 step-1 步），fetch 实时元素交给医生重选，
+    /// 随后用 Pick 选定正确元素。用于"该步点错了元素/元素记错了/要换别的元素"。
+    Reexplore { step: usize, reason: String },
+    /// 在 Reexplore 定位后的实时页面里，选定第 id 个元素作为该步的操作目标：
+    /// 实时落库为 name，并把该步的 .tks 行改成对它的 action（click/input/long_press/clear/assert）。
+    Pick { id: usize, name: String, action: String, text: Option<String> },
     /// 重新诊断回放(测试当前编辑效果)
     Run,
     /// 收尾(医生认为已达标且最短)
     Finish { reason: String },
+}
+
+/// Reexplore 定位后暂存的实时页面（供随后的 Pick 选元素落库）
+struct PendingReselect {
+    /// 要修的步号(1-based)
+    step: usize,
+    /// 该实时页面解析出的元素
+    elements: Vec<UIElement>,
+    /// 各元素在库中已有的 name（命中则 Pick 复用，不重复造名）
+    known_names: Vec<Option<String>>,
 }
 
 /// 医生工具的 name + 参数 schema 表（description 不在此——由 PromptSet 提供，
@@ -127,10 +146,23 @@ fn doctor_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
             serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "from_line": { "type": "integer", "description": "从第几步起重新导航(1-based)。应选**真正开始走错**的那一步，通常比报错步更早。" },
-                    "reason": { "type": "string", "description": "为什么这段要活体重探(看富 trace 说清楚哪步跑偏了)" }
+                    "step": { "type": "integer", "description": "要重新选元素的步号(1-based)。系统会重启并回放到它的前一步、停在该步将操作的实时页面，给你实时元素列表。" },
+                    "reason": { "type": "string", "description": "为什么这步要重选元素(看 trace 说清楚哪步点错了/元素记错了)" }
                 },
-                "required": ["from_line", "reason"]
+                "required": ["step", "reason"]
+            }),
+        ),
+        (
+            "pick",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer", "description": "reexplore 给的实时元素列表里的元素序号" },
+                    "name": { "type": "string", "description": "给该元素起的稳定语义名（落库+写进 .tks；列表里标了「已收录」的复用其库名）" },
+                    "action": { "type": "string", "enum": ["click", "input", "long_press", "clear", "assert"], "description": "对该元素的操作，默认 click" },
+                    "text": { "type": "string", "description": "action=input 时要输入的文本" }
+                },
+                "required": ["id", "name"]
             }),
         ),
         ("run", serde_json::json!({ "type": "object", "properties": {} })),
@@ -362,15 +394,31 @@ fn validate_line(content: &str, element_path: &Path) -> std::result::Result<(), 
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| serde_json::json!({ "elements": {} }));
     for step in &script.steps {
+        // ① 元素引用必须是库里已有的（否则回放找不到）
         for p in &step.params {
             if let TksParam::Element { name, .. } = p {
                 if lib["elements"].get(name).is_none() {
                     return Err(format!(
-                        "元素「{}」不在元素库中——replace/insert 只能引用已有元素；要点新元素/走新路径请改用 reexplore",
+                        "元素「{}」不在元素库中——replace/insert 只能引用已收录元素；要点页面上库里还没有的元素，请用 reexplore 定位+pick 现场选并存库",
                         name
                     ));
                 }
             }
+        }
+        // ② 点击/输入/长按/清空/断言 的**目标**(首参)只能是 [{库元素名}] 或坐标 [{x,y}]，
+        //    不能是裸文本/元素描述（如 `点击 资源链接`、`点击 p(text=...)`、`svg(...)`）——那会被当成页面
+        //    文本搜索、极不可靠，且通常是"想点一个还没存库的元素"的错误写法。该用 reexplore+pick。
+        let targeting = matches!(
+            step.command,
+            TksCommand::Click | TksCommand::Press | TksCommand::Input | TksCommand::Clear | TksCommand::Assert
+        );
+        if targeting && !matches!(step.params.first(), Some(TksParam::Element { .. }) | Some(TksParam::Coordinate(_))) {
+            return Err(format!(
+                "「{}」的目标必须是 [{{库里已有的元素名}}] 或坐标 [{{x,y}}]，不能用裸文本/元素描述\
+                 （如 `点击 资源链接`、`点击 p(text=...)`）——那只是页面文本搜索、不可靠。要点页面上库里还没有的元素，\
+                 请用 reexplore 定位到该步、再 pick 在实时页面上选中它（会存库），别凭描述硬点。",
+                step.raw.trim()
+            ));
         }
     }
     Ok(())
@@ -395,8 +443,14 @@ fn parse_edit(call: &LlmToolCall) -> std::result::Result<EditOp, String> {
             after: uint("after").ok_or("缺少 after")?,
             content: string("content").ok_or("缺少 content")?,
         }),
+        "pick" => Ok(EditOp::Pick {
+            id: uint("id").ok_or("缺少 id")?,
+            name: string("name").ok_or("缺少 name")?,
+            action: string("action").unwrap_or_else(|| "click".to_string()),
+            text: string("text"),
+        }),
         "reexplore" => Ok(EditOp::Reexplore {
-            from_line: uint("from_line").ok_or("缺少 from_line")?,
+            step: uint("step").ok_or("缺少 step")?,
             reason: string("reason").unwrap_or_default(),
         }),
         "run" => Ok(EditOp::Run),
@@ -405,93 +459,48 @@ fn parse_edit(call: &LlmToolCall) -> std::result::Result<EditOp, String> {
     }
 }
 
-// ===================== 活体逃生口(reexplore) =====================
+// ===================== 元素重选(reexplore + pick) =====================
 
-/// 从第 from_line 步起活体重探：回放前缀把设备定位到位 + 用探索会话现场重新导航 + 拼回。
-/// 复用探索会话(有设备知识 + 探索工具)。成功返回新脚本；失败/中断返回 None。
-#[allow(clippy::too_many_arguments)]
-async fn reexplore_segment(
-    explore_sess: &mut LlmSession,
-    tx: &mut Transcript,
-    ctx: &DriveCtx<'_>,
-    params: &Arc<Params>,
-    script_path: &Path,
-    case: &str,
-    lines: &[String],
-    from_line: usize,
-    reason: &str,
-    report: &mut VerifyReport,
-) -> Option<Vec<String>> {
-    let tty = std::io::stderr().is_terminal();
-    let d = from_line.clamp(1, lines.len() + 1);
-    let cut = (d - 1).min(lines.len());
-    let mut prefix: Vec<String> = lines[..cut].to_vec();
-    report.repairs += 1;
-
-    tx.log(
-        "doctor_reexplore",
-        serde_json::json!({ "repair": report.repairs, "from_line": d, "kept_prefix_steps": cut, "reason": reason }),
-    );
-    eprintln!();
-    eprintln!(
-        "  {}",
-        paint(tty, "1;33", &format!("◆ 活体重探(第 {} 次)：从第 {} 步起重新导航，保留前 {} 步（{}）", report.repairs, d, cut, brief(reason, 50)))
-    );
-
-    // 回放前缀把设备定位到第 cut 步后的页面(前缀含「启动」，先净化关闭即可)
+/// 重启净化 + 回放 lines[0..cut]，把设备定位到第 cut 步后的页面（即第 cut+1 步将操作的页面）。
+async fn reposition(ctx: &DriveCtx<'_>, params: &Arc<Params>, script_path: &Path, case: &str, lines: &[String], cut: usize) {
     reset_state(ctx.device, lines).await;
-    if !prefix.is_empty() {
-        let _ = write_script(script_path, case, &prefix);
+    if cut > 0 {
+        let prefix = &lines[..cut.min(lines.len())];
+        let _ = write_script(script_path, case, prefix);
         let _ = do_replay(params, script_path, false).await;
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
+}
 
-    let preamble = render(
-        &ctx.prompts.message("doctor", "reexplore_preamble"),
-        &[("cut", &cut.to_string()), ("d", &d.to_string()), ("reason", reason), ("case", case)],
-    );
-    tx.log("llm_message", serde_json::json!({ "content": preamble.clone(), "to": "explorer" }));
-    explore_sess.user(preamble);
-    let tail = match drive(explore_sess, tx, ctx, false, "重探·").await {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("  {}", paint(tty, "31", &format!("活体重探出错：{}", e)));
-            return None;
-        }
+/// 元素的落库通道（与 execution::tier_for 一致）：OcrText→结构空+ocr 文字；其它→结构+ocr。
+fn tier_for(el: &UIElement) -> (Option<&UIElement>, OcrChannel) {
+    if el.class_name == "OcrText" {
+        let ocr = el.text.clone().filter(|t| !t.trim().is_empty()).map(OcrChannel::Text).unwrap_or(OcrChannel::FromCrop);
+        (None, ocr)
+    } else {
+        let ocr = el
+            .text
+            .clone()
+            .or_else(|| el.content_desc.clone())
+            .filter(|t| !t.trim().is_empty())
+            .map(OcrChannel::Text)
+            .unwrap_or(OcrChannel::FromCrop);
+        (Some(el), ocr)
+    }
+}
+
+/// 据 action 给某元素构造一行可回放的 .tks（经 Phase2 序列化器，保证与 parser 同构）。
+fn build_action_line(action: &str, name: &str, text: Option<&str>) -> std::result::Result<String, String> {
+    let el = TksParam::Element { name: name.to_string(), strategy: LocatorStrategy::Auto };
+    let (command, params) = match action {
+        "click" => (TksCommand::Click, vec![el]),
+        "input" => (TksCommand::Input, vec![el, TksParam::Text(text.unwrap_or_default().to_string())]),
+        "long_press" => (TksCommand::Press, vec![el, TksParam::Number(1000)]),
+        "clear" => (TksCommand::Clear, vec![el]),
+        "assert" => (TksCommand::Assert, vec![el, TksParam::Text("存在".to_string())]),
+        other => return Err(format!("不支持的动作「{}」（仅 click/input/long_press/clear/assert）", other)),
     };
-    for c in tail.created {
-        if !report.created.contains(&c) {
-            report.created.push(c);
-        }
-    }
-    for u in tail.updated {
-        if !report.updated.contains(&u) {
-            report.updated.push(u);
-        }
-    }
-    if tail.aborted {
-        eprintln!("  {}", paint(tty, "33", "已终止（用户中断）"));
-        return None;
-    }
-    if !tail.success {
-        tx.log("doctor_reexplore_failed", serde_json::json!({ "repair": report.repairs, "reason": tail.reason }));
-        eprintln!("  {}", paint(tty, "33", "活体重探未能达成测试目标（探索引擎也没走通）"));
-        return None;
-    }
-    // 改名同步到前缀(库 key 已变，否则回放找不到)
-    for (old, new) in &tail.renames {
-        let (from, to) = (format!("{{{}}}", old), format!("{{{}}}", new));
-        for l in prefix.iter_mut() {
-            if l.contains(&from) {
-                *l = l.replace(&from, &to);
-            }
-        }
-    }
-    let tail_len = tail.lines.len();
-    prefix.extend(tail.lines);
-    eprintln!("  {}", paint(tty, "1;32", &format!("✓ 活体重探完毕：续接 {} 步，新脚本共 {} 步", tail_len, prefix.len())));
-    eprintln!();
-    Some(prefix)
+    Ok(step_to_source(&TksStep { command, params, raw: String::new(), line_number: 0 }))
 }
 
 // ===================== 主循环 =====================
@@ -500,7 +509,6 @@ async fn reexplore_segment(
 /// 返回**最短的达标版本**；始终修不好则返回 None(上层据此判失败、回滚)。
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn doctor_repair(
-    explore_sess: &mut LlmSession,
     ai: &AiConfig,
     prompts: &PromptSet,
     reflection: Option<&str>,
@@ -513,8 +521,7 @@ pub(super) async fn doctor_repair(
     mut lines: Vec<String>,
     report: &mut VerifyReport,
 ) -> Option<Vec<String>> {
-    // 进入「脚本医生 agent」作用域：本函数产出的事件（会话/请求/编辑/诊断）都归属 doctor。
-    // 其中 reexplore→drive() 会再压入 explorer 作用域、返回后弹回 doctor（嵌套由栈处理）。
+    // 进入「脚本医生 agent」作用域：本函数产出的事件（会话/请求/编辑/诊断/重选元素）都归属 doctor。
     let mut _dscope = txp.scoped("doctor");
     let tx = &mut *_dscope;
     let tty = std::io::stderr().is_terminal();
@@ -554,6 +561,7 @@ pub(super) async fn doctor_repair(
     // 最短的达标版本(护栏：删坏了自动还原到它)
     let mut best: Option<Vec<String>> = None;
     let mut stagnation = 0usize; // 连续「没改动且没达标」次数
+    let mut pending: Option<PendingReselect> = None; // reexplore 定位后暂存的实时页面（供 pick）
 
     for iter in 1..=params.harness.doctor_iters {
         eprintln!();
@@ -700,23 +708,85 @@ pub(super) async fn doctor_repair(
                     eprintln!("  {}  {}", paint(tty, "32", &format!("✓ 在第 {} 行后插入", after)), paint(tty, "2", &friendly(&lines[after])));
                     editor.tool_result(primary.call_id.as_str(), format!("已插入，脚本现 {} 行。改完记得 run 验证。", lines.len()));
                 }
-                EditOp::Reexplore { from_line, reason } => {
+                EditOp::Reexplore { step, reason } => {
                     if report.repairs >= params.harness.repairs {
-                        editor.tool_result(primary.call_id.as_str(), format!("已达活体重探上限（{} 次），请改用文本编辑或 finish。", params.harness.repairs));
+                        editor.tool_result(primary.call_id.as_str(), format!("已达重选上限（{} 次），请改用文本编辑或 finish。", params.harness.repairs));
                         continue;
                     }
-                    match reexplore_segment(explore_sess, tx, ctx, params, script_path, case, &lines, from_line, &reason, report).await {
-                        Some(new) => {
-                            lines = new;
-                            did_reexplore = true;
-                            tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": "reexplore", "script_after": lines.clone() }));
-                            editor.tool_result(primary.call_id.as_str(), format!("已活体重探并拼接，脚本现 {} 行。请 run 验证是否到达目标。", lines.len()));
+                    let n = lines.len();
+                    if step < 1 || step > n {
+                        editor.tool_result(primary.call_id.as_str(), format!("step 越界：脚本共 {} 行", n));
+                        continue;
+                    }
+                    report.repairs += 1;
+                    let cut = step - 1; // 回放到目标步的前一步
+                    tx.log("doctor_reexplore", serde_json::json!({ "iter": iter, "step": step, "kept_prefix": cut, "reason": reason }));
+                    eprintln!();
+                    eprintln!("  {}", paint(tty, "1;33", &format!("◆ 重新定位到第 {} 步（重启+回放前 {} 步）：{}", step, cut, brief(&reason, 50))));
+                    reposition(ctx, params, script_path, case, &lines, cut).await;
+                    // fetch 实时页面，交给医生重选
+                    match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
+                        Ok(p) => {
+                            let known = match_known(&p.elements, platform, ctx.element_path);
+                            let known_names: Vec<Option<String>> = known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
+                            let list = render_element_list(&p.elements, &known, &prompts.message("explorer", "element_tag"));
+                            let count = p.elements.len();
+                            pending = Some(PendingReselect { step, elements: p.elements, known_names });
+                            editor.tool_result(
+                                primary.call_id.as_str(),
+                                format!(
+                                    "已重启并回放到第 {} 步、设备停在第 {} 步将操作的**实时页面**。当前实时元素（共 {} 个）：\n{}\n\
+                                     请用 pick 选出第 {} 步该操作的正确元素（给 id + name + action，input 再给 text）；它会被实时存库并替换该步。",
+                                    cut, step, count, list, step
+                                ),
+                            );
                         }
-                        None => {
-                            editor.tool_result(primary.call_id.as_str(), "活体重探失败/未走通（或用户中断）。换个 from_line、或改用文本编辑、或 finish。");
+                        Err(e) => {
+                            editor.tool_result(primary.call_id.as_str(), format!("定位后采集页面失败：{}。可重试 reexplore 或改用文本编辑。", e));
                         }
                     }
-                    break; // 重探后立刻重新诊断
+                    continue; // 等医生 pick；不重诊断
+                }
+                EditOp::Pick { id, name, action, text } => {
+                    let Some(pend) = pending.as_ref() else {
+                        editor.tool_result(primary.call_id.as_str(), "还没定位：请先 reexplore 到要改的步骤，拿到实时元素再 pick。");
+                        continue;
+                    };
+                    let Some(el) = pend.elements.get(id) else {
+                        editor.tool_result(primary.call_id.as_str(), format!("id 越界：该页共 {} 个元素", pend.elements.len()));
+                        continue;
+                    };
+                    // 命中库则复用库名，避免重复造名
+                    let eff_name = pend.known_names.get(id).and_then(|o| o.clone()).unwrap_or_else(|| name.clone());
+                    let line = match build_action_line(&action, &eff_name, text.as_deref()) {
+                        Ok(l) => l,
+                        Err(why) => {
+                            editor.tool_result(primary.call_id.as_str(), why);
+                            continue;
+                        }
+                    };
+                    // 实时落库（从 reexplore 那次 capture 写入工作区的截图裁 img）
+                    let (structure, ocr) = tier_for(el);
+                    if let Err(e) =
+                        add_element_target(ctx.device.to_string(), ctx.element_path, &eff_name, None, el.bounds.clone(), structure, ocr, false).await
+                    {
+                        editor.tool_result(primary.call_id.as_str(), format!("元素落库失败：{}", e));
+                        continue;
+                    }
+                    if !report.created.contains(&eff_name) {
+                        report.created.push(eff_name.clone());
+                    }
+                    let step_idx = pend.step - 1;
+                    let old = lines.get(step_idx).cloned().unwrap_or_default();
+                    if step_idx < lines.len() {
+                        lines[step_idx] = line.clone();
+                    }
+                    eprintln!("  {}  {} → {}", paint(tty, "32", &format!("✓ 重选第 {} 步元素", pend.step)), paint(tty, "2", &friendly(&old)), paint(tty, "2", &friendly(&line)));
+                    tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": "pick", "step": pend.step, "name": eff_name, "script_after": lines.clone() }));
+                    editor.tool_result(primary.call_id.as_str(), format!("已把第 {} 步改为「{}」（元素「{}」已实时存库）。请 run 验证。", pend.step, friendly(&line), eff_name));
+                    pending = None;
+                    did_reexplore = true;
+                    break; // 重选后重新诊断
                 }
                 EditOp::Run => {
                     editor.tool_result(primary.call_id.as_str(), "重新回放诊断中，稍后给你最新 trace。");

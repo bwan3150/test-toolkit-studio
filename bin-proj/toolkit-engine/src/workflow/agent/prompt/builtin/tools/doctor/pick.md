@@ -1,0 +1,1 @@
+在 reexplore 定位后的**实时页面**里，选定第 id 个元素作为该步要操作的目标。系统会把它**实时落库**为你给的 name（命中已收录元素时复用库名），并把该步的 .tks 行改成对它的 action：click（默认）/ input（再给 text）/ long_press / clear / assert。选完后 run 验证。必须先 reexplore 定位、拿到实时元素列表，才能 pick。
