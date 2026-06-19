@@ -163,19 +163,8 @@ impl AgentRunner {
             }
         }
 
-        // —— 成功 → 反思官产出「绕路报告」，喂给 doctor 帮它有的放矢删冗余 ——
-        let reflection_for_doctor: Option<String> = if outcome.success && !outcome.aborted {
-            match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, &opts.case, &outcome, true).await {
-                Some(r) => {
-                    refl_pt += r.prompt_tokens;
-                    refl_ct += r.completion_tokens;
-                    Some(r.report)
-                }
-                None => None,
-            }
-        } else {
-            None
-        };
+        // 注：成功后的"路径优化"已不在此处——它移进了 verify 的「医生⇄反思官交替收敛」循环里
+        // （反思官 reflect::optimize 在脚本正确后才优化、删完交医生复检）。
 
         let end_time = chrono::Local::now().to_rfc3339();
 
@@ -216,7 +205,6 @@ impl AgentRunner {
                 &mut sess,
                 &opts.ai,
                 &prompts,
-                reflection_for_doctor.as_deref(),
                 &mut tx,
                 &ctx,
                 &opts.params,

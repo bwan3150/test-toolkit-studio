@@ -69,6 +69,23 @@ pub(super) struct Diagnosis {
     note: String,
 }
 
+impl Diagnosis {
+    /// 给反思官的紧凑逐步清单：步号 · 成败 · .tks 行 · 该步后页面前几项（求短，用于路径优化分析）
+    pub(super) fn trace_lines(&self) -> String {
+        let mut s = String::new();
+        for st in &self.steps {
+            let mark = if st.ok { "✓" } else { "✗" };
+            s.push_str(&format!("{}. {} {}", st.no, mark, friendly(&st.line)));
+            let page = top_lines(&st.page_full, 6);
+            if !page.trim().is_empty() {
+                s.push_str(&format!("  [页面: {}]", page.replace('\n', " ")));
+            }
+            s.push('\n');
+        }
+        s
+    }
+}
+
 // ===================== 医生编辑动作 =====================
 
 /// 医生发起的一次编辑/控制动作
@@ -350,7 +367,7 @@ fn indent_page(s: &str) -> String {
 /// 把诊断结果渲染成给医生的提示词：编号脚本 + **本轮诊断回放每一步都带「该步执行后页面」**
 /// （失败步/终点页给完整元素列表，其余步给前若干个），让医生看清整条脚本实际走了哪条路。
 /// 历史轮次的 trace 由 `user_trace` 自动省略页面详情，故这里可以放心给全（每轮只有一份完整 trace 在上下文里）。
-fn render_trace_prompt(prompts: &PromptSet, case: &str, marker: &str, diag: &Diagnosis, objective_minimize: bool) -> String {
+fn render_trace_prompt(prompts: &PromptSet, case: &str, marker: &str, diag: &Diagnosis) -> String {
     const PER_STEP_ELEMENTS: usize = 8; // 普通步每步展示的元素条数（失败步/终点页给全量）
     let last_no = diag.steps.last().map(|s| s.no).unwrap_or(0);
     // 逐步 trace 文本（数据，按规则组装；模板只提供外层说明文字）
@@ -366,11 +383,8 @@ fn render_trace_prompt(prompts: &PromptSet, case: &str, marker: &str, diag: &Dia
             steps.push_str(&format!("    页面：\n{}\n", indent_page(&page)));
         }
     }
-    let objective = if objective_minimize {
-        prompts.message("doctor", "trace_objective_minimize")
-    } else {
-        prompts.message("doctor", "trace_objective_fix")
-    };
+    // 医生只管修到正确（路径优化交给反思官），目标固定为"修复"
+    let objective = prompts.message("doctor", "trace_objective_fix");
     render(
         &prompts.message("doctor", "trace"),
         &[("case", case), ("marker", marker), ("note", &diag.note), ("steps", &steps), ("objective", &objective)],
@@ -511,7 +525,6 @@ fn build_action_line(action: &str, name: &str, text: Option<&str>) -> std::resul
 pub(super) async fn doctor_repair(
     ai: &AiConfig,
     prompts: &PromptSet,
-    reflection: Option<&str>,
     txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
@@ -546,61 +559,27 @@ pub(super) async fn doctor_repair(
             "tools": tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "schema": t.schema })).collect::<Vec<_>>(),
         }),
     );
-    // 探索反思官的「绕路报告」作为医生的常驻参考（成功探索后由上层传入）：优先据它删冗余
-    if let Some(r) = reflection {
-        if !r.trim().is_empty() {
-            let msg = format!(
-                "【探索反思官对本次探索路径的复盘报告】\n{}\n\n请把它当作删冗余的优先参考：它指出的绕路/废步段，优先核实并删除（仍以 run 实测为准）。",
-                r
-            );
-            tx.log("llm_message", serde_json::json!({ "content": msg.clone() }));
-            editor.user(msg);
-        }
-    }
 
-    // 最短的达标版本(护栏：删坏了自动还原到它)
-    let mut best: Option<Vec<String>> = None;
     let mut stagnation = 0usize; // 连续「没改动且没达标」次数
     let mut pending: Option<PendingReselect> = None; // reexplore 定位后暂存的实时页面（供 pick）
 
     for iter in 1..=params.harness.doctor_iters {
         if super::interrupt::aborted() {
             eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止医生修复"));
-            return best;
+            return None;
         }
         eprintln!();
         eprintln!("  {}", paint(tty, "1;36", &format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter)));
         let diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
 
-        // 维护 best + 删坏自动还原
+        // 医生只管**正确性**：一旦能跑通且到达目标，立即把正确脚本交回上层（路径优化是反思官的事）
         if diag.reached {
-            let shorter = best.as_ref().map(|b| lines.len() < b.len()).unwrap_or(true);
-            if shorter {
-                best = Some(lines.clone()); // 保留结尾「关闭」步，落盘版本含 close
-            }
-        } else if best.is_some() {
-            // 曾经达标、现在又不达标 → 上一批改动把它改坏了，自动还原
-            let b = best.clone().unwrap();
-            eprintln!("  {}", paint(tty, "33", &format!("上一批改动导致目标丢失，已自动还原到上一个达标版本（{} 步）", b.len())));
-            tx.log("doctor_auto_revert", serde_json::json!({ "iter": iter, "restored_steps": b.len() }));
-            lines = b;
-            let revert_msg = render(&prompts.message("doctor", "auto_revert"), &[("steps", &lines.len().to_string())]);
-            tx.log("llm_message", serde_json::json!({ "iter": iter, "content": revert_msg.clone() }));
-            editor.user(revert_msg);
-            continue;
+            tx.log("doctor_reached", serde_json::json!({ "iter": iter, "steps": lines.len() }));
+            return Some(lines);
         }
 
-        let objective_minimize = best.is_some();
-        let prompt = render_trace_prompt(prompts, case, marker, &diag, objective_minimize);
-        // 记录真实发送给医生的整段 prompt（含逐步 trace），便于复盘 & 迭代上下文压缩
-        tx.log(
-            "doctor_request",
-            serde_json::json!({                "iter": iter,
-                "objective": if objective_minimize { "minimize" } else { "fix" },
-                "reached": diag.reached,
-                "prompt": prompt.clone(),
-            }),
-        );
+        let prompt = render_trace_prompt(prompts, case, marker, &diag);
+        tx.log("doctor_request", serde_json::json!({ "iter": iter, "reached": false, "prompt": prompt.clone() }));
         // user_trace：自动省略上一轮 trace 的页面详情，只保留最新一份完整 trace（防上下文暴涨）
         editor.user_trace(prompt);
         eprintln!(); // 诊断输出与医生编辑之间空一行，分隔更清楚
@@ -620,8 +599,7 @@ pub(super) async fn doctor_repair(
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("  {}", paint(tty, "31", &format!("医生决策出错：{}", e)));
-                    // 用已有 best 兜底
-                    return best;
+                    return None;
                 }
             };
             let (pt, ct) = editor.last_usage();
@@ -808,23 +786,14 @@ pub(super) async fn doctor_repair(
             tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": primary.name.clone(), "script_after": lines.clone() }));
         }
 
-        // 收尾：再诊断一次确认是否真达标
+        // 收尾：finish 后再诊断一次确认是否真达标；达标即返回正确脚本，否则打回继续修
         if go_finish {
             eprintln!();
             eprintln!("  {}", paint(tty, "1;36", "▶ 收尾兜底诊断（重启净化中…）"));
             let final_diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
             if final_diag.reached {
-                let shorter = best.as_ref().map(|b| lines.len() < b.len()).unwrap_or(true);
-                if shorter {
-                    best = Some(lines.clone());
-                }
-                report.hit_iter_limit = false; // 正常收尾、未触上限
-                return best;
-            }
-            // finish 但其实没到 → 若有 best 就返回 best，否则继续修
-            if best.is_some() {
-                report.hit_iter_limit = false;
-                return best;
+                tx.log("doctor_reached", serde_json::json!({ "iter": iter, "steps": lines.len() }));
+                return Some(lines);
             }
             let m = prompts.message("doctor", "finish_pushback");
             tx.log("llm_message", serde_json::json!({ "iter": iter, "content": m.clone() }));
@@ -832,21 +801,19 @@ pub(super) async fn doctor_repair(
             // 落到下一轮
         }
 
-        // 停滞检测：本轮没改动、没重探、且没达标 → 计一次停滞；连续 2 次就收手
+        // 停滞检测：本轮没改动、没重探、且没达标 → 计一次停滞；连续 2 次就收手（修不动了）
         let unchanged = lines == lines_before;
         if unchanged && !did_reexplore && !diag.reached {
             stagnation += 1;
             if stagnation >= 2 {
-                eprintln!("  {}", paint(tty, "33", "医生连续两轮无有效改动且未达标，停止"));
-                report.hit_iter_limit = false; // 停滞收手（非轮数上限）
-                return best;
+                eprintln!("  {}", paint(tty, "33", "医生连续两轮无有效改动且未达标，放弃修复"));
+                return None;
             }
         } else {
             stagnation = 0;
         }
     }
 
-    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮，已保留当前最好版本）", params.harness.doctor_iters)));
-    report.hit_iter_limit = true; // 达到优化上限：若 best 存在则"仍可跑、未必最短"
-    best
+    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮）仍未修到目标", params.harness.doctor_iters)));
+    None
 }

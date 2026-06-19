@@ -1,15 +1,19 @@
-// 【探索反思官】explore 跑完后纵观整条路径复盘：
-//  - 失败/卡住 → 产出「重探指导」，上层据此带指导重探一次（治"绕大圈还没找到"）；
-//  - 成功     → 产出「绕路报告」，喂给 doctor 帮它有的放矢删冗余（治"成功但路径很绕、doctor 不知所措"）。
-// 独立会话(无工具)，按作用域归属 "reflector"；token 单独计、上层并入总量。
+// 【探索反思官】两类职责：
+//  ① 探索失败 → `reflect()` 出「重探指导」，上层带指导重探（治"绕大圈没找到"，探索阶段安全网）；
+//  ② 脚本已正确 → `optimize()` 做**软优化**：看正确脚本的 trace，指出可删的绕路/冗余步并删掉
+//     （大胆删、不逐条验证；删坏了由医生在下一轮复检兜底——医生⇄反思官交替收敛）。
+// 独立会话(无工具)，按作用域归属 "reflector"；token 单独计、并入总量。
 
+use std::io::IsTerminal;
 use std::path::Path;
+use std::sync::Arc;
 
-use crate::{AiConfig, Fetcher, LlmReply, LlmSession, Platform};
+use crate::{AiConfig, Fetcher, LlmReply, LlmSession, Params, Platform};
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, friendly, DriveOutcome};
+use super::flow::{brief, friendly, paint, parse_desc_json, DriveCtx, DriveOutcome};
+use super::options::VerifyReport;
 
 /// 反思产物
 pub(super) struct Reflection {
@@ -95,4 +99,82 @@ pub(super) async fn reflect(
         serde_json::json!({ "mode": if success { "success" } else { "failure" }, "content": reply.clone() }),
     );
     Some(Reflection { report: reply, prompt_tokens, completion_tokens })
+}
+
+/// 软优化：脚本已正确时，看其逐步 trace 找出可删的绕路/冗余步并删掉（大胆删、不逐条验证；
+/// 删坏了由医生下一轮复检兜底）。返回优化后的脚本（有改动）或 None（无可优化/失败）。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn optimize(
+    ai: &AiConfig,
+    prompts: &PromptSet,
+    tx: &mut Transcript,
+    ctx: &DriveCtx<'_>,
+    params: &Arc<Params>,
+    script_path: &Path,
+    case: &str,
+    marker: &str,
+    lines: &[String],
+    report: &mut VerifyReport,
+) -> Option<Vec<String>> {
+    let tty = std::io::stderr().is_terminal();
+    let mut scope = tx.scoped("reflector");
+    let tx = &mut *scope;
+
+    // 诊断当前脚本拿逐步 trace（调用前应已正确；不正确则不优化）
+    let diag = super::doctor::diagnose(tx, ctx, params, script_path, case, lines, marker, "reflect_diagnose", 0, false).await;
+    if !diag.reached {
+        return None;
+    }
+    let trace = diag.trace_lines();
+    let numbered: String = lines.iter().enumerate().map(|(i, l)| format!("{}. {}", i + 1, friendly(l))).collect::<Vec<_>>().join("\n");
+
+    let platform = Platform::from_device(Some(ctx.device));
+    let system = prompts.role_system("reflector", ctx.device, platform.name());
+    let mut sess = LlmSession::new(ai, system, Vec::new()).ok()?;
+    let prompt = render(
+        &prompts.message("reflector", "optimize"),
+        &[("case", case), ("marker", marker), ("trace", &trace), ("script", &numbered)],
+    );
+    tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
+    sess.user(prompt);
+    let reply = match sess.next().await {
+        Ok(LlmReply::Text(t)) => t,
+        _ => return None,
+    };
+    let (pt, ct) = sess.total_usage();
+    report.extra_prompt += pt;
+    report.extra_completion += ct;
+    tx.log("reflector_optimize", serde_json::json!({ "content": reply.clone() }));
+
+    // 解析 {"removable":[步号,...]}
+    let obj = parse_desc_json(&reply)?;
+    let mut removable: Vec<usize> = obj["removable"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|n| n as usize).collect())
+        .unwrap_or_default();
+    removable.retain(|&i| i >= 1 && i <= lines.len());
+    removable.sort_unstable_by(|a, b| b.cmp(a)); // 从大到小删，不影响更小编号
+    removable.dedup();
+    if removable.is_empty() {
+        eprintln!("  {}", paint(tty, "2", "反思官：当前路径已无可删冗余"));
+        return None;
+    }
+
+    let mut new = lines.to_vec();
+    for idx in &removable {
+        new.remove(idx - 1);
+    }
+    if new == lines {
+        return None;
+    }
+    let mut nums: Vec<usize> = removable.iter().copied().collect();
+    nums.sort_unstable();
+    eprintln!(
+        "  {}  删第 {} 步（{} 步 → {} 步），交医生复检",
+        paint(tty, "1;36", "◇ 反思官优化路径"),
+        nums.iter().map(|n| n.to_string()).collect::<Vec<_>>().join("/"),
+        lines.len(),
+        new.len()
+    );
+    Some(new)
 }
