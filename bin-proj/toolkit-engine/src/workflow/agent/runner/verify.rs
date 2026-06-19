@@ -60,31 +60,37 @@ pub async fn verify_and_repair(
         "verify_start",
         serde_json::json!({ "need_pass": NEED_PASS, "max_repairs": MAX_REPAIRS, "marker": marker, "script_lines": lines.clone() }),
     );
+    // ============ 诊断优化 ============
+    // 脚本医生把脚本修到「能跑通并到达目标」并提炼最短（删冗余/改坏自动还原，详见 doctor.rs）。
     eprintln!();
-    eprintln!("{}", paint(tty, "1", "╭─ 自检（脚本医生：编辑→跑→看→改，直到稳定到达目标）─"));
-
-    // —— 阶段①+②：脚本医生把脚本修到达标并提炼最短（删冗余/改坏自动还原，详见 doctor.rs）——
-    eprintln!();
-    eprintln!("  {}", paint(tty, "1;36", "① 修复 + 提炼：医生编辑脚本任意行，直到稳定回放到目标"));
+    eprintln!("{}", paint(tty, "1", "╭─ 诊断优化（脚本医生：编辑→跑→看→改，修到稳定回放到目标并提炼最短）─"));
     let fixed = doctor::doctor_repair(sess, ai, tx, ctx, params, script_path, case, &marker, lines, &mut report).await;
     let mut lines = match fixed {
-        Some(l) => l,
+        Some(l) => {
+            report.reached = true;
+            report.final_steps = l.len();
+            let opt = if report.hit_iter_limit {
+                paint(tty, "33", &format!("■ 优化达上限（仍可跑、未必最短）· 修复 {} 次 · 最终 {} 步", report.repairs, l.len()))
+            } else {
+                paint(tty, "32", &format!("✓ 优化完成 · 修复 {} 次 · 最终 {} 步", report.repairs, l.len()))
+            };
+            eprintln!("  {}   {}", paint(tty, "2", "诊断"), opt);
+            eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+            l
+        }
         None => {
-            tx.log("verify_end", serde_json::json!({ "passed": false, "repairs": report.repairs }));
-            eprintln!();
-            eprintln!(
-                "  {}   {}",
-                paint(tty, "2", "结果"),
-                paint(tty, "33", "■ 未达稳定（医生修复后仍未到达目标，已保留当前最好版本）")
-            );
+            report.reached = false;
+            tx.log("verify_end", serde_json::json!({ "passed": false, "reached": false, "repairs": report.repairs }));
+            eprintln!("  {}   {}", paint(tty, "2", "诊断"), paint(tty, "31", "✗ 修复失败（脚本仍跑不到目标，已保留当前最好版本）"));
             eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
             return (Vec::new(), report);
         }
     };
 
-    // —— 阶段③：稳定性（连续 NEED_PASS 次重启净化后回放都到达目标；中途不稳就再请医生修）——
+    // ============ 稳定性测试 ============
+    // 连续 NEED_PASS 次重启净化后回放都到达目标才算稳定；中途不稳就再请医生修一轮。
     eprintln!();
-    eprintln!("  {}", paint(tty, "1;36", &format!("③ 稳定性：连续 {} 次回放都须到达目标", NEED_PASS)));
+    eprintln!("{}", paint(tty, "1", &format!("╭─ 稳定性测试（连续 {} 次重启净化后回放都须到达目标）─", NEED_PASS)));
     let mut streak = 0usize;
     let mut replay_no = 0usize;
     loop {
@@ -94,6 +100,7 @@ pub async fn verify_and_repair(
         let (reached, _k, _failed, _err) = goal_probe(ctx, params, script_path, case, &lines, &marker, true).await;
         if reached {
             streak += 1;
+            report.stability_passes = streak;
             eprintln!("  {} 到达目标（连续 {}/{}）", paint(tty, "32", "✓"), streak, NEED_PASS);
             if streak >= NEED_PASS {
                 report.passed = true;
@@ -102,6 +109,7 @@ pub async fn verify_and_repair(
             continue;
         }
         streak = 0;
+        report.stability_passes = 0;
         if report.repairs >= MAX_REPAIRS {
             eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止", MAX_REPAIRS)));
             break;
@@ -114,16 +122,19 @@ pub async fn verify_and_repair(
     }
 
     // 落盘最终版本（含结尾关闭）
+    report.final_steps = lines.len();
     let _ = write_script(script_path, case, &lines);
-    tx.log("verify_end", serde_json::json!({ "passed": report.passed, "repairs": report.repairs }));
+    tx.log(
+        "verify_end",
+        serde_json::json!({ "passed": report.passed, "reached": report.reached, "repairs": report.repairs, "final_steps": report.final_steps, "stability_passes": report.stability_passes }),
+    );
 
     let summary = if report.passed {
-        paint(tty, "32", &format!("✓ 稳定通过（连续 {} 次到达目标，修复 {} 次）", NEED_PASS, report.repairs))
+        paint(tty, "32", &format!("✓ 验证通过（连续 {} 次到达目标）", report.stability_passes))
     } else {
-        paint(tty, "33", &format!("■ 未达稳定（修复 {} 次后仍未通过，已保留当前最好版本）", report.repairs))
+        paint(tty, "33", &format!("✗ 验证未通过（连续到达 {}/{} 次，已保留当前最好版本）", report.stability_passes, NEED_PASS))
     };
-    eprintln!();
-    eprintln!("  {}   {}", paint(tty, "2", "结果"), summary);
+    eprintln!("  {}   {}", paint(tty, "2", "验证"), summary);
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 
     (lines, report)

@@ -33,10 +33,18 @@ pub struct AgentRunOptions {
 pub struct VerifyReport {
     /// 是否跑了自检
     pub ran: bool,
-    /// 最终是否稳定通过（连续 2 次干净回放）
+    /// 最终是否稳定通过（稳定性测试连续 NEED_PASS 次干净回放都到达目标）
     pub passed: bool,
-    /// 触发的修复次数
+    /// 触发的活体重探次数
     pub repairs: usize,
+    /// 【诊断】脚本医生是否把脚本修到「至少能跑通并到达目标」一次（false=修复失败）
+    pub reached: bool,
+    /// 【诊断】是否因达到医生诊断轮数上限而停（true=优化达上限：仍可跑、未必最短）
+    pub hit_iter_limit: bool,
+    /// 【诊断】最终脚本步数（落盘版本，含结尾关闭步）
+    pub final_steps: usize,
+    /// 【验证】稳定性测试实际连续通过的次数
+    pub stability_passes: usize,
     /// 修复阶段新建的元素名（与探索阶段合并后展示）
     pub created: Vec<String>,
     /// 修复阶段更新描述的元素差异行

@@ -37,6 +37,12 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             name: req_str(a, "name")?,
             desc: opt_str(a, "desc"),
         },
+        "assert" => AgentAction::Assert {
+            element_id: req_usize(a, "element_id")?,
+            name: req_str(a, "name")?,
+            desc: opt_str(a, "desc"),
+            exist: a.get("exist").and_then(|v| v.as_bool()).unwrap_or(true),
+        },
         "click_visual" => AgentAction::ClickVisual {
             region: opt_region(a, "region"),
             x: opt_i32(a, "x"),

@@ -45,9 +45,7 @@ struct DiagStep {
     line: String,
     ok: bool,
     err: Option<String>,
-    /// 该步执行后页面的精简摘要(前几个元素文本)，给医生看「这步去了哪」
-    page_brief: String,
-    /// 该步执行后页面的完整元素列表(仅失败步及其前后会塞进提示词，省 token)
+    /// 该步执行后页面的元素列表（渲染 trace 时普通步截断、失败步/终点步给全量）
     page_full: String,
 }
 
@@ -159,7 +157,8 @@ const EDITOR_SYSTEM: &str = "你是「脚本医生」。手里有一份由自动
 请重点看：报错那一步往往不是真正的根因，常常是**更早某步根本没跳转/点错了**(看页面没变就知道)，后面都在错页面上空跑、到某步才暴露。\n\n\
 工具：\n\
 - delete_lines：删冗余/走错绕回/无用空步(删错会被自动还原，放心删)。\n\
-- replace_line / insert_after：纯文本改/插。**只能引用已存在元素**([{元素名}])或纯参数(输入文本、滑动幅度、坐标、等待)。\n\
+- replace_line / insert_after：纯文本改/插。**只能引用已存在元素**([{元素名}])或纯参数(输入文本、滑动幅度、坐标、等待)。\
+  也可用 insert_after 插入**断言**行 `断言 [{已有元素名}, 存在]` 给脚本加闭环校验（如在目标处断言目标独有元素存在）。\n\
 - reexplore(from_line)：需要点**全新元素**或走**全新路径**时唯一正确的办法——从某步起活体现场重新导航。选「真正开始跑偏的那一步」。\n\
 - run：重新回放诊断，测你的改动。\n\
 - finish：脚本已稳定到达目标且最短时收尾。\n\n\
@@ -222,7 +221,7 @@ async fn diagnose(
     // 离线逐步重建页面(结构 + OCR)
     let mut steps: Vec<DiagStep> = Vec::with_capacity(result.steps.len());
     for st in &result.steps {
-        let (mut brief_txt, mut full_txt) = (String::new(), String::new());
+        let mut full_txt = String::new();
         if let Some(xml_rel) = &st.xml {
             let xml_abs = run_dir.join(xml_rel);
             if let Ok(mut els) = ctx.fetcher.fetch_elements_from_file(&xml_abs) {
@@ -231,14 +230,6 @@ async fn diagnose(
                         let _ = enrich_with_ocr(&mut els, &bytes, src).await;
                     }
                 }
-                // 精简摘要：前 6 个元素文本
-                brief_txt = els
-                    .iter()
-                    .take(6)
-                    .map(|e| brief(&e.to_ai_text(), 24))
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(", ");
                 let none = vec![None; els.len()];
                 full_txt = render_element_list(&els, &none);
             }
@@ -248,7 +239,6 @@ async fn diagnose(
             line: st.command.clone(),
             ok: st.success,
             err: st.error.clone(),
-            page_brief: brief_txt,
             page_full: full_txt,
         });
     }
@@ -285,48 +275,56 @@ async fn diagnose(
     Diagnosis { reached, steps, fail_idx, note }
 }
 
-/// 把诊断结果渲染成给医生的提示词：编号脚本 + 逐步 trace(精简) + 失败步前后的完整页面 + 目标。
-fn render_trace_prompt(case: &str, marker: &str, diag: &Diagnosis, objective_minimize: bool) -> String {
-    let mut s = String::new();
-    s.push_str(&format!("整体测试目标：{}\n目标标志(只有真到达目标才会出现的文字)：「{}」\n\n", case, marker));
-    s.push_str(&format!("【诊断结论】{}\n\n", diag.note));
+/// 取文本前 n 行（每页元素列表可能很长，逐步展示时截断防 token 爆炸）
+fn top_lines(s: &str, n: usize) -> String {
+    let head = s.lines().take(n).collect::<Vec<_>>().join("\n");
+    let extra = s.lines().count().saturating_sub(n);
+    if extra > 0 {
+        format!("{}\n…还有 {} 个元素未列出", head, extra)
+    } else {
+        head
+    }
+}
 
-    // 逐步 trace(精简)：步号 + 成败 + .tks + 该步后页面前几项
-    s.push_str("【逐步 trace】(每步执行后页面的前几个元素，用于看这步实际去到了哪)\n");
+/// 多行页面文本统一缩进，嵌进 trace 时对齐
+fn indent_page(s: &str) -> String {
+    s.lines().map(|l| format!("      {}", l)).collect::<Vec<_>>().join("\n")
+}
+
+/// 把诊断结果渲染成给医生的提示词：编号脚本 + **本轮诊断回放每一步都带「该步执行后页面」**
+/// （失败步/终点页给完整元素列表，其余步给前若干个），让医生看清整条脚本实际走了哪条路。
+/// 历史轮次的 trace 由 `user_trace` 自动省略页面详情，故这里可以放心给全（每轮只有一份完整 trace 在上下文里）。
+fn render_trace_prompt(case: &str, marker: &str, diag: &Diagnosis, objective_minimize: bool) -> String {
+    const PER_STEP_ELEMENTS: usize = 8; // 普通步每步展示的元素条数（失败步/终点页给全量）
+    let last_no = diag.steps.last().map(|s| s.no).unwrap_or(0);
+    let mut s = String::new();
+    s.push_str(&format!("整体测试目标：{}\n目标标志（只有真到达目标才会出现的文字）：「{}」\n\n", case, marker));
+    s.push_str(&format!("【本轮诊断结论】{}\n\n", diag.note));
+    s.push_str(
+        "【本轮逐步 trace】每步 = 步号 · 成败 · .tks 行，其下「页面」是该步执行后实际所处页面的元素。\
+         请顺着每步页面看这条脚本到底走了哪条路——报错那一步往往不是根因，更早某步「页面没变/走到了错页面」才是真正跑偏处。\n\n",
+    );
     for st in &diag.steps {
         let mark = if st.ok { "✓" } else { "✗" };
-        let err = st.err.as_deref().map(|e| format!("  ← 错误：{}", brief(e, 60))).unwrap_or_default();
-        let page = if st.page_brief.is_empty() { String::new() } else { format!("\n      页面：{}", st.page_brief) };
-        s.push_str(&format!("{}. {} {}{}{}\n", st.no, mark, friendly(&st.line), err, page));
-    }
-
-    // 失败步及其前 2 步的完整页面(给足判断根因的细节)
-    if let Some(k) = diag.fail_idx {
-        let lo = k.saturating_sub(2);
-        s.push_str("\n【关键页面详情】(失败步及其前几步的完整元素列表)\n");
-        for st in diag.steps.iter().filter(|s| s.no >= lo + 1 && s.no <= k + 1) {
-            if !st.page_full.is_empty() {
-                s.push_str(&format!("— 第 {} 步「{}」后的页面：\n{}\n", st.no, friendly(&st.line), st.page_full));
-            }
-        }
-    } else if !diag.reached {
-        // 全跑通却没到目标：给最后一步的完整页面(看终点错在哪)
-        if let Some(st) = diag.steps.last() {
-            if !st.page_full.is_empty() {
-                s.push_str(&format!("\n【终点页面】脚本跑完停在这个页面，但目标标志没出现：\n{}\n", st.page_full));
-            }
+        let err = st.err.as_deref().map(|e| format!("  ← 错误：{}", brief(e, 70))).unwrap_or_default();
+        s.push_str(&format!("{}. {} {}{}\n", st.no, mark, friendly(&st.line), err));
+        if !st.page_full.trim().is_empty() {
+            // 失败步、以及"全跑通但没到目标"时的终点步 → 完整页面；其余步 → 前若干个元素
+            let critical = !st.ok || (diag.fail_idx.is_none() && !diag.reached && st.no == last_no);
+            let page = if critical { st.page_full.clone() } else { top_lines(&st.page_full, PER_STEP_ELEMENTS) };
+            s.push_str(&format!("    页面：\n{}\n", indent_page(&page)));
         }
     }
 
     if objective_minimize {
         s.push_str(
-            "\n当前脚本**已能到达目标**。现在请尽量**删冗余步**让它最短(重复点击、走错绕回、点了没用的空步)，\
-             每删完用 run 确认仍到达目标；删错导致目标丢失会被自动还原。确认没有更多可删时 finish。",
+            "\n当前脚本**已能到达目标**。现在请尽量**删冗余步**让它最短（重复点击、走错绕回、点了没用的空步、\
+             连续多余滑动）。每删完用 run 确认仍到达目标；删错导致目标丢失会被自动还原。确认没有更多可删时 finish。",
         );
     } else {
         s.push_str(
-            "\n请判断**真正开始跑偏的那一步**(常比报错步更早)，用最小改动修好它：能删/改参数就别 reexplore，\
-             需要新元素/新路径才 reexplore。改完用 run 看效果。",
+            "\n请结合每步页面判断**真正开始跑偏的那一步**（常比报错步更早），用最小改动修好它：能删冗余/改一行参数就别 reexplore，\
+             确实需要点全新元素/走全新路径才 reexplore。改完用 run 看效果。",
         );
     }
     s
@@ -502,13 +500,24 @@ pub(super) async fn doctor_repair(
     let tty = std::io::stderr().is_terminal();
 
     // 独立医生会话(独立工具集)。其 token 单独累计、最后并入总量(报告 extra_*)。
-    let mut editor = match LlmSession::new(ai, EDITOR_SYSTEM, editor_tools()) {
+    let tools = editor_tools();
+    let mut editor = match LlmSession::new(ai, EDITOR_SYSTEM, tools.clone()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("  {}", paint(tty, "31", &format!("脚本医生会话创建失败：{}", e)));
             return None;
         }
     };
+    // 记录医生会话(独立 agent)的系统提示词 + 工具定义，便于在 conversation.json 里按 agent 复盘
+    tx.log(
+        "doctor_session",
+        serde_json::json!({
+            "agent": "doctor",
+            "model": editor.model(),
+            "system_prompt": EDITOR_SYSTEM,
+            "tools": tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "schema": t.schema })).collect::<Vec<_>>(),
+        }),
+    );
 
     // 最短的达标版本(护栏：删坏了自动还原到它)
     let mut best: Option<Vec<String>> = None;
@@ -540,7 +549,21 @@ pub(super) async fn doctor_repair(
         }
 
         let objective_minimize = best.is_some();
-        editor.user(render_trace_prompt(case, marker, &diag, objective_minimize));
+        let prompt = render_trace_prompt(case, marker, &diag, objective_minimize);
+        // 记录真实发送给医生的整段 prompt（含逐步 trace），便于复盘 & 迭代上下文压缩
+        tx.log(
+            "doctor_request",
+            serde_json::json!({
+                "agent": "doctor",
+                "iter": iter,
+                "objective": if objective_minimize { "minimize" } else { "fix" },
+                "reached": diag.reached,
+                "prompt": prompt.clone(),
+            }),
+        );
+        // user_trace：自动省略上一轮 trace 的页面详情，只保留最新一份完整 trace（防上下文暴涨）
+        editor.user_trace(prompt);
+        eprintln!(); // 诊断输出与医生编辑之间空一行，分隔更清楚
 
         // 内层：收医生的编辑动作，直到它 run / finish / 触发重新诊断
         let lines_before = lines.clone();
@@ -588,10 +611,22 @@ pub(super) async fn doctor_repair(
                     continue;
                 }
             };
-            // 一行思考
-            let say = text.as_deref().map(|s| brief(s, 160)).filter(|s| !s.is_empty()).unwrap_or_else(|| format!("调用 {}", primary.name));
-            eprintln!("  {}  {}", say, toks);
-            tx.log("doctor_edit", serde_json::json!({ "iter": iter, "tool": primary.name.clone(), "args": primary.arguments.clone() }));
+            // 一行思考：理由优先(reason 字段)，其次模型同时给的文字；工具名用紫色标签区分
+            let reason = primary
+                .arguments
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+            let say = reason
+                .map(|s| brief(s, 180))
+                .or_else(|| text.as_deref().map(|s| brief(s, 180)).filter(|s| !s.is_empty()))
+                .unwrap_or_else(|| "（未说明理由）".to_string());
+            eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ {}", primary.name)), say, toks);
+            tx.log(
+                "doctor_edit",
+                serde_json::json!({ "agent": "doctor", "iter": iter, "tool": primary.name.clone(), "reason": reason, "thinking": text.clone(), "args": primary.arguments.clone() }),
+            );
 
             match op {
                 EditOp::Delete { from, to } => {
@@ -656,7 +691,7 @@ pub(super) async fn doctor_repair(
                 }
                 EditOp::Finish { reason } => {
                     editor.tool_result(primary.call_id.as_str(), "收到收尾请求，系统再诊断一次兜底校验。");
-                    tx.log("doctor_finish", serde_json::json!({ "iter": iter, "reason": reason }));
+                    tx.log("doctor_finish", serde_json::json!({ "agent": "doctor", "iter": iter, "reason": reason }));
                     go_finish = true;
                     break;
                 }
@@ -665,16 +700,20 @@ pub(super) async fn doctor_repair(
 
         // 收尾：再诊断一次确认是否真达标
         if go_finish {
+            eprintln!();
+            eprintln!("  {}", paint(tty, "1;36", "▶ 收尾兜底诊断（重启净化中…）"));
             let final_diag = diagnose(ctx, params, script_path, case, &lines, marker, true).await;
             if final_diag.reached {
                 let shorter = best.as_ref().map(|b| lines.len() < b.len()).unwrap_or(true);
                 if shorter {
                     best = Some(lines.clone());
                 }
+                report.hit_iter_limit = false; // 正常收尾、未触上限
                 return best;
             }
             // finish 但其实没到 → 若有 best 就返回 best，否则继续修
             if best.is_some() {
+                report.hit_iter_limit = false;
                 return best;
             }
             editor.user("你 finish 了，但重新诊断**仍未到达目标**。请继续修（看下面的最新 trace）。");
@@ -687,6 +726,7 @@ pub(super) async fn doctor_repair(
             stagnation += 1;
             if stagnation >= 2 {
                 eprintln!("  {}", paint(tty, "33", "医生连续两轮无有效改动且未达标，停止"));
+                report.hit_iter_limit = false; // 停滞收手（非轮数上限）
                 return best;
             }
         } else {
@@ -694,6 +734,7 @@ pub(super) async fn doctor_repair(
         }
     }
 
-    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮）", MAX_DOCTOR_ITERS)));
+    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮，已保留当前最好版本）", MAX_DOCTOR_ITERS)));
+    report.hit_iter_limit = true; // 达到优化上限：若 best 存在则"仍可跑、未必最短"
     best
 }

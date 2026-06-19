@@ -234,6 +234,7 @@ impl AgentRunner {
             outcome.aborted,
             &outcome.reason,
             outcome.rounds,
+            final_lines.len(),
             verified.as_ref(),
             sess.model(),
             total_prompt,
@@ -255,13 +256,16 @@ impl AgentRunner {
 }
 
 /// 末尾统一渲染「结果 + 元素库更新」框（在 verify 之后调用，token 覆盖全程）。
-/// 「验证」一行：未配 --verify=未验证；配了则 验证通过/验证失败。
+/// 结果框分**三层状态**：探索（探索 agent 是否完成 + 原始步数/轮数）、
+/// 诊断（脚本医生复跑修复：优化完成 / 优化达上限仍可跑 / 修复失败 + 修复次数 + 最终步数）、
+/// 验证（稳定性测试：连续通过几次 / 未通过 / 未验证）。
 #[allow(clippy::too_many_arguments)]
 fn render_summary(
     success: bool,
     aborted: bool,
     reason: &str,
     rounds: usize,
+    explore_steps: usize,
     verified: Option<&options::VerifyReport>,
     model: &str,
     tp: i64,
@@ -273,22 +277,33 @@ fn render_summary(
     use flow::{brief, fmt_tokens, paint};
     let tty = std::io::stderr().is_terminal();
 
-    let status = if aborted {
-        paint(tty, "33", "■ 已终止")
+    // ① 探索状态
+    let explore_status = if aborted {
+        paint(tty, "33", &format!("■ 已终止 · 原始 {} 步（{} 轮）", explore_steps, rounds))
     } else if success {
-        paint(tty, "32", "✓ 达成")
+        paint(tty, "32", &format!("✓ 达成 · 原始 {} 步（{} 轮）", explore_steps, rounds))
     } else {
-        paint(tty, "31", "✗ 未达成")
+        paint(tty, "31", &format!("✗ 未达成 · {} 步（{} 轮）", explore_steps, rounds))
     };
+    // ② 诊断状态（脚本医生复跑修复）
+    let diagnose_status = match verified {
+        None => paint(tty, "2", "未运行（未开启 --verify 或探索未达成）"),
+        Some(r) if !r.reached => paint(tty, "31", "✗ 修复失败（脚本仍跑不到目标）"),
+        Some(r) if r.hit_iter_limit => paint(tty, "33", &format!("■ 优化达上限·仍可跑（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
+        Some(r) => paint(tty, "32", &format!("✓ 优化完成（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
+    };
+    // ③ 验证状态（稳定性测试）
     let verify_status = match verified {
         None => paint(tty, "2", "未验证"),
-        Some(r) if r.passed => paint(tty, "32", "✓ 验证通过"),
-        Some(_) => paint(tty, "31", "✗ 验证失败"),
+        Some(r) if r.passed => paint(tty, "32", &format!("✓ 验证通过（连续 {} 次到达目标）", r.stability_passes)),
+        Some(r) if !r.reached => paint(tty, "2", "未验证（诊断未修复，未进入稳定性测试）"),
+        Some(r) => paint(tty, "31", &format!("✗ 验证未通过（连续到达 {} 次）", r.stability_passes)),
     };
 
     eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
-    eprintln!("  {}   {}（{} 轮）", paint(tty, "2", "状态"), status, rounds);
+    eprintln!("  {}   {}", paint(tty, "2", "探索"), explore_status);
+    eprintln!("  {}   {}", paint(tty, "2", "诊断"), diagnose_status);
     eprintln!("  {}   {}", paint(tty, "2", "验证"), verify_status);
     eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(reason, 200));
     eprintln!("  {}   {}", paint(tty, "2", "模型"), model);

@@ -85,6 +85,18 @@ pub async fn apply(
             let detail = exec(device, ControlAction::Clear).await?;
             Ok((line(TksCommand::Clear, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
+        AgentAction::Assert { element_id, name, exist, .. } => {
+            // 断言只产出可回放的**校验步**、不操作设备：当前页面 AI 已看到该元素，落库后
+            // 回放时校验它是否存在；用于给脚本加闭环（到达关键页/目标页才能通过断言）。
+            let el = lookup(elements, *element_id)?;
+            let c = el.center();
+            let name = effective_name(known, *element_id, name);
+            let (structure, ocr) = tier_for(el);
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
+            let cond = if *exist { "存在" } else { "不存在" };
+            let detail = format!("记录断言：{} {}", name, cond);
+            Ok((line(TksCommand::Assert, vec![el_param(&name), TksParam::Text(cond.to_string())]), detail, el_trace(c, el, &name), saved))
+        }
         AgentAction::ClickVisual { region, x, y, name, .. } => {
             // 看图后视觉点击：region 优先；否则 (x,y) 周围取屏宽 15% 方块
             let (sw, sh) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));

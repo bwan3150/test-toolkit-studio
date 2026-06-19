@@ -43,6 +43,9 @@ pub struct LlmSession {
     last_page_idx: Option<usize>,
     /// 上一条"截图"消息在 messages 中的下标（用于只保留 AI 当前请求的那一张）
     last_image_idx: Option<usize>,
+    /// 上一条"诊断 trace"消息在 messages 中的下标（脚本医生用：进入新一轮诊断时压缩旧 trace，
+    /// 只保留最新一份完整 trace，历史只剩"改了什么/为什么"的工具结果，防上下文随轮数暴涨）
+    last_trace_idx: Option<usize>,
 }
 
 /// 历史页面元素被压缩后的占位文本（塞进 LLM 上下文，故只写对 AI 有用的话；
@@ -51,6 +54,9 @@ const PAGE_ELIDED: &str = "【上一轮页面元素已省略，请依据你已�
 
 /// 历史截图被压缩后的占位文本（截图只在 AI 当次要图时保留一张，用完即省略）
 const IMAGE_ELIDED: &str = "【上一张截图已省略，以当前页面为准】";
+
+/// 历史诊断 trace 被压缩后的占位文本（脚本医生：你已据它做过编辑，见随后的工具结果，以最新 trace 为准）
+const TRACE_ELIDED: &str = "【上一轮诊断 trace 的逐步页面详情已省略——你已据它做过编辑（见随后的工具调用与结果），请以下方最新一轮 trace 为准】";
 
 impl LlmSession {
     /// 从 [ai] 配置构建会话：注入 system 提示词与工具集
@@ -81,6 +87,7 @@ impl LlmSession {
             total_usage: (0, 0),
             last_page_idx: None,
             last_image_idx: None,
+            last_trace_idx: None,
         })
     }
 
@@ -122,6 +129,19 @@ impl LlmSession {
         }
         self.req = self.req.clone().append_message(ChatMessage::user(text.into()));
         self.last_page_idx = Some(self.req.messages.len() - 1);
+    }
+
+    /// 追加一条"诊断 trace"消息，并把上一轮的同类消息压缩为占位（脚本医生专用）。
+    /// 这样 LLM 上下文只保留**当前轮**的完整逐步 trace（含每步页面），历史 trace 的页面详情
+    /// 被省略，只剩 AI 的编辑工具调用与结果——既让医生看清当前全貌，又防上下文随诊断轮数暴涨。
+    pub fn user_trace(&mut self, text: impl Into<String>) {
+        if let Some(i) = self.last_trace_idx {
+            if let Some(msg) = self.req.messages.get_mut(i) {
+                *msg = ChatMessage::user(TRACE_ELIDED);
+            }
+        }
+        self.req = self.req.clone().append_message(ChatMessage::user(text.into()));
+        self.last_trace_idx = Some(self.req.messages.len() - 1);
     }
 
     /// 追加一条用户消息 + 图片：用于"AI 主动要图 → 系统真实传图"。

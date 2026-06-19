@@ -15,6 +15,10 @@ pub enum AgentAction {
     LongPress { element_id: usize, name: String, desc: Option<String>, duration_ms: u64 },
     /// 清空输入框
     Clear { element_id: usize, name: String, desc: Option<String> },
+    /// 断言某元素在当前页面存在/不存在——用于给脚本加**闭环校验**：到达关键页/目标页后，
+    /// 断言该页独有元素存在，回放时若没真正到达就会在此失败（而不是悄悄跑偏）。
+    /// exist=true 断言存在（默认），false 断言不存在。落库该元素，产出 `断言 [{name}, 存在]`。
+    Assert { element_id: usize, name: String, desc: Option<String>, exist: bool },
     /// 看图后视觉点击：当结构元素与 OCR 都定位不到目标时，多模态 AI 看截图后
     /// 给出目标框 region=[x1,y1,x2,y2]（优先）或点击点 (x,y)。
     /// 落库为纯 img 元素（结构/ocr 通道空），换设备靠图像模板匹配回放。

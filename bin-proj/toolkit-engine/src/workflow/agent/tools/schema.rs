@@ -73,6 +73,15 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             schema: obj(el_props(serde_json::json!({})), serde_json::json!(["element_id", "name"])),
         },
         ToolSchema {
+            name: "assert",
+            schema: obj(
+                el_props(serde_json::json!({
+                    "exist": { "type": "boolean", "description": "断言该元素存在(true，默认)还是不存在(false)" }
+                })),
+                serde_json::json!(["element_id", "name"]),
+            ),
+        },
+        ToolSchema {
             name: "click_visual",
             schema: serde_json::json!({
                 "type": "object",
