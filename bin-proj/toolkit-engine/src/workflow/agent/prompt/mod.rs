@@ -50,18 +50,37 @@ impl PromptSet {
         })
     }
 
-    /// 渲染主系统提示词：替换 {device} / {platform} 占位
+    /// 渲染主系统提示词（角色 explorer）：替换 {device} / {platform} 占位
     pub fn system(&self, device: &str, platform: &str) -> String {
-        self.system_raw
-            .replace("{device}", device)
-            .replace("{platform}", platform)
+        self.role_system("explorer", device, platform)
     }
 
-    /// 取某工具的 description：目录覆盖优先，否则内置默认
+    /// 渲染某角色的系统提示词：目录覆盖优先，否则内置默认；替换 {device} / {platform} 占位。
+    /// explorer 角色复用构造时已解析好的 system_raw（含 CLI 注入文本/文件覆盖）；
+    /// 其它角色（如 doctor）走 <prompts_dir>/agents/<role>.md 覆盖 → 内置默认。
+    pub fn role_system(&self, role: &str, device: &str, platform: &str) -> String {
+        let raw = if role == "explorer" {
+            self.system_raw.clone()
+        } else {
+            self.prompts_dir
+                .as_ref()
+                .and_then(|d| source::role_override(d, role))
+                .unwrap_or_else(|| defaults::default_role_system(role).trim().to_string())
+        };
+        raw.replace("{device}", device).replace("{platform}", platform)
+    }
+
+    /// 取某工具的 description（角色 explorer）：目录覆盖优先，否则内置默认
     pub fn tool_description(&self, name: &str) -> String {
+        self.role_tool_description("explorer", name)
+    }
+
+    /// 取某角色某工具的 description：目录覆盖优先（explorer→tools/<name>.md，其它→tools/<role>/<name>.md），
+    /// 否则内置默认。
+    pub fn role_tool_description(&self, role: &str, name: &str) -> String {
         self.prompts_dir
             .as_ref()
-            .and_then(|d| source::tool_override(d, name))
-            .unwrap_or_else(|| defaults::default_tool_description(name).trim().to_string())
+            .and_then(|d| source::tool_override_role(d, role, name))
+            .unwrap_or_else(|| defaults::default_tool_description_role(role, name).trim().to_string())
     }
 }

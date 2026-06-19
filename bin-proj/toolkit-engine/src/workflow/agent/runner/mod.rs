@@ -144,6 +144,7 @@ impl AgentRunner {
             let (_final_lines, rep) = verify::verify_and_repair(
                 &mut sess,
                 &opts.ai,
+                &prompts,
                 &mut tx,
                 &ctx,
                 &opts.params,

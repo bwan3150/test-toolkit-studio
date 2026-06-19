@@ -12,6 +12,11 @@ use super::EventPrinter;
 pub struct RunArgs {
     /// 执行的文件路径: .tks 单脚本 / .toml flow
     pub path: PathBuf,
+    /// OCR 来源（回放时 ocr/断言元素的识别方式）：
+    /// online=用默认在线服务地址(配置 ocr_url) / offline=本地离线 tesseract /
+    /// http(s)://... =指定在线服务 URL。不传则沿用「在线 + 配置地址」。
+    #[arg(long)]
+    pub ocr: Option<String>,
 }
 
 /// 处理 Run 命令
@@ -20,6 +25,14 @@ pub async fn handle(
     params: std::sync::Arc<tke::Params>,
 ) -> Result<()> {
     let path = run_args.path;
+
+    // --ocr：设置进程级 OCR 来源，供回放时 recognizer 解析 ocr 通道元素 / 断言（"online" 用配置地址兜底）
+    if let Some(spec) = run_args.ocr.as_deref() {
+        match tke::engines::ocr::resolve_ocr(spec, &params.ocr_url) {
+            Some(src) => tke::utils::params::set_ocr_source(src),
+            None => JsonOutput::error(format!("无法解析 --ocr 值「{}」（用 online/offline/http(s):// 或确认 ocr_url 已配置）", spec)),
+        }
+    }
     let mut printer = EventPrinter::auto(params.json);
     let mut emit = move |e: &tke::RunEvent| printer.print(e);
 

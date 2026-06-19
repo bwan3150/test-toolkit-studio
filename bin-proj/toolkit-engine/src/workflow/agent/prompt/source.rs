@@ -26,6 +26,18 @@ pub fn tool_override(dir: &Path, name: &str) -> Option<String> {
     read_optional(&dir.join("tools").join(format!("{}.md", name)))
 }
 
+/// 取某角色某工具的 description 覆盖：
+///   explorer → <dir>/tools/<name>.md（保持向后兼容，主 agent 工具不分子目录）
+///   其它角色 → <dir>/tools/<role>/<name>.md（如 tools/doctor/delete_lines.md）
+pub fn tool_override_role(dir: &Path, role: &str, name: &str) -> Option<String> {
+    let path = if role == "explorer" {
+        dir.join("tools").join(format!("{}.md", name))
+    } else {
+        dir.join("tools").join(role).join(format!("{}.md", name))
+    };
+    read_optional(&path)
+}
+
 /// 文件存在则读取（非空），否则 None；读取失败也返回 None（容错，回落默认）
 fn read_optional(path: &Path) -> Option<String> {
     if !path.is_file() {

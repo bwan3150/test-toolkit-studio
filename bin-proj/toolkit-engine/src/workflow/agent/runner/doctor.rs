@@ -21,10 +21,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::engines::ocr::enrich_with_ocr;
-use crate::{AiConfig, LlmReply, LlmSession, LlmTool, LlmToolCall, Params, RunEvent, ScriptParser, ScriptRunner, TksParam};
+use crate::{AiConfig, LlmReply, LlmSession, LlmTool, LlmToolCall, Params, Platform, RunEvent, ScriptParser, ScriptRunner, TksParam};
 
 use super::super::execution::script::write_script;
 use super::super::perception::{capture, render_element_list};
+use super::super::prompt::PromptSet;
 use super::super::transcript::Transcript;
 use super::flow::{brief, drive, fmt_tokens, friendly, paint, DriveCtx};
 use super::options::VerifyReport;
@@ -78,12 +79,12 @@ enum EditOp {
     Finish { reason: String },
 }
 
-/// 医生工具集(独立于探索工具)。description 内联——这是内部 agent，暂不走 PromptSet 覆盖。
-fn editor_tools() -> Vec<LlmTool> {
+/// 医生工具的 name + 参数 schema 表（description 不在此——由 PromptSet 提供，
+/// 内置默认见 prompt/builtin/tools/doctor/<name>.md，外部 <prompts_dir>/tools/doctor/<name>.md 可覆盖）。
+fn doctor_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
     vec![
-        LlmTool::new(
+        (
             "delete_lines",
-            "删除脚本的第 from..=to 行(1-based，含两端)。用于删掉冗余/重复/走错绕回/点了没用的空步。删错了若导致目标丢失会被系统自动还原，可大胆删。",
             serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -94,9 +95,8 @@ fn editor_tools() -> Vec<LlmTool> {
                 "required": ["from", "to"]
             }),
         ),
-        LlmTool::new(
+        (
             "replace_line",
-            "把第 line 行替换成新的 .tks 行 content。**只能引用已存在于元素库里的元素**(写成 [{元素名}])，或纯参数改动(如修正输入文本、把滑动幅度 full 改 quarter、改坐标)。需要点一个全新元素/走全新路径请改用 reexplore。",
             serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -107,9 +107,8 @@ fn editor_tools() -> Vec<LlmTool> {
                 "required": ["line", "content"]
             }),
         ),
-        LlmTool::new(
+        (
             "insert_after",
-            "在第 after 行之后插入一行 .tks(after=0 表示插到最前)。同 replace_line：只能引用已有元素或纯无元素步(如 `等待 1000`、`定向滑动 [{640,406}, 上, half]`、`隐藏键盘`)。新导航请用 reexplore。",
             serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -120,9 +119,8 @@ fn editor_tools() -> Vec<LlmTool> {
                 "required": ["after", "content"]
             }),
         ),
-        LlmTool::new(
+        (
             "reexplore",
-            "活体逃生口：当某段没法靠文本编辑改对(需要点全新元素、走一条全新路径)时，从第 from_line 步起**现场重新导航**——系统会回放前 from_line-1 步把设备定位到位，再让探索引擎实地重探剩余目标、拼回脚本。这是引入新元素/新路径的唯一正确方式。",
             serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -132,14 +130,9 @@ fn editor_tools() -> Vec<LlmTool> {
                 "required": ["from_line", "reason"]
             }),
         ),
-        LlmTool::new(
-            "run",
-            "重新诊断回放当前脚本，拿到最新的逐步 trace 和「是否到达目标」。这是你测试自己改动的方式——改完就 run 看效果。",
-            serde_json::json!({ "type": "object", "properties": {} }),
-        ),
-        LlmTool::new(
+        ("run", serde_json::json!({ "type": "object", "properties": {} })),
+        (
             "finish",
-            "收尾：当脚本已稳定到达目标、且你认为已删到最短、没有更多可改时调用。系统会再诊断一次兜底校验。",
             serde_json::json!({
                 "type": "object",
                 "properties": { "reason": { "type": "string", "description": "收尾依据" } },
@@ -149,20 +142,14 @@ fn editor_tools() -> Vec<LlmTool> {
     ]
 }
 
-/// 医生系统提示词(内联)
-const EDITOR_SYSTEM: &str = "你是「脚本医生」。手里有一份由自动探索产出的 .tks 回放脚本，它能被 `tke run` 逐行回放，\
-但当前**回放时跑不到测试目标**(或有冗余步)。你的任务：像代码 agent 一样**编辑这份脚本的任意行**，\
-反复「改→run→看 trace」，直到它能稳定回放到目标，并尽量最短。\n\n\
-你会反复收到【诊断 trace】：整条脚本逐步回放的结果——每步的 .tks 行、成功/失败、错误、以及**该步执行后页面变成了什么样**。\
-请重点看：报错那一步往往不是真正的根因，常常是**更早某步根本没跳转/点错了**(看页面没变就知道)，后面都在错页面上空跑、到某步才暴露。\n\n\
-工具：\n\
-- delete_lines：删冗余/走错绕回/无用空步(删错会被自动还原，放心删)。\n\
-- replace_line / insert_after：纯文本改/插。**只能引用已存在元素**([{元素名}])或纯参数(输入文本、滑动幅度、坐标、等待)。\
-  也可用 insert_after 插入**断言**行 `断言 [{已有元素名}, 存在]` 给脚本加闭环校验（如在目标处断言目标独有元素存在）。\n\
-- reexplore(from_line)：需要点**全新元素**或走**全新路径**时唯一正确的办法——从某步起活体现场重新导航。选「真正开始跑偏的那一步」。\n\
-- run：重新回放诊断，测你的改动。\n\
-- finish：脚本已稳定到达目标且最短时收尾。\n\n\
-原则：能用最小改动(删一两步 / 改一行参数)解决就别 reexplore；只有确实需要新元素/新路径才 reexplore。每次只调一个工具。";
+/// 组装医生工具集：schema 来自上表，description 来自 PromptSet（可外部覆盖）。
+/// 医生工具不注入 comment（它们各自有 reason 字段表达意图）。
+fn build_doctor_tools(prompts: &PromptSet) -> Vec<LlmTool> {
+    doctor_tool_schemas()
+        .into_iter()
+        .map(|(name, schema)| LlmTool::new(name, prompts.role_tool_description("doctor", name), schema))
+        .collect()
+}
 
 // ===================== 诊断回放 =====================
 
@@ -488,6 +475,7 @@ async fn reexplore_segment(
 pub(super) async fn doctor_repair(
     explore_sess: &mut LlmSession,
     ai: &AiConfig,
+    prompts: &PromptSet,
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
@@ -499,9 +487,12 @@ pub(super) async fn doctor_repair(
 ) -> Option<Vec<String>> {
     let tty = std::io::stderr().is_terminal();
 
-    // 独立医生会话(独立工具集)。其 token 单独累计、最后并入总量(报告 extra_*)。
-    let tools = editor_tools();
-    let mut editor = match LlmSession::new(ai, EDITOR_SYSTEM, tools.clone()) {
+    // 独立医生会话(独立工具集)。系统提示词与工具描述均走 PromptSet（内置 md，可外部覆盖）。
+    // 其 token 单独累计、最后并入总量(报告 extra_*)。
+    let platform = Platform::from_device(Some(ctx.device));
+    let system = prompts.role_system("doctor", ctx.device, platform.name());
+    let tools = build_doctor_tools(prompts);
+    let mut editor = match LlmSession::new(ai, system.clone(), tools.clone()) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("  {}", paint(tty, "31", &format!("脚本医生会话创建失败：{}", e)));
@@ -514,7 +505,7 @@ pub(super) async fn doctor_repair(
         serde_json::json!({
             "agent": "doctor",
             "model": editor.model(),
-            "system_prompt": EDITOR_SYSTEM,
+            "system_prompt": system,
             "tools": tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "schema": t.schema })).collect::<Vec<_>>(),
         }),
     );

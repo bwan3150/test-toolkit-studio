@@ -12,6 +12,38 @@
 /// 默认主系统提示词（角色 explorer）
 pub const DEFAULT_SYSTEM: &str = include_str!("builtin/agents/explorer.md");
 
+/// 默认脚本医生系统提示词（角色 doctor）
+pub const DEFAULT_DOCTOR_SYSTEM: &str = include_str!("builtin/agents/doctor.md");
+
+/// 某角色的默认系统提示词（外部 <prompts_dir>/agents/<role>.md 可覆盖）
+pub fn default_role_system(role: &str) -> &'static str {
+    match role {
+        "doctor" => DEFAULT_DOCTOR_SYSTEM,
+        _ => DEFAULT_SYSTEM, // explorer 及未知角色回落主提示词
+    }
+}
+
+/// 某角色某工具的默认 description（外部目录可覆盖：explorer→tools/<name>.md，其它→tools/<role>/<name>.md）
+pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
+    match role {
+        "doctor" => default_doctor_tool_description(name),
+        _ => default_tool_description(name),
+    }
+}
+
+/// 脚本医生（编辑器 agent）各工具默认 description
+fn default_doctor_tool_description(name: &str) -> &'static str {
+    match name {
+        "delete_lines" => include_str!("builtin/tools/doctor/delete_lines.md"),
+        "replace_line" => include_str!("builtin/tools/doctor/replace_line.md"),
+        "insert_after" => include_str!("builtin/tools/doctor/insert_after.md"),
+        "reexplore" => include_str!("builtin/tools/doctor/reexplore.md"),
+        "run" => include_str!("builtin/tools/doctor/run.md"),
+        "finish" => include_str!("builtin/tools/doctor/finish.md"),
+        _ => "",
+    }
+}
+
 /// 各工具默认 description（外部 <prompts_dir>/tools/<name>.md 可覆盖）
 pub fn default_tool_description(name: &str) -> &'static str {
     match name {

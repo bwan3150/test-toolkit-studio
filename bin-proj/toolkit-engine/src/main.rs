@@ -259,7 +259,7 @@ async fn main() -> tke::Result<()> {
         Commands::Tool(args) => {
             if tool_is_script {
                 let path = PathBuf::from(&args[0]);
-                workflow::run::handle(RunArgs { path }, params.clone()).await
+                workflow::run::handle(RunArgs { path, ocr: None }, params.clone()).await
             } else {
                 passthrough::handle(args, params.clone()).await
             }

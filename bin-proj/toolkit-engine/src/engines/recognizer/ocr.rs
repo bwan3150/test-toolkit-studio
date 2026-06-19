@@ -29,9 +29,13 @@ pub async fn find_by_ocr(
     let image_data = std::fs::read(screenshot_path)
         .map_err(|e| TkeError::IoError(e))?;
 
-    // 调用在线 OCR（地址来自参数层，单一来源、可配）
-    let ocr_url = crate::utils::params::ocr_url();
-    let result = ocr(&image_data, true, &ocr_url).await
+    // OCR 来源：优先用进程级设置（tke run/harness --ocr，可选 online/offline/URL）；
+    // 未设置则回退「在线 + 配置的 ocr_url」（保持旧行为）。
+    let (online, param) = match crate::utils::params::ocr_source() {
+        Some(src) => (src.online, src.param),
+        None => (true, crate::utils::params::ocr_url()),
+    };
+    let result = ocr(&image_data, online, &param).await
         .map_err(|e| TkeError::OcrError(format!("OCR 识别失败: {}", e)))?;
 
     debug!("OCR 识别到 {} 个文字区域", result.texts.len());
