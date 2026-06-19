@@ -22,12 +22,32 @@ pub struct TkeConfig {
     pub scripts: Option<PathBuf>,
     /// 在线 OCR 服务地址（缺省用内置默认；私有部署/换服务时配置）
     pub ocr_url: Option<String>,
+    /// OCR 来源模式（harness/run 用）：online / offline / http(s)://... ；CLI --ocr 优先
+    pub ocr: Option<String>,
+    /// harness 生成脚本后是否自检+自修复（等价 CLI --verify）；CLI --verify 出现则也为 true
+    pub verify: Option<bool>,
     /// AI 配置（tke harness 探索测试用）：[ai] 段
     #[serde(default)]
     pub ai: AiConfig,
+    /// harness 验证/修复各环节的次数上限：[harness] 段
+    #[serde(default)]
+    pub harness: HarnessConfig,
     /// 记忆/知识库配置：[knowledge] 段（本期留口子，未配置则跳过真实调用）
     #[serde(default)]
     pub knowledge: KnowledgeConfig,
+}
+
+/// [harness] 段：探索/验证/修复各环节的次数上限（都可选，缺省见 HarnessLimits 默认）
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct HarnessConfig {
+    /// 探索失败后「反思+从头重探」的次数上限（默认 1）
+    pub reexplore: Option<u32>,
+    /// 验证/修复阶段「活体重探(修复)」的次数上限（默认 6）
+    pub repairs: Option<u32>,
+    /// 稳定性测试需连续通过几次才算稳定（默认 2）
+    pub stability: Option<u32>,
+    /// 脚本医生单次诊断的轮数上限（默认 10）
+    pub doctor_iters: Option<u32>,
 }
 
 /// [ai] 段：统一多家大模型的接入参数

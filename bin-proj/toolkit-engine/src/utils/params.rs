@@ -10,7 +10,39 @@
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use super::config::{AiConfig, KnowledgeConfig, TkeConfig};
+use super::config::{AiConfig, HarnessConfig, KnowledgeConfig, TkeConfig};
+
+/// harness 各环节次数上限（解析后的具体值，含默认）。配置见 [harness] 段。
+#[derive(Debug, Clone)]
+pub struct HarnessLimits {
+    /// 探索失败后「反思+从头重探」上限
+    pub reexplore: usize,
+    /// 验证/修复阶段「活体重探(修复)」上限
+    pub repairs: usize,
+    /// 稳定性测试需连续通过的次数
+    pub stability: usize,
+    /// 脚本医生单次诊断轮数上限
+    pub doctor_iters: usize,
+}
+
+impl Default for HarnessLimits {
+    fn default() -> Self {
+        Self { reexplore: 1, repairs: 6, stability: 2, doctor_iters: 10 }
+    }
+}
+
+impl HarnessLimits {
+    fn from_config(c: &HarnessConfig) -> Self {
+        let d = Self::default();
+        Self {
+            reexplore: c.reexplore.map(|v| v as usize).unwrap_or(d.reexplore),
+            repairs: c.repairs.map(|v| v as usize).unwrap_or(d.repairs),
+            // 稳定性至少 1 次、诊断至少 1 轮，避免配 0 导致退化
+            stability: c.stability.map(|v| (v as usize).max(1)).unwrap_or(d.stability),
+            doctor_iters: c.doctor_iters.map(|v| (v as usize).max(1)).unwrap_or(d.doctor_iters),
+        }
+    }
+}
 
 /// 进程级在线 OCR 地址表：main 启动时由 Params 设置一次，识别引擎深处查询，
 /// 避免为单个 URL 穿透多层构造器（统一参数表"按需查询"的体现）。
@@ -65,6 +97,12 @@ pub struct Params {
     pub json: bool,
     /// 在线 OCR 服务地址
     pub ocr_url: String,
+    /// OCR 来源模式（online/offline/URL）；CLI --ocr 优先，否则用此。None=不跑 OCR
+    pub ocr: Option<String>,
+    /// harness 是否自检+自修复（config 默认；CLI --verify 出现则也为 true）
+    pub verify: bool,
+    /// harness 各环节次数上限
+    pub harness: HarnessLimits,
     /// AI 配置
     pub ai: AiConfig,
     /// 记忆/知识库配置
@@ -89,6 +127,9 @@ impl Params {
             scripts: cli_scripts.or(config.scripts),
             json,
             ocr_url: config.ocr_url.unwrap_or_else(|| DEFAULT_OCR_URL.to_string()),
+            ocr: config.ocr,
+            verify: config.verify.unwrap_or(false),
+            harness: HarnessLimits::from_config(&config.harness),
             ai: config.ai,
             knowledge: config.knowledge,
         }

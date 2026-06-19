@@ -100,9 +100,9 @@ pub async fn handle(
             .or_else(|| merged_ai.prompts_dir.clone().map(PathBuf::from)),
     };
 
-    // --ocr：解析来源（"online" 用配置的 ocr_url 兜底）；不传则不跑 OCR
-    let ocr = args
-        .ocr
+    // --ocr：CLI > config.ocr；"online" 用配置的 ocr_url 兜底；都没有则不跑 OCR
+    let ocr_spec = args.ocr.clone().or_else(|| params.ocr.clone());
+    let ocr = ocr_spec
         .as_deref()
         .and_then(|spec| tke::engines::ocr::resolve_ocr(spec, &tke::utils::params::ocr_url()));
     // 同时设进程级 OCR 来源：让验证/医生阶段的回放（recognizer 解析 ocr 元素/断言）与探索用同一模式
@@ -110,13 +110,16 @@ pub async fn handle(
         tke::utils::params::set_ocr_source(src.clone());
     }
 
+    // verify：CLI --verify 出现 或 config.verify=true 即开启
+    let verify = args.verify || params.verify;
+
     let result = AgentRunner::run(AgentRunOptions {
         case: case_text,
         script_dir,
         ai: merged_ai,
         prompt,
         ocr,
-        verify: args.verify,
+        verify,
         params: params.clone(),
     })
     .await

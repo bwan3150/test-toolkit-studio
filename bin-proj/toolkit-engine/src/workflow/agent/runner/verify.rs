@@ -4,7 +4,7 @@
 //   ① 目标标志：问探索会话要一段"只有真到达目标才出现的独特文字"(marker)，用于自动校验是否真达成；
 //   ② 脚本医生(doctor.rs)：诊断回放(每步留页面)→ 医生编辑脚本任意行(删/改/插 + 活体重探)→ 重跑 →
 //      直到稳定到达目标并提炼最短(详见 doctor.rs)；
-//   ③ 稳定性：连续 NEED_PASS 次(默认 2)重启净化后回放都到达目标才算稳定，期间不稳就再请医生修。
+//   ③ 稳定性：连续 need_pass 次(默认 2)重启净化后回放都到达目标才算稳定，期间不稳就再请医生修。
 //
 // 全景记录（conversation.json）：除 AI 交互外还记 verify_start / doctor_* / verify_end，可复盘
 // 一开始脚本哪里错、医生怎么改、最终结论。
@@ -27,8 +27,7 @@ use super::doctor;
 use super::flow::{brief, friendly, paint, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 
-const NEED_PASS: usize = 2; // 连续干净回放通过几次算「稳定」
-pub(super) const MAX_REPAIRS: usize = 6; // 活体重探尝试上限（兜底，避免反复修不好时无限循环）
+// 稳定性通过次数 / 修复(活体重探)上限均来自 config [harness]（params.harness），不再写死。
 
 /// 自检并尝试修复，返回（最终脚本步骤, 自检报告）。会把最终版本写回 script_path。
 /// `ai`：用于新建独立的「脚本医生」会话（与探索会话分开，独立工具集）。
@@ -49,6 +48,9 @@ pub async fn verify_and_repair(
 ) -> (Vec<String>, VerifyReport) {
     let tty = std::io::stderr().is_terminal();
     let mut report = VerifyReport { ran: true, ..Default::default() };
+    // 次数上限来自 config [harness]（缺省 stability=2 / repairs=6）
+    let need_pass = params.harness.stability;
+    let max_repairs = params.harness.repairs;
 
     if lines.is_empty() {
         eprintln!("{}", paint(tty, "33", "自检跳过：没有生成可回放的步骤"));
@@ -61,7 +63,7 @@ pub async fn verify_and_repair(
 
     tx.log(
         "verify_start",
-        serde_json::json!({ "need_pass": NEED_PASS, "max_repairs": MAX_REPAIRS, "marker": marker, "script_lines": lines.clone() }),
+        serde_json::json!({ "need_pass": need_pass, "max_repairs": max_repairs, "marker": marker, "script_lines": lines.clone() }),
     );
     // ============ 诊断优化 ============
     // 脚本医生把脚本修到「能跑通并到达目标」并提炼最短（删冗余/改坏自动还原，详见 doctor.rs）。
@@ -91,9 +93,9 @@ pub async fn verify_and_repair(
     };
 
     // ============ 稳定性测试 ============
-    // 连续 NEED_PASS 次重启净化后回放都到达目标才算稳定；中途不稳就再请医生修一轮。
+    // 连续 need_pass 次重启净化后回放都到达目标才算稳定；中途不稳就再请医生修一轮。
     eprintln!();
-    eprintln!("{}", paint(tty, "1", &format!("╭─ 稳定性测试（连续 {} 次重启净化后回放都须到达目标）─", NEED_PASS)));
+    eprintln!("{}", paint(tty, "1", &format!("╭─ 稳定性测试（连续 {} 次重启净化后回放都须到达目标）─", need_pass)));
     let mut streak = 0usize;
     let mut replay_no = 0usize;
     loop {
@@ -105,8 +107,8 @@ pub async fn verify_and_repair(
         if reached {
             streak += 1;
             report.stability_passes = streak;
-            eprintln!("  {} 到达目标（连续 {}/{}）", paint(tty, "32", "✓"), streak, NEED_PASS);
-            if streak >= NEED_PASS {
+            eprintln!("  {} 到达目标（连续 {}/{}）", paint(tty, "32", "✓"), streak, need_pass);
+            if streak >= need_pass {
                 report.passed = true;
                 break;
             }
@@ -114,8 +116,8 @@ pub async fn verify_and_repair(
         }
         streak = 0;
         report.stability_passes = 0;
-        if report.repairs >= MAX_REPAIRS {
-            eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止", MAX_REPAIRS)));
+        if report.repairs >= max_repairs {
+            eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止", max_repairs)));
             break;
         }
         // 不稳 → 再请医生修一轮（克隆传入：医生放弃时仍保留当前最好版本供落盘）
@@ -143,7 +145,7 @@ pub async fn verify_and_repair(
     let summary = if report.passed {
         paint(tty, "32", &format!("✓ 验证通过（连续 {} 次到达目标）", report.stability_passes))
     } else {
-        paint(tty, "33", &format!("✗ 验证未通过（连续到达 {}/{} 次，已保留当前最好版本）", report.stability_passes, NEED_PASS))
+        paint(tty, "33", &format!("✗ 验证未通过（连续到达 {}/{} 次，已保留当前最好版本）", report.stability_passes, need_pass))
     };
     eprintln!("  {}   {}", paint(tty, "2", "验证"), summary);
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));

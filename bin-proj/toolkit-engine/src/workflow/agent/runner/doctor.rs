@@ -31,8 +31,7 @@ use super::flow::{brief, drive, fmt_tokens, friendly, paint, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 
-/// 医生主循环最多诊断几轮(每轮 = 一次完整诊断回放 + 一批编辑)
-const MAX_DOCTOR_ITERS: usize = 10;
+// 医生主循环诊断轮数上限来自 config [harness].doctor_iters（params.harness.doctor_iters）。
 /// 单轮内医生最多调用几次 LLM(防在编辑里空转)
 const MAX_EDITS_PER_ITER: usize = 24;
 
@@ -556,7 +555,7 @@ pub(super) async fn doctor_repair(
     let mut best: Option<Vec<String>> = None;
     let mut stagnation = 0usize; // 连续「没改动且没达标」次数
 
-    for iter in 1..=MAX_DOCTOR_ITERS {
+    for iter in 1..=params.harness.doctor_iters {
         eprintln!();
         eprintln!("  {}", paint(tty, "1;36", &format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter)));
         let diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
@@ -702,8 +701,8 @@ pub(super) async fn doctor_repair(
                     editor.tool_result(primary.call_id.as_str(), format!("已插入，脚本现 {} 行。改完记得 run 验证。", lines.len()));
                 }
                 EditOp::Reexplore { from_line, reason } => {
-                    if report.repairs >= super::verify::MAX_REPAIRS {
-                        editor.tool_result(primary.call_id.as_str(), format!("已达活体重探上限（{} 次），请改用文本编辑或 finish。", super::verify::MAX_REPAIRS));
+                    if report.repairs >= params.harness.repairs {
+                        editor.tool_result(primary.call_id.as_str(), format!("已达活体重探上限（{} 次），请改用文本编辑或 finish。", params.harness.repairs));
                         continue;
                     }
                     match reexplore_segment(explore_sess, tx, ctx, params, script_path, case, &lines, from_line, &reason, report).await {
@@ -773,7 +772,7 @@ pub(super) async fn doctor_repair(
         }
     }
 
-    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮，已保留当前最好版本）", MAX_DOCTOR_ITERS)));
+    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮，已保留当前最好版本）", params.harness.doctor_iters)));
     report.hit_iter_limit = true; // 达到优化上限：若 best 存在则"仍可跑、未必最短"
     best
 }

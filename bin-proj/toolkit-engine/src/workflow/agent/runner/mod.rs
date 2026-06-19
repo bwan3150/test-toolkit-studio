@@ -121,10 +121,10 @@ impl AgentRunner {
         // 跨重探累计的新建元素（失败重探也可能造元素，最终失败要一并回滚，防泄漏）
         let mut explore_created: Vec<String> = outcome.created.clone();
 
-        // —— 失败/卡住 → 反思官给「重探指导」，带指导从头重探（最多 MAX_REEXPLORE 次）——
-        const MAX_REEXPLORE: usize = 1;
+        // —— 失败/卡住 → 反思官给「重探指导」，带指导从头重探（次数上限来自 config [harness].reexplore）——
+        let max_reexplore = opts.params.harness.reexplore;
         let mut reexplore_n = 0;
-        while !outcome.success && !outcome.aborted && reexplore_n < MAX_REEXPLORE {
+        while !outcome.success && !outcome.aborted && reexplore_n < max_reexplore {
             reexplore_n += 1;
             let guidance = match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, &opts.case, &outcome, false).await {
                 Some(r) => {
