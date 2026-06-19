@@ -83,7 +83,7 @@ pub async fn verify_and_repair(
             break;
         }
         report.repairs += 1;
-        match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report, &mut failures).await {
+        match repair_once(sess, tx, ctx, params, script_path, case, &lines, k, &failed, &err, &mut report, &mut failures).await {
             Some(l) => lines = l,
             None => break,
         }
@@ -118,7 +118,7 @@ pub async fn verify_and_repair(
                 break;
             }
             report.repairs += 1;
-            match repair_once(sess, tx, ctx, case, &lines, k, &failed, &err, &mut report, &mut failures).await {
+            match repair_once(sess, tx, ctx, params, script_path, case, &lines, k, &failed, &err, &mut report, &mut failures).await {
                 Some(l) => lines = l,
                 None => break,
             }
@@ -198,12 +198,16 @@ async fn minimize_candidates(
     current
 }
 
-/// 一次修复：前 k 步可信保留，AI 从失败处当前实时页面续接，把目标走完。
+/// 一次修复：让 AI 指出**真正跑偏的第一步**（常比报错处早——报错那步往往只是"前面早就
+/// 点错了、后面都在错页面空跑、到这步没东西可点"的结果），从那步把前缀回放定位后重新导航。
 /// 成功返回拼接后的新脚本；放弃（出错/中断/AI 也没走通）返回 None。
+#[allow(clippy::too_many_arguments)]
 async fn repair_once(
     sess: &mut LlmSession,
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
+    params: &Arc<Params>,
+    script_path: &Path,
     case: &str,
     lines: &[String],
     k: usize,
@@ -214,43 +218,61 @@ async fn repair_once(
 ) -> Option<Vec<String>> {
     let tty = std::io::stderr().is_terminal();
     let k = k.min(lines.len());
-    let mut prefix: Vec<String> = lines[..k].to_vec();
-    // 失败记忆：同一个操作在回放时反复失败 → 逼 AI 换路/换点法，别再重蹈覆辙
+    // 失败记忆：同一个操作反复失败 → 逼 AI 换路/换点法
     let n = {
         let c = failures.entry(failed.to_string()).or_insert(0);
         *c += 1;
         *c
     };
+    // 让 AI 看脚本指出真正跑偏的第一步 D（1-based，≤ 报错步）；默认就用报错步
+    let d = ask_divergence(sess, tx, lines, k, failed, err).await.unwrap_or(k + 1).clamp(1, k + 1);
+    let cut = (d - 1).min(lines.len()); // 保留前 cut 步
+    let mut prefix: Vec<String> = lines[..cut].to_vec();
+
     tx.log(
         "verify_repair",
-        serde_json::json!({ "repair": report.repairs, "from_step": k + 1, "failed_line": failed, "error": err, "kept_prefix_steps": k, "fail_count": n }),
+        serde_json::json!({ "repair": report.repairs, "fail_step": k + 1, "diverge_step": d, "kept_prefix_steps": cut, "failed_line": failed, "error": err, "fail_count": n }),
     );
     eprintln!();
-    eprintln!(
-        "  {}",
-        paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, k))
-    );
+    if d <= k {
+        eprintln!(
+            "  {}",
+            paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：报错在第 {} 步，但真正跑偏在第 {} 步——从第 {} 步起重新导航，保留前 {} 步", report.repairs, k + 1, d, d, cut))
+        );
+    } else {
+        eprintln!(
+            "  {}",
+            paint(tty, "1;33", &format!("◆ AI 接管修复（第 {} 次）：从第 {} 步起重新导航，保留前 {} 步", report.repairs, d, cut))
+        );
+    }
     if n >= 2 {
         eprintln!("  {}", paint(tty, "33", &format!("  （这一步已连续失败 {} 次，要求 AI 换条路/换点法）", n)));
     }
-    // 第 2 次起强力警告：这条路/这个元素回放时不可靠，必须换做法
+
+    // 回放前缀把设备定位到第 cut 步后的页面（前缀含「启动」，故先净化关闭即可）
+    reset_state(ctx.device, lines).await;
+    if !prefix.is_empty() {
+        let _ = write_script(script_path, case, &prefix);
+        let _ = do_replay(params, script_path, false).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+
     let avoid = if n >= 2 {
         format!(
-            "\n\n⚠ 特别注意：这一步「{}」在**回放时已经连续失败 {} 次**（错误：{}）。\
-             说明这个元素 / 这种点法在回放里**根本不可靠**，再用一次还会失败。\
-             你**绝对不能**再产出点击同一个元素的步骤——必须换一条**完全不同**的做法：\
-             比如改用 click_visual 看截图直接点目标的像素位置、点它**相邻的另一个可点元素**、\
-             或换一条到达目标的路径。先 request_screenshot 看清楚再决定。",
-            friendly(failed), n, err
+            "\n\n⚠ 特别注意：第 {} 步「{}」在**回放时已连续失败 {} 次**（错误：{}）。这个元素/这种点法在\
+             回放里根本不可靠，再用一次还会失败。**绝对不能**再点同一个元素——必须换做法：改用 click_visual\
+             看截图直接点像素位置、点相邻的另一个可点元素、或换一条路径。先 request_screenshot 看清楚再决定。",
+            k + 1, friendly(failed), n, err
         )
     } else {
         String::new()
     };
     let preamble = format!(
-        "现在进入【回放修复】。我把脚本从头跑了一遍，前 {} 步都成功了，但第 {} 步「{}」没达成：{}。\
-         设备此刻就停在那一步该发生的页面上。请从当前页面出发重新找到正确做法、把剩下的测试目标走完，\
-         最后 finish。（只需产出从这一步往后的操作，前面成功的步骤会自动保留。）整体测试目标：{}{}",
-        k, k + 1, friendly(failed), err, case, avoid
+        "现在进入【回放修复】。已把脚本前 {} 步重新跑了一遍、设备停在那之后的页面。\
+         之前从第 {} 步起走错了路（后面在错页面上空跑、到第 {} 步「{}」就没东西可点了：{}）。\
+         请从**当前页面**出发重新找到正确做法、把剩下的测试目标走完，最后 finish。\
+         （只产出从这里往后的操作，前 {} 步会自动保留。）整体测试目标：{}{}",
+        cut, d, k + 1, friendly(failed), err, cut, case, avoid
     );
     sess.user(preamble);
     let tail = match drive(sess, tx, ctx, false, "修复·").await {
@@ -297,6 +319,32 @@ async fn repair_once(
     eprintln!("  {}", paint(tty, "1;32", &format!("✓ 修复完毕：续接 {} 步，新脚本共 {} 步", tail_len, prefix.len())));
     eprintln!();
     Some(prefix)
+}
+
+/// 让 AI 看脚本指出**真正跑偏的第一步**（1-based 步号）。报错那步常只是结果，根因更早。
+async fn ask_divergence(sess: &mut LlmSession, tx: &mut Transcript, lines: &[String], k: usize, failed: &str, err: &str) -> Option<usize> {
+    let listing = lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| format!("{}. {}", i + 1, friendly(l)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    sess.user(format!(
+        "回放这个脚本时第 {} 步「{}」失败：{}。\n脚本：\n{}\n\n\
+         报错的那一步往往不是真正出问题的地方——很可能**更早就点错了/跑偏到了错误页面**，\
+         后面的步骤都在错页面上空跑、到这步才暴露。请判断：**从第几步开始就走错了**\
+         （要从这一步重新导航才对）。只回一个数字（1-based 步号），不要任何别的文字。",
+        k + 1, friendly(failed), err, listing
+    ));
+    let reply = match sess.next().await {
+        Ok(LlmReply::Text(t)) => t,
+        _ => return None,
+    };
+    tx.log("repair_divergence", serde_json::json!({ "fail_step": k + 1, "reply": reply.clone() }));
+    reply
+        .split(|c: char| !c.is_ascii_digit())
+        .find(|s| !s.is_empty())
+        .and_then(|s| s.parse::<usize>().ok())
 }
 
 /// 问 AI 要：目标标志文本 + 可删候选步编号
