@@ -308,26 +308,28 @@ pub async fn drive(
         // 卡得更死（连续 2 次没变 / 多页打转）→ 进入**纯视觉**：元素列表已经帮不上忙了，
         // 只发当前截图、不再带元素/OCR，让 AI 直接看图用 click_visual 决策（避免被无效元素继续误导）。
         let go_visual = (no_progress >= 2 || revisits >= 3) && perceive_err.is_none();
+        // 渲染每轮要发给 AI 的页面消息（含框架/hint）——同时记进 conversation.json，供提示词调优复盘
+        let page_msg = render(
+            &ctx.prompts.message("explorer", "page_round"),
+            &[("tabs", &tabs_block), ("round", &round_s), ("elements", &list_text), ("hint", &hint)],
+        );
         if go_visual {
             let prompt = render(
                 &ctx.prompts.message("explorer", "page_round_visual"),
                 &[("tabs", &tabs_block), ("round", &round_s), ("hint", &hint)],
             );
+            tx.log("llm_message", serde_json::json!({ "round": round, "content": prompt, "image": p.shot_path.to_string_lossy() }));
             if let Err(e) = sess.user_with_image(&prompt, &p.shot_path) {
                 // 截图失败兜底：退回发元素列表
                 tx.log("auto_screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
-                sess.user_page(render(
-                    &ctx.prompts.message("explorer", "page_round"),
-                    &[("tabs", &tabs_block), ("round", &round_s), ("elements", &list_text), ("hint", &hint)],
-                ));
+                tx.log("llm_message", serde_json::json!({ "round": round, "content": page_msg }));
+                sess.user_page(page_msg);
             } else {
                 tx.log("auto_screenshot", serde_json::json!({ "round": round }));
             }
         } else {
-            sess.user_page(render(
-                &ctx.prompts.message("explorer", "page_round"),
-                &[("tabs", &tabs_block), ("round", &round_s), ("elements", &list_text), ("hint", &hint)],
-            ));
+            tx.log("llm_message", serde_json::json!({ "round": round, "content": page_msg }));
+            sess.user_page(page_msg);
         }
         // 轮与轮之间空一行，分隔更清楚
         eprintln!();
@@ -396,7 +398,9 @@ pub async fn drive(
                     let say = if b.is_empty() { "（未调用工具，已提示其用工具或 finish）".to_string() } else { b };
                     eprintln!("  {}  {}", say, toks);
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
-                    sess.user(ctx.prompts.message("explorer", "nudge_use_tool"));
+                    let m = ctx.prompts.message("explorer", "nudge_use_tool");
+                    tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
+                    sess.user(m);
                     continue;
                 }
                 LlmReply::ToolCalls { text, calls } => (text, calls),
@@ -445,14 +449,18 @@ pub async fn drive(
                 AgentAction::RequestScreenshot { reason } => {
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
-                    match sess.user_with_image(&ctx.prompts.message("explorer", "screenshot_provided"), &p.shot_path) {
+                    let shot_msg = ctx.prompts.message("explorer", "screenshot_provided");
+                    tx.log("llm_message", serde_json::json!({ "round": round, "content": shot_msg.clone(), "image": p.shot_path.to_string_lossy() }));
+                    match sess.user_with_image(&shot_msg, &p.shot_path) {
                         Ok(()) => tx.log(
                             "screenshot_sent",
                             serde_json::json!({ "round": round, "screenshot": p.shot_path.to_string_lossy() }),
                         ),
                         Err(e) => {
                             tx.log("screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
-                            sess.user(ctx.prompts.message("explorer", "screenshot_failed"));
+                            let m = ctx.prompts.message("explorer", "screenshot_failed");
+                            tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
+                            sess.user(m);
                         }
                     }
                     continue; // 不前进，重新询问
@@ -588,10 +596,9 @@ pub async fn drive(
         if aborted {
             eprintln!("{}", paint(tty, "33", "退出中：正在为新建元素生成描述…（再次 Ctrl+C 强制退出）"));
         }
-        sess.user(render(
-            &ctx.prompts.message("explorer", "desc_pass"),
-            &[("elements", &created.join("、"))],
-        ));
+        let desc_msg = render(&ctx.prompts.message("explorer", "desc_pass"), &[("elements", &created.join("、"))]);
+        tx.log("llm_message", serde_json::json!({ "content": desc_msg.clone() }));
+        sess.user(desc_msg);
         if let Ok(LlmReply::Text(t)) = sess.next().await {
             tx.log("desc_pass", serde_json::json!({ "content": t.clone() }));
             if let Some(obj) = parse_desc_json(&t) {

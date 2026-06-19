@@ -16,7 +16,7 @@ use crate::{ExecutionResult, Fetcher, LlmSession, Result, RunArtifacts, Workarea
 
 use super::execution::script::write_script;
 use super::knowledge::{Knowledge, KnowledgeOutcome};
-use super::prompt::PromptSet;
+use super::prompt::{render, PromptSet};
 use super::tools::build_tools;
 use super::transcript::Transcript;
 use flow::{drive, DriveCtx};
@@ -90,7 +90,9 @@ impl AgentRunner {
         );
         let mut sess = LlmSession::new(&opts.ai, system_prompt, tools)?;
         tx.log("model", serde_json::json!({ "model": sess.model() }));
-        sess.user(format!("测试用例：\n{}\n\n请开始探索测试。", opts.case));
+        let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", &opts.case)]);
+        tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
+        sess.user(case_msg);
 
         // —— 驱动循环 ——
         let workarea = Workarea::for_device(Some(&device))?;

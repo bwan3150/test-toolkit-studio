@@ -158,7 +158,9 @@ async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Tr
         .map(|(i, l)| format!("{}. {}", i + 1, friendly(l)))
         .collect::<Vec<_>>()
         .join("\n");
-    sess.user(render(&prompts.message("verify", "goal_marker"), &[("listing", &listing), ("case", case)]));
+    let ask = render(&prompts.message("verify", "goal_marker"), &[("listing", &listing), ("case", case)]);
+    tx.log("llm_message", serde_json::json!({ "content": ask.clone() }));
+    sess.user(ask);
     let reply = match sess.next().await {
         Ok(LlmReply::Text(t)) => t,
         _ => return None,

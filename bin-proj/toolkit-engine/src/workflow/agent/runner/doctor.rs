@@ -451,6 +451,7 @@ async fn reexplore_segment(
         &ctx.prompts.message("doctor", "reexplore_preamble"),
         &[("cut", &cut.to_string()), ("d", &d.to_string()), ("reason", reason), ("case", case)],
     );
+    tx.log("llm_message", serde_json::json!({ "content": preamble.clone(), "to": "explorer" }));
     explore_sess.user(preamble);
     let tail = match drive(explore_sess, tx, ctx, false, "重探·").await {
         Ok(o) => o,
@@ -560,7 +561,9 @@ pub(super) async fn doctor_repair(
             eprintln!("  {}", paint(tty, "33", &format!("上一批改动导致目标丢失，已自动还原到上一个达标版本（{} 步）", b.len())));
             tx.log("doctor_auto_revert", serde_json::json!({ "iter": iter, "restored_steps": b.len() }));
             lines = b;
-            editor.user(render(&prompts.message("doctor", "auto_revert"), &[("steps", &lines.len().to_string())]));
+            let revert_msg = render(&prompts.message("doctor", "auto_revert"), &[("steps", &lines.len().to_string())]);
+            tx.log("llm_message", serde_json::json!({ "iter": iter, "content": revert_msg.clone() }));
+            editor.user(revert_msg);
             continue;
         }
 
@@ -608,7 +611,9 @@ pub(super) async fn doctor_repair(
                 LlmReply::Text(t) => {
                     let b = brief(&t, 160);
                     eprintln!("  {}  {}", if b.is_empty() { "（未调用工具）".into() } else { b }, toks);
-                    editor.user(prompts.message("doctor", "nudge_use_tool"));
+                    let m = prompts.message("doctor", "nudge_use_tool");
+                    tx.log("llm_message", serde_json::json!({ "iter": iter, "content": m.clone() }));
+                    editor.user(m);
                     continue;
                 }
                 LlmReply::ToolCalls { text, calls } => (text, calls),
@@ -736,7 +741,9 @@ pub(super) async fn doctor_repair(
                 report.hit_iter_limit = false;
                 return best;
             }
-            editor.user(prompts.message("doctor", "finish_pushback"));
+            let m = prompts.message("doctor", "finish_pushback");
+            tx.log("llm_message", serde_json::json!({ "iter": iter, "content": m.clone() }));
+            editor.user(m);
             // 落到下一轮
         }
 

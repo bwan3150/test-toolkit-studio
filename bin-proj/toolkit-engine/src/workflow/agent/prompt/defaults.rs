@@ -36,6 +36,7 @@ pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
 pub fn default_message(role: &str, name: &str) -> &'static str {
     match (role, name) {
         // —— explorer：探索 agent 每轮 / 控制类消息 ——
+        ("explorer", "case_intro") => include_str!("builtin/messages/explorer/case_intro.md"),
         ("explorer", "element_tag") => include_str!("builtin/messages/explorer/element_tag.md"),
         ("explorer", "page_round") => include_str!("builtin/messages/explorer/page_round.md"),
         ("explorer", "page_round_visual") => include_str!("builtin/messages/explorer/page_round_visual.md"),
