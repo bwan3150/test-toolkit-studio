@@ -504,6 +504,7 @@ pub(super) async fn doctor_repair(
     explore_sess: &mut LlmSession,
     ai: &AiConfig,
     prompts: &PromptSet,
+    reflection: Option<&str>,
     txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
@@ -539,6 +540,17 @@ pub(super) async fn doctor_repair(
             "tools": tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "schema": t.schema })).collect::<Vec<_>>(),
         }),
     );
+    // 探索反思官的「绕路报告」作为医生的常驻参考（成功探索后由上层传入）：优先据它删冗余
+    if let Some(r) = reflection {
+        if !r.trim().is_empty() {
+            let msg = format!(
+                "【探索反思官对本次探索路径的复盘报告】\n{}\n\n请把它当作删冗余的优先参考：它指出的绕路/废步段，优先核实并删除（仍以 run 实测为准）。",
+                r
+            );
+            tx.log("llm_message", serde_json::json!({ "content": msg.clone() }));
+            editor.user(msg);
+        }
+    }
 
     // 最短的达标版本(护栏：删坏了自动还原到它)
     let mut best: Option<Vec<String>> = None;

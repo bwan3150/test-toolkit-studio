@@ -4,6 +4,7 @@
 pub mod doctor;
 pub mod flow;
 pub mod options;
+pub mod reflect;
 pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
@@ -109,7 +110,70 @@ impl AgentRunner {
             max_rounds,
             prompts: &prompts,
         };
-        let outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
+        let tty = std::io::stderr().is_terminal();
+        let mut outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
+
+        // 反思官 token + 被弃用(重探)的旧探索会话 token，最终并入总量
+        let mut refl_pt = 0i64;
+        let mut refl_ct = 0i64;
+        let mut discarded_pt = 0i64;
+        let mut discarded_ct = 0i64;
+        // 跨重探累计的新建元素（失败重探也可能造元素，最终失败要一并回滚，防泄漏）
+        let mut explore_created: Vec<String> = outcome.created.clone();
+
+        // —— 失败/卡住 → 反思官给「重探指导」，带指导从头重探（最多 MAX_REEXPLORE 次）——
+        const MAX_REEXPLORE: usize = 1;
+        let mut reexplore_n = 0;
+        while !outcome.success && !outcome.aborted && reexplore_n < MAX_REEXPLORE {
+            reexplore_n += 1;
+            let guidance = match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, &opts.case, &outcome, false).await {
+                Some(r) => {
+                    refl_pt += r.prompt_tokens;
+                    refl_ct += r.completion_tokens;
+                    r.report
+                }
+                None => break,
+            };
+            eprintln!();
+            eprintln!("{}", flow::paint(tty, "1;36", &format!("◆ 探索未达成——反思官给出重探指导（第 {} 次重探）：", reexplore_n)));
+            eprintln!("{}", flow::paint(tty, "2", &flow::brief(&guidance, 300)));
+            // 旧探索会话即将弃用，先记下它的 token
+            let (dp, dc) = sess.total_usage();
+            discarded_pt += dp;
+            discarded_ct += dc;
+            // 全新探索会话 + 用例 + 重探指导，从头带指导重探（避免旧会话 N 步的混乱上下文）
+            sess = LlmSession::new(&opts.ai, prompts.system(&device, platform.name()), build_tools(&prompts))?;
+            let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", &opts.case)]);
+            tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
+            sess.user(case_msg);
+            let guide_msg = format!(
+                "【上一轮探索没找到目标。探索反思官给的重探指导】\n{}\n\n请据此从头重新探索，直接走对的路、别再重蹈覆辙。",
+                guidance
+            );
+            tx.log("llm_message", serde_json::json!({ "content": guide_msg.clone() }));
+            sess.user(guide_msg);
+            outcome = drive(&mut sess, &mut tx, &ctx, true, &format!("重探{}·", reexplore_n)).await?;
+            for c in &outcome.created {
+                if !explore_created.contains(c) {
+                    explore_created.push(c.clone());
+                }
+            }
+        }
+
+        // —— 成功 → 反思官产出「绕路报告」，喂给 doctor 帮它有的放矢删冗余 ——
+        let reflection_for_doctor: Option<String> = if outcome.success && !outcome.aborted {
+            match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, &opts.case, &outcome, true).await {
+                Some(r) => {
+                    refl_pt += r.prompt_tokens;
+                    refl_ct += r.completion_tokens;
+                    Some(r.report)
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+
         let end_time = chrono::Local::now().to_rfc3339();
 
         // —— 脚本文件名：用 AI 在 finish 起的名（概括本次测试），兜底用例 slug；
@@ -127,7 +191,6 @@ impl AgentRunner {
         let final_lines = outcome.lines.clone();
         write_script(&script_path, &opts.case, &final_lines)?;
         // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
-        let tty = std::io::stderr().is_terminal();
         let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         eprintln!();
         if outcome.success {
@@ -150,6 +213,7 @@ impl AgentRunner {
                 &mut sess,
                 &opts.ai,
                 &prompts,
+                reflection_for_doctor.as_deref(),
                 &mut tx,
                 &ctx,
                 &opts.params,
@@ -173,6 +237,9 @@ impl AgentRunner {
         // —— log.json(ExecutionResult，与 run 同构) ——
         // 总 token = 探索会话(含活体重探复用的同一会话) + 脚本医生独立会话(report.extra_*)
         let (mut total_prompt, mut total_completion) = sess.total_usage();
+        // 并入：被弃用的重探旧会话 + 反思官会话 + 脚本医生独立会话
+        total_prompt += discarded_pt + refl_pt;
+        total_completion += discarded_ct + refl_ct;
         if let Some(r) = &verified {
             total_prompt += r.extra_prompt;
             total_completion += r.extra_completion;
@@ -219,7 +286,8 @@ impl AgentRunner {
 
         // —— 统一在最末尾渲染「结果 + 元素库」框：放到 verify 之后，
         //    token 总量才覆盖探索+验证+修复全程；并多给一行「验证状态」——
-        let mut all_created = outcome.created.clone();
+        // 本次运行新建的所有元素（跨重探累计 + 验证/修复阶段）
+        let mut all_created = explore_created.clone();
         if let Some(r) = &verified {
             for c in &r.created {
                 if !all_created.contains(c) {
@@ -227,17 +295,31 @@ impl AgentRunner {
                 }
             }
         }
-        // 防污染：运行未成功（探索未达成 / 验证未通过）就**既不留脚本、也回滚元素**——
-        // 不稳定的半成品脚本和它造的垃圾元素都不该留下骗下次。成功(稳定通过)才保留、沉淀复用。
+        // 最终脚本实际引用的元素名（用于判定哪些新建元素是孤儿：失败重探残留 / 被 doctor 删步后没用上的）
+        let referenced = referenced_element_names(&result_script_lines);
+        // 防污染：
+        //  - 运行未成功（探索未达成 / 验证未通过）→ 既删脚本、也回滚**本次新建的全部元素**；
+        //  - 成功 → 只清掉本次新建但最终脚本**没引用**的孤儿（含失败重探残留），保留真正用到的。
         let rolled_back = if !overall_success {
-            let _ = std::fs::remove_file(&script_path); // 删掉不稳定的脚本
+            let _ = std::fs::remove_file(&script_path);
             if !all_created.is_empty() {
                 crate::tools::element::remove_elements(&element_path, &all_created).unwrap_or(0)
             } else {
                 0
             }
         } else {
-            0
+            let orphans: Vec<String> = all_created.iter().filter(|n| !referenced.contains(n.as_str())).cloned().collect();
+            if !orphans.is_empty() {
+                crate::tools::element::remove_elements(&element_path, &orphans).unwrap_or(0)
+            } else {
+                0
+            }
+        };
+        // 展示用：成功时只列最终脚本真正引用的新建元素（孤儿已清，不展示）
+        let display_created: Vec<String> = if overall_success {
+            all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect()
+        } else {
+            all_created.clone()
         };
         render_summary(
             outcome.success,
@@ -249,7 +331,7 @@ impl AgentRunner {
             sess.model(),
             total_prompt,
             total_completion,
-            &all_created,
+            &display_created,
             rolled_back,
             &element_path,
         );
@@ -372,6 +454,23 @@ fn record_knowledge(tx: &mut Transcript, kind: &str, outcome: KnowledgeOutcome) 
         KnowledgeOutcome::Hit(ctx) => tx.log(kind, serde_json::json!({ "hit": true, "context": ctx })),
         KnowledgeOutcome::Skipped(why) => tx.log(kind, serde_json::json!({ "hit": false, "skipped": why })),
     }
+}
+
+/// 提取脚本里实际引用到的元素名集合（解析 .tks，收集 `TksParam::Element` 的 name）。
+/// 用于判定本次新建元素里哪些是孤儿（最终脚本没用到）。
+fn referenced_element_names(lines: &[String]) -> std::collections::HashSet<String> {
+    let mut set = std::collections::HashSet::new();
+    let content = format!("步骤:\n{}", lines.join("\n"));
+    if let Ok(script) = crate::ScriptParser::new().parse(&content) {
+        for step in &script.steps {
+            for p in &step.params {
+                if let crate::TksParam::Element { name, .. } = p {
+                    set.insert(name.clone());
+                }
+            }
+        }
+    }
+    set
 }
 
 /// 把任意文字压成适合做文件名的 slug：保留字母数字（含中日韩），其余转连字符，小写、去重、限长。

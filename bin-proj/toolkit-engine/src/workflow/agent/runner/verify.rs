@@ -38,6 +38,7 @@ pub async fn verify_and_repair(
     sess: &mut LlmSession,
     ai: &AiConfig,
     prompts: &PromptSet,
+    reflection: Option<&str>,
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
@@ -66,7 +67,7 @@ pub async fn verify_and_repair(
     // 脚本医生把脚本修到「能跑通并到达目标」并提炼最短（删冗余/改坏自动还原，详见 doctor.rs）。
     eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 诊断优化（脚本医生：编辑→跑→看→改，修到稳定回放到目标并提炼最短）─"));
-    let fixed = doctor::doctor_repair(sess, ai, prompts, tx, ctx, params, script_path, case, &marker, lines, &mut report).await;
+    let fixed = doctor::doctor_repair(sess, ai, prompts, reflection, tx, ctx, params, script_path, case, &marker, lines, &mut report).await;
     let mut lines = match fixed {
         Some(l) => {
             report.reached = true;
@@ -118,7 +119,7 @@ pub async fn verify_and_repair(
             break;
         }
         // 不稳 → 再请医生修一轮（克隆传入：医生放弃时仍保留当前最好版本供落盘）
-        match doctor::doctor_repair(sess, ai, prompts, tx, ctx, params, script_path, case, &marker, lines.clone(), &mut report).await {
+        match doctor::doctor_repair(sess, ai, prompts, reflection, tx, ctx, params, script_path, case, &marker, lines.clone(), &mut report).await {
             Some(l) => lines = l,
             None => break,
         }

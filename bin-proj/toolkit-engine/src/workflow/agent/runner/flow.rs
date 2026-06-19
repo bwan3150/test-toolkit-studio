@@ -103,6 +103,8 @@ pub struct DriveOutcome {
     pub script_name: Option<String>,
     /// 本次发生的元素改名 (旧名, 新名)，供上层把前缀脚本里的引用同步改掉
     pub renames: Vec<(String, String)>,
+    /// 每个落库步骤当时 AI 给的 comment（理由），与 lines 一一对应；供反思 agent 复盘"怎么走成这样"
+    pub step_comments: Vec<String>,
 }
 
 /// 驱动探索循环
@@ -160,6 +162,7 @@ pub async fn drive(
     let mut no_progress = 0usize; // 连续多少轮页面无变化（上一步操作没生效）
     let max_llm_calls = ctx.max_rounds * 4 + 10; // 含要图/反问等不前进的轮次
     let mut lines: Vec<String> = Vec::new();
+    let mut step_comments: Vec<String> = Vec::new(); // 与 lines 对应：每步 AI 的理由(comment)
     let mut steps: Vec<StepResult> = Vec::new();
     let mut round = 0usize;
     let mut llm_calls = 0usize;
@@ -562,6 +565,7 @@ pub async fn drive(
                                 xml,
                             });
                             lines.push(line.clone());
+                            step_comments.push(comment.clone().unwrap_or_default());
                             last_was_swipe = is_swipe; // 记下这步是不是滑动，供下一轮判定空滑
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
@@ -613,5 +617,5 @@ pub async fn drive(
         }
     }
 
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames, step_comments })
 }
