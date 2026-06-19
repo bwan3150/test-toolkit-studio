@@ -19,6 +19,11 @@ pub struct Transcript {
     file: File,
     /// 内存累积所有事件，用于结束时导出美化 JSON
     events: Vec<serde_json::Value>,
+    /// 默认 agent 标签：事件未显式带 "agent" 字段时注入此值。
+    /// 多 agent 结构下用于把每条事件归属到对应 agent —— 探索/编排默认 "explorer"，
+    /// 脚本医生的事件在 doctor.rs 内显式带 "agent":"doctor"（含 reexplore 里 drive() 的探索事件
+    /// 天然回落 explorer，语义正确：那确实是探索 agent 在活体重探）。
+    default_agent: String,
 }
 
 impl Transcript {
@@ -28,19 +33,23 @@ impl Transcript {
             std::fs::create_dir_all(parent).map_err(TkeError::IoError)?;
         }
         let file = File::create(&path).map_err(TkeError::IoError)?;
-        Ok(Self { path, file, events: Vec::new() })
+        Ok(Self { path, file, events: Vec::new(), default_agent: "explorer".to_string() })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// 写入一条事件：kind 为事件类型，data 为对象（会被注入 type 与时间戳）
+    /// 写入一条事件：kind 为事件类型，data 为对象（会被注入 type / agent / 时间戳）
     pub fn log(&mut self, kind: &str, mut data: serde_json::Value) {
         if !data.is_object() {
             data = serde_json::json!({ "value": data });
         }
         data["type"] = serde_json::json!(kind);
+        // agent 归属：未显式指定则补默认（多 agent 结构下每条事件都可追溯到来源 agent）
+        if data.get("agent").is_none() {
+            data["agent"] = serde_json::json!(self.default_agent);
+        }
         data["ts"] = serde_json::json!(now_rfc3339());
         if let Ok(line) = serde_json::to_string(&data) {
             let _ = writeln!(self.file, "{}", line);

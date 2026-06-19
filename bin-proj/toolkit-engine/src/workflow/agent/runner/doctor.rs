@@ -442,7 +442,7 @@ async fn reexplore_segment(
 
     tx.log(
         "doctor_reexplore",
-        serde_json::json!({ "repair": report.repairs, "from_line": d, "kept_prefix_steps": cut, "reason": reason }),
+        serde_json::json!({ "agent": "doctor", "repair": report.repairs, "from_line": d, "kept_prefix_steps": cut, "reason": reason }),
     );
     eprintln!();
     eprintln!(
@@ -487,7 +487,7 @@ async fn reexplore_segment(
         return None;
     }
     if !tail.success {
-        tx.log("doctor_reexplore_failed", serde_json::json!({ "repair": report.repairs, "reason": tail.reason }));
+        tx.log("doctor_reexplore_failed", serde_json::json!({ "agent": "doctor", "repair": report.repairs, "reason": tail.reason }));
         eprintln!("  {}", paint(tty, "33", "活体重探未能达成测试目标（探索引擎也没走通）"));
         return None;
     }
@@ -569,7 +569,7 @@ pub(super) async fn doctor_repair(
             // 曾经达标、现在又不达标 → 上一批改动把它改坏了，自动还原
             let b = best.clone().unwrap();
             eprintln!("  {}", paint(tty, "33", &format!("上一批改动导致目标丢失，已自动还原到上一个达标版本（{} 步）", b.len())));
-            tx.log("doctor_auto_revert", serde_json::json!({ "iter": iter, "restored_steps": b.len() }));
+            tx.log("doctor_auto_revert", serde_json::json!({ "agent": "doctor", "iter": iter, "restored_steps": b.len() }));
             lines = b;
             editor.user(format!(
                 "你上一批改动导致**目标丢失**，系统已自动还原到上一个达标版本（{} 步）。\
