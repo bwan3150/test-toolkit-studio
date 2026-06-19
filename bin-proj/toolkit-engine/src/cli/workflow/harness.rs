@@ -118,8 +118,11 @@ pub async fn handle(
     .await
     .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
-    // 状态/依据/模型/token/元素变更已在探索结束的「结果」框中统一展示，这里只补产物路径
-    eprintln!("  脚本   {}", result.script.display());
+    // 状态/依据/模型/token/元素变更已在「结果」框中统一展示，这里只补产物路径。
+    // 未稳定通过的脚本已被删除（不留半成品），只显示日志路径供复盘。
+    if result.success {
+        eprintln!("  脚本   {}", result.script.display());
+    }
     eprintln!("  日志   {}", result.conversation.display());
 
     std::process::exit(if result.success { 0 } else { 1 });

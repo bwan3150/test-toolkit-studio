@@ -210,10 +210,15 @@ impl AgentRunner {
                 }
             }
         }
-        // 防污染：运行未成功（探索未达成 / 验证未通过）就回滚本次新建的元素，
-        // 不让错误脚本的垃圾元素留在共享元素库里骗下次的 AI。成功才保留、沉淀复用。
-        let rolled_back = if !overall_success && !all_created.is_empty() {
-            crate::tools::element::remove_elements(&element_path, &all_created).unwrap_or(0)
+        // 防污染：运行未成功（探索未达成 / 验证未通过）就**既不留脚本、也回滚元素**——
+        // 不稳定的半成品脚本和它造的垃圾元素都不该留下骗下次。成功(稳定通过)才保留、沉淀复用。
+        let rolled_back = if !overall_success {
+            let _ = std::fs::remove_file(&script_path); // 删掉不稳定的脚本
+            if !all_created.is_empty() {
+                crate::tools::element::remove_elements(&element_path, &all_created).unwrap_or(0)
+            } else {
+                0
+            }
         } else {
             0
         };
@@ -290,11 +295,12 @@ fn render_summary(
     // 元素库更新：合并探索+修复阶段新增，desc 从库里读（探索/修复各自的 desc-pass 已写入）
     eprintln!();
     eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
-    if rolled_back > 0 {
-        // 运行未成功：本次新建已回滚清理，不污染元素库
+    let overall = !aborted && success && verified.map(|r| r.passed).unwrap_or(true);
+    if !overall {
+        // 运行未成功（未稳定通过）：脚本与本次新建元素都已清理，不留半成品、不污染
         eprintln!(
             "  {}",
-            paint(tty, "33", &format!("运行未成功，已清理本次新建的 {} 个元素（未污染元素库）", rolled_back))
+            paint(tty, "33", &format!("未稳定通过——脚本未保存，本次新建的 {} 个元素已清理（不留半成品、不污染元素库）", rolled_back))
         );
         eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
         return;
