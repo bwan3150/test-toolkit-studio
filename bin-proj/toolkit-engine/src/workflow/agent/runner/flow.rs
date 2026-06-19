@@ -110,11 +110,15 @@ pub struct DriveOutcome {
 ///   以便把验证/修复阶段的 token 也算进总量。修复模式调用前请先 `sess.user(开场白)`。
 pub async fn drive(
     sess: &mut LlmSession,
-    tx: &mut Transcript,
+    txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
     spinner: bool,
     round_prefix: &str,
 ) -> Result<DriveOutcome> {
+    // 进入「探索 agent」作用域：本函数（首次探索 与 reexplore 活体重探都走它）产出的所有事件
+    // 都归属 explorer。Drop 守卫保证任何退出路径都弹栈（被 doctor 调用时弹回 doctor 作用域）。
+    let mut _ascope = txp.scoped("explorer");
+    let tx = &mut *_ascope;
     let tty = std::io::stderr().is_terminal();
 
     // 用户中断（Ctrl+C）：监听到则在下一个决策点优雅停止、照常出总结

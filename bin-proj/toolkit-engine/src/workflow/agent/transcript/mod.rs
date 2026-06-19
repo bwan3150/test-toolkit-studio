@@ -19,11 +19,37 @@ pub struct Transcript {
     file: File,
     /// 内存累积所有事件，用于结束时导出美化 JSON
     events: Vec<serde_json::Value>,
-    /// 默认 agent 标签：事件未显式带 "agent" 字段时注入此值。
-    /// 多 agent 结构下用于把每条事件归属到对应 agent —— 探索/编排默认 "explorer"，
-    /// 脚本医生的事件在 doctor.rs 内显式带 "agent":"doctor"（含 reexplore 里 drive() 的探索事件
-    /// 天然回落 explorer，语义正确：那确实是探索 agent 在活体重探）。
-    default_agent: String,
+    /// agent 作用域栈：栈顶 = 当前正在执行的 agent。每条事件按栈顶归属（多 agent 框架的
+    /// 核心——归属来自"现在是哪个 agent 在跑"这一显式上下文，不靠按事件猜测）。
+    /// 进入某 agent 的执行用 `scoped()` 压栈、Drop 自动弹栈，嵌套(doctor→reexplore→explorer)天然由栈处理。
+    /// 栈空 = 还没进入任何 agent，归属为编排层 "harness"。
+    agent_stack: Vec<String>,
+}
+
+/// agent 执行作用域守卫：创建即压栈、Drop 即弹栈。
+/// 保证无论函数怎么退出（正常返回 / 早返回 / `?` / panic）都正确弹出当前 agent，作用域不泄漏。
+/// 解引用为 `Transcript`，所以作用域内可直接当 `Transcript` 用（含传给下层 `&mut Transcript`）。
+pub struct AgentScope<'a> {
+    tx: &'a mut Transcript,
+}
+
+impl Drop for AgentScope<'_> {
+    fn drop(&mut self) {
+        self.tx.agent_stack.pop();
+    }
+}
+
+impl std::ops::Deref for AgentScope<'_> {
+    type Target = Transcript;
+    fn deref(&self) -> &Transcript {
+        self.tx
+    }
+}
+
+impl std::ops::DerefMut for AgentScope<'_> {
+    fn deref_mut(&mut self) -> &mut Transcript {
+        self.tx
+    }
 }
 
 impl Transcript {
@@ -33,11 +59,23 @@ impl Transcript {
             std::fs::create_dir_all(parent).map_err(TkeError::IoError)?;
         }
         let file = File::create(&path).map_err(TkeError::IoError)?;
-        Ok(Self { path, file, events: Vec::new(), default_agent: "explorer".to_string() })
+        Ok(Self { path, file, events: Vec::new(), agent_stack: Vec::new() })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// 进入某 agent 的执行作用域：压栈，返回守卫；守卫 Drop 时自动弹栈。
+    /// 用法：`let mut tx = tx.scoped("explorer"); ...`（守卫解引用为 Transcript，原有 `tx.log(...)` 不变）。
+    pub fn scoped(&mut self, agent: &str) -> AgentScope<'_> {
+        self.agent_stack.push(agent.to_string());
+        AgentScope { tx: self }
+    }
+
+    /// 当前正在执行的 agent（栈顶）；栈空则为编排层 "harness"
+    fn current_agent(&self) -> &str {
+        self.agent_stack.last().map(String::as_str).unwrap_or("harness")
     }
 
     /// 写入一条事件：kind 为事件类型，data 为对象（会被注入 type / agent / 时间戳）
@@ -46,10 +84,8 @@ impl Transcript {
             data = serde_json::json!({ "value": data });
         }
         data["type"] = serde_json::json!(kind);
-        // agent 归属：未显式指定则补默认（多 agent 结构下每条事件都可追溯到来源 agent）
-        if data.get("agent").is_none() {
-            data["agent"] = serde_json::json!(self.default_agent);
-        }
+        // agent 归属：按当前作用域栈顶（权威来源，覆盖 data 里可能残留的 agent 字段）
+        data["agent"] = serde_json::json!(self.current_agent());
         data["ts"] = serde_json::json!(now_rfc3339());
         if let Ok(line) = serde_json::to_string(&data) {
             let _ = writeln!(self.file, "{}", line);

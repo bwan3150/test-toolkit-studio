@@ -179,7 +179,7 @@ pub(super) async fn diagnose(
     let tty = std::io::stderr().is_terminal();
     let check = strip_trailing_close(lines);
     if check.is_empty() {
-        tx.log(phase, serde_json::json!({ "agent": "doctor", "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
+        tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
         return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into() };
     }
     let _ = write_script(script_path, case, &check);
@@ -213,7 +213,7 @@ pub(super) async fn diagnose(
     let result = match result {
         Ok(r) => r,
         Err(e) => {
-            tx.log(phase, serde_json::json!({ "agent": "doctor", "iter": iter, "script": check, "reached": false, "note": format!("回放出错：{}", e), "steps": [] }));
+            tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": format!("回放出错：{}", e), "steps": [] }));
             return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: format!("回放出错：{}", e) };
         }
     };
@@ -280,9 +280,7 @@ pub(super) async fn diagnose(
     // 结构化执行轨迹进 conversation.json：本轮完整脚本 + 逐步成败/错误/截图/页面结构/页面元素 + 结论
     tx.log(
         phase,
-        serde_json::json!({
-            "agent": "doctor",
-            "iter": iter,
+        serde_json::json!({            "iter": iter,
             "script": check.clone(),
             "reached": reached,
             "fail_step": fail_idx.map(|k| k + 1),
@@ -442,7 +440,7 @@ async fn reexplore_segment(
 
     tx.log(
         "doctor_reexplore",
-        serde_json::json!({ "agent": "doctor", "repair": report.repairs, "from_line": d, "kept_prefix_steps": cut, "reason": reason }),
+        serde_json::json!({ "repair": report.repairs, "from_line": d, "kept_prefix_steps": cut, "reason": reason }),
     );
     eprintln!();
     eprintln!(
@@ -487,7 +485,7 @@ async fn reexplore_segment(
         return None;
     }
     if !tail.success {
-        tx.log("doctor_reexplore_failed", serde_json::json!({ "agent": "doctor", "repair": report.repairs, "reason": tail.reason }));
+        tx.log("doctor_reexplore_failed", serde_json::json!({ "repair": report.repairs, "reason": tail.reason }));
         eprintln!("  {}", paint(tty, "33", "活体重探未能达成测试目标（探索引擎也没走通）"));
         return None;
     }
@@ -516,7 +514,7 @@ pub(super) async fn doctor_repair(
     explore_sess: &mut LlmSession,
     ai: &AiConfig,
     prompts: &PromptSet,
-    tx: &mut Transcript,
+    txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
     script_path: &Path,
@@ -525,6 +523,10 @@ pub(super) async fn doctor_repair(
     mut lines: Vec<String>,
     report: &mut VerifyReport,
 ) -> Option<Vec<String>> {
+    // 进入「脚本医生 agent」作用域：本函数产出的事件（会话/请求/编辑/诊断）都归属 doctor。
+    // 其中 reexplore→drive() 会再压入 explorer 作用域、返回后弹回 doctor（嵌套由栈处理）。
+    let mut _dscope = txp.scoped("doctor");
+    let tx = &mut *_dscope;
     let tty = std::io::stderr().is_terminal();
 
     // 独立医生会话(独立工具集)。系统提示词与工具描述均走 PromptSet（内置 md，可外部覆盖）。
@@ -542,9 +544,7 @@ pub(super) async fn doctor_repair(
     // 记录医生会话(独立 agent)的系统提示词 + 工具定义，便于在 conversation.json 里按 agent 复盘
     tx.log(
         "doctor_session",
-        serde_json::json!({
-            "agent": "doctor",
-            "model": editor.model(),
+        serde_json::json!({            "model": editor.model(),
             "system_prompt": system,
             "tools": tools.iter().map(|t| serde_json::json!({ "name": t.name, "description": t.description, "schema": t.schema })).collect::<Vec<_>>(),
         }),
@@ -569,7 +569,7 @@ pub(super) async fn doctor_repair(
             // 曾经达标、现在又不达标 → 上一批改动把它改坏了，自动还原
             let b = best.clone().unwrap();
             eprintln!("  {}", paint(tty, "33", &format!("上一批改动导致目标丢失，已自动还原到上一个达标版本（{} 步）", b.len())));
-            tx.log("doctor_auto_revert", serde_json::json!({ "agent": "doctor", "iter": iter, "restored_steps": b.len() }));
+            tx.log("doctor_auto_revert", serde_json::json!({ "iter": iter, "restored_steps": b.len() }));
             lines = b;
             editor.user(format!(
                 "你上一批改动导致**目标丢失**，系统已自动还原到上一个达标版本（{} 步）。\
@@ -584,9 +584,7 @@ pub(super) async fn doctor_repair(
         // 记录真实发送给医生的整段 prompt（含逐步 trace），便于复盘 & 迭代上下文压缩
         tx.log(
             "doctor_request",
-            serde_json::json!({
-                "agent": "doctor",
-                "iter": iter,
+            serde_json::json!({                "iter": iter,
                 "objective": if objective_minimize { "minimize" } else { "fix" },
                 "reached": diag.reached,
                 "prompt": prompt.clone(),
@@ -658,7 +656,7 @@ pub(super) async fn doctor_repair(
             let script_before = lines.clone();
             tx.log(
                 "doctor_edit",
-                serde_json::json!({ "agent": "doctor", "iter": iter, "tool": primary.name.clone(), "reason": reason, "thinking": text.clone(), "args": primary.arguments.clone(), "script_before": script_before }),
+                serde_json::json!({ "iter": iter, "tool": primary.name.clone(), "reason": reason, "thinking": text.clone(), "args": primary.arguments.clone(), "script_before": script_before }),
             );
 
             match op {
@@ -710,7 +708,7 @@ pub(super) async fn doctor_repair(
                         Some(new) => {
                             lines = new;
                             did_reexplore = true;
-                            tx.log("doctor_edit_applied", serde_json::json!({ "agent": "doctor", "iter": iter, "tool": "reexplore", "script_after": lines.clone() }));
+                            tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": "reexplore", "script_after": lines.clone() }));
                             editor.tool_result(primary.call_id.as_str(), format!("已活体重探并拼接，脚本现 {} 行。请 run 验证是否到达目标。", lines.len()));
                         }
                         None => {
@@ -725,14 +723,14 @@ pub(super) async fn doctor_repair(
                 }
                 EditOp::Finish { reason } => {
                     editor.tool_result(primary.call_id.as_str(), "收到收尾请求，系统再诊断一次兜底校验。");
-                    tx.log("doctor_finish", serde_json::json!({ "agent": "doctor", "iter": iter, "reason": reason }));
+                    tx.log("doctor_finish", serde_json::json!({ "iter": iter, "reason": reason }));
                     go_finish = true;
                     break;
                 }
             }
             // 走到这里 = 文本编辑(删/改/插)成功落地（失败/越界已 continue、reexplore/run/finish 已 break）：
             // 记录变更后脚本全貌，与 doctor_edit 的 script_before 对照。
-            tx.log("doctor_edit_applied", serde_json::json!({ "agent": "doctor", "iter": iter, "tool": primary.name.clone(), "script_after": lines.clone() }));
+            tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": primary.name.clone(), "script_after": lines.clone() }));
         }
 
         // 收尾：再诊断一次确认是否真达标
