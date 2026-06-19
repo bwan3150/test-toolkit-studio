@@ -20,7 +20,7 @@ use crate::{AiConfig, ControlAction, ExecutionResult, LlmReply, LlmSession, Para
 
 use super::super::execution::device::exec;
 use super::super::execution::script::write_script;
-use super::super::perception::{capture, Perceived};
+use super::super::perception::Perceived;
 use super::super::transcript::Transcript;
 use super::doctor;
 use super::flow::{brief, friendly, paint, parse_desc_json, DriveCtx};
@@ -98,7 +98,8 @@ pub async fn verify_and_repair(
         replay_no += 1;
         eprintln!();
         eprintln!("  {}", paint(tty, "1;36", &format!("▶ 第 {} 次稳定回放（重启净化中…）", replay_no)));
-        let (reached, _k, _failed, _err) = goal_probe(ctx, params, script_path, case, &lines, &marker, true).await;
+        // 用 diagnose 跑（与诊断同格式、同样把逐步成败/截图/页面结构记进 conversation.json）
+        let reached = doctor::diagnose(tx, ctx, params, script_path, case, &lines, &marker, "verify_stability", replay_no, true).await.reached;
         if reached {
             streak += 1;
             report.stability_passes = streak;
@@ -127,7 +128,14 @@ pub async fn verify_and_repair(
     let _ = write_script(script_path, case, &lines);
     tx.log(
         "verify_end",
-        serde_json::json!({ "passed": report.passed, "reached": report.reached, "repairs": report.repairs, "final_steps": report.final_steps, "stability_passes": report.stability_passes }),
+        serde_json::json!({
+            "passed": report.passed,
+            "reached": report.reached,
+            "repairs": report.repairs,
+            "final_steps": report.final_steps,
+            "stability_passes": report.stability_passes,
+            "final_script": lines.clone(),
+        }),
     );
 
     let summary = if report.passed {
@@ -163,54 +171,6 @@ async fn ask_goal_marker(sess: &mut LlmSession, tx: &mut Transcript, lines: &[St
     tx.log("goal_marker", serde_json::json!({ "content": reply.clone() }));
     let obj = parse_desc_json(&reply)?;
     Some(obj["goal_marker"].as_str().unwrap_or("").trim().to_string())
-}
-
-/// 回放探针：回放 lines（去掉结尾"关闭"步，否则关了就看不到目标页）并判定是否到达目标。
-/// 返回 (是否到达, 失败步号k, 失败步文本, 错误)。verbose=true 逐步打印（像 tke run）。
-/// - 某步执行失败 → reached=false，k=该步号
-/// - 全部跑完但目标标志没出现 → reached=false，k=最后（从尾部续接修复）
-/// - 到达目标 → reached=true
-async fn goal_probe(
-    ctx: &DriveCtx<'_>,
-    params: &Arc<Params>,
-    script_path: &Path,
-    case: &str,
-    lines: &[String],
-    marker: &str,
-    verbose: bool,
-) -> (bool, usize, String, String) {
-    let tty = std::io::stderr().is_terminal();
-    let check = strip_trailing_close(lines);
-    if check.is_empty() {
-        return (false, 0, String::new(), "空脚本".into());
-    }
-    let _ = write_script(script_path, case, &check);
-    reset_state(ctx.device, &check).await;
-    let result = do_replay(params, script_path, verbose).await;
-    match result {
-        Ok(r) if r.success => {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let reached = marker.is_empty()
-                || matches!(capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await, Ok(p) if page_contains(&p, marker));
-            if verbose {
-                if reached {
-                    eprintln!("    {}  {}", paint(tty, "32", "✓ 到达目标"), brief(marker, 40));
-                } else {
-                    eprintln!("    {}  目标标志未出现：{}", paint(tty, "31", "✗ 未达目标"), brief(marker, 40));
-                }
-            }
-            if reached {
-                (true, 0, String::new(), String::new())
-            } else {
-                (false, check.len(), "（目标标志未出现）".into(), format!("脚本跑完但未到达目标标志「{}」", marker))
-            }
-        }
-        Ok(r) => {
-            let k = r.steps.iter().position(|s| !s.success).unwrap_or_else(|| r.steps.len().saturating_sub(1));
-            (false, k, check.get(k).cloned().unwrap_or_default(), r.error.unwrap_or_else(|| "未知错误".into()))
-        }
-        Err(e) => (false, 0, String::new(), e.to_string()),
-    }
 }
 
 /// 回放一遍：verbose=true 逐步流式打印（像 tke run）。

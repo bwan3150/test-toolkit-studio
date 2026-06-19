@@ -48,12 +48,16 @@ struct DiagStep {
     err: Option<String>,
     /// 该步执行后页面的元素列表（渲染 trace 时普通步截断、失败步/终点步给全量）
     page_full: String,
+    /// 该步标注截图路径（落盘产物，写入 conversation.json 供复盘）
+    screenshot: Option<String>,
+    /// 该步页面结构文件路径
+    xml: Option<String>,
 }
 
 /// 一次诊断结果
-struct Diagnosis {
+pub(super) struct Diagnosis {
     /// 是否真到达目标(脚本全跑通 且 目标标志出现)
-    reached: bool,
+    pub(super) reached: bool,
     steps: Vec<DiagStep>,
     /// 第一个失败步的下标(0-based)；None=全跑通
     fail_idx: Option<usize>,
@@ -155,18 +159,27 @@ fn build_doctor_tools(prompts: &PromptSet) -> Vec<LlmTool> {
 
 /// 诊断回放：整脚本跑一遍(去结尾「关闭」步)，**每步留下页面**，产出富 trace + 是否到达目标。
 /// 靠 ScriptRunner 一次带产物的回放就逐步落盘 screenshots/page，回放后离线逐步解析 + OCR 重建。
-async fn diagnose(
+///
+/// 同时把**结构化执行轨迹**记进 conversation.json（事件类型 = `phase`）：本轮跑的完整脚本、
+/// 逐步成败/错误/截图/页面结构路径/页面元素、是否到达目标——格式与探索阶段对称，供事无巨细复盘。
+/// phase 区分阶段：诊断用 "doctor_diagnose"、稳定性测试用 "verify_stability"。
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn diagnose(
+    tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
     script_path: &Path,
     case: &str,
     lines: &[String],
     marker: &str,
+    phase: &str,
+    iter: usize,
     verbose: bool,
 ) -> Diagnosis {
     let tty = std::io::stderr().is_terminal();
     let check = strip_trailing_close(lines);
     if check.is_empty() {
+        tx.log(phase, serde_json::json!({ "agent": "doctor", "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
         return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into() };
     }
     let _ = write_script(script_path, case, &check);
@@ -200,12 +213,13 @@ async fn diagnose(
     let result = match result {
         Ok(r) => r,
         Err(e) => {
+            tx.log(phase, serde_json::json!({ "agent": "doctor", "iter": iter, "script": check, "reached": false, "note": format!("回放出错：{}", e), "steps": [] }));
             return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: format!("回放出错：{}", e) };
         }
     };
     let run_dir = result.run_dir.clone().map(PathBuf::from).unwrap_or_else(|| log_root.clone());
 
-    // 离线逐步重建页面(结构 + OCR)
+    // 离线逐步重建页面(结构 + OCR)，并记下每步产物路径
     let mut steps: Vec<DiagStep> = Vec::with_capacity(result.steps.len());
     for st in &result.steps {
         let mut full_txt = String::new();
@@ -221,12 +235,15 @@ async fn diagnose(
                 full_txt = render_element_list(&els, &none);
             }
         }
+        let abs = |rel: &Option<String>| rel.as_ref().map(|r| run_dir.join(r).to_string_lossy().to_string());
         steps.push(DiagStep {
             no: st.index + 1,
             line: st.command.clone(),
             ok: st.success,
             err: st.error.clone(),
             page_full: full_txt,
+            screenshot: abs(&st.screenshot),
+            xml: abs(&st.xml),
         });
     }
 
@@ -259,6 +276,29 @@ async fn diagnose(
             eprintln!("    {}  {}", paint(tty, "31", "✗ 未达目标"), brief(&note, 70));
         }
     }
+
+    // 结构化执行轨迹进 conversation.json：本轮完整脚本 + 逐步成败/错误/截图/页面结构/页面元素 + 结论
+    tx.log(
+        phase,
+        serde_json::json!({
+            "agent": "doctor",
+            "iter": iter,
+            "script": check.clone(),
+            "reached": reached,
+            "fail_step": fail_idx.map(|k| k + 1),
+            "marker": marker,
+            "note": note.clone(),
+            "steps": steps.iter().map(|s| serde_json::json!({
+                "step": s.no,
+                "line": friendly(&s.line),
+                "ok": s.ok,
+                "error": s.err,
+                "screenshot": s.screenshot,
+                "xml": s.xml,
+                "page": s.page_full,
+            })).collect::<Vec<_>>(),
+        }),
+    );
     Diagnosis { reached, steps, fail_idx, note }
 }
 
@@ -517,7 +557,7 @@ pub(super) async fn doctor_repair(
     for iter in 1..=MAX_DOCTOR_ITERS {
         eprintln!();
         eprintln!("  {}", paint(tty, "1;36", &format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter)));
-        let diag = diagnose(ctx, params, script_path, case, &lines, marker, true).await;
+        let diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
 
         // 维护 best + 删坏自动还原
         if diag.reached {
@@ -614,9 +654,11 @@ pub(super) async fn doctor_repair(
                 .or_else(|| text.as_deref().map(|s| brief(s, 180)).filter(|s| !s.is_empty()))
                 .unwrap_or_else(|| "（未说明理由）".to_string());
             eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ {}", primary.name)), say, toks);
+            // 编辑前脚本全貌（变更后由各 arm 记 doctor_edit_applied）
+            let script_before = lines.clone();
             tx.log(
                 "doctor_edit",
-                serde_json::json!({ "agent": "doctor", "iter": iter, "tool": primary.name.clone(), "reason": reason, "thinking": text.clone(), "args": primary.arguments.clone() }),
+                serde_json::json!({ "agent": "doctor", "iter": iter, "tool": primary.name.clone(), "reason": reason, "thinking": text.clone(), "args": primary.arguments.clone(), "script_before": script_before }),
             );
 
             match op {
@@ -668,6 +710,7 @@ pub(super) async fn doctor_repair(
                         Some(new) => {
                             lines = new;
                             did_reexplore = true;
+                            tx.log("doctor_edit_applied", serde_json::json!({ "agent": "doctor", "iter": iter, "tool": "reexplore", "script_after": lines.clone() }));
                             editor.tool_result(primary.call_id.as_str(), format!("已活体重探并拼接，脚本现 {} 行。请 run 验证是否到达目标。", lines.len()));
                         }
                         None => {
@@ -687,13 +730,16 @@ pub(super) async fn doctor_repair(
                     break;
                 }
             }
+            // 走到这里 = 文本编辑(删/改/插)成功落地（失败/越界已 continue、reexplore/run/finish 已 break）：
+            // 记录变更后脚本全貌，与 doctor_edit 的 script_before 对照。
+            tx.log("doctor_edit_applied", serde_json::json!({ "agent": "doctor", "iter": iter, "tool": primary.name.clone(), "script_after": lines.clone() }));
         }
 
         // 收尾：再诊断一次确认是否真达标
         if go_finish {
             eprintln!();
             eprintln!("  {}", paint(tty, "1;36", "▶ 收尾兜底诊断（重启净化中…）"));
-            let final_diag = diagnose(ctx, params, script_path, case, &lines, marker, true).await;
+            let final_diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
             if final_diag.reached {
                 let shorter = best.as_ref().map(|b| lines.len() < b.len()).unwrap_or(true);
                 if shorter {

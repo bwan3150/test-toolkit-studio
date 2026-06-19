@@ -138,10 +138,12 @@ impl AgentRunner {
 
         // —— 再验证：回放提炼后的脚本，失败让 AI 续接修复，连过 2 次才算稳定 ——
         // 仅当探索**达成且未被中断**时才验证：脚本没完成就别去验证一个半成品。
+        // result_script_lines：最终落盘的完整脚本（验证后可能更短）；用于 run_end 完整记录。
+        let mut result_script_lines = final_lines.clone();
         let verified = if opts.verify && outcome.success && !outcome.aborted {
             // 回放产物（标注截图/页面结构）落在 run_dir/verify 下，便于复盘哪步怎么错
             let verify_log = run_dir.join("verify");
-            let (_final_lines, rep) = verify::verify_and_repair(
+            let (verified_lines, rep) = verify::verify_and_repair(
                 &mut sess,
                 &opts.ai,
                 &prompts,
@@ -154,6 +156,9 @@ impl AgentRunner {
                 final_lines.clone(),
             )
             .await;
+            if !verified_lines.is_empty() {
+                result_script_lines = verified_lines;
+            }
             Some(rep)
         } else {
             None
@@ -178,6 +183,7 @@ impl AgentRunner {
                 "rounds": outcome.rounds,
                 "steps": outcome.steps.len(),
                 "script": script_path.to_string_lossy(),
+                "final_script": result_script_lines,
                 "model": sess.model(),
                 "prompt_tokens": total_prompt,
                 "completion_tokens": total_completion,
@@ -185,7 +191,7 @@ impl AgentRunner {
                 "elements_created": outcome.created.clone(),
                 "elements_updated": outcome.updated.clone(),
                 "verify": verified.as_ref().map(|r| serde_json::json!({
-                    "ran": r.ran, "passed": r.passed, "repairs": r.repairs
+                    "ran": r.ran, "passed": r.passed, "repairs": r.repairs, "final_steps": r.final_steps
                 })),
             }),
         );
