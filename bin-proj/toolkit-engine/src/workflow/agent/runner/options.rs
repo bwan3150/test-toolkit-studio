@@ -41,6 +41,10 @@ pub struct VerifyReport {
     pub created: Vec<String>,
     /// 修复阶段更新描述的元素差异行
     pub updated: Vec<String>,
+    /// 脚本医生（独立会话）消耗的输入 token（探索会话外，需并入总量统计）
+    pub extra_prompt: i64,
+    /// 脚本医生（独立会话）消耗的输出 token
+    pub extra_completion: i64,
 }
 
 /// AgentRunner 结果

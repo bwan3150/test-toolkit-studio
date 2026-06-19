@@ -1,6 +1,7 @@
 // 【编排】AgentRunner：装配各子模块（提示词/会话/感知/执行/记忆/日志）并驱动循环
 // 本文件只做"装配 + 收尾"，循环逻辑在 flow.rs。
 
+pub mod doctor;
 pub mod flow;
 pub mod options;
 pub mod verify;
@@ -142,12 +143,13 @@ impl AgentRunner {
             let verify_log = run_dir.join("verify");
             let (_final_lines, rep) = verify::verify_and_repair(
                 &mut sess,
+                &opts.ai,
                 &mut tx,
                 &ctx,
                 &opts.params,
                 &script_path,
                 &opts.case,
-                Some(&verify_log),
+                Some(verify_log.as_path()),
                 final_lines.clone(),
             )
             .await;
@@ -160,7 +162,12 @@ impl AgentRunner {
         let overall_success = outcome.success && stable.unwrap_or(true);
 
         // —— log.json(ExecutionResult，与 run 同构) ——
-        let (total_prompt, total_completion) = sess.total_usage();
+        // 总 token = 探索会话(含活体重探复用的同一会话) + 脚本医生独立会话(report.extra_*)
+        let (mut total_prompt, mut total_completion) = sess.total_usage();
+        if let Some(r) = &verified {
+            total_prompt += r.extra_prompt;
+            total_completion += r.extra_completion;
+        }
         tx.log(
             "run_end",
             serde_json::json!({
