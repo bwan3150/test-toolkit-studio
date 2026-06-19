@@ -32,7 +32,7 @@ use super::super::execution::script::write_script;
 use super::super::perception::{capture, match_known, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, fmt_tokens, friendly, paint, DriveCtx};
+use super::flow::{brief, fmt_tokens, friendly, paint, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 
@@ -67,6 +67,8 @@ pub(super) struct Diagnosis {
     fail_idx: Option<usize>,
     /// 一句话结论(给医生 & CLI)
     note: String,
+    /// 脚本跑完后的最终页面元素（渲染文本），供医生 finish 时对照用户需求做终点校验
+    final_page: String,
 }
 
 impl Diagnosis {
@@ -83,6 +85,38 @@ impl Diagnosis {
             s.push('\n');
         }
         s
+    }
+
+    /// 页面访问/重复分析（给反思官判冗余）：按每步页面内容分组，标出哪些步落在**完全相同**的页面、
+    /// 各页被访问几次。同一页被反复访问 = 很可能在原地打转/绕路，即使指令本身不重复也算冗余。
+    pub(super) fn page_groups(&self) -> String {
+        use std::collections::HashMap;
+        // 页面内容 → 首个出现的步号（代表）+ 命中的步号列表
+        let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+        let mut index: HashMap<&str, usize> = HashMap::new();
+        for st in &self.steps {
+            let key = st.page_full.trim();
+            if key.is_empty() {
+                continue;
+            }
+            if let Some(&gi) = index.get(key) {
+                groups[gi].1.push(st.no);
+            } else {
+                index.insert(key, groups.len());
+                groups.push((st.page_full.clone(), vec![st.no]));
+            }
+        }
+        let mut out = String::new();
+        for (gi, (page, steps)) in groups.iter().enumerate() {
+            let head = top_lines(page, 3).replace('\n', " ");
+            let dup = if steps.len() > 1 {
+                format!("（步 {} 落在**完全相同**的页面，访问 {} 次 ← 疑似原地打转/绕路）", steps.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(","), steps.len())
+            } else {
+                format!("（步 {}）", steps[0])
+            };
+            out.push_str(&format!("页面#{}: {}  {}\n", gi + 1, head, dup));
+        }
+        out
     }
 }
 
@@ -228,7 +262,7 @@ pub(super) async fn diagnose(
     let check = strip_trailing_close(lines);
     if check.is_empty() {
         tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
-        return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into() };
+        return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into(), final_page: String::new() };
     }
     let _ = write_script(script_path, case, &check);
     reset_state(ctx.device, &check).await;
@@ -262,7 +296,7 @@ pub(super) async fn diagnose(
         Ok(r) => r,
         Err(e) => {
             tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": format!("回放出错：{}", e), "steps": [] }));
-            return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: format!("回放出错：{}", e) };
+            return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: format!("回放出错：{}", e), final_page: String::new() };
         }
     };
     let run_dir = result.run_dir.clone().map(PathBuf::from).unwrap_or_else(|| log_root.clone());
@@ -298,14 +332,21 @@ pub(super) async fn diagnose(
     let fail_idx = result.steps.iter().position(|s| !s.success);
 
     // 目标标志校验：全跑通才有意义(失败步中断时设备停在错页)。等渲染稳定后取一帧实时页面。
+    // 同时把这帧最终页面渲染出来存 final_page，供医生 finish 时做"对照用户原话需求"的终点校验。
+    let mut final_page = String::new();
     let reached = if result.success {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        if marker.is_empty() {
-            true
-        } else {
-            matches!(capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await, Ok(p) if page_contains(&p, marker))
+        match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
+            Ok(p) => {
+                let none = vec![None; p.elements.len()];
+                final_page = render_element_list(&p.elements, &none, &ctx.prompts.message("explorer", "element_tag"));
+                marker.is_empty() || page_contains(&p, marker)
+            }
+            Err(_) => marker.is_empty(),
         }
     } else {
+        // 失败中断：最终页取最后一步的页面
+        final_page = steps.last().map(|s| s.page_full.clone()).unwrap_or_default();
         false
     };
 
@@ -345,7 +386,7 @@ pub(super) async fn diagnose(
             })).collect::<Vec<_>>(),
         }),
     );
-    Diagnosis { reached, steps, fail_idx, note }
+    Diagnosis { reached, steps, fail_idx, note, final_page }
 }
 
 /// 取文本前 n 行（每页元素列表可能很长，逐步展示时截断防 token 爆炸）
@@ -562,6 +603,7 @@ pub(super) async fn doctor_repair(
 
     let mut stagnation = 0usize; // 连续「没改动且没达标」次数
     let mut pending: Option<PendingReselect> = None; // reexplore 定位后暂存的实时页面（供 pick）
+    let mut finish_rechecks = 0usize; // finish 终点校验被打回的次数（防无限）
 
     for iter in 1..=params.harness.doctor_iters {
         if super::interrupt::aborted() {
@@ -792,6 +834,30 @@ pub(super) async fn doctor_repair(
             eprintln!("  {}", paint(tty, "1;36", "▶ 收尾兜底诊断（重启净化中…）"));
             let final_diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
             if final_diag.reached {
+                // 终点校验：把最终页面 + 用户原话需求发给医生判断是否真到对的地方（marker 命中只是文本，
+                // 这里再做一层语义判断，防"标志在但页面不对"）。被打回有上限，避免无限。
+                if finish_rechecks < 2 && !final_diag.final_page.trim().is_empty() {
+                    finish_rechecks += 1;
+                    let check = render(&prompts.message("doctor", "finish_check"), &[("case", case), ("page", &final_diag.final_page)]);
+                    tx.log("llm_message", serde_json::json!({ "iter": iter, "content": check.clone() }));
+                    editor.user(check);
+                    if let Ok(LlmReply::Text(t)) = editor.next().await {
+                        let (pt, ct) = editor.last_usage();
+                        report.extra_prompt += pt;
+                        report.extra_completion += ct;
+                        tx.log("finish_check", serde_json::json!({ "iter": iter, "content": t.clone() }));
+                        if let Some(obj) = parse_desc_json(&t) {
+                            if obj["done"].as_bool() == Some(false) {
+                                let why = obj["reason"].as_str().unwrap_or("最终页面不符合用户需求").to_string();
+                                eprintln!("  {}", paint(tty, "33", &format!("终点校验未通过：{}", brief(&why, 80))));
+                                let m = format!("终点校验未通过：{}。脚本最终到的页面不是用户要的目的地，请继续修（看下面的最新 trace）。", why);
+                                tx.log("llm_message", serde_json::json!({ "iter": iter, "content": m.clone() }));
+                                editor.user(m);
+                                continue; // 不收尾，继续修
+                            }
+                        }
+                    }
+                }
                 tx.log("doctor_reached", serde_json::json!({ "iter": iter, "steps": lines.len() }));
                 return Some(lines);
             }

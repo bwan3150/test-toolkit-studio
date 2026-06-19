@@ -126,6 +126,7 @@ pub(super) async fn optimize(
         return None;
     }
     let trace = diag.trace_lines();
+    let pages = diag.page_groups(); // 页面访问/重复分析：同一页反复=绕路，助判冗余
     let numbered: String = lines.iter().enumerate().map(|(i, l)| format!("{}. {}", i + 1, friendly(l))).collect::<Vec<_>>().join("\n");
 
     let platform = Platform::from_device(Some(ctx.device));
@@ -133,7 +134,7 @@ pub(super) async fn optimize(
     let mut sess = LlmSession::new(ai, system, Vec::new()).ok()?;
     let prompt = render(
         &prompts.message("reflector", "optimize"),
-        &[("case", case), ("marker", marker), ("trace", &trace), ("script", &numbered)],
+        &[("case", case), ("marker", marker), ("trace", &trace), ("pages", &pages), ("script", &numbered)],
     );
     tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
     sess.user(prompt);

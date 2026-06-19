@@ -84,6 +84,8 @@ pub struct DriveCtx<'a> {
     pub max_rounds: usize,
     /// 提示词集合：运行时消息模板（每轮页面/各类提示/截图等）从这里取，可外部覆盖
     pub prompts: &'a PromptSet,
+    /// 用户原始测试用例（finish 终点校验：对照原话需求判断是否真到对的地方）
+    pub case: &'a str,
 }
 
 /// 循环结果
@@ -158,6 +160,7 @@ pub async fn drive(
     let mut steps: Vec<StepResult> = Vec::new();
     let mut round = 0usize;
     let mut llm_calls = 0usize;
+    let mut finish_rechecks = 0usize; // finish 终点校验被打回的次数（防无限）
     let mut finish: Option<(bool, String)> = None;
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
@@ -434,7 +437,33 @@ pub async fn drive(
             match action {
                 AgentAction::Finish { success, reason, script_name: sn } => {
                     // 回执 finish 的 tool_result，避免后续 desc 生成轮因悬空 tool_call 被 API 拒
-                    sess.tool_result(primary.call_id.as_str(), "已结束探索");
+                    sess.tool_result(primary.call_id.as_str(), "结束前先做终点校验");
+                    // —— 终点校验：把当前页面 + 用户原话需求发回模型，判断是否真到对的地方 ——
+                    //   只对"声称成功"的 finish 校验；被打回有上限，避免无限循环。
+                    if success && finish_rechecks < 2 && perceive_err.is_none() {
+                        finish_rechecks += 1;
+                        let check = render(
+                            &ctx.prompts.message("explorer", "finish_check"),
+                            &[("case", ctx.case), ("page", &list_text)],
+                        );
+                        tx.log("llm_message", serde_json::json!({ "round": round, "content": check.clone() }));
+                        sess.user(check);
+                        if let Ok(LlmReply::Text(t)) = sess.next().await {
+                            let (pt, ct) = sess.last_usage();
+                            tx.log("finish_check", serde_json::json!({ "round": round, "content": t.clone(), "prompt_tokens": pt, "completion_tokens": ct }));
+                            if let Some(obj) = parse_desc_json(&t) {
+                                if obj["done"].as_bool() == Some(false) {
+                                    let why = obj["reason"].as_str().unwrap_or("尚未真正达成").to_string();
+                                    eprintln!("  {}", paint(tty, "33", &format!("终点校验未通过：{}", brief(&why, 80))));
+                                    sess.user(format!(
+                                        "终点校验未通过：{}。当前页面并非用户要的最终目的地，请继续操作直到真正达成需求，再 finish。",
+                                        why
+                                    ));
+                                    continue; // 不结束，回到内层循环继续修
+                                }
+                            }
+                        }
+                    }
                     // 结果在末尾统一 section 展示，这里只记录与收尾
                     tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone(), "script_name": sn.clone() }));
                     script_name = sn;

@@ -112,6 +112,7 @@ impl AgentRunner {
             ocr: opts.ocr.as_ref(),
             max_rounds,
             prompts: &prompts,
+            case: &opts.case,
         };
         let tty = std::io::stderr().is_terminal();
         let mut outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;

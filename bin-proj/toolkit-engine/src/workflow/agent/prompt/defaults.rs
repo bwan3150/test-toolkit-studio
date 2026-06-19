@@ -51,6 +51,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("explorer", "screenshot_provided") => include_str!("builtin/messages/explorer/screenshot_provided.md"),
         ("explorer", "screenshot_failed") => include_str!("builtin/messages/explorer/screenshot_failed.md"),
         ("explorer", "desc_pass") => include_str!("builtin/messages/explorer/desc_pass.md"),
+        ("explorer", "finish_check") => include_str!("builtin/messages/explorer/finish_check.md"),
         // —— doctor：脚本医生消息 ——
         ("doctor", "trace") => include_str!("builtin/messages/doctor/trace.md"),
         ("doctor", "trace_objective_minimize") => include_str!("builtin/messages/doctor/trace_objective_minimize.md"),
@@ -59,6 +60,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("doctor", "auto_revert") => include_str!("builtin/messages/doctor/auto_revert.md"),
         ("doctor", "nudge_use_tool") => include_str!("builtin/messages/doctor/nudge_use_tool.md"),
         ("doctor", "finish_pushback") => include_str!("builtin/messages/doctor/finish_pushback.md"),
+        ("doctor", "finish_check") => include_str!("builtin/messages/doctor/finish_check.md"),
         // —— verify：验证编排消息 ——
         ("verify", "goal_marker") => include_str!("builtin/messages/verify/goal_marker.md"),
         // —— reflector：探索反思官 ——
