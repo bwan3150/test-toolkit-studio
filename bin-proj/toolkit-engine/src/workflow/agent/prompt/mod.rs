@@ -83,4 +83,23 @@ impl PromptSet {
             .and_then(|d| source::tool_override_role(d, role, name))
             .unwrap_or_else(|| defaults::default_tool_description_role(role, name).trim().to_string())
     }
+
+    /// 取某角色某**运行时消息模板**（含 {占位符}）：目录覆盖优先（<dir>/messages/<role>/<name>.md），
+    /// 否则内置默认。返回的模板已 trim（结构性空白由调用点用 `render` 填充时控制）。
+    pub fn message(&self, role: &str, name: &str) -> String {
+        self.prompts_dir
+            .as_ref()
+            .and_then(|d| source::message_override(d, role, name))
+            .unwrap_or_else(|| defaults::default_message(role, name).trim().to_string())
+    }
+}
+
+/// 渲染消息模板：把 `{key}` 依次替换为给定值（沿用 {device}/{platform} 那套，无外部模板引擎）。
+/// 只替换显式给出的 key，模板里其它 `{...}`（如 JSON 示例 `{"goal_marker":"..."}`）原样保留。
+pub fn render(tmpl: &str, vars: &[(&str, &str)]) -> String {
+    let mut s = tmpl.to_string();
+    for (k, v) in vars {
+        s = s.replace(&format!("{{{}}}", k), v);
+    }
+    s
 }

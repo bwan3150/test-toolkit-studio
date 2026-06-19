@@ -22,6 +22,7 @@ use super::super::execution::device::exec;
 use super::super::execution::script::write_script;
 use super::super::perception::Perceived;
 use super::super::transcript::Transcript;
+use super::super::prompt::{render, PromptSet};
 use super::doctor;
 use super::flow::{brief, friendly, paint, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
@@ -36,7 +37,7 @@ pub(super) const MAX_REPAIRS: usize = 6; // 活体重探尝试上限（兜底，
 pub async fn verify_and_repair(
     sess: &mut LlmSession,
     ai: &AiConfig,
-    prompts: &super::super::prompt::PromptSet,
+    prompts: &PromptSet,
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
@@ -55,7 +56,7 @@ pub async fn verify_and_repair(
     let _ = verify_log; // 诊断回放会反复进行，产物落点由 doctor 内部管理
 
     // 目标标志：问探索会话(它见过目标页)要一段"只有真到达目标才出现的独特文字"
-    let marker = ask_goal_marker(sess, tx, &lines, case).await.unwrap_or_default();
+    let marker = ask_goal_marker(prompts, sess, tx, &lines, case).await.unwrap_or_default();
 
     tx.log(
         "verify_start",
@@ -150,20 +151,14 @@ pub async fn verify_and_repair(
 }
 
 /// 问探索会话要一段「目标标志」文本：只有真正到达目标时最终页面才会出现的独特文字。
-async fn ask_goal_marker(sess: &mut LlmSession, tx: &mut Transcript, lines: &[String], case: &str) -> Option<String> {
+async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Transcript, lines: &[String], case: &str) -> Option<String> {
     let listing = lines
         .iter()
         .enumerate()
         .map(|(i, l)| format!("{}. {}", i + 1, friendly(l)))
         .collect::<Vec<_>>()
         .join("\n");
-    sess.user(format!(
-        "探索已达成目标。接下来我要**自动验证并修复**这个回放脚本：反复回放并校验是否真到达目标。\
-         请给我一段**只有真正达成目标时最终页面上才会出现**的独特文字（从你看到的目标页里挑，\
-         如文档标题/编号/SKU），用于自动校验是否到达目标，**务必准确、独特**。\n已执行步骤：\n{}\n\n\
-         只返回 JSON：{{\"goal_marker\":\"...\"}}，不要调用工具、不要 ``` 围栏或多余文字。整体测试目标：{}",
-        listing, case
-    ));
+    sess.user(render(&prompts.message("verify", "goal_marker"), &[("listing", &listing), ("case", case)]));
     let reply = match sess.next().await {
         Ok(LlmReply::Text(t)) => t,
         _ => return None,

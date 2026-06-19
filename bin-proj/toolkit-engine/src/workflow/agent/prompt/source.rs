@@ -38,6 +38,12 @@ pub fn tool_override_role(dir: &Path, role: &str, name: &str) -> Option<String> 
     read_optional(&path)
 }
 
+/// 取某角色某运行时消息模板的覆盖：<dir>/messages/<role>/<name>.md
+/// （运行时喂给 AI 的消息模板，如每轮页面消息、诊断 trace、各类提示；含 {占位符}）
+pub fn message_override(dir: &Path, role: &str, name: &str) -> Option<String> {
+    read_optional(&dir.join("messages").join(role).join(format!("{}.md", name)))
+}
+
 /// 文件存在则读取（非空），否则 None；读取失败也返回 None（容错，回落默认）
 fn read_optional(path: &Path) -> Option<String> {
     if !path.is_file() {

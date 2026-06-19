@@ -31,6 +31,35 @@ pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
     }
 }
 
+/// 某角色某运行时消息模板的内置默认（外部 <prompts_dir>/messages/<role>/<name>.md 可覆盖）。
+/// 这些是**运行时喂给 AI 的消息**（每轮页面、各类提示、诊断 trace、活体重探开场白等），含 {占位符}。
+pub fn default_message(role: &str, name: &str) -> &'static str {
+    match (role, name) {
+        // —— explorer：探索 agent 每轮 / 控制类消息 ——
+        ("explorer", "element_tag") => include_str!("builtin/messages/explorer/element_tag.md"),
+        ("explorer", "page_round") => include_str!("builtin/messages/explorer/page_round.md"),
+        ("explorer", "page_round_visual") => include_str!("builtin/messages/explorer/page_round_visual.md"),
+        ("explorer", "hint_perceive_error") => include_str!("builtin/messages/explorer/hint_perceive_error.md"),
+        ("explorer", "hint_no_progress") => include_str!("builtin/messages/explorer/hint_no_progress.md"),
+        ("explorer", "hint_revisits") => include_str!("builtin/messages/explorer/hint_revisits.md"),
+        ("explorer", "nudge_use_tool") => include_str!("builtin/messages/explorer/nudge_use_tool.md"),
+        ("explorer", "screenshot_provided") => include_str!("builtin/messages/explorer/screenshot_provided.md"),
+        ("explorer", "screenshot_failed") => include_str!("builtin/messages/explorer/screenshot_failed.md"),
+        ("explorer", "desc_pass") => include_str!("builtin/messages/explorer/desc_pass.md"),
+        // —— doctor：脚本医生消息 ——
+        ("doctor", "trace") => include_str!("builtin/messages/doctor/trace.md"),
+        ("doctor", "trace_objective_minimize") => include_str!("builtin/messages/doctor/trace_objective_minimize.md"),
+        ("doctor", "trace_objective_fix") => include_str!("builtin/messages/doctor/trace_objective_fix.md"),
+        ("doctor", "reexplore_preamble") => include_str!("builtin/messages/doctor/reexplore_preamble.md"),
+        ("doctor", "auto_revert") => include_str!("builtin/messages/doctor/auto_revert.md"),
+        ("doctor", "nudge_use_tool") => include_str!("builtin/messages/doctor/nudge_use_tool.md"),
+        ("doctor", "finish_pushback") => include_str!("builtin/messages/doctor/finish_pushback.md"),
+        // —— verify：验证编排消息 ——
+        ("verify", "goal_marker") => include_str!("builtin/messages/verify/goal_marker.md"),
+        _ => "",
+    }
+}
+
 /// 脚本医生（编辑器 agent）各工具默认 description
 fn default_doctor_tool_description(name: &str) -> &'static str {
     match name {

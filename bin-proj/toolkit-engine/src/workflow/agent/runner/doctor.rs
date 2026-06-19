@@ -25,7 +25,7 @@ use crate::{AiConfig, LlmReply, LlmSession, LlmTool, LlmToolCall, Params, Platfo
 
 use super::super::execution::script::write_script;
 use super::super::perception::{capture, render_element_list};
-use super::super::prompt::PromptSet;
+use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
 use super::flow::{brief, drive, fmt_tokens, friendly, paint, DriveCtx};
 use super::options::VerifyReport;
@@ -232,7 +232,7 @@ pub(super) async fn diagnose(
                     }
                 }
                 let none = vec![None; els.len()];
-                full_txt = render_element_list(&els, &none);
+                full_txt = render_element_list(&els, &none, &ctx.prompts.message("explorer", "element_tag"));
             }
         }
         let abs = |rel: &Option<String>| rel.as_ref().map(|r| run_dir.join(r).to_string_lossy().to_string());
@@ -319,40 +319,31 @@ fn indent_page(s: &str) -> String {
 /// 把诊断结果渲染成给医生的提示词：编号脚本 + **本轮诊断回放每一步都带「该步执行后页面」**
 /// （失败步/终点页给完整元素列表，其余步给前若干个），让医生看清整条脚本实际走了哪条路。
 /// 历史轮次的 trace 由 `user_trace` 自动省略页面详情，故这里可以放心给全（每轮只有一份完整 trace 在上下文里）。
-fn render_trace_prompt(case: &str, marker: &str, diag: &Diagnosis, objective_minimize: bool) -> String {
+fn render_trace_prompt(prompts: &PromptSet, case: &str, marker: &str, diag: &Diagnosis, objective_minimize: bool) -> String {
     const PER_STEP_ELEMENTS: usize = 8; // 普通步每步展示的元素条数（失败步/终点页给全量）
     let last_no = diag.steps.last().map(|s| s.no).unwrap_or(0);
-    let mut s = String::new();
-    s.push_str(&format!("整体测试目标：{}\n目标标志（只有真到达目标才会出现的文字）：「{}」\n\n", case, marker));
-    s.push_str(&format!("【本轮诊断结论】{}\n\n", diag.note));
-    s.push_str(
-        "【本轮逐步 trace】每步 = 步号 · 成败 · .tks 行，其下「页面」是该步执行后实际所处页面的元素。\
-         请顺着每步页面看这条脚本到底走了哪条路——报错那一步往往不是根因，更早某步「页面没变/走到了错页面」才是真正跑偏处。\n\n",
-    );
+    // 逐步 trace 文本（数据，按规则组装；模板只提供外层说明文字）
+    let mut steps = String::new();
     for st in &diag.steps {
         let mark = if st.ok { "✓" } else { "✗" };
         let err = st.err.as_deref().map(|e| format!("  ← 错误：{}", brief(e, 70))).unwrap_or_default();
-        s.push_str(&format!("{}. {} {}{}\n", st.no, mark, friendly(&st.line), err));
+        steps.push_str(&format!("{}. {} {}{}\n", st.no, mark, friendly(&st.line), err));
         if !st.page_full.trim().is_empty() {
             // 失败步、以及"全跑通但没到目标"时的终点步 → 完整页面；其余步 → 前若干个元素
             let critical = !st.ok || (diag.fail_idx.is_none() && !diag.reached && st.no == last_no);
             let page = if critical { st.page_full.clone() } else { top_lines(&st.page_full, PER_STEP_ELEMENTS) };
-            s.push_str(&format!("    页面：\n{}\n", indent_page(&page)));
+            steps.push_str(&format!("    页面：\n{}\n", indent_page(&page)));
         }
     }
-
-    if objective_minimize {
-        s.push_str(
-            "\n当前脚本**已能到达目标**。现在请尽量**删冗余步**让它最短（重复点击、走错绕回、点了没用的空步、\
-             连续多余滑动）。每删完用 run 确认仍到达目标；删错导致目标丢失会被自动还原。确认没有更多可删时 finish。",
-        );
+    let objective = if objective_minimize {
+        prompts.message("doctor", "trace_objective_minimize")
     } else {
-        s.push_str(
-            "\n请结合每步页面判断**真正开始跑偏的那一步**（常比报错步更早），用最小改动修好它：能删冗余/改一行参数就别 reexplore，\
-             确实需要点全新元素/走全新路径才 reexplore。改完用 run 看效果。",
-        );
-    }
-    s
+        prompts.message("doctor", "trace_objective_fix")
+    };
+    render(
+        &prompts.message("doctor", "trace"),
+        &[("case", case), ("marker", marker), ("note", &diag.note), ("steps", &steps), ("objective", &objective)],
+    )
 }
 
 // ===================== 行编辑 + 校验 =====================
@@ -456,11 +447,9 @@ async fn reexplore_segment(
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
-    let preamble = format!(
-        "现在进入【活体重探】。已把脚本前 {} 步重新跑了一遍、设备停在那之后的页面。\
-         脚本医生判断从第 {} 步起要重新导航（原因：{}）。请从**当前页面**出发，重新找到正确做法、\
-         把剩下的测试目标走完，最后 finish。（只产出从这里往后的操作，前 {} 步会自动保留。）整体测试目标：{}",
-        cut, d, reason, cut, case
+    let preamble = render(
+        &ctx.prompts.message("doctor", "reexplore_preamble"),
+        &[("cut", &cut.to_string()), ("d", &d.to_string()), ("reason", reason), ("case", case)],
     );
     explore_sess.user(preamble);
     let tail = match drive(explore_sess, tx, ctx, false, "重探·").await {
@@ -571,16 +560,12 @@ pub(super) async fn doctor_repair(
             eprintln!("  {}", paint(tty, "33", &format!("上一批改动导致目标丢失，已自动还原到上一个达标版本（{} 步）", b.len())));
             tx.log("doctor_auto_revert", serde_json::json!({ "iter": iter, "restored_steps": b.len() }));
             lines = b;
-            editor.user(format!(
-                "你上一批改动导致**目标丢失**，系统已自动还原到上一个达标版本（{} 步）。\
-                 这个版本已经能到达目标。如果你是在删冗余，请换更保守的删法（一次删更少）或直接 finish。",
-                lines.len()
-            ));
+            editor.user(render(&prompts.message("doctor", "auto_revert"), &[("steps", &lines.len().to_string())]));
             continue;
         }
 
         let objective_minimize = best.is_some();
-        let prompt = render_trace_prompt(case, marker, &diag, objective_minimize);
+        let prompt = render_trace_prompt(prompts, case, marker, &diag, objective_minimize);
         // 记录真实发送给医生的整段 prompt（含逐步 trace），便于复盘 & 迭代上下文压缩
         tx.log(
             "doctor_request",
@@ -623,7 +608,7 @@ pub(super) async fn doctor_repair(
                 LlmReply::Text(t) => {
                     let b = brief(&t, 160);
                     eprintln!("  {}  {}", if b.is_empty() { "（未调用工具）".into() } else { b }, toks);
-                    editor.user("请只通过调用一个编辑工具（delete_lines / replace_line / insert_after / reexplore）或 run / finish 来操作。");
+                    editor.user(prompts.message("doctor", "nudge_use_tool"));
                     continue;
                 }
                 LlmReply::ToolCalls { text, calls } => (text, calls),
@@ -751,7 +736,7 @@ pub(super) async fn doctor_repair(
                 report.hit_iter_limit = false;
                 return best;
             }
-            editor.user("你 finish 了，但重新诊断**仍未到达目标**。请继续修（看下面的最新 trace）。");
+            editor.user(prompts.message("doctor", "finish_pushback"));
             // 落到下一轮
         }
 

@@ -68,6 +68,7 @@ use crate::Platform;
 use super::super::execution;
 use super::super::interaction::read_user_line;
 use super::super::perception::{capture, match_known, render_element_list, Perceived};
+use super::super::prompt::{render, PromptSet};
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
 
@@ -81,6 +82,8 @@ pub struct DriveCtx<'a> {
     /// OCR 增强来源（None=不跑 OCR，行为同此前）
     pub ocr: Option<&'a OcrSource>,
     pub max_rounds: usize,
+    /// 提示词集合：运行时消息模板（每轮页面/各类提示/截图等）从这里取，可外部覆盖
+    pub prompts: &'a PromptSet,
 }
 
 /// 循环结果
@@ -213,7 +216,7 @@ pub async fn drive(
         let mut known_names: Vec<Option<String>> =
             known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
 
-        let list_text = render_element_list(&p.elements, &known);
+        let list_text = render_element_list(&p.elements, &known, &ctx.prompts.message("explorer", "element_tag"));
 
         // 结构签名：只用真实元素的结构文本（排除易变的 OCR 伪元素如时钟、坐标），
         // 用于判断"上一步操作有没有让页面变化"以及是否在多页间打转。
@@ -288,48 +291,42 @@ pub async fn drive(
                 "perceive_error": perceive_err.clone(),
             }),
         );
+        // 提示（卡住/无变化/打转）：模板无前导换行，这里统一加 \n 作分隔
         let hint = if perceive_err.is_some() {
-            "\n（注意：未能采集到页面——若是 web/iOS 且尚未打开目标，请先调用 launch 打开应用/网址）".to_string()
+            format!("\n{}", ctx.prompts.message("explorer", "hint_perceive_error"))
         } else if no_progress >= 1 {
-            format!(
-                "\n（重要：你上一步操作后，页面与操作前**完全相同**（已连续 {} 次）。\
-                 **不要再重复同一个操作**！可能原因：①它触发了下载（下载不会改变页面，做一次就够，别再点）；\
-                 ②它无效或需要换元素/换方式；③在弹层中打开了；\
-                 ④若刚在滑动：很可能**方向反了**（想往下看内容要用 up，不是 down）或已到顶/到底——换个方向试。\
-                 请据此换一个**完全不同**的目标/做法，或 request_screenshot 看截图，或如果该步已完成就继续下一步/finish。）",
-                no_progress
-            )
+            format!("\n{}", render(&ctx.prompts.message("explorer", "hint_no_progress"), &[("n", &no_progress.to_string())]))
         } else if revisits >= 2 {
-            "\n（系统提示：你回到了之前出现过的页面、在多页间打转。请停止重复无效操作，换一条**完全不同**的路径。）".to_string()
+            format!("\n{}", ctx.prompts.message("explorer", "hint_revisits"))
         } else {
             String::new()
         };
         // 标签页信息（web 多标签时），人和 AI 对称可见
         let tabs_text = crate::format_tabs(&p.tabs);
         let tabs_block = if tabs_text.is_empty() { String::new() } else { format!("{}\n", tabs_text) };
+        let round_s = round.to_string();
         // 卡得更死（连续 2 次没变 / 多页打转）→ 进入**纯视觉**：元素列表已经帮不上忙了，
         // 只发当前截图、不再带元素/OCR，让 AI 直接看图用 click_visual 决策（避免被无效元素继续误导）。
         let go_visual = (no_progress >= 2 || revisits >= 3) && perceive_err.is_none();
         if go_visual {
-            let prompt = format!(
-                "{}【第 {} 轮】基于元素列表已经无法推进（连续卡住）。现在**只给你当前页面截图**，\
-                 请直接看图判断下一步该点哪里，用 click_visual 给出像素位置（region=[x1,y1,x2,y2] 或 x,y）。{}",
-                tabs_block, round, hint
+            let prompt = render(
+                &ctx.prompts.message("explorer", "page_round_visual"),
+                &[("tabs", &tabs_block), ("round", &round_s), ("hint", &hint)],
             );
             if let Err(e) = sess.user_with_image(&prompt, &p.shot_path) {
                 // 截图失败兜底：退回发元素列表
                 tx.log("auto_screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
-                sess.user_page(format!(
-                    "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已收录」的只是命名提示——要操作它才复用其 name；**该不该点只看当前目标，别因它已收录就偏向它/绕路点它**。请调用一个工具决定下一步。",
-                    tabs_block, round, list_text, hint
+                sess.user_page(render(
+                    &ctx.prompts.message("explorer", "page_round"),
+                    &[("tabs", &tabs_block), ("round", &round_s), ("elements", &list_text), ("hint", &hint)],
                 ));
             } else {
                 tx.log("auto_screenshot", serde_json::json!({ "round": round }));
             }
         } else {
-            sess.user_page(format!(
-                "{}【第 {} 轮】当前页面元素（[序号] 描述 @(中心坐标)）：\n{}{}\n标有「已收录」的只是命名提示——要操作它才复用其 name；**该不该点只看当前目标，别因它已收录就偏向它/绕路点它**。请调用一个工具决定下一步。",
-                tabs_block, round, list_text, hint
+            sess.user_page(render(
+                &ctx.prompts.message("explorer", "page_round"),
+                &[("tabs", &tabs_block), ("round", &round_s), ("elements", &list_text), ("hint", &hint)],
             ));
         }
         // 轮与轮之间空一行，分隔更清楚
@@ -399,7 +396,7 @@ pub async fn drive(
                     let say = if b.is_empty() { "（未调用工具，已提示其用工具或 finish）".to_string() } else { b };
                     eprintln!("  {}  {}", say, toks);
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
-                    sess.user("请只通过调用工具来操作；若已完成或无法继续，请调用 finish。");
+                    sess.user(ctx.prompts.message("explorer", "nudge_use_tool"));
                     continue;
                 }
                 LlmReply::ToolCalls { text, calls } => (text, calls),
@@ -448,14 +445,14 @@ pub async fn drive(
                 AgentAction::RequestScreenshot { reason } => {
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
-                    match sess.user_with_image("当前页面截图——请直接看图判断该点哪里，用 click_visual 给像素位置（既然要看图，说明元素列表已不够用，以图为准）：", &p.shot_path) {
+                    match sess.user_with_image(&ctx.prompts.message("explorer", "screenshot_provided"), &p.shot_path) {
                         Ok(()) => tx.log(
                             "screenshot_sent",
                             serde_json::json!({ "round": round, "screenshot": p.shot_path.to_string_lossy() }),
                         ),
                         Err(e) => {
                             tx.log("screenshot_error", serde_json::json!({ "round": round, "error": e.to_string() }));
-                            sess.user("（截图附加失败，请基于元素列表继续判断）");
+                            sess.user(ctx.prompts.message("explorer", "screenshot_failed"));
                         }
                     }
                     continue; // 不前进，重新询问
@@ -591,11 +588,9 @@ pub async fn drive(
         if aborted {
             eprintln!("{}", paint(tty, "33", "退出中：正在为新建元素生成描述…（再次 Ctrl+C 强制退出）"));
         }
-        sess.user(format!(
-            "探索结束。请根据本次探索中这些元素被操作后的实际效果，为每个元素写一句准确的 desc\
-             （描述该元素本身是什么、点了会怎样，与本次测试过程无关）。\
-             只返回一个 JSON 对象，键为元素名、值为其 desc；不要调用工具、不要 ``` 围栏或多余文字。\n元素：{}",
-            created.join("、")
+        sess.user(render(
+            &ctx.prompts.message("explorer", "desc_pass"),
+            &[("elements", &created.join("、"))],
         ));
         if let Ok(LlmReply::Text(t)) = sess.next().await {
             tx.log("desc_pass", serde_json::json!({ "content": t.clone() }));

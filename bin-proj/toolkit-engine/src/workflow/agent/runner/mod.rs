@@ -105,6 +105,7 @@ impl AgentRunner {
             artifacts: &artifacts,
             ocr: opts.ocr.as_ref(),
             max_rounds,
+            prompts: &prompts,
         };
         let outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
         let end_time = chrono::Local::now().to_rfc3339();
