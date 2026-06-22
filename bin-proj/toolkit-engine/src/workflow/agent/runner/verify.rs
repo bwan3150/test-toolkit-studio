@@ -238,10 +238,20 @@ pub(super) fn strip_trailing_close(lines: &[String]) -> Vec<String> {
     v
 }
 
-/// 当前页面（含 OCR 伪元素）的文本里是否包含目标标志（不分大小写）
+/// 当前页面是否包含目标标志。两点都很关键，否则会把"明明已达成"误判为未达目标、
+/// 进而诱导医生删掉正确步骤：
+/// 1) 空格/大小写不敏感——与滚动查找 page_has_text 一致（OCR 出来的文字常多/少空格，
+///    "DATASHEET-KSL00240-01072025" 在页面里可能渲染成 "DATASHEET - KSL00240 - 01072025"）；
+/// 2) 兼查标签页标题与 URL——打开 PDF/新标签这类目标的独特标志(文件名/标题)常只活在 tab 上、
+///    不在页面 DOM/OCR 元素里，只查 elements 会漏判（本案 marker 正是 PDF 标签页标题）。
 pub(super) fn page_contains(p: &Perceived, marker: &str) -> bool {
-    let m = marker.to_lowercase();
-    p.elements.iter().any(|e| e.to_ai_text().to_lowercase().contains(&m))
+    let norm = |s: &str| -> String { s.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect() };
+    let needle = norm(marker);
+    if needle.is_empty() {
+        return false;
+    }
+    p.elements.iter().any(|e| norm(&e.to_ai_text()).contains(&needle))
+        || p.tabs.iter().any(|t| norm(&t.title).contains(&needle) || norm(&t.url).contains(&needle))
 }
 
 /// 重启净化：关掉目标后**重新启动**，把状态刷新到干净初始态，再开始回放。
