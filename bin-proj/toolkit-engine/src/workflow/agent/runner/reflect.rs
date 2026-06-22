@@ -147,33 +147,67 @@ pub(super) async fn optimize(
     report.extra_completion += ct;
     tx.log("reflector_optimize", serde_json::json!({ "content": reply.clone() }));
 
-    // 解析 {"removable":[步号,...]}
+    // 解析 {"removable":[步号], "scroll_merges":[{from,to,target,direction}]}
     let obj = parse_desc_json(&reply)?;
-    let mut removable: Vec<usize> = obj["removable"]
+    let removable: std::collections::HashSet<usize> = obj["removable"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|n| n as usize).collect())
+        .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|n| n as usize).filter(|&i| i >= 1 && i <= lines.len()).collect())
         .unwrap_or_default();
-    removable.retain(|&i| i >= 1 && i <= lines.len());
-    removable.sort_unstable_by(|a, b| b.cmp(a)); // 从大到小删，不影响更小编号
-    removable.dedup();
-    if removable.is_empty() {
-        eprintln!("  {}", paint(tty, "2", "反思官：当前路径已无可删冗余"));
+    // 滚动合并：把第 from..=to 步（应全是定向滑动盲滑）替换成一条 `滚动查找 ["target", 方向]`，
+    // 把"不可复现的连续盲滑"换成"可靠地滚到目标文字出现"。只接受 from..to 全是滑动步的合并。
+    struct Merge { from: usize, to: usize, line: String }
+    let mut merges: Vec<Merge> = Vec::new();
+    if let Some(arr) = obj["scroll_merges"].as_array() {
+        for m in arr {
+            let from = m["from"].as_u64().unwrap_or(0) as usize;
+            let to = m["to"].as_u64().unwrap_or(0) as usize;
+            let target = m["target"].as_str().unwrap_or("").trim().to_string();
+            let direction = m["direction"].as_str().unwrap_or("up").trim();
+            if from < 1 || to < from || to > lines.len() || target.is_empty() {
+                continue;
+            }
+            // 校验 from..=to 全是定向滑动步（避免误把点击合并掉）
+            let all_swipes = lines[from - 1..to].iter().all(|l| l.trim_start().starts_with("定向滑动"));
+            if !all_swipes {
+                continue;
+            }
+            let dir_cn = match direction {
+                "down" => "下",
+                "left" => "左",
+                "right" => "右",
+                _ => "上",
+            };
+            merges.push(Merge { from, to, line: format!("滚动查找 [\"{}\", {}]", target, dir_cn) });
+        }
+    }
+    if removable.is_empty() && merges.is_empty() {
+        eprintln!("  {}", paint(tty, "2", "反思官：当前路径已无可删冗余/可合并的盲滑"));
         return None;
     }
 
-    let mut new = lines.to_vec();
-    for idx in &removable {
-        new.remove(idx - 1);
+    // 按原行号重建脚本：merge 的 from 处输出滚动查找、跳过其余；removable 跳过；其它保留
+    let mut new: Vec<String> = Vec::with_capacity(lines.len());
+    let mut i = 0usize; // 0-based
+    while i < lines.len() {
+        let step = i + 1; // 1-based
+        if let Some(m) = merges.iter().find(|m| m.from == step) {
+            new.push(m.line.clone());
+            i = m.to; // 跳过 from..=to（to 为 1-based，对应 0-based 索引 to，即下一个未处理项）
+            continue;
+        }
+        if !removable.contains(&step) {
+            new.push(lines[i].clone());
+        }
+        i += 1;
     }
     if new == lines {
         return None;
     }
-    let mut nums: Vec<usize> = removable.iter().copied().collect();
-    nums.sort_unstable();
     eprintln!(
-        "  {}  删第 {} 步（{} 步 → {} 步），交医生复检",
+        "  {}  删 {} 步 + 合并 {} 段盲滑（{} 步 → {} 步），交医生复检",
         paint(tty, "1;36", "◇ 反思官优化路径"),
-        nums.iter().map(|n| n.to_string()).collect::<Vec<_>>().join("/"),
+        removable.len(),
+        merges.len(),
         lines.len(),
         new.len()
     );
