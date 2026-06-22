@@ -165,8 +165,10 @@ pub async fn apply(
             ))
         }
         AgentAction::SwipeToFind { target, direction } => {
-            // 探索时就用"可复现的滚动找文字"（落 滚动查找 指令，回放与探索滚动位置一致）：
-            // 朝 direction 循环滚一屏、采页面查 target 文字是否出现，最多 15 次。
+            // 探索时就用"可复现的滚动找文字"（落 滚动查找 指令，与回放 execute_scroll_find 同款逻辑）：
+            // 小步滚（1/3 屏，防一次跨过目标）+ 每步采页查文字（含 OCR，否则 DATA SHEET 这类图片文字漏）
+            // + 忽略空格匹配（"Datasheet" 命中 "DATA SHEET-..."）。
+            use crate::engines::ocr::enrich_with_ocr;
             use crate::{Fetcher, Refresh, RefreshOptions, Workarea};
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
             let from = Point::new(w as i32 / 2, h as i32 / 2);
@@ -174,17 +176,26 @@ pub async fn apply(
                 "left" | "right" => w as i32,
                 _ => h as i32,
             };
-            let dist = dim / 2; // 每次滚半屏（与回放 execute_scroll_find 的力度一致取向）
+            let dist = (dim / 3).max(200);
             let workarea = Workarea::for_device(Some(device))?;
             let fetcher = Fetcher::new();
-            let tgt = target.to_lowercase();
+            let ocr_src = crate::utils::params::ocr_source();
+            let needle: String = target.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
             let mut found = false;
-            const MAX: usize = 15;
+            const MAX: usize = 30;
             for i in 0..=MAX {
-                // 先采页面查文字是否已可见（先查再滚，避免滑过头）
                 if Refresh::new(device.to_string())?.run(RefreshOptions::default()).await.is_ok() {
-                    if let Ok(els) = fetcher.fetch_elements_from_file(&workarea.ui_tree_path()) {
-                        if els.iter().any(|e| e.to_ai_text().to_lowercase().contains(&tgt)) {
+                    if let Ok(mut els) = fetcher.fetch_elements_from_file(&workarea.ui_tree_path()) {
+                        if let Some(src) = &ocr_src {
+                            if let Ok(bytes) = std::fs::read(workarea.screenshot_path()) {
+                                let _ = enrich_with_ocr(&mut els, &bytes, src).await;
+                            }
+                        }
+                        let hit = els.iter().any(|e| {
+                            let hay: String = e.to_ai_text().to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
+                            hay.contains(&needle)
+                        });
+                        if hit {
                             found = true;
                             break;
                         }
@@ -198,7 +209,7 @@ pub async fn apply(
                     ControlAction::SwipeDir { from, direction: direction.clone(), distance: dist, duration_ms: 300 },
                 )
                 .await?;
-                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
             if !found {
                 return Err(TkeError::ScriptExecuteError(format!("滚动查找：滚动后仍未出现「{}」", target)));

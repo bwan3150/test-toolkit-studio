@@ -159,33 +159,58 @@ impl<'a> CommandExecutor<'a> {
         if params.len() < 2 {
             return Err(TkeError::InvalidArgument("滚动查找命令需要目标文字和方向: [\"文字\", 方向]".to_string()));
         }
-        let target = ParamExtractor::extract_text(&params[0])?;
+        let target = ParamExtractor::extract_text(&params[0])?.to_lowercase();
         let direction = ParamExtractor::extract_direction(&params[1])?;
-        const MAX_SCROLLS: usize = 15; // 滚动次数上限，防到底还找不到时无限滚
-        let from = Point::new(640, 400); // 屏幕中心附近起滑（execute_action 会夹紧坐标）
+        // 每次滚动幅度取小（约 1/3 屏）+ 每滚一步都查，避免一次滚一整屏把目标从两次检查之间跨过去
+        // （目标"路过时看到了、却查不到"就是滚太大跨过的）。次数上限相应放大。
+        const MAX_SCROLLS: usize = 30;
+        let (sw, sh) = image::image_dimensions(self.workarea.screenshot_path()).unwrap_or((1080, 1920));
+        let from = Point::new(sw as i32 / 2, sh as i32 / 2);
+        let dim = if matches!(direction.as_str(), "left" | "right") { sw as i32 } else { sh as i32 };
+        let step = (dim / 3).max(200);
+        let ocr_src = crate::utils::params::ocr_source();
         for i in 0..=MAX_SCROLLS {
             if crate::utils::interrupt::aborted() {
                 return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
             }
-            // 先看目标是否已可见（先检查再滚，避免目标已在视口还多滚一屏滑过头）
+            // 先查目标是否已在当前视口（含 OCR：DATA SHEET 这类图片/图标文字只有 OCR 能识别，
+            // 只查 xml 结构文字会漏——这正是"滚动查找某些文字死活找不到"的根因）。
             self.controller.capture_ui_state(self.workarea).await?;
             self.trace.captured = true;
-            if self.recognizer.find_element_by_text(&target).is_ok() {
+            if self.page_has_text(&target, ocr_src.as_ref()).await {
                 info!("滚动查找：目标「{}」已可见（滚动 {} 次）", target, i);
                 return Ok(());
             }
             if i == MAX_SCROLLS {
                 break;
             }
-            // 没找到 → 朝指定方向滚一屏，等滚动惯性 + 懒加载稳定
             execute_action(
                 &*self.controller,
-                ControlAction::SwipeDir { from, direction: direction.clone(), distance: 650, duration_ms: 300 },
+                ControlAction::SwipeDir { from, direction: direction.clone(), distance: step, duration_ms: 300 },
             )
             .await?;
-            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         Err(TkeError::ElementNotFound(format!("滚动查找：滚动 {} 次后页面仍未出现「{}」", MAX_SCROLLS, target)))
+    }
+
+    /// 当前页面（结构元素 + OCR 文字）是否含 target（不分大小写）。OCR 源为 None 时只查结构。
+    async fn page_has_text(&self, target_lower: &str, ocr: Option<&crate::engines::ocr::OcrSource>) -> bool {
+        let mut els = match crate::Fetcher::new().fetch_elements_from_file(&self.workarea.ui_tree_path()) {
+            Ok(e) => e,
+            Err(_) => return false,
+        };
+        if let Some(src) = ocr {
+            if let Ok(bytes) = std::fs::read(self.workarea.screenshot_path()) {
+                let _ = crate::engines::ocr::enrich_with_ocr(&mut els, &bytes, src).await;
+            }
+        }
+        // 忽略空格匹配："Datasheet" 应能命中 OCR 的 "DATA SHEET - KSL00229"（空格/大小写不敏感）
+        let needle: String = target_lower.chars().filter(|c| !c.is_whitespace()).collect();
+        els.iter().any(|e| {
+            let hay: String = e.to_ai_text().to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
+            hay.contains(&needle)
+        })
     }
 
     /// 输入文本（execute_action 的 Input 已含「点击聚焦 + 等待键盘 + 输入」）
