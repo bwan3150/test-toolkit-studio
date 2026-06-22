@@ -64,6 +64,10 @@ impl<'a> TargetResolver<'a> {
         const MAX_TRIES: usize = 12;
         let mut last_err = None;
         for attempt in 0..MAX_TRIES {
+            // 中断检查点：Ctrl+C 后不再继续 ~6s 的重试，立即返回（否则按了得等这步重试/超时跑完）
+            if crate::utils::interrupt::aborted() {
+                return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
+            }
             if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
                 error!("刷新UI状态失败: {}", e);
                 return Err(e);
