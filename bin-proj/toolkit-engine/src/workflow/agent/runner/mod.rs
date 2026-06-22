@@ -36,8 +36,9 @@ impl AgentRunner {
         // 脚本输出目录确保存在（.tks 文件名由 AI 在 finish 起、落库时去重）
         std::fs::create_dir_all(&opts.script_dir).ok();
 
-        // 元素库（参数层查表；缺省落脚本目录下的 element.json，整目录脚本共享一份库）
-        let element_path: PathBuf = opts
+        // 正式元素库（参数层查表；缺省落脚本目录下的 element.json，整目录脚本共享一份库）。
+        // **探索/修复/验证全程不直接写它**——只在脚本定稿(稳定通过)后，把最终脚本实际用到的元素提交进来。
+        let real_element_path: PathBuf = opts
             .params
             .element_lib()
             .unwrap_or_else(|| opts.script_dir.join("element.json"));
@@ -49,6 +50,9 @@ impl AgentRunner {
         let log_root = opts.params.log.clone().unwrap_or_else(|| opts.script_dir.clone());
         let artifacts = RunArtifacts::create(&log_root, &stem)?;
         let run_dir = artifacts.run_dir.clone();
+        // 临时元素库：本次运行隔离（run_dir 下）。探索/修复/验证全程都读写它——随便造、随便试，
+        // 不污染正式库；失败则连同 run_dir 一起丢弃、正式库纹丝不动；成功则把最终脚本用到的元素提交到正式库。
+        let element_path = run_dir.join("element.json");
         let conversation_path = run_dir.join("conversation.jsonl");
 
         let mut tx = Transcript::create(conversation_path.clone())?;
@@ -287,31 +291,16 @@ impl AgentRunner {
                 }
             }
         }
-        // 最终脚本实际引用的元素名（用于判定哪些新建元素是孤儿：失败重探残留 / 被 doctor 删步后没用上的）
+        // 防污染（临时库架构）：探索/修复全程只写临时库 element_path(run_dir 下)，正式库从未被碰。
+        //  - 成功（稳定通过）→ 把**最终脚本实际引用的元素**从临时库提交到正式库(连 img 一起)；临时库随 run_dir 留存复盘。
+        //  - 失败 → 删脚本；临时库随 run_dir 丢弃即可，正式库纹丝不动，无需任何回滚。
         let referenced = referenced_element_names(&result_script_lines);
-        // 防污染：
-        //  - 运行未成功（探索未达成 / 验证未通过）→ 既删脚本、也回滚**本次新建的全部元素**；
-        //  - 成功 → 只清掉本次新建但最终脚本**没引用**的孤儿（含失败重探残留），保留真正用到的。
-        let rolled_back = if !overall_success {
+        let display_created: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
+        let committed = if overall_success {
+            crate::tools::element::commit_elements(&element_path, &real_element_path, &display_created).unwrap_or(0)
+        } else {
             let _ = std::fs::remove_file(&script_path);
-            if !all_created.is_empty() {
-                crate::tools::element::remove_elements(&element_path, &all_created).unwrap_or(0)
-            } else {
-                0
-            }
-        } else {
-            let orphans: Vec<String> = all_created.iter().filter(|n| !referenced.contains(n.as_str())).cloned().collect();
-            if !orphans.is_empty() {
-                crate::tools::element::remove_elements(&element_path, &orphans).unwrap_or(0)
-            } else {
-                0
-            }
-        };
-        // 展示用：成功时只列最终脚本真正引用的新建元素（孤儿已清，不展示）
-        let display_created: Vec<String> = if overall_success {
-            all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect()
-        } else {
-            all_created.clone()
+            0
         };
         render_summary(
             outcome.success,
@@ -324,8 +313,8 @@ impl AgentRunner {
             total_prompt,
             total_completion,
             &display_created,
-            rolled_back,
-            &element_path,
+            committed,
+            &real_element_path,
         );
 
         Ok(AgentResult {
@@ -355,7 +344,7 @@ fn render_summary(
     tp: i64,
     tc: i64,
     created: &[String],
-    rolled_back: usize,
+    committed: usize,
     element_path: &Path,
 ) {
     use flow::{brief, fmt_tokens, paint};
@@ -403,27 +392,28 @@ fn render_summary(
     eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
     let overall = !aborted && success && verified.map(|r| r.passed).unwrap_or(true);
     if !overall {
-        // 运行未成功（未稳定通过）：脚本与本次新建元素都已清理，不留半成品、不污染
+        // 运行未成功：探索/修复全程只写临时库(随 run_dir 丢弃)，正式库从未被碰——天然不污染。
         eprintln!(
             "  {}",
-            paint(tty, "33", &format!("未稳定通过——脚本未保存，本次新建的 {} 个元素已清理（不留半成品、不污染元素库）", rolled_back))
+            paint(tty, "33", "未稳定通过——脚本未保存；本次元素只存在临时库（随运行目录丢弃），正式元素库未改动")
         );
         eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
         return;
     }
+    // 成功：最终脚本用到的元素已从临时库提交到正式库；desc 从正式库读
     let descs = read_descs(element_path, created);
     if created.is_empty() {
-        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "2", "（无）"));
+        eprintln!("  {}   {}", paint(tty, "2", "提交"), paint(tty, "2", "（无新元素）"));
     } else {
         let line_for = |c: &String| match descs.get(c) {
             Some(Some(d)) => format!("{} · {}", c, brief(d, 80)),
             _ => c.clone(),
         };
-        eprintln!("  {}   {}", paint(tty, "2", "新增"), paint(tty, "32", &line_for(&created[0])));
+        eprintln!("  {}   {}", paint(tty, "2", &format!("提交 {} 个", committed)), paint(tty, "32", &line_for(&created[0])));
         for c in &created[1..] {
             eprintln!("         {}", paint(tty, "32", &line_for(c)));
         }
-        eprintln!("  {}", paint(tty, "2", "（已新增，desc 据实际作用生成，请人工二次审核）"));
+        eprintln!("  {}", paint(tty, "2", "（最终脚本用到的元素已写入正式库，desc 据实际作用生成，请人工二次审核）"));
     }
     eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
 }

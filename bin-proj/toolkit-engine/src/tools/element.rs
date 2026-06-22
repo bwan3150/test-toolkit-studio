@@ -323,6 +323,56 @@ pub fn remove_elements(lib_path: &Path, names: &[String]) -> Result<usize> {
     Ok(removed)
 }
 
+/// 把临时库 `tmp_lib` 里指定 `names` 的元素（连同 img 模板文件）合并/提交到正式库 `real_lib`。
+/// 用于 harness 脚本定稿（稳定通过）后，**只把最终脚本实际用到的元素**沉淀进正式库——
+/// 探索/修复全程的试错垃圾元素都留在临时库、随 run_dir 丢弃，正式库永不被污染。返回提交个数。
+pub fn commit_elements(tmp_lib: &Path, real_lib: &Path, names: &[String]) -> Result<usize> {
+    if names.is_empty() {
+        return Ok(0);
+    }
+    let tmp: serde_json::Value = std::fs::read_to_string(tmp_lib)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({ "elements": {} }));
+    let mut real: serde_json::Value = match std::fs::read_to_string(real_lib) {
+        Ok(content) if !content.trim().is_empty() => serde_json::from_str(&content)
+            .map_err(|e| TkeError::InvalidArgument(format!("正式元素库解析失败 {}: {}", real_lib.display(), e)))?,
+        _ => serde_json::json!({ "elements": {} }),
+    };
+    if !real["elements"].is_object() {
+        real["elements"] = serde_json::json!({});
+    }
+    let tmp_dir = tmp_lib.parent().unwrap_or_else(|| Path::new("."));
+    let real_dir = real_lib.parent().unwrap_or_else(|| Path::new("."));
+    let mut n = 0usize;
+    for name in names {
+        let Some(entry) = tmp["elements"].get(name).cloned() else {
+            continue;
+        };
+        // img 模板文件相对库目录，路径保持不变，从临时库目录复制到正式库目录
+        if let Some(img_rel) = entry["img"].as_str() {
+            let src = tmp_dir.join(img_rel);
+            let dst = real_dir.join(img_rel);
+            if src.exists() {
+                if let Some(p) = dst.parent() {
+                    let _ = std::fs::create_dir_all(p);
+                }
+                let _ = std::fs::copy(&src, &dst);
+            }
+        }
+        real["elements"][name] = entry;
+        n += 1;
+    }
+    if n > 0 {
+        if let Some(p) = real_lib.parent() {
+            std::fs::create_dir_all(p).map_err(TkeError::IoError)?;
+        }
+        let pretty = serde_json::to_string_pretty(&real).map_err(TkeError::JsonError)?;
+        std::fs::write(real_lib, pretty).map_err(TkeError::IoError)?;
+    }
+    Ok(n)
+}
+
 /// OCR 通道写入方式（add_element_target 用）
 pub enum OcrChannel {
     /// 用显式文本（OCR 元素的识别文字）
