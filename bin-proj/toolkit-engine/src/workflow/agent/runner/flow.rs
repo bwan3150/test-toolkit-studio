@@ -166,10 +166,6 @@ pub async fn drive(
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
     let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
     let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
-    // 坏元素拉黑：点击某元素后页面没变或跳回旧页面 → 该元素很可能是误匹配的脏库元素
-    // （如旧 img/弱通道元素在本页误命中），把它名字拉黑：本轮起取消其"已收录"诱导 + 强标"别再点"。
-    let mut last_click_name: Option<String> = None; // 上一步点击/操作的元素名（滑动为 None）
-    let mut bad_elements: std::collections::HashSet<String> = std::collections::HashSet::new();
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -209,36 +205,20 @@ pub async fn drive(
             let _ = h.await;
         }
 
-        // 对照元素库：命中(结构/ocr)的标"已知"，让 AI 复用库名、不重复造
+        // 元素库对照：**只在内部用于落库时复用库名**（避免重复造名/库膨胀），**不再展示给 AI**。
+        // —— AI 每轮看到的是干净的纯页面元素，选择完全基于当前页面真实情况，不受历史库诱导（之前
+        //    "已收录"标注会诱导 AI 偏向点对口名字的脏库元素、反复跳错页）。命名复用挪到落库时机械去重。
         let platform = Platform::from_device(Some(ctx.device));
-        let mut known = match_known(&p.elements, platform, ctx.element_path);
-        // 坏元素抑制：本页命中的元素若已被拉黑（之前点它无效/跳回旧页面），取消其"已收录"标记
-        // （去掉诱导），并收集起来在提示里强标"别再点"——根治"被脏库元素反复诱导点击"的死循环。
-        let mut bad_here: Vec<(usize, String)> = Vec::new();
-        for (i, k) in known.iter_mut().enumerate() {
-            if let Some(h) = k {
-                if bad_elements.contains(&h.name) {
-                    bad_here.push((i, h.name.clone()));
-                    *k = None; // 去掉已收录诱导
-                }
-            }
-        }
+        let known = match_known(&p.elements, platform, ctx.element_path);
         let n_known = known.iter().filter(|k| k.is_some()).count();
         let n_unknown = p.elements.len() - n_known;
-        // 仅 name 的视图，供 apply 强制复用库名（rename 后会就地更新）
+        // 仅 name 的视图，供 apply 落库时复用库名（rename 后会就地更新）；AI 看不到
         let mut known_names: Vec<Option<String>> =
             known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
 
-        let mut list_text = render_element_list(&p.elements, &known, &ctx.prompts.message("explorer", "element_tag"));
-        // 坏元素强警告：本页出现了之前点击无效/跳回旧页面的元素，明确叫 AI 别再点
-        if !bad_here.is_empty() {
-            let items = bad_here.iter().map(|(i, n)| format!("[{}] {}", i, n)).collect::<Vec<_>>().join("、");
-            list_text.push_str(&format!(
-                "\n⚠ 以下元素之前点过**无效或把页面跳回了旧页面**（几乎肯定是误匹配的坏元素/错链接，比如点了它会跳回首页）：{}。\
-                 **绝对不要再点它们**；目标若真在本页，请点别的元素或继续滚动找正确入口。",
-                items
-            ));
-        }
+        // 干净页面：渲染时传全 None，不标任何"已收录"——AI 只看纯元素列表
+        let no_known = vec![None; p.elements.len()];
+        let list_text = render_element_list(&p.elements, &no_known, &ctx.prompts.message("explorer", "element_tag"));
 
         // 结构签名：只用真实元素的结构文本（排除易变的 OCR 伪元素如时钟、坐标），
         // 用于判断"上一步操作有没有让页面变化"以及是否在多页间打转。
@@ -252,21 +232,11 @@ pub async fn drive(
         );
         let unchanged = page_sigs.last() == Some(&struct_sig); // 与上一轮完全相同 → 上一步没生效
         let revisits = page_sigs.iter().rev().take(8).filter(|&&h| h == struct_sig).count();
-        let revisited_old = revisits >= 2; // 本页在最近出现过 → 上一步把我们带回了旧页面
         page_sigs.push(struct_sig);
         if unchanged {
             no_progress += 1;
         } else {
             no_progress = 0;
-        }
-        // 坏元素判定：上一步点了某元素，但页面没变 或 跳回了旧页面 → 这个元素很可能是误匹配的脏库
-        // 元素（旧 img/弱通道在本页误命中），点它要么无效要么把人带回首页。拉黑它，下面取消诱导+强标。
-        if let Some(name) = last_click_name.take() {
-            if unchanged || revisited_old {
-                if bad_elements.insert(name.clone()) {
-                    tx.log("bad_element", serde_json::json!({ "round": round, "name": name, "reason": if unchanged { "点击后页面无变化" } else { "点击后跳回旧页面" } }));
-                }
-            }
         }
         // 剔除"空滑"：上一步是滑动但页面纹丝未动（已到边界/没滚起来）——这种步无用，
         // 且回放时它往往会真的滚动，导致整段脚本滑过头到底部、错过目标元素。从脚本里删掉。
@@ -622,8 +592,6 @@ pub async fn drive(
                             lines.push(line.clone());
                             step_comments.push(comment.clone().unwrap_or_default());
                             last_was_swipe = is_swipe; // 记下这步是不是滑动，供下一轮判定空滑
-                            // 记下这步点击/操作的元素名（滑动等无元素操作为 None）——供下一轮判定坏元素
-                            last_click_name = if is_swipe { None } else { trace.element_name.clone() };
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
