@@ -158,6 +158,15 @@ impl Params {
         self.element_lib()
             .unwrap_or_else(|| PathBuf::from(DEFAULT_ELEMENT_PATHS[0]))
     }
+
+    /// 返回一个把元素库指向 `path` 的 Params 副本。
+    /// harness 用它让诊断/验证的回放（ScriptRunner）也读**临时库**——否则探索把元素落到临时库、
+    /// 回放却查正式库，会全部"元素未定义"。
+    pub fn with_element_lib(&self, path: PathBuf) -> Self {
+        let mut p = self.clone();
+        p.element = Some(path);
+        p
+    }
 }
 
 /// 供库层在缺省时复用的默认查找（与 Params 同一份常量），用于尚未持有 Params 的入口
