@@ -55,6 +55,10 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             distance: opt_i32(a, "distance"),
             amount: opt_str(a, "amount"),
         },
+        "swipe_to_find" => AgentAction::SwipeToFind {
+            target: req_str(a, "target")?,
+            direction: req_str(a, "direction")?,
+        },
         "back" => AgentAction::Back,
         "switch" => AgentAction::Switch { target: req_str(a, "target")? },
         "hide_keyboard" => AgentAction::HideKeyboard,

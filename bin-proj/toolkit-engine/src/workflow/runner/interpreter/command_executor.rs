@@ -152,6 +152,42 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::SwipeDir { from: from_point, direction, distance, duration_ms: duration }).await.map(|_| ())
     }
 
+    /// 滚动查找：朝指定方向滚动，直到目标文字在页面出现（可复现地"滚到目标可见"，
+    /// 替代固定距离盲滑——固定滑动受加载时机影响、回放与探索的滚动位置常不一致）。
+    /// 参数：[目标文字(Text), 方向(Direction)]。后面通常跟一条 click 点该目标。
+    pub async fn execute_scroll_find(&mut self, params: &[TksParam]) -> Result<()> {
+        if params.len() < 2 {
+            return Err(TkeError::InvalidArgument("滚动查找命令需要目标文字和方向: [\"文字\", 方向]".to_string()));
+        }
+        let target = ParamExtractor::extract_text(&params[0])?;
+        let direction = ParamExtractor::extract_direction(&params[1])?;
+        const MAX_SCROLLS: usize = 15; // 滚动次数上限，防到底还找不到时无限滚
+        let from = Point::new(640, 400); // 屏幕中心附近起滑（execute_action 会夹紧坐标）
+        for i in 0..=MAX_SCROLLS {
+            if crate::utils::interrupt::aborted() {
+                return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
+            }
+            // 先看目标是否已可见（先检查再滚，避免目标已在视口还多滚一屏滑过头）
+            self.controller.capture_ui_state(self.workarea).await?;
+            self.trace.captured = true;
+            if self.recognizer.find_element_by_text(&target).is_ok() {
+                info!("滚动查找：目标「{}」已可见（滚动 {} 次）", target, i);
+                return Ok(());
+            }
+            if i == MAX_SCROLLS {
+                break;
+            }
+            // 没找到 → 朝指定方向滚一屏，等滚动惯性 + 懒加载稳定
+            execute_action(
+                &*self.controller,
+                ControlAction::SwipeDir { from, direction: direction.clone(), distance: 650, duration_ms: 300 },
+            )
+            .await?;
+            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        }
+        Err(TkeError::ElementNotFound(format!("滚动查找：滚动 {} 次后页面仍未出现「{}」", MAX_SCROLLS, target)))
+    }
+
     /// 输入文本（execute_action 的 Input 已含「点击聚焦 + 等待键盘 + 输入」）
     pub async fn execute_input(&mut self, params: &[TksParam]) -> Result<()> {
         if params.len() < 2 {

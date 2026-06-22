@@ -32,6 +32,9 @@ pub enum AgentAction {
     /// 定向滑动（up/down/left/right），从屏幕中心滑动。
     /// amount=屏幕比例 full/half/quarter（推荐，免算像素）；distance=像素（兜底）
     SwipeDir { direction: String, distance: Option<i32>, amount: Option<String> },
+    /// 滚动查找：朝某方向滚动直到目标文字出现（可复现地"滚到目标可见"，回放与探索滚动位置一致）。
+    /// 替代"盲滑 N 次找东西"——目标在更下方就用 direction=up 滚动找它。落 .tks `滚动查找 ["文字", 方向]`。
+    SwipeToFind { target: String, direction: String },
     /// 返回
     Back,
     /// 切换标签/App：web=标签序号 或 用新标签打开 URL；移动端=切到目标 App 包名

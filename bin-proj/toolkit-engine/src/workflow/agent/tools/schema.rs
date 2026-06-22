@@ -112,6 +112,17 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
                 "required": ["direction"]
             }),
         },
+        ToolSchema {
+            name: "swipe_to_find",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string", "description": "要滚动找到的目标文字（页面上会出现的可见文字，如产品名/型号/标题，如 'T01 Pro' 或 'DATA SHEET'）" },
+                    "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "滚动方向。目标在更下方就用 up（向上滑=看下方内容）。" }
+                },
+                "required": ["target", "direction"]
+            }),
+        },
         ToolSchema { name: "back", schema: empty_schema() },
         ToolSchema {
             name: "switch",

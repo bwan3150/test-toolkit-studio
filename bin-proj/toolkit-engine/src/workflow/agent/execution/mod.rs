@@ -163,6 +163,54 @@ pub async fn apply(
                 None,
             ))
         }
+        AgentAction::SwipeToFind { target, direction } => {
+            // 探索时就用"可复现的滚动找文字"（落 滚动查找 指令，回放与探索滚动位置一致）：
+            // 朝 direction 循环滚一屏、采页面查 target 文字是否出现，最多 15 次。
+            use crate::{Fetcher, Refresh, RefreshOptions, Workarea};
+            let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
+            let from = Point::new(w as i32 / 2, h as i32 / 2);
+            let dim = match direction.as_str() {
+                "left" | "right" => w as i32,
+                _ => h as i32,
+            };
+            let dist = dim / 2; // 每次滚半屏（与回放 execute_scroll_find 的力度一致取向）
+            let workarea = Workarea::for_device(Some(device))?;
+            let fetcher = Fetcher::new();
+            let tgt = target.to_lowercase();
+            let mut found = false;
+            const MAX: usize = 15;
+            for i in 0..=MAX {
+                // 先采页面查文字是否已可见（先查再滚，避免滑过头）
+                if Refresh::new(device.to_string())?.run(RefreshOptions::default()).await.is_ok() {
+                    if let Ok(els) = fetcher.fetch_elements_from_file(&workarea.ui_tree_path()) {
+                        if els.iter().any(|e| e.to_ai_text().to_lowercase().contains(&tgt)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if i == MAX {
+                    break;
+                }
+                let _ = exec(
+                    device,
+                    ControlAction::SwipeDir { from, direction: direction.clone(), distance: dist, duration_ms: 300 },
+                )
+                .await?;
+                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            }
+            if !found {
+                return Err(TkeError::ScriptExecuteError(format!("滚动查找：滚动后仍未出现「{}」", target)));
+            }
+            let detail = format!("滚动找到「{}」", target);
+            let trace = ActionTrace { captured: false, points: vec![from], bounds: None, element_name: None };
+            Ok((
+                line(TksCommand::ScrollFind, vec![TksParam::Text(target.clone()), TksParam::Direction(direction.clone())]),
+                detail,
+                trace,
+                None,
+            ))
+        }
         AgentAction::Launch { target, activity } => {
             let detail = exec(
                 device,

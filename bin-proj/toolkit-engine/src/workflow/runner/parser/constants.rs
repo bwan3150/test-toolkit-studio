@@ -19,6 +19,7 @@ pub fn create_command_map() -> HashMap<String, TksCommand> {
     map.insert("等待".to_string(), TksCommand::Wait);
     map.insert("断言".to_string(), TksCommand::Assert);
     map.insert("切换".to_string(), TksCommand::Switch);
+    map.insert("滚动查找".to_string(), TksCommand::ScrollFind);
     map
 }
 

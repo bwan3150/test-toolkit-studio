@@ -21,6 +21,7 @@ pub enum TksCommand {
     Wait,             // 等待
     Assert,           // 断言
     Switch,           // 切换（web 标签 / App）
+    ScrollFind,       // 滚动查找（朝某方向滚动直到目标文字出现——可复现地"滚到目标可见"，替代固定距离盲滑）
 }
 
 impl TksCommand {
@@ -40,6 +41,7 @@ impl TksCommand {
             "等待" => Some(Self::Wait),
             "断言" => Some(Self::Assert),
             "切换" => Some(Self::Switch),
+            "滚动查找" => Some(Self::ScrollFind),
             _ => None,
         }
     }
