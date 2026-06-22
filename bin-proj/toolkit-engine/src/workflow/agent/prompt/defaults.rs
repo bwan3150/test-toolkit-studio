@@ -45,6 +45,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("explorer", "page_round") => include_str!("builtin/messages/explorer/page_round.md"),
         ("explorer", "page_round_visual") => include_str!("builtin/messages/explorer/page_round_visual.md"),
         ("explorer", "hint_perceive_error") => include_str!("builtin/messages/explorer/hint_perceive_error.md"),
+        ("explorer", "hint_after_close") => include_str!("builtin/messages/explorer/hint_after_close.md"),
         ("explorer", "hint_no_progress") => include_str!("builtin/messages/explorer/hint_no_progress.md"),
         ("explorer", "hint_revisits") => include_str!("builtin/messages/explorer/hint_revisits.md"),
         ("explorer", "nudge_use_tool") => include_str!("builtin/messages/explorer/nudge_use_tool.md"),

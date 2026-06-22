@@ -166,6 +166,7 @@ pub async fn drive(
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
     let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
     let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
+    let mut last_was_close = false; // 上一步是否是主动关闭/收尾（关 app/销毁会话）——下一轮空页面不催 launch
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -295,7 +296,10 @@ pub async fn drive(
         );
         // 提示（卡住/无变化/打转）：模板无前导换行，这里统一加 \n 作分隔
         let hint = if perceive_err.is_some() {
-            format!("\n{}", ctx.prompts.message("explorer", "hint_perceive_error"))
+            // 区分"冷启动从没 launch"和"刚主动收尾关闭"——后者不催 launch，提示可直接 finish，
+            // 否则会逼着 AI 在已完成任务后重新打开网址，把干净的 finish(success=true) 搅黄。
+            let key = if last_was_close { "hint_after_close" } else { "hint_perceive_error" };
+            format!("\n{}", ctx.prompts.message("explorer", key))
         } else if no_progress >= 1 {
             format!("\n{}", render(&ctx.prompts.message("explorer", "hint_no_progress"), &[("n", &no_progress.to_string())]))
         } else if revisits >= 2 {
@@ -345,7 +349,11 @@ pub async fn drive(
             stat.push(format!("{} 标签页", p.tabs.len()));
         }
         let notready = if perceive_err.is_some() {
-            paint(tty, "33", "  · 页面未就绪，待 launch")
+            if last_was_close {
+                paint(tty, "2", "  · 会话已关闭（收尾）")
+            } else {
+                paint(tty, "33", "  · 页面未就绪，待 launch")
+            }
         } else {
             String::new()
         };
@@ -592,6 +600,7 @@ pub async fn drive(
                             lines.push(line.clone());
                             step_comments.push(comment.clone().unwrap_or_default());
                             last_was_swipe = is_swipe; // 记下这步是不是滑动，供下一轮判定空滑
+                            last_was_close = matches!(&device_action, AgentAction::Close { .. }); // 记下是不是主动收尾关闭
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
