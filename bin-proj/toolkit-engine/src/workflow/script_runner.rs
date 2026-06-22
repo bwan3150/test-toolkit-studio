@@ -3,7 +3,7 @@
 // 指定 --log 时每步保存标注截图 + 页面结构文件，结束后写入完整 log.json
 // 工作区使用系统缓存临时目录，运行结束即删除；web 会话由脚本的 关闭 指令控制
 
-use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter, Params};
+use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter, Params, TksCommand};
 use crate::utils::Workarea;
 use super::{RunEvent, RunArtifacts};
 use std::path::Path;
@@ -136,9 +136,17 @@ impl ScriptRunner {
             let step_start = Instant::now();
             // 每步硬超时：元素反复重试/页面无响应时不再干等（视觉元素图像匹配尤其慢）。
             // 超时即判该步失败——回放上层据此让 AI 早点介入修复，而不是傻等。
-            const STEP_TIMEOUT_SECS: u64 = 20;
+            // 命令感知：滚动查找是「最多 30 次 capture+OCR+滑动」的循环，20s 必然误杀，
+            //   会把"目标没找到（页面/文字不对）"伪装成"页面无响应"，诱导医生删掉这条导航。
+            //   给它足够预算，让它要么真找到、要么干净返回「滚 N 次仍未出现 X」的明确错。
+            //   等待命令自带超时参数，也放宽到不被外层夹掉。
+            let step_timeout_secs: u64 = match step.command {
+                TksCommand::ScrollFind => 75,
+                TksCommand::Wait => 95, // 等待最长可指定 90s，外层要留余量
+                _ => 20,
+            };
             let exec_result = match tokio::time::timeout(
-                std::time::Duration::from_secs(STEP_TIMEOUT_SECS),
+                std::time::Duration::from_secs(step_timeout_secs),
                 interpreter.interpret_step(step),
             )
             .await
@@ -146,7 +154,7 @@ impl ScriptRunner {
                 Ok(r) => r,
                 Err(_) => Err(TkeError::DeviceError(format!(
                     "执行超时（>{}s）：元素反复重试或页面无响应",
-                    STEP_TIMEOUT_SECS
+                    step_timeout_secs
                 ))),
             };
             let duration_ms = step_start.elapsed().as_millis() as u64;
