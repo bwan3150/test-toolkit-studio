@@ -179,6 +179,8 @@ async fn main() -> tke::Result<()> {
     let params = Arc::new(tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.json, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
+    // 安装进程级 Ctrl+C 中断监听：run/steps/harness 各阶段（含 ScriptRunner 逐步回放）统一查中断、及时停
+    tke::utils::interrupt::install();
 
     // 便捷路由: tke <path.tks|path.toml> 等价于 tke run <path>
     let tool_is_script = matches!(&cli.command, Commands::Tool(args)

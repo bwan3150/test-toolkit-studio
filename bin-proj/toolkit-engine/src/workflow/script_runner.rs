@@ -121,6 +121,12 @@ impl ScriptRunner {
 
         // 4. 逐步执行
         for (index, step) in script.steps.iter().enumerate() {
+            // 中断检查点：Ctrl+C 后不再继续后续步骤，及时停下（否则一整段回放要跑完才轮到上层检查）
+            if crate::utils::interrupt::aborted() {
+                result.success = false;
+                result.error = Some("已中断（用户 Ctrl+C）".to_string());
+                break;
+            }
             on_event(&RunEvent::StepStart {
                 index,
                 line: step.line_number,

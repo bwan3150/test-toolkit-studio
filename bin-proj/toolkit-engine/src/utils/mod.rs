@@ -3,6 +3,7 @@
 pub mod json_output;
 pub mod workarea;
 pub mod config;
+pub mod interrupt;
 pub mod params;
 pub mod xml;
 

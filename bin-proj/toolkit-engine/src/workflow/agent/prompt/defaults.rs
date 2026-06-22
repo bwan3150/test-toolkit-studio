@@ -79,6 +79,7 @@ fn default_doctor_tool_description(name: &str) -> &'static str {
         "insert_after" => include_str!("builtin/tools/doctor/insert_after.md"),
         "reexplore" => include_str!("builtin/tools/doctor/reexplore.md"),
         "pick" => include_str!("builtin/tools/doctor/pick.md"),
+        "pick_visual" => include_str!("builtin/tools/doctor/pick_visual.md"),
         "run" => include_str!("builtin/tools/doctor/run.md"),
         "finish" => include_str!("builtin/tools/doctor/finish.md"),
         _ => "",

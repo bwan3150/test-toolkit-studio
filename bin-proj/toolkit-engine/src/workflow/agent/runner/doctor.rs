@@ -136,13 +136,16 @@ enum EditOp {
     /// 在 Reexplore 定位后的实时页面里，选定第 id 个元素作为该步的操作目标：
     /// 实时落库为 name，并把该步的 .tks 行改成对它的 action（click/input/long_press/clear/assert）。
     Pick { id: usize, name: String, action: String, text: Option<String> },
+    /// 看图视觉选：元素列表里没有/反复点不中（如纯 img 图标、滑动没到位）时，看 reexplore 那帧
+    /// 截图直接给像素框 region=[x1,y1,x2,y2]（优先）或点 (x,y)，按像素落 img 元素并替换该步。
+    PickVisual { region: Option<[i32; 4]>, x: Option<i32>, y: Option<i32>, name: String, action: String, text: Option<String> },
     /// 重新诊断回放(测试当前编辑效果)
     Run,
     /// 收尾(医生认为已达标且最短)
     Finish { reason: String },
 }
 
-/// Reexplore 定位后暂存的实时页面（供随后的 Pick 选元素落库）
+/// Reexplore 定位后暂存的实时页面（供随后的 Pick / PickVisual 选元素落库）
 struct PendingReselect {
     /// 要修的步号(1-based)
     step: usize,
@@ -150,6 +153,8 @@ struct PendingReselect {
     elements: Vec<UIElement>,
     /// 各元素在库中已有的 name（命中则 Pick 复用，不重复造名）
     known_names: Vec<Option<String>>,
+    /// 该实时页面的截图路径（供 PickVisual 看图框选、按像素落 img 元素）
+    shot_path: std::path::PathBuf,
 }
 
 /// 医生工具的 name + 参数 schema 表（description 不在此——由 PromptSet 提供，
@@ -214,6 +219,21 @@ fn doctor_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
                     "text": { "type": "string", "description": "action=input 时要输入的文本" }
                 },
                 "required": ["id", "name"]
+            }),
+        ),
+        (
+            "pick_visual",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "region": { "type": "array", "items": { "type": "integer" }, "minItems": 4, "maxItems": 4, "description": "目标在截图中的像素框 [x1,y1,x2,y2]（优先，越贴合越好）" },
+                    "x": { "type": "integer", "description": "无 region 时给点击点 x（像素）" },
+                    "y": { "type": "integer", "description": "无 region 时给点击点 y（像素）" },
+                    "name": { "type": "string", "description": "给该目标起的稳定语义名（落库+写进 .tks）" },
+                    "action": { "type": "string", "enum": ["click", "input", "long_press", "clear", "assert"], "description": "对该目标的操作，默认 click" },
+                    "text": { "type": "string", "description": "action=input 时要输入的文本" }
+                },
+                "required": ["name"]
             }),
         ),
         ("run", serde_json::json!({ "type": "object", "properties": {} })),
@@ -504,6 +524,27 @@ fn parse_edit(call: &LlmToolCall) -> std::result::Result<EditOp, String> {
             action: string("action").unwrap_or_else(|| "click".to_string()),
             text: string("text"),
         }),
+        "pick_visual" => {
+            let region = a.get("region").and_then(|v| v.as_array()).and_then(|arr| {
+                if arr.len() == 4 {
+                    let mut r = [0i32; 4];
+                    for (i, e) in arr.iter().enumerate() {
+                        r[i] = e.as_i64()? as i32;
+                    }
+                    Some(r)
+                } else {
+                    None
+                }
+            });
+            Ok(EditOp::PickVisual {
+                region,
+                x: a.get("x").and_then(|v| v.as_i64()).map(|n| n as i32),
+                y: a.get("y").and_then(|v| v.as_i64()).map(|n| n as i32),
+                name: string("name").ok_or("缺少 name")?,
+                action: string("action").unwrap_or_else(|| "click".to_string()),
+                text: string("text"),
+            })
+        }
         "reexplore" => Ok(EditOp::Reexplore {
             step: uint("step").ok_or("缺少 step")?,
             reason: string("reason").unwrap_or_default(),
@@ -632,6 +673,10 @@ pub(super) async fn doctor_repair(
         let mut edit_calls = 0usize;
         let mut go_finish = false;
         loop {
+            if super::interrupt::aborted() {
+                eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止医生修复"));
+                return None;
+            }
             if edit_calls >= MAX_EDITS_PER_ITER {
                 eprintln!("  {}", paint(tty, "33", "医生单轮编辑过多，强制重新诊断"));
                 break;
@@ -755,21 +800,30 @@ pub(super) async fn doctor_repair(
                             let known_names: Vec<Option<String>> = known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
                             let list = render_element_list(&p.elements, &known, &prompts.message("explorer", "element_tag"));
                             let count = p.elements.len();
-                            pending = Some(PendingReselect { step, elements: p.elements, known_names });
-                            editor.tool_result(
-                                primary.call_id.as_str(),
-                                format!(
-                                    "已重启并回放到第 {} 步、设备停在第 {} 步将操作的**实时页面**。当前实时元素（共 {} 个）：\n{}\n\
-                                     请用 pick 选出第 {} 步该操作的正确元素（给 id + name + action，input 再给 text）；它会被实时存库并替换该步。",
-                                    cut, step, count, list, step
-                                ),
+                            let shot = p.shot_path.clone();
+                            pending = Some(PendingReselect { step, elements: p.elements, known_names, shot_path: shot.clone() });
+                            editor.tool_result(primary.call_id.as_str(), "已定位到该步实时页面（元素列表 + 截图见下一条消息）");
+                            // 同时发**元素列表 + 截图**：列表里有就 pick(id)，列表里没有/反复点不中（纯图标、
+                            // 滑动没到位）就看截图用 pick_visual 给像素框/点。
+                            let msg = format!(
+                                "已回放到第 {} 步、设备停在第 {} 步将操作的实时页面。\n实时元素（共 {} 个）：\n{}\n\n\
+                                 请为第 {} 步选正确目标：\n\
+                                 · 目标在上面列表里 → pick(id, name, action)；\n\
+                                 · 列表里没有、或之前反复点这个元素都没反应（很可能是纯图标、或目标被滑出屏幕外）→ \
+                                 看下面的截图用 pick_visual 给像素框 region=[x1,y1,x2,y2]（优先）或点 (x,y)。\n\
+                                 input 动作再给 text。",
+                                cut, step, count, list, step
                             );
+                            tx.log("llm_message", serde_json::json!({ "iter": iter, "content": msg.clone(), "image": shot.to_string_lossy() }));
+                            if editor.user_with_image(&msg, &shot).is_err() {
+                                editor.user(msg);
+                            }
                         }
                         Err(e) => {
                             editor.tool_result(primary.call_id.as_str(), format!("定位后采集页面失败：{}。可重试 reexplore 或改用文本编辑。", e));
                         }
                     }
-                    continue; // 等医生 pick；不重诊断
+                    continue; // 等医生 pick / pick_visual；不重诊断
                 }
                 EditOp::Pick { id, name, action, text } => {
                     let Some(pend) = pending.as_ref() else {
@@ -811,6 +865,51 @@ pub(super) async fn doctor_repair(
                     pending = None;
                     did_reexplore = true;
                     break; // 重选后重新诊断
+                }
+                EditOp::PickVisual { region, x, y, name, action, text } => {
+                    let Some(pend) = pending.as_ref() else {
+                        editor.tool_result(primary.call_id.as_str(), "还没定位：请先 reexplore 到要改的步骤，看到截图再 pick_visual。");
+                        continue;
+                    };
+                    // 看图框选 → 像素 bounds（region 优先；否则以 (x,y) 取屏宽 15% 方块），落纯 img 元素
+                    let (sw, sh) = image::image_dimensions(&pend.shot_path).unwrap_or((1080, 1920));
+                    let bounds = match region {
+                        Some([x1, y1, x2, y2]) => crate::Bounds::new(x1, y1, x2, y2),
+                        None => {
+                            let cx = x.unwrap_or(sw as i32 / 2);
+                            let cy = y.unwrap_or(sh as i32 / 2);
+                            let half = (sw as i32 * 15 / 100).max(20) / 2;
+                            crate::Bounds::new(cx - half, cy - half, cx + half, cy + half)
+                        }
+                    };
+                    let line = match build_action_line(&action, &name, text.as_deref()) {
+                        Ok(l) => l,
+                        Err(why) => {
+                            editor.tool_result(primary.call_id.as_str(), why);
+                            continue;
+                        }
+                    };
+                    // 三级·仅视觉：结构空、ocr 空、仅 img 模板（从 reexplore 那帧截图裁）
+                    if let Err(e) =
+                        add_element_target(ctx.device.to_string(), ctx.element_path, &name, None, bounds, None, OcrChannel::None, false).await
+                    {
+                        editor.tool_result(primary.call_id.as_str(), format!("视觉元素落库失败：{}", e));
+                        continue;
+                    }
+                    if !report.created.contains(&name) {
+                        report.created.push(name.clone());
+                    }
+                    let step_idx = pend.step - 1;
+                    let old = lines.get(step_idx).cloned().unwrap_or_default();
+                    if step_idx < lines.len() {
+                        lines[step_idx] = line.clone();
+                    }
+                    eprintln!("  {}  {} → {}", paint(tty, "32", &format!("✓ 视觉重选第 {} 步元素", pend.step)), paint(tty, "2", &friendly(&old)), paint(tty, "2", &friendly(&line)));
+                    tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": "pick_visual", "step": pend.step, "name": name, "script_after": lines.clone() }));
+                    editor.tool_result(primary.call_id.as_str(), format!("已把第 {} 步改为视觉点击「{}」（img 模板已存库）。请 run 验证。", pend.step, friendly(&line)));
+                    pending = None;
+                    did_reexplore = true;
+                    break;
                 }
                 EditOp::Run => {
                     editor.tool_result(primary.call_id.as_str(), "重新回放诊断中，稍后给你最新 trace。");
