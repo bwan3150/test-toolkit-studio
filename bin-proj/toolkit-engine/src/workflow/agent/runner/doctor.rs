@@ -29,7 +29,8 @@ use crate::{
 };
 
 use super::super::execution::script::write_script;
-use super::super::perception::{capture, match_known, render_element_list};
+use super::super::execution::{auto_name, visual_auto_name};
+use super::super::perception::{capture, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
 use super::flow::{brief, fmt_tokens, friendly, paint, parse_desc_json, DriveCtx};
@@ -151,8 +152,6 @@ struct PendingReselect {
     step: usize,
     /// 该实时页面解析出的元素
     elements: Vec<UIElement>,
-    /// 各元素在库中已有的 name（命中则 Pick 复用，不重复造名）
-    known_names: Vec<Option<String>>,
     /// 该实时页面的截图路径（供 PickVisual 看图框选、按像素落 img 元素）
     shot_path: std::path::PathBuf,
 }
@@ -796,12 +795,11 @@ pub(super) async fn doctor_repair(
                     // fetch 实时页面，交给医生重选
                     match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
                         Ok(p) => {
-                            let known = match_known(&p.elements, platform, ctx.element_path);
-                            let known_names: Vec<Option<String>> = known.iter().map(|k| k.as_ref().map(|h| h.name.clone())).collect();
-                            let list = render_element_list(&p.elements, &known, &prompts.message("explorer", "element_tag"));
+                            let none = vec![None; p.elements.len()];
+                            let list = render_element_list(&p.elements, &none, &prompts.message("explorer", "element_tag"));
                             let count = p.elements.len();
                             let shot = p.shot_path.clone();
-                            pending = Some(PendingReselect { step, elements: p.elements, known_names, shot_path: shot.clone() });
+                            pending = Some(PendingReselect { step, elements: p.elements, shot_path: shot.clone() });
                             editor.tool_result(primary.call_id.as_str(), "已定位到该步实时页面（元素列表 + 截图见下一条消息）");
                             // 同时发**元素列表 + 截图**：列表里有就 pick(id)，列表里没有/反复点不中（纯图标、
                             // 滑动没到位）就看截图用 pick_visual 给像素框/点。
@@ -834,8 +832,9 @@ pub(super) async fn doctor_repair(
                         editor.tool_result(primary.call_id.as_str(), format!("id 越界：该页共 {} 个元素", pend.elements.len()));
                         continue;
                     };
-                    // 命中库则复用库名，避免重复造名
-                    let eff_name = pend.known_names.get(id).and_then(|o| o.clone()).unwrap_or_else(|| name.clone());
+                    // 元素名按特征自动生成（与探索一致），医生不必起名；AI 传的 name 忽略
+                    let _ = &name;
+                    let eff_name = auto_name(el);
                     let line = match build_action_line(&action, &eff_name, text.as_deref()) {
                         Ok(l) => l,
                         Err(why) => {
@@ -867,6 +866,7 @@ pub(super) async fn doctor_repair(
                     break; // 重选后重新诊断
                 }
                 EditOp::PickVisual { region, x, y, name, action, text } => {
+                    let _ = &name; // 元素名按特征(坐标)自动生成，AI 传的 name 忽略
                     let Some(pend) = pending.as_ref() else {
                         editor.tool_result(primary.call_id.as_str(), "还没定位：请先 reexplore 到要改的步骤，看到截图再 pick_visual。");
                         continue;
@@ -882,6 +882,7 @@ pub(super) async fn doctor_repair(
                             crate::Bounds::new(cx - half, cy - half, cx + half, cy + half)
                         }
                     };
+                    let name = visual_auto_name(&bounds); // 自动命名
                     let line = match build_action_line(&action, &name, text.as_deref()) {
                         Ok(l) => l,
                         Err(why) => {

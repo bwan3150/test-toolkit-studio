@@ -11,12 +11,11 @@ pub struct ToolSchema {
 
 /// 全部工具的 name + schema 表
 pub fn tool_schemas() -> Vec<ToolSchema> {
-    // 针对元素的工具都需要 element_id + name(+desc)，extra 注入各自附加字段
+    // 元素工具只需 element_id（选哪个元素）；**不必起名**——系统按元素特征自动命名、
+    // 落临时库，定稿时再统一起正式名。extra 注入各自附加字段（如 input 的 text）。
     let el_props = |extra: serde_json::Value| -> serde_json::Value {
         let mut base = serde_json::json!({
-            "element_id": { "type": "integer", "description": "页面元素列表中的序号" },
-            "name": { "type": "string", "description": "给该元素起的稳定语义名（落库并写进 .tks，如 '登录按钮'）" },
-            "desc": { "type": "string", "description": "可选、可留空——系统会在探索结束后据元素的实际作用统一生成 desc，无需你在此猜测。" }
+            "element_id": { "type": "integer", "description": "页面元素列表中的序号；选你要操作的那个元素" }
         });
         if let (Some(obj), Some(ex)) = (base.as_object_mut(), extra.as_object()) {
             for (k, v) in ex {
@@ -52,25 +51,25 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
         },
         ToolSchema {
             name: "click",
-            schema: obj(el_props(serde_json::json!({})), serde_json::json!(["element_id", "name"])),
+            schema: obj(el_props(serde_json::json!({})), serde_json::json!(["element_id"])),
         },
         ToolSchema {
             name: "input",
             schema: obj(
                 el_props(serde_json::json!({ "text": { "type": "string", "description": "要输入的文本" } })),
-                serde_json::json!(["element_id", "name", "text"]),
+                serde_json::json!(["element_id", "text"]),
             ),
         },
         ToolSchema {
             name: "long_press",
             schema: obj(
                 el_props(serde_json::json!({ "duration_ms": { "type": "integer", "description": "长按毫秒数，默认 1000" } })),
-                serde_json::json!(["element_id", "name"]),
+                serde_json::json!(["element_id"]),
             ),
         },
         ToolSchema {
             name: "clear",
-            schema: obj(el_props(serde_json::json!({})), serde_json::json!(["element_id", "name"])),
+            schema: obj(el_props(serde_json::json!({})), serde_json::json!(["element_id"])),
         },
         ToolSchema {
             name: "assert",
@@ -78,7 +77,7 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
                 el_props(serde_json::json!({
                     "exist": { "type": "boolean", "description": "断言该元素存在(true，默认)还是不存在(false)" }
                 })),
-                serde_json::json!(["element_id", "name"]),
+                serde_json::json!(["element_id"]),
             ),
         },
         ToolSchema {
@@ -93,11 +92,9 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
                         "description": "目标在截图中的像素框 [x1,y1,x2,y2]（优先；越贴合目标越好）"
                     },
                     "x": { "type": "integer", "description": "无 region 时给点击点 x（像素）" },
-                    "y": { "type": "integer", "description": "无 region 时给点击点 y（像素）" },
-                    "name": { "type": "string", "description": "给该目标起的稳定语义名（落库并写进 .tks）" },
-                    "desc": { "type": "string", "description": "可选、可留空——系统会在探索结束后据实际作用统一生成 desc" }
+                    "y": { "type": "integer", "description": "无 region 时给点击点 y（像素）" }
                 },
-                "required": ["name"]
+                "required": []
             }),
         },
         ToolSchema {

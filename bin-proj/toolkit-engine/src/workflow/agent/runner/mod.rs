@@ -297,12 +297,18 @@ impl AgentRunner {
         //  - 成功（稳定通过）→ 把**最终脚本实际引用的元素**从临时库提交到正式库(连 img 一起)；临时库随 run_dir 留存复盘。
         //  - 失败 → 删脚本；临时库随 run_dir 丢弃即可，正式库纹丝不动，无需任何回滚。
         let referenced = referenced_element_names(&result_script_lines);
-        let display_created: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
-        let committed = if overall_success {
-            crate::tools::element::commit_elements(&element_path, &real_element_path, &display_created).unwrap_or(0)
+        let feat_names: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
+        let (display_created, committed) = if overall_success {
+            // 定稿语义命名：把终稿用到的「特征自动名」元素改成语义名(改临时库 key + 脚本引用)，再提交正式库
+            let (renamed, semantic) =
+                reflect::finalize_names(&opts.ai, &prompts, &mut tx, &element_path, &result_script_lines, &feat_names).await;
+            result_script_lines = renamed;
+            let _ = write_script(&script_path, &opts.case, &result_script_lines); // 落盘改名后的脚本
+            let n = crate::tools::element::commit_elements(&element_path, &real_element_path, &semantic).unwrap_or(0);
+            (semantic, n)
         } else {
             let _ = std::fs::remove_file(&script_path);
-            0
+            (feat_names, 0)
         };
         render_summary(
             outcome.success,

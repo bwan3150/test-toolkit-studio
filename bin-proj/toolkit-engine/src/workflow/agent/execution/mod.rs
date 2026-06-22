@@ -32,26 +32,26 @@ pub async fn apply(
     element_path: &Path,
     action: &AgentAction,
     elements: &[UIElement],
-    known: &[Option<String>],
+    _known: &[Option<String>], // 元素名改为按特征自动生成（auto_name），不再用库匹配名；参数暂留以减少 flow 改动
     shot_path: &Path,
     tx: &mut Transcript,
     round: usize,
 ) -> Result<(String, String, ActionTrace, Option<SavedInfo>)> {
     match action {
         // 注：desc 不在创建时写（approach A：避免想当然）；探索结束后据实际作用统一生成
-        AgentAction::Click { element_id, name, .. } => {
+        AgentAction::Click { element_id, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            let name = effective_name(known, *element_id, name);
+            let name = auto_name(el);
             let (structure, ocr) = tier_for(el);
             let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::Input { element_id, name, text, .. } => {
+        AgentAction::Input { element_id, text, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            let name = effective_name(known, *element_id, name);
+            let name = auto_name(el);
             let (structure, ocr) = tier_for(el);
             let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
@@ -61,10 +61,10 @@ pub async fn apply(
             .await?;
             Ok((line(TksCommand::Input, vec![el_param(&name), TksParam::Text(text.clone())]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::LongPress { element_id, name, duration_ms, .. } => {
+        AgentAction::LongPress { element_id, duration_ms, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            let name = effective_name(known, *element_id, name);
+            let name = auto_name(el);
             let (structure, ocr) = tier_for(el);
             let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let detail = exec(
@@ -74,10 +74,10 @@ pub async fn apply(
             .await?;
             Ok((line(TksCommand::Press, vec![el_param(&name), TksParam::Number(*duration_ms as i32)]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::Clear { element_id, name, .. } => {
+        AgentAction::Clear { element_id, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            let name = effective_name(known, *element_id, name);
+            let name = auto_name(el);
             let (structure, ocr) = tier_for(el);
             let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             // 先点击聚焦，再清空（ControlAction::Clear 自身不带坐标）
@@ -85,19 +85,19 @@ pub async fn apply(
             let detail = exec(device, ControlAction::Clear).await?;
             Ok((line(TksCommand::Clear, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::Assert { element_id, name, exist, .. } => {
+        AgentAction::Assert { element_id, exist, .. } => {
             // 断言只产出可回放的**校验步**、不操作设备：当前页面 AI 已看到该元素，落库后
             // 回放时校验它是否存在；用于给脚本加闭环（到达关键页/目标页才能通过断言）。
             let el = lookup(elements, *element_id)?;
             let c = el.center();
-            let name = effective_name(known, *element_id, name);
+            let name = auto_name(el);
             let (structure, ocr) = tier_for(el);
             let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
             let cond = if *exist { "存在" } else { "不存在" };
             let detail = format!("记录断言：{} {}", name, cond);
             Ok((line(TksCommand::Assert, vec![el_param(&name), TksParam::Text(cond.to_string())]), detail, el_trace(c, el, &name), saved))
         }
-        AgentAction::ClickVisual { region, x, y, name, .. } => {
+        AgentAction::ClickVisual { region, x, y, .. } => {
             // 看图后视觉点击：region 优先；否则 (x,y) 周围取屏宽 15% 方块
             let (sw, sh) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
             let bounds = match region {
@@ -110,8 +110,9 @@ pub async fn apply(
                 }
             };
             let c = bounds.center();
+            let name = visual_auto_name(&bounds); // 自动命名，AI 不必起名
             // 三级·仅视觉：结构空、ocr 空、仅 img 模板
-            let saved = save_target(device, element_path, name, &None, bounds.clone(), None, OcrChannel::None, tx, round).await;
+            let saved = save_target(device, element_path, &name, &None, bounds.clone(), None, OcrChannel::None, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             let trace = ActionTrace {
                 captured: false,
@@ -119,7 +120,7 @@ pub async fn apply(
                 bounds: Some(bounds),
                 element_name: Some(name.clone()),
             };
-            Ok((line(TksCommand::Click, vec![el_param(name)]), detail, trace, saved))
+            Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, trace, saved))
         }
         AgentAction::SwipeDir { direction, distance, amount } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
@@ -264,10 +265,31 @@ pub async fn apply(
     }
 }
 
-/// 已知元素强制复用库名：命中库(known[id])则用库名，否则用 AI 起的名。
-/// 避免 AI 每次给新名导致元素库重复膨胀。
-fn effective_name(known: &[Option<String>], id: usize, ai_name: &str) -> String {
-    known.get(id).and_then(|o| o.clone()).unwrap_or_else(|| ai_name.to_string())
+/// 临时库元素**自动命名**：用元素稳定特征（可见文字/描述/资源id/类名，截断）+ 中心坐标合成 key。
+/// AI 全程不必起名、也不被名字误导；临时库重复无所谓——定稿提交时再由语义改名 pass 起正式名。
+/// 名字里不含 .tks 特殊字符（{}[]、逗号），避免破坏脚本解析（坐标用下划线连接）。
+pub(crate) fn auto_name(el: &UIElement) -> String {
+    let feat = el
+        .text
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| el.content_desc.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        .or_else(|| el.resource_id.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        .unwrap_or(el.class_name.as_str());
+    let feat: String = feat
+        .chars()
+        .filter(|c| !matches!(c, '\n' | '\r' | '\t' | '{' | '}' | '[' | ']' | ','))
+        .take(24)
+        .collect();
+    let c = el.center();
+    format!("{}@{}_{}", feat.trim(), c.x, c.y)
+}
+
+/// 视觉元素（看图框选、无结构）自动命名：用框中心坐标。
+pub(crate) fn visual_auto_name(b: &Bounds) -> String {
+    let c = b.center();
+    format!("visual@{}_{}", c.x, c.y)
 }
 
 /// 判断 AI 选中元素走哪级落库：

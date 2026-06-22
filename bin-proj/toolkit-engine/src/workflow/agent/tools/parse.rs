@@ -17,29 +17,29 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
         "close" => AgentAction::Close { target: req_str(a, "target")? },
         "click" => AgentAction::Click {
             element_id: req_usize(a, "element_id")?,
-            name: req_str(a, "name")?,
+            name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
         },
         "input" => AgentAction::Input {
             element_id: req_usize(a, "element_id")?,
-            name: req_str(a, "name")?,
+            name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
             text: req_str(a, "text")?,
         },
         "long_press" => AgentAction::LongPress {
             element_id: req_usize(a, "element_id")?,
-            name: req_str(a, "name")?,
+            name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
             duration_ms: opt_u64(a, "duration_ms").unwrap_or(1000),
         },
         "clear" => AgentAction::Clear {
             element_id: req_usize(a, "element_id")?,
-            name: req_str(a, "name")?,
+            name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
         },
         "assert" => AgentAction::Assert {
             element_id: req_usize(a, "element_id")?,
-            name: req_str(a, "name")?,
+            name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
             exist: a.get("exist").and_then(|v| v.as_bool()).unwrap_or(true),
         },
@@ -47,7 +47,7 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             region: opt_region(a, "region"),
             x: opt_i32(a, "x"),
             y: opt_i32(a, "y"),
-            name: req_str(a, "name")?,
+            name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
         },
         "swipe_direction" => AgentAction::SwipeDir {

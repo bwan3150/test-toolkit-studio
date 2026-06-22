@@ -67,6 +67,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("reflector", "analyze_failure") => include_str!("builtin/messages/reflector/analyze_failure.md"),
         ("reflector", "analyze_success") => include_str!("builtin/messages/reflector/analyze_success.md"),
         ("reflector", "optimize") => include_str!("builtin/messages/reflector/optimize.md"),
+        ("reflector", "finalize") => include_str!("builtin/messages/reflector/finalize.md"),
         _ => "",
     }
 }
