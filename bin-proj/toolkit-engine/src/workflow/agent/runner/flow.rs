@@ -79,31 +79,28 @@ use crate::Platform;
 /// 「即将执行」的人类可读预览：用 AI 选中元素的文字（执行前即有），让 CLI 先于设备显示，
 /// 用户能对上 agent 这步要点啥。返回 None = 非设备动作、不预览。
 fn preview_action(action: &AgentAction, elements: &[crate::UIElement]) -> Option<String> {
-    let el = |id: usize| -> String {
-        elements
-            .get(id)
-            .map(|e| brief(&e.to_ai_text(), 40))
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| format!("元素#{}", id))
+    // 用 auto_name（与 apply 落库同源）拼出和最终 .tks 行一致的展示，如「点击 Products@410_57」
+    let name = |id: usize| -> String {
+        elements.get(id).map(execution::auto_name).unwrap_or_else(|| format!("元素#{}", id))
     };
     Some(match action {
         AgentAction::Launch { target, .. } => format!("启动 {}", brief(target, 60)),
         AgentAction::Close { target } => format!("关闭 {}", brief(target, 60)),
-        AgentAction::Click { element_id, .. } => format!("点击「{}」", el(*element_id)),
-        AgentAction::Input { element_id, text, .. } => format!("输入「{}」→「{}」", brief(text, 30), el(*element_id)),
-        AgentAction::LongPress { element_id, .. } => format!("长按「{}」", el(*element_id)),
-        AgentAction::Clear { element_id, .. } => format!("清空「{}」", el(*element_id)),
+        AgentAction::Click { element_id, .. } => format!("点击 {}", name(*element_id)),
+        AgentAction::Input { element_id, text, .. } => format!("输入 {} \"{}\"", name(*element_id), brief(text, 30)),
+        AgentAction::LongPress { element_id, duration_ms, .. } => format!("按压 {} {}ms", name(*element_id), duration_ms),
+        AgentAction::Clear { element_id, .. } => format!("清空 {}", name(*element_id)),
         AgentAction::Assert { element_id, exist, .. } => {
-            format!("断言「{}」{}", el(*element_id), if *exist { "存在" } else { "不存在" })
+            format!("断言 {} {}", name(*element_id), if *exist { "存在" } else { "不存在" })
         }
         AgentAction::ClickVisual { .. } => "视觉点击（看图框选）".to_string(),
         AgentAction::SwipeDir { direction, .. } => format!("定向滑动 {}", dir_cn(direction)),
-        AgentAction::SwipeToFind { target, direction } => format!("滚动查找「{}」{}", brief(target, 30), dir_cn(direction)),
+        AgentAction::SwipeToFind { target, direction } => format!("滚动查找 \"{}\", {}", brief(target, 30), dir_cn(direction)),
         AgentAction::Switch { target } => format!("切换 {}", brief(target, 40)),
         AgentAction::Back => "返回".to_string(),
         AgentAction::HideKeyboard => "隐藏键盘".to_string(),
         AgentAction::Wait { ms: Some(ms), .. } => format!("等待 {}ms", ms),
-        AgentAction::Wait { element: Some(e), .. } => format!("等待元素「{}」", brief(e, 30)),
+        AgentAction::Wait { element: Some(e), .. } => format!("等待元素 {}", brief(e, 30)),
         AgentAction::Wait { .. } => "等待".to_string(),
         _ => return None, // Finish/RequestScreenshot/AskUser/Rename 非设备动作，不在此预览
     })
@@ -603,11 +600,15 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
-                    // 先显示「即将执行」的指令、再操作设备——否则浏览器先动、CLI 后显示，
-                    // 用户对不上、看不出 agent 这步对不对。用 AI 选中元素的文字描述（执行前就有）。
-                    if let Some(pv) = preview_action(&device_action, &p.elements) {
-                        eprintln!("  {} {}", paint(tty, "2", "▸"), pv);
+                    // 单行格式（对齐回放/tke run）：先显示「[N] 指令 ...」再操作设备，执行后接上
+                    // `✓ 耗时`/`✗ 耗时`——CLI 与设备同步，且 agent 这步点啥、花多久一目了然。
+                    let step_no = steps.len() + 1;
+                    let preview = preview_action(&device_action, &p.elements);
+                    if let Some(pv) = &preview {
+                        eprint!("  {} {} {} ", paint(tty, "2", &format!("[{:>2}]", step_no)), pv, paint(tty, "2", "..."));
+                        let _ = std::io::stderr().flush();
                     }
+                    let act_t0 = std::time::Instant::now();
                     let is_swipe = matches!(&device_action, AgentAction::SwipeDir { .. });
                     match execution::apply(
                         ctx.device,
@@ -622,7 +623,13 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace, saved)) => {
-                            eprintln!("  {} {}", paint(tty, "32", "✓"), friendly(&line));
+                            let dur = fmt_duration(act_t0.elapsed().as_millis() as u64);
+                            if preview.is_some() {
+                                // 接上之前那行「[N] 指令 ...」
+                                eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &dur));
+                            } else {
+                                eprintln!("  {} {} {}", paint(tty, "32", "✓"), friendly(&line), paint(tty, "2", &dur));
+                            }
                             // 记录元素库变更（去重），供结束时人工审核
                             if let Some(s) = saved {
                                 if s.created {
@@ -669,6 +676,10 @@ pub async fn drive(
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
+                            let dur = fmt_duration(act_t0.elapsed().as_millis() as u64);
+                            if preview.is_some() {
+                                eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &dur));
+                            }
                             eprintln!("  {} {}", paint(tty, "31", "✗ 执行失败:"), e);
                             tx.log("exec_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                             sess.tool_result(primary.call_id.as_str(), format!("执行失败: {}", e));
