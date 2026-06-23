@@ -73,6 +73,22 @@ pub(super) struct Diagnosis {
 }
 
 impl Diagnosis {
+    /// "页面与上一步完全相同"（即执行后**没改变页面** = 空操作）的步号集合（1-based）。
+    /// 反思官只准删这些——它们删了不影响后续状态、安全；而改变了页面/开了标签的步是**承重步**，
+    /// 删了会让后续依赖该状态的步（如随后的「切换」依赖新开的标签）失效。空页面(0元素)的步不算
+    /// 空操作（PDF/新标签等空页恰恰常是刚开出来的承重结果），保守保留。
+    pub(super) fn noop_step_nos(&self) -> std::collections::HashSet<usize> {
+        let mut set = std::collections::HashSet::new();
+        for i in 1..self.steps.len() {
+            let cur = self.steps[i].page_full.trim();
+            let prev = self.steps[i - 1].page_full.trim();
+            if !cur.is_empty() && cur == prev {
+                set.insert(self.steps[i].no);
+            }
+        }
+        set
+    }
+
     /// 给反思官的紧凑逐步清单：步号 · 成败 · .tks 行 · 该步后页面前几项（求短，用于路径优化分析）
     pub(super) fn trace_lines(&self) -> String {
         let mut s = String::new();

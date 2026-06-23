@@ -149,10 +149,21 @@ pub(super) async fn optimize(
 
     // 解析 {"removable":[步号], "scroll_merges":[{from,to,target,direction}]}
     let obj = parse_desc_json(&reply)?;
-    let removable: std::collections::HashSet<usize> = obj["removable"]
+    let proposed: std::collections::HashSet<usize> = obj["removable"]
         .as_array()
         .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|n| n as usize).filter(|&i| i >= 1 && i <= lines.len()).collect())
         .unwrap_or_default();
+    // 护栏：只准删"页面与上一步完全相同"的空操作步；改变了页面/开了标签的**承重步**一律保留，
+    // 否则会像把"点开 PDF 新标签"那一步删掉、让随后的「切换」越界一样毁掉脚本。
+    let noops = diag.noop_step_nos();
+    let mut removable = std::collections::HashSet::new();
+    for n in proposed {
+        if noops.contains(&n) {
+            removable.insert(n);
+        } else {
+            eprintln!("  {}", paint(tty, "33", &format!("反思官想删第 {} 步，但该步改变了页面（承重步），跳过不删", n)));
+        }
+    }
     // 滚动合并：把第 from..=to 步（应全是定向滑动盲滑）替换成一条 `滚动查找 ["target", 方向]`，
     // 把"不可复现的连续盲滑"换成"可靠地滚到目标文字出现"。只接受 from..to 全是滑动步的合并。
     struct Merge { from: usize, to: usize, line: String }
