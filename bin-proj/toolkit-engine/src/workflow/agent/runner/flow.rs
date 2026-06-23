@@ -408,7 +408,7 @@ pub async fn drive(
         // 接口报错则标 ✗，详情在下面红字单列——绝不用一个静默的 0 掩盖报错。
         if ctx.ocr.is_some() {
             if p.ocr_error.is_some() {
-                stat.push("OCR✗".to_string());
+                stat.push("OCR调用失败".to_string());
             } else {
                 stat.push(format!("+{} OCR元素", p.ocr_added));
             }
@@ -431,9 +431,8 @@ pub async fn drive(
             paint(tty, "2", &stat.join(" · ")),
             notready
         );
-        // OCR 接口报错——「OCR调用失败」+ 换行列报错详情(红字) + 记日志，绝不让它被"0"掩盖。
+        // OCR 接口报错：stat 已标「OCR调用失败」，这里红字单列具体报错 + 记日志，绝不让它被"0"掩盖。
         if let Some(err) = &p.ocr_error {
-            eprintln!("  {}", paint(tty, "31", "OCR调用失败"));
             eprintln!("  {}", paint(tty, "31", &brief(err, 160)));
             tx.log("ocr_error", serde_json::json!({ "round": round, "error": err }));
         }
