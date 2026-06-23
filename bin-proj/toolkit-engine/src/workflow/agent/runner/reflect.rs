@@ -168,7 +168,7 @@ pub(super) async fn optimize(
         let obj = match parse_desc_json(&reply) {
             Some(o) => o,
             None => {
-                sess.user("请只返回一个 JSON 动作：{\"action\":\"delete|merge|done\", ...}".to_string());
+                sess.user(prompts.message("optimizer", "nudge"));
                 continue;
             }
         };
@@ -183,21 +183,21 @@ pub(super) async fn optimize(
             "delete" => {
                 let step = obj["step"].as_u64().unwrap_or(0) as usize;
                 if step < 1 || step > lines.len() {
-                    sess.user(format!("第 {} 步不存在（共 {} 步），换一步或 done。", step, lines.len()));
+                    sess.user(render(&prompts.message("optimizer", "fb_step_oob"), &[("step", &step.to_string()), ("total", &lines.len().to_string())]));
                     continue;
                 }
                 if removable.contains(&step) {
-                    sess.user(format!("第 {} 步已删过，提下一个或 done。", step));
+                    sess.user(render(&prompts.message("optimizer", "fb_step_dup"), &[("step", &step.to_string())]));
                     continue;
                 }
                 if !noops.contains(&step) {
                     eprintln!("  {}  {}", paint(tty, "33", &format!("↩ 第 {} 步改变了页面（承重步），不删", step)), toks);
-                    sess.user(format!("第 {} 步执行后页面变了（承重步），删了会让后续失效、不能删。换一步或 done。", step));
+                    sess.user(render(&prompts.message("optimizer", "fb_step_loadbearing"), &[("step", &step.to_string())]));
                     continue;
                 }
                 removable.insert(step);
                 eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ 删第 {} 步", step)), paint(tty, "2", &format!("{}（{}）", why, friendly(&lines[step - 1]))), toks);
-                sess.user(format!("已删第 {} 步（空操作、安全）。继续提下一个，或 done。", step));
+                sess.user(render(&prompts.message("optimizer", "fb_step_deleted"), &[("step", &step.to_string())]));
             }
             "merge" => {
                 let from = obj["from"].as_u64().unwrap_or(0) as usize;
@@ -205,15 +205,15 @@ pub(super) async fn optimize(
                 let target = obj["target"].as_str().unwrap_or("").trim();
                 let direction = obj["direction"].as_str().unwrap_or("up").trim();
                 if from < 1 || to < from || to > lines.len() || target.is_empty() {
-                    sess.user("merge 参数无效：需 1<=from<=to<=步数 且 target 非空。".to_string());
+                    sess.user(prompts.message("optimizer", "fb_merge_invalid"));
                     continue;
                 }
                 if !lines[from - 1..to].iter().all(|l| l.trim_start().starts_with("定向滑动")) {
-                    sess.user(format!("第 {}–{} 步不全是「定向滑动」，不能合并。", from, to));
+                    sess.user(render(&prompts.message("optimizer", "fb_merge_notswipe"), &[("from", &from.to_string()), ("to", &to.to_string())]));
                     continue;
                 }
                 if spans.iter().any(|&(a, b)| from <= b && a <= to) {
-                    sess.user("这段与已合并的段重叠，换一段或 done。".to_string());
+                    sess.user(prompts.message("optimizer", "fb_merge_overlap"));
                     continue;
                 }
                 let dir_cn = match direction { "down" => "下", "left" => "左", "right" => "右", _ => "上" };
@@ -221,10 +221,10 @@ pub(super) async fn optimize(
                 eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ 合并第 {}–{} 步 → {}", from, to, mline)), paint(tty, "2", &why), toks);
                 merges.push(Merge { from, to, line: mline });
                 spans.push((from, to));
-                sess.user(format!("已合并第 {}–{} 步。继续，或 done。", from, to));
+                sess.user(render(&prompts.message("optimizer", "fb_merge_done"), &[("from", &from.to_string()), ("to", &to.to_string())]));
             }
             _ => {
-                sess.user("action 只能是 delete / merge / done。".to_string());
+                sess.user(prompts.message("optimizer", "fb_bad_action"));
             }
         }
     }

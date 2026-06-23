@@ -74,6 +74,16 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("reflector", "optimize") => include_str!("builtin/messages/reflector/optimize.md"),
         ("reflector", "finalize") => include_str!("builtin/messages/reflector/finalize.md"),
         ("optimizer", "intro") => include_str!("builtin/messages/optimizer/intro.md"),
+        ("optimizer", "nudge") => include_str!("builtin/messages/optimizer/nudge.md"),
+        ("optimizer", "fb_step_oob") => include_str!("builtin/messages/optimizer/fb_step_oob.md"),
+        ("optimizer", "fb_step_dup") => include_str!("builtin/messages/optimizer/fb_step_dup.md"),
+        ("optimizer", "fb_step_loadbearing") => include_str!("builtin/messages/optimizer/fb_step_loadbearing.md"),
+        ("optimizer", "fb_step_deleted") => include_str!("builtin/messages/optimizer/fb_step_deleted.md"),
+        ("optimizer", "fb_merge_invalid") => include_str!("builtin/messages/optimizer/fb_merge_invalid.md"),
+        ("optimizer", "fb_merge_notswipe") => include_str!("builtin/messages/optimizer/fb_merge_notswipe.md"),
+        ("optimizer", "fb_merge_overlap") => include_str!("builtin/messages/optimizer/fb_merge_overlap.md"),
+        ("optimizer", "fb_merge_done") => include_str!("builtin/messages/optimizer/fb_merge_done.md"),
+        ("optimizer", "fb_bad_action") => include_str!("builtin/messages/optimizer/fb_bad_action.md"),
         _ => "",
     }
 }
