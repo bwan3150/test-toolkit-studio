@@ -35,7 +35,18 @@ pub fn default_role_system(role: &str) -> &'static str {
 pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
     match role {
         "doctor" => default_doctor_tool_description(name),
+        "optimizer" => default_optimizer_tool_description(name),
         _ => default_tool_description(name),
+    }
+}
+
+/// 脚本优化官各工具默认 description（外部 <prompts_dir>/tools/optimizer/<name>.md 可覆盖）
+fn default_optimizer_tool_description(name: &str) -> &'static str {
+    match name {
+        "delete_step" => include_str!("builtin/tools/optimizer/delete_step.md"),
+        "merge_swipes" => include_str!("builtin/tools/optimizer/merge_swipes.md"),
+        "done" => include_str!("builtin/tools/optimizer/done.md"),
+        _ => "",
     }
 }
 

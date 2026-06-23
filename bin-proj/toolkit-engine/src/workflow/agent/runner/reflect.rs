@@ -8,7 +8,7 @@ use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::{AiConfig, Fetcher, LlmReply, LlmSession, Params, Platform};
+use crate::{AiConfig, Fetcher, LlmReply, LlmSession, LlmTool, Params, Platform};
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
@@ -104,6 +104,53 @@ pub(super) async fn reflect(
 /// 软优化：脚本已正确时，看其逐步 trace 找出可删的绕路/冗余步并删掉（大胆删、不逐条验证；
 /// 删坏了由医生下一轮复检兜底）。返回优化后的脚本（有改动）或 None（无可优化/失败）。
 #[allow(clippy::too_many_arguments)]
+/// 脚本优化官的工具表（name + JSON schema）；description 由 tools/optimizer/*.md 提供。
+fn optimizer_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
+    vec![
+        (
+            "delete_step",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "step": { "type": "integer", "description": "要删的步号(1-based)，必须是空操作步" },
+                    "reason": { "type": "string", "description": "为什么这步是没改变页面的空操作、删了安全" }
+                },
+                "required": ["step", "reason"]
+            }),
+        ),
+        (
+            "merge_swipes",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "from": { "type": "integer", "description": "起始步号(1-based)" },
+                    "to": { "type": "integer", "description": "结束步号(1-based，含)；from..to 之间必须全是「定向滑动」" },
+                    "target": { "type": "string", "description": "这段滑动结束后会出现的目标可见文字" },
+                    "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "滚动方向，通常 up" },
+                    "reason": { "type": "string", "description": "为什么这段是盲滑、合并更稳" }
+                },
+                "required": ["from", "to", "target", "direction"]
+            }),
+        ),
+        (
+            "done",
+            serde_json::json!({
+                "type": "object",
+                "properties": { "reason": { "type": "string", "description": "一句话总结：已无可优化" } },
+                "required": []
+            }),
+        ),
+    ]
+}
+
+/// 组装优化官工具集：schema 来自 optimizer_tool_schemas，description 来自 tools/optimizer/*.md（可外部覆盖）。
+fn build_optimizer_tools(prompts: &PromptSet) -> Vec<LlmTool> {
+    optimizer_tool_schemas()
+        .into_iter()
+        .map(|(name, schema)| LlmTool::new(name, prompts.role_tool_description("optimizer", name), schema))
+        .collect()
+}
+
 pub(super) async fn optimize(
     ai: &AiConfig,
     prompts: &PromptSet,
@@ -138,7 +185,9 @@ pub(super) async fn optimize(
     // 独立「脚本优化官」会话——专用系统提示词（不再复用 reflect 的"只分析"提示词）。
     let platform = Platform::from_device(Some(ctx.device));
     let system = prompts.role_system("optimizer", ctx.device, platform.name());
-    let mut sess = LlmSession::new(ai, system, Vec::new()).ok()?;
+    // 真正的工具调用（与医生同机制）：工具 schema + tools/optimizer/*.md 描述，LLM 调 tool、我回 tool_result。
+    let tools = build_optimizer_tools(prompts);
+    let mut sess = LlmSession::new(ai, system, tools).ok()?;
     let intro = render(
         &prompts.message("optimizer", "intro"),
         &[("case", case), ("marker", marker), ("trace", &trace), ("pages", &pages), ("noops", &noop_list), ("script", &numbered)],
@@ -146,85 +195,88 @@ pub(super) async fn optimize(
     tx.log("llm_message", serde_json::json!({ "content": intro.clone() }));
     sess.user(intro);
 
-    // 逐步收集优化（像医生：LLM 每次只提一个动作，执行/拒绝后反馈，它据此再提下一个）。
+    // 逐步优化（像医生：LLM 每次只调一个工具，执行/拒绝后回 tool_result，它据此再调下一个）。
     // 在**稳定的原始行号**上工作：删除收进 removable、合并收进 merges，最后一次性重建 + 一次诊断验证，
     // 避免每改一步就重跑回放。护栏：只准删空操作步（noops），承重步当场拒。
     struct Merge { from: usize, to: usize, line: String }
     let mut removable: std::collections::HashSet<usize> = std::collections::HashSet::new();
     let mut merges: Vec<Merge> = Vec::new();
     let mut spans: Vec<(usize, usize)> = Vec::new();
-    for _ in 0..16usize {
+    for _ in 0..24usize {
         if super::interrupt::aborted() {
             break;
         }
-        let reply = match sess.next().await {
-            Ok(LlmReply::Text(t)) => t,
-            _ => break,
+        let (text, calls) = match sess.next().await {
+            Ok(LlmReply::ToolCalls { text, calls }) => (text, calls),
+            Ok(LlmReply::Text(_)) => {
+                sess.user(prompts.message("optimizer", "nudge"));
+                continue;
+            }
+            Err(_) => break,
         };
         let (pt, ct) = sess.last_usage();
         report.extra_prompt += pt;
         report.extra_completion += ct;
         let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pt), fmt_tokens(ct)));
-        let obj = match parse_desc_json(&reply) {
-            Some(o) => o,
-            None => {
-                sess.user(prompts.message("optimizer", "nudge"));
-                continue;
-            }
-        };
-        let action = obj["action"].as_str().unwrap_or("").trim();
-        let raw_reason = obj["reason"].as_str().unwrap_or("").trim();
-        let why = if raw_reason.is_empty() { "（未说明理由）".to_string() } else { brief(raw_reason, 160) };
-        match action {
+        let primary = calls[0].clone();
+        for extra in &calls[1..] {
+            sess.tool_result(extra.call_id.as_str(), "已忽略：每轮仅处理第一个工具调用");
+        }
+        let arg_u = |k: &str| primary.arguments.get(k).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        let arg_s = |k: &str| primary.arguments.get(k).and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+        let raw_reason = primary.arguments.get("reason").and_then(|v| v.as_str()).map(str::trim).unwrap_or("");
+        let why = if !raw_reason.is_empty() { brief(raw_reason, 160) } else { text.as_deref().map(|s| brief(s, 160)).filter(|s| !s.is_empty()).unwrap_or_else(|| "（未说明理由）".to_string()) };
+        match primary.name.as_str() {
             "done" => {
                 eprintln!("  {}  {}  {}", paint(tty, "1;36", "✓ 优化结束"), paint(tty, "2", &why), toks);
                 break;
             }
-            "delete" => {
-                let step = obj["step"].as_u64().unwrap_or(0) as usize;
+            "delete_step" => {
+                let step = arg_u("step");
                 if step < 1 || step > lines.len() {
-                    sess.user(render(&prompts.message("optimizer", "fb_step_oob"), &[("step", &step.to_string()), ("total", &lines.len().to_string())]));
+                    sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_oob"), &[("step", &step.to_string()), ("total", &lines.len().to_string())]));
                     continue;
                 }
                 if removable.contains(&step) {
-                    sess.user(render(&prompts.message("optimizer", "fb_step_dup"), &[("step", &step.to_string())]));
+                    sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_dup"), &[("step", &step.to_string())]));
                     continue;
                 }
                 if !noops.contains(&step) {
                     eprintln!("  {}  {}", paint(tty, "33", &format!("↩ 第 {} 步改变了页面（承重步），不删", step)), toks);
-                    sess.user(render(&prompts.message("optimizer", "fb_step_loadbearing"), &[("step", &step.to_string())]));
+                    sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_loadbearing"), &[("step", &step.to_string())]));
                     continue;
                 }
                 removable.insert(step);
                 eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ 删第 {} 步", step)), paint(tty, "2", &format!("{}（{}）", why, friendly(&lines[step - 1]))), toks);
-                sess.user(render(&prompts.message("optimizer", "fb_step_deleted"), &[("step", &step.to_string())]));
+                sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_deleted"), &[("step", &step.to_string())]));
             }
-            "merge" => {
-                let from = obj["from"].as_u64().unwrap_or(0) as usize;
-                let to = obj["to"].as_u64().unwrap_or(0) as usize;
-                let target = obj["target"].as_str().unwrap_or("").trim();
-                let direction = obj["direction"].as_str().unwrap_or("up").trim();
+            "merge_swipes" => {
+                let from = arg_u("from");
+                let to = arg_u("to");
+                let target = arg_s("target");
+                let direction = arg_s("direction");
+                let direction = if direction.is_empty() { "up".to_string() } else { direction };
                 if from < 1 || to < from || to > lines.len() || target.is_empty() {
-                    sess.user(prompts.message("optimizer", "fb_merge_invalid"));
+                    sess.tool_result(primary.call_id.as_str(), prompts.message("optimizer", "fb_merge_invalid"));
                     continue;
                 }
                 if !lines[from - 1..to].iter().all(|l| l.trim_start().starts_with("定向滑动")) {
-                    sess.user(render(&prompts.message("optimizer", "fb_merge_notswipe"), &[("from", &from.to_string()), ("to", &to.to_string())]));
+                    sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_merge_notswipe"), &[("from", &from.to_string()), ("to", &to.to_string())]));
                     continue;
                 }
                 if spans.iter().any(|&(a, b)| from <= b && a <= to) {
-                    sess.user(prompts.message("optimizer", "fb_merge_overlap"));
+                    sess.tool_result(primary.call_id.as_str(), prompts.message("optimizer", "fb_merge_overlap"));
                     continue;
                 }
-                let dir_cn = match direction { "down" => "下", "left" => "左", "right" => "右", _ => "上" };
+                let dir_cn = match direction.as_str() { "down" => "下", "left" => "左", "right" => "右", _ => "上" };
                 let mline = format!("滚动查找 [\"{}\", {}]", target, dir_cn);
                 eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ 合并第 {}–{} 步 → {}", from, to, mline)), paint(tty, "2", &why), toks);
                 merges.push(Merge { from, to, line: mline });
                 spans.push((from, to));
-                sess.user(render(&prompts.message("optimizer", "fb_merge_done"), &[("from", &from.to_string()), ("to", &to.to_string())]));
+                sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_merge_done"), &[("from", &from.to_string()), ("to", &to.to_string())]));
             }
             _ => {
-                sess.user(prompts.message("optimizer", "fb_bad_action"));
+                sess.tool_result(primary.call_id.as_str(), prompts.message("optimizer", "fb_bad_action"));
             }
         }
     }

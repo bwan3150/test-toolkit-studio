@@ -1,1 +1,1 @@
-请只返回一个 JSON 动作：{"action":"delete|merge|done", ...}
+请用工具来优化：delete_step / merge_swipes / done，不要只回文字。

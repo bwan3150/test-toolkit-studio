@@ -13,4 +13,4 @@
 编号脚本：
 {script}
 
-现在开始，每次只提一个优化动作（delete / merge / done）。
+现在开始，每次只调用一个工具（delete_step / merge_swipes / done）。
