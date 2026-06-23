@@ -404,14 +404,13 @@ pub async fn drive(
         let ocr_n = p.ocr_added;
         let page_n = p.elements.len().saturating_sub(ocr_n);
         let mut stat = vec![format!("{} 页面元素", page_n)];
-        // OCR 状态**如实**展示，绝不用一个静默的 0 掩盖问题——区分四种：
-        //   没开(不显示) / 接口报错(下面红字单列) / 识别N并入M新增K / 真识别 0。
+        // OCR：正常只显示**新增**伪元素数（这些元素只有 OCR 一个锚点，是 OCR 的独有贡献）；
+        // 接口报错则标 ✗，详情在下面红字单列——绝不用一个静默的 0 掩盖报错。
         if ctx.ocr.is_some() {
             if p.ocr_error.is_some() {
-                stat.push("OCR✗报错".to_string());
+                stat.push("OCR✗".to_string());
             } else {
-                // recognized=识别到的文字总数(>0 即 OCR 在工作)；并入=回填进已有元素；新增=独立伪元素。
-                stat.push(format!("OCR识别{}（并入{}·新增{}）", p.ocr_recognized, p.ocr_filled, p.ocr_added));
+                stat.push(format!("+{} OCR元素", p.ocr_added));
             }
         }
         if !p.tabs.is_empty() {
@@ -432,9 +431,10 @@ pub async fn drive(
             paint(tty, "2", &stat.join(" · ")),
             notready
         );
-        // OCR 接口报错——单独红字一行 + 记日志，绝不让它被"0"掩盖。
+        // OCR 接口报错——「OCR调用失败」+ 换行列报错详情(红字) + 记日志，绝不让它被"0"掩盖。
         if let Some(err) = &p.ocr_error {
-            eprintln!("  {}", paint(tty, "31", &format!("OCR 接口报错：{}", brief(err, 120))));
+            eprintln!("  {}", paint(tty, "31", "OCR调用失败"));
+            eprintln!("  {}", paint(tty, "31", &brief(err, 160)));
             tx.log("ocr_error", serde_json::json!({ "round": round, "error": err }));
         }
         // 卡住提示：淡黄一行，不用 emoji（与 ✓/✗ 状态色区分开）
