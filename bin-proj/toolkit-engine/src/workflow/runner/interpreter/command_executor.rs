@@ -171,11 +171,16 @@ impl<'a> CommandExecutor<'a> {
         // 就是滚到底/到顶、滚不动了，立刻停（不再卡在边界空转）。安全上限防病态死循环。
         const SAFETY_MAX: usize = 40;
         let (sw, sh) = image::image_dimensions(self.workarea.screenshot_path()).unwrap_or((1080, 1920));
+        let vertical = !matches!(direction.as_str(), "left" | "right");
+        // 主手势从屏幕中心；"没动"时换个起点重试，避开中间嵌套可滚动区（图片/轮播）吃掉手势——
+        // 竖向改从下方 3/4 处、横向改从右侧 3/4 处发起，更可能作用到主页面。
         let from = Point::new(sw as i32 / 2, sh as i32 / 2);
-        let dim = if matches!(direction.as_str(), "left" | "right") { sw as i32 } else { sh as i32 };
+        let alt = if vertical { Point::new(sw as i32 / 2, sh as i32 * 3 / 4) } else { Point::new(sw as i32 * 3 / 4, sh as i32 / 2) };
+        let dim = if vertical { sh as i32 } else { sw as i32 };
         let step = (dim * 4 / 5).max(200);
         let ocr_src = crate::utils::params::ocr_source();
         let mut prev_texts: Option<Vec<String>> = None;
+        let mut stuck = 0u32; // 连续"页面没变"的次数
         for i in 0..SAFETY_MAX {
             if crate::utils::interrupt::aborted() {
                 return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
@@ -193,14 +198,21 @@ impl<'a> CommandExecutor<'a> {
                 info!("滚动查找：目标「{}」已可见（滚动 {} 次）", hit, i);
                 return Ok(());
             }
-            // 与上一屏大部分相同 → 滚不动了（到底/到顶），停。
+            // 与上一屏大部分相同 = 这次没滚动。**连续两次**没动才算真到底/到顶（一次可能是中间
+            // 嵌套区吃了手势）；第一次没动就换起点(alt)再试。
             if prev_texts.as_ref().map(|p| crate::utils::scroll::page_stuck(p, &texts)).unwrap_or(false) {
-                break;
+                stuck += 1;
+                if stuck >= 2 {
+                    break;
+                }
+            } else {
+                stuck = 0;
             }
             prev_texts = Some(texts);
+            let origin = if stuck > 0 { alt } else { from };
             execute_action(
                 &*self.controller,
-                ControlAction::SwipeDir { from, direction: direction.clone(), distance: step, duration_ms: 300 },
+                ControlAction::SwipeDir { from: origin, direction: direction.clone(), distance: step, duration_ms: 300 },
             )
             .await?;
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
