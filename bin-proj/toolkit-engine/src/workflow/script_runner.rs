@@ -142,7 +142,6 @@ impl ScriptRunner {
             //   等待命令自带超时参数，也放宽到不被外层夹掉。
             let step_timeout_secs: u64 = match step.command {
                 TksCommand::ScrollFind => 75,
-                TksCommand::Wait => 95, // 等待最长可指定 90s，外层要留余量
                 _ => 20,
             };
             let exec_result = match tokio::time::timeout(
