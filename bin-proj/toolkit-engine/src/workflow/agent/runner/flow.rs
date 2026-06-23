@@ -529,10 +529,7 @@ pub async fn drive(
                                 if obj["done"].as_bool() == Some(false) {
                                     let why = obj["reason"].as_str().unwrap_or("尚未真正达成").to_string();
                                     eprintln!("  {}", paint(tty, "33", &format!("终点校验未通过：{}", brief(&why, 80))));
-                                    sess.user(format!(
-                                        "终点校验未通过：{}。当前页面并非用户要的最终目的地，请继续操作直到真正达成需求，再 finish。",
-                                        why
-                                    ));
+                                    sess.user(render(&ctx.prompts.message("explorer", "finish_recheck_fail"), &[("why", &why)]));
                                     continue; // 不结束，回到内层循环继续修
                                 }
                             }

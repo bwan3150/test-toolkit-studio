@@ -57,6 +57,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("explorer", "screenshot_failed") => include_str!("builtin/messages/explorer/screenshot_failed.md"),
         ("explorer", "desc_pass") => include_str!("builtin/messages/explorer/desc_pass.md"),
         ("explorer", "finish_check") => include_str!("builtin/messages/explorer/finish_check.md"),
+        ("explorer", "finish_recheck_fail") => include_str!("builtin/messages/explorer/finish_recheck_fail.md"),
         // —— doctor：脚本医生消息 ——
         ("doctor", "trace") => include_str!("builtin/messages/doctor/trace.md"),
         ("doctor", "trace_objective_minimize") => include_str!("builtin/messages/doctor/trace_objective_minimize.md"),
