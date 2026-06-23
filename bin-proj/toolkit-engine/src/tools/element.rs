@@ -59,7 +59,8 @@ fn build_channel(platform: Platform, el: &UIElement) -> (&'static str, serde_jso
             "web",
             serde_json::json!({
                 "css": null,
-                "xpath": null,
+                // 浏览器算好的唯一 DOM 路径——回放优先按它精确重定位同一元素，避免 text 撞名点错
+                "xpath": non_empty(&el.xpath),
                 "id": rid,
                 "text": text,
                 "aria": desc,

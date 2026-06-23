@@ -8,6 +8,22 @@
 pub(super) const DOM_WALK_JS: &str = r#"
 const dpr = window.devicePixelRatio || 1;
 const out = [];
+// 给元素算一条**唯一、与分辨率无关**的 DOM 路径，用于回放时精确重定位同一个元素
+// （纯 text 会撞名：页面常有两个 "Products"、导航项与页脚同名链接，回放只认 text 会点错）。
+// 锚在最近带 id 的祖先上 + 其余用 tag[第几个同类]，DOM 结构与屏幕尺寸无关，跨机型稳定。
+const xpathOf = (el) => {
+  const segs = [];
+  let node = el;
+  while (node && node.nodeType === 1) {
+    if (node.id) { segs.unshift("*[@id='" + node.id + "']"); break; }
+    if (node === document.body) { segs.unshift('body'); break; }
+    let i = 1, sib = node;
+    while ((sib = sib.previousElementSibling)) { if (sib.tagName === node.tagName) i++; }
+    segs.unshift(node.tagName.toLowerCase() + '[' + i + ']');
+    node = node.parentElement;
+  }
+  return '/' + segs.join('/');
+};
 const walk = (el) => {
   for (const child of el.children) {
     const r = child.getBoundingClientRect();
@@ -41,6 +57,7 @@ const walk = (el) => {
           id: child.id || '',
           aria: aria,
           text: ownText,
+          xpath: xpathOf(child),
           clickable: clickable,
           x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
           x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
@@ -64,11 +81,12 @@ pub(super) fn dom_elements_to_xml(elements: &serde_json::Value) -> String {
     let mut xml = String::from("<?xml version='1.0' encoding='UTF-8'?>\n<hierarchy rotation=\"0\">\n");
     for e in list {
         xml.push_str(&format!(
-            "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" clickable=\"{}\" enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
+            "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" xpath=\"{}\" clickable=\"{}\" enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
             escape_attr(e["tag"].as_str().unwrap_or("")),
             escape_attr(e["id"].as_str().unwrap_or("")),
             escape_attr(e["aria"].as_str().unwrap_or("")),
             escape_attr(e["text"].as_str().unwrap_or("")),
+            escape_attr(e["xpath"].as_str().unwrap_or("")),
             e["clickable"].as_bool().unwrap_or(false),
             e["x1"].as_i64().unwrap_or(0),
             e["y1"].as_i64().unwrap_or(0),

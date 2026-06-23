@@ -160,6 +160,9 @@ impl Fetcher {
         let mut content_desc = None;
         let mut resource_id = None;
         let mut hint = None;
+        // web 采集已在浏览器里算好唯一 DOM 路径（normalize.rs），随 node 的 xpath 属性带来；
+        // 有它就直接用、不再走下面那套按 text 生成的 xpath（会撞名）。
+        let mut xpath_attr = None;
         let mut clickable = false;
         let mut checkable = false;
         let mut checked = false;
@@ -183,6 +186,7 @@ impl Fetcher {
                     "text" => if !value.is_empty() { text = Some(value) },
                     "content-desc" => if !value.is_empty() { content_desc = Some(value) },
                     "resource-id" => if !value.is_empty() { resource_id = Some(value) },
+                    "xpath" => if !value.is_empty() { xpath_attr = Some(value) },
                     "hint" | "hintText" => if !value.is_empty() { hint = Some(value) },
                     "clickable" => clickable = value == "true",
                     "checkable" => checkable = value == "true",
@@ -213,7 +217,7 @@ impl Fetcher {
             scrollable,
             selected,
             enabled,
-            xpath: None,  // 稍后生成
+            xpath: xpath_attr,  // web 自带唯一路径；为 None 时下面 generate_xpaths 兜底生成
             z_index: None,  // 稍后计算
             parent_index,
             depth,
@@ -486,6 +490,10 @@ impl Fetcher {
         let elements_ref: Vec<UIElement> = elements.to_vec();
 
         for i in 0..elements.len() {
+            // 已带唯一路径（web 在浏览器里算好）的不覆盖；只给没有的（App/uiautomator）兜底生成。
+            if elements[i].xpath.is_some() {
+                continue;
+            }
             let xpath = self.generate_single_xpath(&elements_ref, i);
             elements[i].xpath = Some(xpath);
         }
