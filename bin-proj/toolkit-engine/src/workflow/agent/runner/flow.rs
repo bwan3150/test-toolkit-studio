@@ -399,7 +399,9 @@ pub async fn drive(
         let ocr_n = p.ocr_added;
         let page_n = p.elements.len().saturating_sub(ocr_n);
         let mut stat = vec![format!("{} 页面元素", page_n)];
-        if ocr_n > 0 {
+        // OCR 开启时**总是**显示（哪怕额外独立元素为 0）——告知用户 OCR 在起作用：
+        // 它即使没产出独立新元素，也会把识别到的文字合并进已有页面元素（ocr_filled）。
+        if ctx.ocr.is_some() {
             stat.push(format!("{} OCR元素", ocr_n));
         }
         if !p.tabs.is_empty() {

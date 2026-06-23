@@ -149,24 +149,51 @@ pub(super) async fn optimize(
 
     // 解析 {"removable":[步号], "scroll_merges":[{from,to,target,direction}]}
     let obj = parse_desc_json(&reply)?;
-    let proposed: std::collections::HashSet<usize> = obj["removable"]
+    // removable：支持 [{"step":N,"reason":".."}]（每步给依据，像医生）或裸数字 N（兼容）。
+    let mut reasons: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+    let proposed: Vec<usize> = obj["removable"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_u64()).map(|n| n as usize).filter(|&i| i >= 1 && i <= lines.len()).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| {
+                    let step = v.get("step").and_then(|x| x.as_u64()).or_else(|| v.as_u64())? as usize;
+                    if step < 1 || step > lines.len() {
+                        return None;
+                    }
+                    if let Some(r) = v.get("reason").and_then(|x| x.as_str()).map(str::trim).filter(|s| !s.is_empty()) {
+                        reasons.insert(step, r.to_string());
+                    }
+                    Some(step)
+                })
+                .collect()
+        })
         .unwrap_or_default();
-    // 护栏：只准删"页面与上一步完全相同"的空操作步；改变了页面/开了标签的**承重步**一律保留，
-    // 否则会像把"点开 PDF 新标签"那一步删掉、让随后的「切换」越界一样毁掉脚本。
+    // 护栏 + 逐步亮明依据（像医生 ⟫）：只准删"页面与上一步完全相同"的空操作步；改变了页面/
+    // 开了标签的**承重步**一律保留（否则会像把"点开 PDF 新标签"那步删掉、让随后「切换」越界）。
     let noops = diag.noop_step_nos();
     let mut removable = std::collections::HashSet::new();
     for n in proposed {
+        if !removable.insert(n) {
+            continue; // 去重
+        }
         if noops.contains(&n) {
-            removable.insert(n);
+            let why = reasons.get(&n).map(String::as_str).unwrap_or("空操作冗余步（执行后页面未变）");
+            eprintln!(
+                "  {} {}",
+                paint(tty, "1;36", &format!("⟫ 删第 {} 步", n)),
+                paint(tty, "2", &format!("{}（{}）", why, friendly(&lines[n - 1]))),
+            );
         } else {
-            eprintln!("  {}", paint(tty, "33", &format!("反思官想删第 {} 步，但该步改变了页面（承重步），跳过不删", n)));
+            removable.remove(&n);
+            eprintln!(
+                "  {}",
+                paint(tty, "33", &format!("↩ 第 {} 步改变了页面（承重步），不删：{}", n, friendly(&lines[n - 1]))),
+            );
         }
     }
     // 滚动合并：把第 from..=to 步（应全是定向滑动盲滑）替换成一条 `滚动查找 ["target", 方向]`，
     // 把"不可复现的连续盲滑"换成"可靠地滚到目标文字出现"。只接受 from..to 全是滑动步的合并。
-    struct Merge { from: usize, to: usize, line: String }
+    struct Merge { from: usize, to: usize, line: String, reason: String }
     let mut merges: Vec<Merge> = Vec::new();
     if let Some(arr) = obj["scroll_merges"].as_array() {
         for m in arr {
@@ -188,11 +215,20 @@ pub(super) async fn optimize(
                 "right" => "右",
                 _ => "上",
             };
-            merges.push(Merge { from, to, line: format!("滚动查找 [\"{}\", {}]", target, dir_cn) });
+            let reason = m["reason"].as_str().unwrap_or("").trim().to_string();
+            merges.push(Merge { from, to, line: format!("滚动查找 [\"{}\", {}]", target, dir_cn), reason });
         }
     }
+    for m in &merges {
+        let why = if m.reason.is_empty() { "连续盲滑合并为可靠的滚动查找".to_string() } else { m.reason.clone() };
+        eprintln!(
+            "  {} {}",
+            paint(tty, "1;36", &format!("⟫ 合并第 {}–{} 步 → {}", m.from, m.to, m.line)),
+            paint(tty, "2", &format!("（{}）", why)),
+        );
+    }
     if removable.is_empty() && merges.is_empty() {
-        eprintln!("  {}", paint(tty, "2", "反思官：当前路径已无可删冗余/可合并的盲滑"));
+        eprintln!("  {}", paint(tty, "2", "反思官：当前路径已无可删冗余/可合并的盲滑（依据上面的逐步 trace）"));
         return None;
     }
 
@@ -215,10 +251,8 @@ pub(super) async fn optimize(
         return None;
     }
     eprintln!(
-        "  {}  删 {} 步 + 合并 {} 段盲滑（{} 步 → {} 步），交医生复检",
-        paint(tty, "1;36", "◇ 反思官优化路径"),
-        removable.len(),
-        merges.len(),
+        "  {}  {} 步 → {} 步，交医生复检",
+        paint(tty, "1;36", "◇ 反思官优化完成"),
         lines.len(),
         new.len()
     );
