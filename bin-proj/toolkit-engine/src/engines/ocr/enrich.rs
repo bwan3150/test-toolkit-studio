@@ -65,13 +65,17 @@ pub fn resolve_ocr(spec: &str, default_url: &str) -> Option<OcrSource> {
 
 /// 用 OCR 文字增强元素列表（异步：在线模式走网络）。
 /// 返回 (回填数, 新增伪元素数)。出错向上抛，调用方决定降级。
+/// 返回 (回填数 filled, 新增伪元素数 added, OCR 识别到的文字总数 recognized)。
+/// recognized 用于如实展示 OCR 状态：即使 filled/added 都为 0，只要 recognized>0 就说明 OCR 在工作（文字都已并入已有元素）。
 pub async fn enrich_with_ocr(
     elements: &mut Vec<UIElement>,
     image_data: &[u8],
     src: &OcrSource,
-) -> Result<(usize, usize), OcrErr> {
+) -> Result<(usize, usize, usize), OcrErr> {
     let result = ocr(image_data, src.online, &src.param).await?;
-    Ok(merge(elements, &result.texts))
+    let recognized = result.texts.len();
+    let (filled, added) = merge(elements, &result.texts);
+    Ok((filled, added, recognized))
 }
 
 /// 纯合并逻辑（无 IO，便于测试）

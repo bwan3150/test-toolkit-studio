@@ -18,6 +18,10 @@ pub struct Perceived {
     pub ocr_filled: usize,
     /// OCR 新增伪元素的个数（XML 漏掉的文字）
     pub ocr_added: usize,
+    /// OCR 识别到的文字总数（如实展示用：>0 即说明 OCR 在工作，哪怕 filled/added 都为 0）
+    pub ocr_recognized: usize,
+    /// OCR 是否报错（接口失败/识别崩溃等）——Some=出错了，别让"0"掩盖问题
+    pub ocr_error: Option<String>,
     /// 浏览器标签页（仅 web；其它平台为空）
     pub tabs: Vec<TabInfo>,
 }
@@ -37,13 +41,20 @@ pub async fn capture(
     let shot_path = workarea.screenshot_path();
     let mut elements = fetcher.fetch_elements_from_file(&xml_path)?;
 
-    let (mut ocr_filled, mut ocr_added) = (0, 0);
+    // OCR：如实记录结果——别把"接口报错"和"识别到 0 个"混成一个静默的 0。
+    let (mut ocr_filled, mut ocr_added, mut ocr_recognized) = (0, 0, 0);
+    let mut ocr_error: Option<String> = None;
     if let Some(src) = ocr {
-        if let Ok(bytes) = std::fs::read(&shot_path) {
-            if let Ok((f, a)) = enrich_with_ocr(&mut elements, &bytes, src).await {
-                ocr_filled = f;
-                ocr_added = a;
-            }
+        match std::fs::read(&shot_path) {
+            Ok(bytes) => match enrich_with_ocr(&mut elements, &bytes, src).await {
+                Ok((f, a, n)) => {
+                    ocr_filled = f;
+                    ocr_added = a;
+                    ocr_recognized = n;
+                }
+                Err(e) => ocr_error = Some(e.to_string()),
+            },
+            Err(e) => ocr_error = Some(format!("读截图失败：{}", e)),
         }
     }
 
@@ -54,5 +65,5 @@ pub async fn capture(
         Vec::new()
     };
 
-    Ok(Perceived { elements, shot_path, xml_path, ocr_filled, ocr_added, tabs })
+    Ok(Perceived { elements, shot_path, xml_path, ocr_filled, ocr_added, ocr_recognized, ocr_error, tabs })
 }

@@ -249,6 +249,8 @@ pub async fn drive(
                         xml_path: ctx.workarea.ui_tree_path(),
                         ocr_filled: 0,
                         ocr_added: 0,
+                        ocr_recognized: 0,
+                        ocr_error: None,
                         tabs: Vec::new(),
                     },
                     Some(e.to_string()),
@@ -402,10 +404,15 @@ pub async fn drive(
         let ocr_n = p.ocr_added;
         let page_n = p.elements.len().saturating_sub(ocr_n);
         let mut stat = vec![format!("{} 页面元素", page_n)];
-        // OCR 开启时**总是**显示（哪怕额外独立元素为 0）——告知用户 OCR 在起作用：
-        // 它即使没产出独立新元素，也会把识别到的文字合并进已有页面元素（ocr_filled）。
+        // OCR 状态**如实**展示，绝不用一个静默的 0 掩盖问题——区分四种：
+        //   没开(不显示) / 接口报错(下面红字单列) / 识别N并入M新增K / 真识别 0。
         if ctx.ocr.is_some() {
-            stat.push(format!("{} OCR元素", ocr_n));
+            if p.ocr_error.is_some() {
+                stat.push("OCR✗报错".to_string());
+            } else {
+                // recognized=识别到的文字总数(>0 即 OCR 在工作)；并入=回填进已有元素；新增=独立伪元素。
+                stat.push(format!("OCR识别{}（并入{}·新增{}）", p.ocr_recognized, p.ocr_filled, p.ocr_added));
+            }
         }
         if !p.tabs.is_empty() {
             stat.push(format!("{} 标签页", p.tabs.len()));
@@ -425,6 +432,11 @@ pub async fn drive(
             paint(tty, "2", &stat.join(" · ")),
             notready
         );
+        // OCR 接口报错——单独红字一行 + 记日志，绝不让它被"0"掩盖。
+        if let Some(err) = &p.ocr_error {
+            eprintln!("  {}", paint(tty, "31", &format!("OCR 接口报错：{}", brief(err, 120))));
+            tx.log("ocr_error", serde_json::json!({ "round": round, "error": err }));
+        }
         // 卡住提示：淡黄一行，不用 emoji（与 ✓/✗ 状态色区分开）
         if stuck {
             let msg = if no_progress >= 2 || revisits >= 3 {
