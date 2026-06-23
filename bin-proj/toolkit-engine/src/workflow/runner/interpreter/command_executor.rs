@@ -166,29 +166,38 @@ impl<'a> CommandExecutor<'a> {
             return Err(TkeError::InvalidArgument("滚动查找需要目标文字".to_string()));
         }
         let direction = ParamExtractor::extract_direction(&params[1])?;
-        // 每次滚动幅度取小（约 1/3 屏）+ 每滚一步都查，避免一次滚一整屏把目标从两次检查之间跨过去
-        // （目标"路过时看到了、却查不到"就是滚太大跨过的）。次数上限相应放大。
-        const MAX_SCROLLS: usize = 30;
+        // 每滚一步都查（含 OCR：DATA SHEET 这类图片/图标文字只有 OCR 能识别）。滚动幅度取**近全屏**
+        // （少重复检查同一批元素/OCR）；不定死次数，而是**滚一次→查→比上一屏是否大部分相同**：相同
+        // 就是滚到底/到顶、滚不动了，立刻停（不再卡在边界空转）。安全上限防病态死循环。
+        const SAFETY_MAX: usize = 40;
         let (sw, sh) = image::image_dimensions(self.workarea.screenshot_path()).unwrap_or((1080, 1920));
         let from = Point::new(sw as i32 / 2, sh as i32 / 2);
         let dim = if matches!(direction.as_str(), "left" | "right") { sw as i32 } else { sh as i32 };
-        let step = (dim / 3).max(200);
+        let step = (dim * 4 / 5).max(200);
         let ocr_src = crate::utils::params::ocr_source();
-        for i in 0..=MAX_SCROLLS {
+        let mut prev_texts: Option<Vec<String>> = None;
+        for i in 0..SAFETY_MAX {
             if crate::utils::interrupt::aborted() {
                 return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
             }
-            // 先查目标是否已在当前视口（含 OCR：DATA SHEET 这类图片/图标文字只有 OCR 能识别，
-            // 只查 xml 结构文字会漏——这正是"滚动查找某些文字死活找不到"的根因）。
             self.controller.capture_ui_state(self.workarea).await?;
             self.trace.captured = true;
-            if let Some(hit) = self.page_first_hit(&cands, ocr_src.as_ref()).await {
+            let mut els = crate::Fetcher::new().fetch_elements_from_file(&self.workarea.ui_tree_path()).unwrap_or_default();
+            if let Some(src) = ocr_src.as_ref() {
+                if let Ok(bytes) = std::fs::read(self.workarea.screenshot_path()) {
+                    let _ = crate::engines::ocr::enrich_with_ocr(&mut els, &bytes, src).await;
+                }
+            }
+            let texts: Vec<String> = els.iter().map(|e| e.to_ai_text()).collect();
+            if let Some(hit) = crate::utils::scroll::first_hit(&texts, &cands) {
                 info!("滚动查找：目标「{}」已可见（滚动 {} 次）", hit, i);
                 return Ok(());
             }
-            if i == MAX_SCROLLS {
+            // 与上一屏大部分相同 → 滚不动了（到底/到顶），停。
+            if prev_texts.as_ref().map(|p| crate::utils::scroll::page_stuck(p, &texts)).unwrap_or(false) {
                 break;
             }
+            prev_texts = Some(texts);
             execute_action(
                 &*self.controller,
                 ControlAction::SwipeDir { from, direction: direction.clone(), distance: step, duration_ms: 300 },
@@ -196,20 +205,7 @@ impl<'a> CommandExecutor<'a> {
             .await?;
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
-        Err(TkeError::ElementNotFound(format!("滚动查找：滚动 {} 次后页面仍未出现「{}」", MAX_SCROLLS, target_raw)))
-    }
-
-    /// 当前页面（结构元素 + OCR 文字）是否命中任一候选关键词（空格/大小写不敏感）。
-    /// 命中返回该候选**原文**；OCR 源为 None 时只查结构。
-    async fn page_first_hit<'c>(&self, cands: &'c [(String, String)], ocr: Option<&crate::engines::ocr::OcrSource>) -> Option<&'c str> {
-        let mut els = crate::Fetcher::new().fetch_elements_from_file(&self.workarea.ui_tree_path()).ok()?;
-        if let Some(src) = ocr {
-            if let Ok(bytes) = std::fs::read(self.workarea.screenshot_path()) {
-                let _ = crate::engines::ocr::enrich_with_ocr(&mut els, &bytes, src).await;
-            }
-        }
-        let texts: Vec<String> = els.iter().map(|e| e.to_ai_text()).collect();
-        crate::utils::scroll::first_hit(&texts, cands)
+        Err(TkeError::ElementNotFound(format!("滚动查找：滚到底/到顶仍未出现「{}」", target_raw)))
     }
 
     /// 输入文本（execute_action 的 Input 已含「点击聚焦 + 等待键盘 + 输入」）

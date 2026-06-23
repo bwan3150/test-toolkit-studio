@@ -19,6 +19,18 @@ pub fn targets(target: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// 相邻两次滚动的页面是否"大部分相同"——相同元素文字占比 >= 85% 即判为**滚不动了**
+/// （滚到底 / 滚到顶 / 被卡住）。据此停止滚动查找，而不是死磕固定次数、卡在边界空转。
+pub fn page_stuck(prev: &[String], cur: &[String]) -> bool {
+    if prev.is_empty() && cur.is_empty() {
+        return true;
+    }
+    let set: std::collections::HashSet<&String> = prev.iter().collect();
+    let common = cur.iter().filter(|t| set.contains(t)).count();
+    let denom = prev.len().max(cur.len());
+    denom > 0 && common * 100 / denom >= 85
+}
+
 /// 在一批页面元素文本里找：哪个候选被某元素文本（归一后）包含。
 /// 命中返回该候选的**原文**（用于把多候选收敛成单一确定关键词）；都没命中返回 None。
 /// 按候选给定顺序优先（AI 列在前面的更可能是它最想要的）。

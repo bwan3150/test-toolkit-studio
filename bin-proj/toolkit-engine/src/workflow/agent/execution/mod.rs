@@ -176,7 +176,7 @@ pub async fn apply(
                 "left" | "right" => w as i32,
                 _ => h as i32,
             };
-            let dist = (dim / 3).max(200);
+            let dist = (dim * 4 / 5).max(200); // 近全屏，少重复检查同一批元素/OCR
             let workarea = Workarea::for_device(Some(device))?;
             let fetcher = Fetcher::new();
             let ocr_src = crate::utils::params::ocr_source();
@@ -186,8 +186,10 @@ pub async fn apply(
                 return Err(TkeError::InvalidArgument("滚动查找需要目标文字".to_string()));
             }
             let mut matched: Option<String> = None; // 命中的那个候选原文（用于收敛）
-            const MAX: usize = 30;
-            for i in 0..=MAX {
+            // 不定死次数：滚一次→查→比上一屏是否大部分相同，相同就是滚到底/到顶滚不动了、停。安全上限防死循环。
+            const SAFETY_MAX: usize = 40;
+            let mut prev_texts: Option<Vec<String>> = None;
+            for _ in 0..SAFETY_MAX {
                 if Refresh::new(device.to_string())?.run(RefreshOptions::default()).await.is_ok() {
                     if let Ok(mut els) = fetcher.fetch_elements_from_file(&workarea.ui_tree_path()) {
                         if let Some(src) = &ocr_src {
@@ -200,10 +202,11 @@ pub async fn apply(
                             matched = Some(hit.to_string());
                             break;
                         }
+                        if prev_texts.as_ref().map(|p| crate::utils::scroll::page_stuck(p, &texts)).unwrap_or(false) {
+                            break; // 滚不动了
+                        }
+                        prev_texts = Some(texts);
                     }
-                }
-                if i == MAX {
-                    break;
                 }
                 let _ = exec(
                     device,
