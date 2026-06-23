@@ -98,6 +98,24 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             }),
         },
         ToolSchema {
+            name: "assert_visual",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "region": {
+                        "type": "array",
+                        "items": { "type": "integer" },
+                        "minItems": 4, "maxItems": 4,
+                        "description": "该页独特标志在截图中的像素框 [x1,y1,x2,y2]（优先；越贴合越好）"
+                    },
+                    "x": { "type": "integer", "description": "无 region 时给标志中心点 x（像素）" },
+                    "y": { "type": "integer", "description": "无 region 时给标志中心点 y（像素）" },
+                    "exist": { "type": "boolean", "description": "断言该标志存在(true，默认)还是不存在(false)" }
+                },
+                "required": []
+            }),
+        },
+        ToolSchema {
             name: "swipe_direction",
             schema: serde_json::json!({
                 "type": "object",

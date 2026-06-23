@@ -29,6 +29,16 @@ pub enum AgentAction {
         name: String,
         desc: Option<String>,
     },
+    /// 看图后视觉断言：当该页的独特标志只能靠看图认（图标/logo/无文字块）、结构与 OCR 列表里
+    /// 没有可断言的元素时，看截图给出该标志的像素框 region=[x1,y1,x2,y2]（优先）或点 (x,y)。
+    /// 落库为纯 img 元素、产出 `断言 [{name}, 存在]`，回放靠图像模板匹配校验它在不在（不操作设备）。
+    AssertVisual {
+        region: Option<[i32; 4]>,
+        x: Option<i32>,
+        y: Option<i32>,
+        name: String,
+        exist: bool,
+    },
     /// 定向滑动（up/down/left/right），从屏幕中心滑动。
     /// amount=屏幕比例 full/half/quarter（推荐，免算像素）；distance=像素（兜底）
     SwipeDir { direction: String, distance: Option<i32>, amount: Option<String> },

@@ -50,6 +50,13 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
         },
+        "assert_visual" => AgentAction::AssertVisual {
+            region: opt_region(a, "region"),
+            x: opt_i32(a, "x"),
+            y: opt_i32(a, "y"),
+            name: opt_str(a, "name").unwrap_or_default(),
+            exist: a.get("exist").and_then(|v| v.as_bool()).unwrap_or(true),
+        },
         "swipe_direction" => AgentAction::SwipeDir {
             direction: req_str(a, "direction")?,
             distance: opt_i32(a, "distance"),

@@ -122,6 +122,28 @@ pub async fn apply(
             };
             Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, trace, saved))
         }
+        AgentAction::AssertVisual { region, x, y, exist, .. } => {
+            // 看图视觉断言：与 click_visual 同样按像素框落纯 img 元素，但**不操作设备**，只产出校验步
+            // `断言 [{name}, 存在/不存在]`——回放靠图像模板匹配校验该标志在不在。
+            let (sw, sh) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
+            let bounds = match region {
+                Some([x1, y1, x2, y2]) => Bounds::new(*x1, *y1, *x2, *y2),
+                None => {
+                    let cx = x.unwrap_or(sw as i32 / 2);
+                    let cy = y.unwrap_or(sh as i32 / 2);
+                    let half = (sw as i32 * 15 / 100).max(20) / 2;
+                    Bounds::new(cx - half, cy - half, cx + half, cy + half)
+                }
+            };
+            let c = bounds.center();
+            let name = visual_auto_name(&bounds);
+            // 三级·仅视觉：结构空、ocr 空、仅 img 模板（从当前帧裁）
+            let saved = save_target(device, element_path, &name, &None, bounds.clone(), None, OcrChannel::None, tx, round).await;
+            let cond = if *exist { "存在" } else { "不存在" };
+            let detail = format!("记录视觉断言：{} {}", name, cond);
+            let trace = ActionTrace { captured: false, points: vec![c], bounds: Some(bounds), element_name: Some(name.clone()) };
+            Ok((line(TksCommand::Assert, vec![el_param(&name), TksParam::Text(cond.to_string())]), detail, trace, saved))
+        }
         AgentAction::SwipeDir { direction, distance, amount } => {
             let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
             let (cx, cy) = (w as i32 / 2, h as i32 / 2);

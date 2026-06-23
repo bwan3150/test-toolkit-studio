@@ -106,6 +106,7 @@ fn preview_action(action: &AgentAction, elements: &[crate::UIElement]) -> Option
             format!("断言 {} {}", name(*element_id), if *exist { "存在" } else { "不存在" })
         }
         AgentAction::ClickVisual { .. } => "视觉点击（看图框选）".to_string(),
+        AgentAction::AssertVisual { exist, .. } => format!("视觉断言（看图框选）{}", if *exist { "存在" } else { "不存在" }),
         AgentAction::SwipeDir { direction, .. } => format!("定向滑动 {}", dir_cn(direction)),
         AgentAction::SwipeToFind { target, direction } => format!("滚动查找 \"{}\", {}", brief(target, 30), dir_cn(direction)),
         AgentAction::SwipeElement { element_id, direction, .. } => format!("在 {} 上滑 {}", name(*element_id), dir_cn(direction)),
@@ -320,7 +321,7 @@ pub async fn drive(
         // 踩实：上一步是「导航」(点击/视觉点击/切换/拖拽)且确实进入了新页面/菜单(页面变了、且新页有可断言
         // 元素) → 本轮强制先 assert 一个该页独有元素把这步踩实，再继续往下点。空元素页(PDF/新标签)无法断言则跳过。
         let need_checkpoint = last_was_nav && !unchanged && !p.elements.is_empty();
-        let mut checkpoint_nudges = 0usize; // 本轮已催「先踩实」几次（防个别页死活断言不了时卡死）
+        let mut checkpoint_nudges = 0usize; // 本轮已催「先踩实」几次（只催 1 次就放行，避免对弱模型空转打转）
         // 剔除"空滑"：上一步是滑动但页面纹丝未动（已到边界/没滚起来）——这种步无用，
         // 且回放时它往往会真的滚动，导致整段脚本滑过头到底部、错过目标元素。从脚本里删掉。
         if unchanged && last_was_swipe {
@@ -638,14 +639,15 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
-                    // —— 强制踩实：刚导航进新页面/菜单却没先 assert 就想继续操作 → 拦下，要求先断言该页独有元素 ——
-                    //   断言/收尾(close)放行；连催 2 次仍不断言则放行(防个别页死活断言不了时卡死)。
-                    let is_assert = matches!(&device_action, AgentAction::Assert { .. });
-                    let is_teardown = matches!(&device_action, AgentAction::Close { .. });
-                    if need_checkpoint && !is_assert && !is_teardown && checkpoint_nudges < 2 {
+                    // —— 强制踩实：刚导航进新页面/菜单却没先 assert 就想继续操作 → 拦下，提醒先断言该页独有元素 ——
+                    //   断言(含视觉断言)/收尾(close)/返回(back，"发现点错了回退")放行；只催 1 次，
+                    //   仍不断言则放行(避免对弱模型空转打转——它若执意推进，提示已尽到，强行多拦只是浪费)。
+                    let is_assert = matches!(&device_action, AgentAction::Assert { .. } | AgentAction::AssertVisual { .. });
+                    let is_teardown = matches!(&device_action, AgentAction::Close { .. } | AgentAction::Back);
+                    if need_checkpoint && !is_assert && !is_teardown && checkpoint_nudges < 1 {
                         checkpoint_nudges += 1;
                         let m = ctx.prompts.message("explorer", "nudge_checkpoint");
-                        eprintln!("  {}", paint(tty, "33", "  先踩实：刚进入新页面，需先 assert 一个该页独有元素再继续"));
+                        eprintln!("  {}", paint(tty, "33", "  先踩实：刚导航进新页面，请先 assert/assert_visual 一个该页独有标志；若这页找不到能证明到位的标志，多半是上一步点错了元素——回退换个元素重试"));
                         tx.log("checkpoint_nudge", serde_json::json!({ "round": round, "blocked_tool": primary.name.clone() }));
                         tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
                         sess.tool_result(primary.call_id.as_str(), m);
@@ -733,7 +735,7 @@ pub async fn drive(
                             // 免得把"正常的页面没变"误报成"上一步没生效/原地打转"。
                             last_no_pagecheck = matches!(
                                 &device_action,
-                                AgentAction::Assert { .. } | AgentAction::Wait { .. } | AgentAction::HideKeyboard
+                                AgentAction::Assert { .. } | AgentAction::AssertVisual { .. } | AgentAction::Wait { .. } | AgentAction::HideKeyboard
                             );
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
