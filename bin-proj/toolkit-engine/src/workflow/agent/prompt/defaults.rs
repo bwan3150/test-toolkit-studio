@@ -18,11 +18,15 @@ pub const DEFAULT_DOCTOR_SYSTEM: &str = include_str!("builtin/agents/doctor.md")
 /// 默认探索反思官系统提示词（角色 reflector）
 pub const DEFAULT_REFLECTOR_SYSTEM: &str = include_str!("builtin/agents/reflector.md");
 
+/// 默认脚本优化官系统提示词（角色 optimizer：逐步删冗余/合并盲滑）
+pub const DEFAULT_OPTIMIZER_SYSTEM: &str = include_str!("builtin/agents/optimizer.md");
+
 /// 某角色的默认系统提示词（外部 <prompts_dir>/agents/<role>.md 可覆盖）
 pub fn default_role_system(role: &str) -> &'static str {
     match role {
         "doctor" => DEFAULT_DOCTOR_SYSTEM,
         "reflector" => DEFAULT_REFLECTOR_SYSTEM,
+        "optimizer" => DEFAULT_OPTIMIZER_SYSTEM,
         _ => DEFAULT_SYSTEM, // explorer 及未知角色回落主提示词
     }
 }
@@ -69,6 +73,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("reflector", "analyze_success") => include_str!("builtin/messages/reflector/analyze_success.md"),
         ("reflector", "optimize") => include_str!("builtin/messages/reflector/optimize.md"),
         ("reflector", "finalize") => include_str!("builtin/messages/reflector/finalize.md"),
+        ("optimizer", "intro") => include_str!("builtin/messages/optimizer/intro.md"),
         _ => "",
     }
 }
