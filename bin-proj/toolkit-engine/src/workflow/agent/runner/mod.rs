@@ -1,6 +1,7 @@
 // 【编排】AgentRunner：装配各子模块（提示词/会话/感知/执行/记忆/日志）并驱动循环
 // 本文件只做"装配 + 收尾"，循环逻辑在 flow.rs。
 
+pub mod asserter;
 pub mod doctor;
 pub mod flow;
 pub mod interrupt;
@@ -138,9 +139,9 @@ impl AgentRunner {
         let mut refl_ct = 0i64;
         let mut discarded_pt = 0i64;
         let mut discarded_ct = 0i64;
-        // 监督官(finish 把关)独立会话 token，跨初探+各重探累计
-        let mut sup_pt = outcome.supervisor_pt;
-        let mut sup_ct = outcome.supervisor_ct;
+        // 子 agent(踩实官 + finish 监督官)独立会话 token，跨初探+各重探累计
+        let mut sup_pt = outcome.subagent_pt;
+        let mut sup_ct = outcome.subagent_ct;
         // 跨重探累计的新建元素（失败重探也可能造元素，最终失败要一并回滚，防泄漏）
         let mut explore_created: Vec<String> = outcome.created.clone();
 
@@ -176,8 +177,8 @@ impl AgentRunner {
             tx.log("llm_message", serde_json::json!({ "content": guide_msg.clone() }));
             sess.user(guide_msg);
             outcome = drive(&mut sess, &mut tx, &ctx, true, &format!("重探{}·", reexplore_n)).await?;
-            sup_pt += outcome.supervisor_pt;
-            sup_ct += outcome.supervisor_ct;
+            sup_pt += outcome.subagent_pt;
+            sup_ct += outcome.subagent_ct;
             for c in &outcome.created {
                 if !explore_created.contains(c) {
                     explore_created.push(c.clone());

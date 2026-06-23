@@ -139,6 +139,7 @@ use super::super::perception::{capture, match_known, render_element_list, Percei
 use super::super::prompt::{render, PromptSet};
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
+use super::asserter;
 use super::supervisor;
 
 /// 循环所需的只读上下文
@@ -178,9 +179,9 @@ pub struct DriveOutcome {
     pub renames: Vec<(String, String)>,
     /// 每个落库步骤当时 AI 给的 comment（理由），与 lines 一一对应；供反思 agent 复盘"怎么走成这样"
     pub step_comments: Vec<String>,
-    /// 监督官(finish 把关)独立会话消耗的 token，供上层并入总量
-    pub supervisor_pt: i64,
-    pub supervisor_ct: i64,
+    /// 子 agent(踩实官 + finish 监督官)独立会话消耗的 token 合计，供上层并入总量
+    pub subagent_pt: i64,
+    pub subagent_ct: i64,
 }
 
 /// 驱动探索循环
@@ -236,8 +237,8 @@ pub async fn drive(
     let mut llm_calls = 0usize;
     let mut supervisor_rejects = 0usize; // 监督官打回 finish 的次数（防无限：到上限后以失败收场）
     const MAX_SUPERVISOR_REJECTS: usize = 3;
-    let mut supervisor_pt = 0i64; // 监督官独立会话 token，累进 DriveOutcome
-    let mut supervisor_ct = 0i64;
+    let mut subagent_pt = 0i64; // 子 agent(踩实官 + 监督官)独立会话 token 合计，累进 DriveOutcome
+    let mut subagent_ct = 0i64;
     let mut prev_action_elements: Vec<crate::UIElement> = Vec::new(); // 上一步执行前所见的页面元素，用于算"新出现的元素"增量
     let mut finish: Option<(bool, String)> = None;
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
@@ -403,19 +404,6 @@ pub async fn drive(
         } else if last_no_pagecheck {
             // 上一步是断言/等待/隐藏键盘——页面没变是预期，不发"无变化/打转"提示
             String::new()
-        } else if changed_after_nav {
-            // 上一步导航让页面变了 → 提示"有反应但要确认方向"，并列出新出现的元素引导 assert 踩实
-            let delta_str = if delta_indices.is_empty() {
-                "（页面已变化，但未识别出明显的新增元素；请挑当前页一个该页独有的元素 assert 确认方向）".to_string()
-            } else {
-                delta_indices
-                    .iter()
-                    .take(8)
-                    .map(|&i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 80)))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            };
-            format!("\n{}", render(&ctx.prompts.message("explorer", "confirm_direction"), &[("delta", &delta_str)]))
         } else if no_progress >= 1 {
             format!("\n{}", render(&ctx.prompts.message("explorer", "hint_no_progress"), &[("n", &no_progress.to_string())]))
         } else if revisits >= 2 {
@@ -502,6 +490,53 @@ pub async fn drive(
                 "  在多页间打转，已提示 AI 换路径"
             };
             eprintln!("{}", paint(tty, "33", msg));
+        }
+
+        // 1b) 自动踩实（踩实官子 agent）：上一步导航让页面变了 → 由踩实官从"新出现的元素"挑一个标志，
+        //     系统自动插一条断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。挑不出标志=疑似点错，
+        //     只记日志不插断言（交监督官在 finish 处兜底）。
+        if changed_after_nav && !super::interrupt::aborted() {
+            let action_desc = lines.last().map(|l| friendly(l)).unwrap_or_default();
+            let cand: Vec<usize> = if delta_indices.is_empty() {
+                (0..p.elements.len()).take(12).collect()
+            } else {
+                delta_indices.iter().copied().take(12).collect()
+            };
+            let delta_listing = cand.iter().map(|&i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 80))).collect::<Vec<_>>().join("\n");
+            let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, &delta_listing).await;
+            subagent_pt += pick.pt;
+            subagent_ct += pick.ct;
+            match pick.index {
+                Some(idx) if idx < p.elements.len() => {
+                    let act = AgentAction::Assert { element_id: idx, name: String::new(), desc: None, exist: true };
+                    let step_no = steps.len() + 1;
+                    eprint!("  {} {} {} ", paint(tty, "2", &format!("[{:>2}]", step_no)), preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()), paint(tty, "2", "..."));
+                    let _ = std::io::stderr().flush();
+                    match execution::apply(ctx.device, ctx.element_path, &act, &p.elements, &known_names, &p.shot_path, tx, round).await {
+                        Ok((line, detail, trace, saved)) => {
+                            eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", "踩实"));
+                            if let Some(s) = saved {
+                                if s.created && !created.contains(&s.name) {
+                                    created.push(s.name.clone());
+                                }
+                            }
+                            let step_index = steps.len();
+                            let (screenshot, xml) = ctx.artifacts.save_step(ctx.workarea, step_index, &trace, &line, true);
+                            tx.log("tks_step", serde_json::json!({ "round": round, "step": step_index + 1, "line": line.clone(), "exec": detail.clone(), "screenshot": screenshot.clone(), "xml": xml.clone(), "auto_checkpoint": true, "reason": pick.reason.clone() }));
+                            steps.push(StepResult { index: step_index, command: line.clone(), success: true, error: None, duration_ms: 0, line: None, screenshot, xml });
+                            lines.push(line.clone());
+                            step_comments.push(format!("踩实：{}", pick.reason));
+                        }
+                        Err(e) => {
+                            eprintln!("{} {}", paint(tty, "33", "·"), paint(tty, "2", &format!("踩实跳过：{}", brief(&e.to_string(), 50))));
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("  {}", paint(tty, "33", &format!("  踩实官：未找到可踩实标志（{}）", brief(&pick.reason, 70))));
+                    tx.log("checkpoint_skip", serde_json::json!({ "round": round, "reason": pick.reason }));
+                }
+            }
         }
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
@@ -599,8 +634,8 @@ pub async fn drive(
                         if let Some(v) =
                             supervisor::supervise(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &steps_listing, &list_text, success, &reason).await
                         {
-                            supervisor_pt += v.pt;
-                            supervisor_ct += v.ct;
+                            subagent_pt += v.pt;
+                            subagent_ct += v.ct;
                             if !v.approved {
                                 supervisor_rejects += 1;
                                 eprintln!("  {}", paint(tty, "33", &format!("监督官打回（第 {} 次）：{}", supervisor_rejects, brief(&v.reason, 90))));
@@ -826,5 +861,5 @@ pub async fn drive(
         }
     }
 
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames, step_comments, supervisor_pt, supervisor_ct })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames, step_comments, subagent_pt, subagent_ct })
 }

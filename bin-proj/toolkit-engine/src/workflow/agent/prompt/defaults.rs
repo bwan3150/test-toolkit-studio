@@ -24,6 +24,9 @@ pub const DEFAULT_OPTIMIZER_SYSTEM: &str = include_str!("builtin/agents/optimize
 /// 默认探索监督官系统提示词（角色 supervisor：finish 处审查需求/步骤/终页，放行才结束）
 pub const DEFAULT_SUPERVISOR_SYSTEM: &str = include_str!("builtin/agents/supervisor.md");
 
+/// 默认踩实官系统提示词（角色 asserter：每次导航后据 diff 挑标志元素自动断言踩实）
+pub const DEFAULT_ASSERTER_SYSTEM: &str = include_str!("builtin/agents/asserter.md");
+
 /// 某角色的默认系统提示词（外部 <prompts_dir>/agents/<role>.md 可覆盖）
 pub fn default_role_system(role: &str) -> &'static str {
     match role {
@@ -31,6 +34,7 @@ pub fn default_role_system(role: &str) -> &'static str {
         "reflector" => DEFAULT_REFLECTOR_SYSTEM,
         "optimizer" => DEFAULT_OPTIMIZER_SYSTEM,
         "supervisor" => DEFAULT_SUPERVISOR_SYSTEM,
+        "asserter" => DEFAULT_ASSERTER_SYSTEM,
         _ => DEFAULT_SYSTEM, // explorer 及未知角色回落主提示词
     }
 }
@@ -73,10 +77,11 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("explorer", "desc_pass") => include_str!("builtin/messages/explorer/desc_pass.md"),
         ("explorer", "finish_check") => include_str!("builtin/messages/explorer/finish_check.md"),
         ("explorer", "finish_recheck_fail") => include_str!("builtin/messages/explorer/finish_recheck_fail.md"),
-        ("explorer", "confirm_direction") => include_str!("builtin/messages/explorer/confirm_direction.md"),
         // —— supervisor：探索监督官（finish 把关）——
         ("supervisor", "review") => include_str!("builtin/messages/supervisor/review.md"),
         ("supervisor", "pushback") => include_str!("builtin/messages/supervisor/pushback.md"),
+        // —— asserter：踩实官（每次导航后自动断言）——
+        ("asserter", "pick") => include_str!("builtin/messages/asserter/pick.md"),
         // —— doctor：脚本医生消息 ——
         ("doctor", "trace") => include_str!("builtin/messages/doctor/trace.md"),
         ("doctor", "trace_objective_minimize") => include_str!("builtin/messages/doctor/trace_objective_minimize.md"),
