@@ -119,6 +119,16 @@ impl AgentRunner {
             case: &opts.case,
         };
         let tty = std::io::stderr().is_terminal();
+
+        // —— 开局净化：关掉可能残留的旧会话（如上次没关的浏览器）——
+        // 否则探索会直接从那张旧页面开始：① 状态被污染；② 因为 web `launch` 会复用存活会话，
+        // AI 连「启动」都不发，生成的脚本缺少启动步、后续验证回放还得医生补。
+        // 关掉后首屏采集失败→AI 收到「请先 launch」提示→发启动建全新会话，干净且脚本完整。
+        // （web 关会话忽略 package；移动端起始包名未知、且 launch 自带 force-stop，暂不处理。）
+        if matches!(platform, Platform::Web) {
+            let _ = super::execution::device::exec(&device, crate::ControlAction::Close { package: String::new() }).await;
+        }
+
         let mut outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
 
         // 反思官 token + 被弃用(重探)的旧探索会话 token，最终并入总量
