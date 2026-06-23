@@ -260,14 +260,12 @@ impl<'a> CommandExecutor<'a> {
                 tokio::time::sleep(tokio::time::Duration::from_millis(*ms as u64)).await;
             }
             TksParam::Number(num) => {
-                // 数字参数：如果小于等于3600，当作秒数；否则当作毫秒数
-                if *num <= 3600 {
-                    debug!("等待 {} 秒", num);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(*num as u64)).await;
-                } else {
-                    debug!("等待 {} 毫秒", num);
-                    tokio::time::sleep(tokio::time::Duration::from_millis(*num as u64)).await;
-                }
+                // 裸数字一律按**毫秒**——必须与产出方同口径：探索/动作写脚本就是 `等待 [毫秒数]`
+                // （execution 里实时 sleep(from_millis(ms))）。要表达秒请用 `Ns` 形式（解析为 Duration）。
+                // 曾经"≤3600 当秒"的启发式会把 `等待 1000`(本意 1 秒) 在回放里睡成 1000 秒。
+                let ms = (*num).max(0) as u64;
+                debug!("等待 {} 毫秒", ms);
+                tokio::time::sleep(tokio::time::Duration::from_millis(ms)).await;
             }
             TksParam::Element { name, strategy } => {
                 // 可选第二参数 = 超时秒数: 等待 [{元素}, 90]（缺省 30s）
@@ -281,10 +279,10 @@ impl<'a> CommandExecutor<'a> {
                 self.wait_for_element(name, strategy, timeout_secs).await?;
             }
             TksParam::Text(text) => {
-                // 支持文本参数的等待
-                if let Ok(seconds) = text.parse::<u64>() {
-                    debug!("等待 {} 秒 (文本解析)", seconds);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(seconds)).await;
+                // 与裸数字同口径：毫秒
+                if let Ok(ms) = text.parse::<u64>() {
+                    debug!("等待 {} 毫秒 (文本解析)", ms);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(ms)).await;
                 } else {
                     return Err(TkeError::InvalidArgument(format!("无法解析等待参数: {}", text)));
                 }
