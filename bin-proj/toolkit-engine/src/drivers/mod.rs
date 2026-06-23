@@ -33,14 +33,14 @@ pub fn format_tabs(tabs: &[TabInfo]) -> String {
     let items: Vec<String> = tabs
         .iter()
         .map(|t| {
-            let mark = if t.active { "✓当前" } else { "" };
+            let mark = if t.active { " ◀你现在就在这页" } else { "" };
             let title = if t.title.trim().is_empty() { t.url.as_str() } else { t.title.as_str() };
             let title: String = title.chars().take(40).collect();
-            format!("[{}]{} {}", t.index, mark, title)
+            format!("[{}] {}{}", t.index, title, mark)
         })
         .collect();
     format!(
-        "【浏览器共 {} 个标签页】{}\n（标 ✓当前 的就是你**正所处**的标签页——上面那些页面元素就是它的内容，**你已经在它上面了、无需再 switch 它**；只有要看**别的**标签页时才 switch [序号]，或 switch <URL> 用新标签打开。打开新标签后浏览器已自动切到新标签，别多此一举再 switch 一次。）",
+        "【浏览器共 {} 个标签页】{}\n（标「◀你现在就在这页」的那个标签就是你当前所处的页面，上面那些页面元素就是它的内容。switch [序号] 用于切到**别的**标签页；switch <URL> 用新标签打开网址。）",
         tabs.len(),
         items.join("  ")
     )
