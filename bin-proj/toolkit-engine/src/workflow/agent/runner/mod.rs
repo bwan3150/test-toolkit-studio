@@ -6,6 +6,7 @@ pub mod flow;
 pub mod interrupt;
 pub mod options;
 pub mod reflect;
+pub mod supervisor;
 pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
@@ -117,6 +118,7 @@ impl AgentRunner {
             max_rounds,
             prompts: &prompts,
             case: &opts.case,
+            ai: &opts.ai,
         };
         let tty = std::io::stderr().is_terminal();
 
@@ -131,11 +133,14 @@ impl AgentRunner {
 
         let mut outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
 
-        // 反思官 token + 被弃用(重探)的旧探索会话 token，最终并入总量
+        // 反思官 token + 被弃用(重探)的旧探索会话 token + 监督官 token，最终并入总量
         let mut refl_pt = 0i64;
         let mut refl_ct = 0i64;
         let mut discarded_pt = 0i64;
         let mut discarded_ct = 0i64;
+        // 监督官(finish 把关)独立会话 token，跨初探+各重探累计
+        let mut sup_pt = outcome.supervisor_pt;
+        let mut sup_ct = outcome.supervisor_ct;
         // 跨重探累计的新建元素（失败重探也可能造元素，最终失败要一并回滚，防泄漏）
         let mut explore_created: Vec<String> = outcome.created.clone();
 
@@ -171,6 +176,8 @@ impl AgentRunner {
             tx.log("llm_message", serde_json::json!({ "content": guide_msg.clone() }));
             sess.user(guide_msg);
             outcome = drive(&mut sess, &mut tx, &ctx, true, &format!("重探{}·", reexplore_n)).await?;
+            sup_pt += outcome.supervisor_pt;
+            sup_ct += outcome.supervisor_ct;
             for c in &outcome.created {
                 if !explore_created.contains(c) {
                     explore_created.push(c.clone());
@@ -245,9 +252,9 @@ impl AgentRunner {
         // —— log.json(ExecutionResult，与 run 同构) ——
         // 总 token = 探索会话(含活体重探复用的同一会话) + 脚本医生独立会话(report.extra_*)
         let (mut total_prompt, mut total_completion) = sess.total_usage();
-        // 并入：被弃用的重探旧会话 + 反思官会话 + 脚本医生独立会话
-        total_prompt += discarded_pt + refl_pt;
-        total_completion += discarded_ct + refl_ct;
+        // 并入：被弃用的重探旧会话 + 反思官会话 + 监督官会话 + 脚本医生独立会话
+        total_prompt += discarded_pt + refl_pt + sup_pt;
+        total_completion += discarded_ct + refl_ct + sup_ct;
         if let Some(r) = &verified {
             total_prompt += r.extra_prompt;
             total_completion += r.extra_completion;

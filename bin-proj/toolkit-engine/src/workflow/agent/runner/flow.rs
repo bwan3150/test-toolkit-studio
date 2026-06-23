@@ -139,6 +139,7 @@ use super::super::perception::{capture, match_known, render_element_list, Percei
 use super::super::prompt::{render, PromptSet};
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
+use super::supervisor;
 
 /// 循环所需的只读上下文
 pub struct DriveCtx<'a> {
@@ -154,6 +155,8 @@ pub struct DriveCtx<'a> {
     pub prompts: &'a PromptSet,
     /// 用户原始测试用例（finish 终点校验：对照原话需求判断是否真到对的地方）
     pub case: &'a str,
+    /// AI 配置：供 finish 时新建独立的「监督官」会话审查（与探索会话分开）
+    pub ai: &'a crate::AiConfig,
 }
 
 /// 循环结果
@@ -175,6 +178,9 @@ pub struct DriveOutcome {
     pub renames: Vec<(String, String)>,
     /// 每个落库步骤当时 AI 给的 comment（理由），与 lines 一一对应；供反思 agent 复盘"怎么走成这样"
     pub step_comments: Vec<String>,
+    /// 监督官(finish 把关)独立会话消耗的 token，供上层并入总量
+    pub supervisor_pt: i64,
+    pub supervisor_ct: i64,
 }
 
 /// 驱动探索循环
@@ -228,7 +234,11 @@ pub async fn drive(
     let mut steps: Vec<StepResult> = Vec::new();
     let mut round = 0usize;
     let mut llm_calls = 0usize;
-    let mut finish_rechecks = 0usize; // finish 终点校验被打回的次数（防无限）
+    let mut supervisor_rejects = 0usize; // 监督官打回 finish 的次数（防无限：到上限后以失败收场）
+    const MAX_SUPERVISOR_REJECTS: usize = 3;
+    let mut supervisor_pt = 0i64; // 监督官独立会话 token，累进 DriveOutcome
+    let mut supervisor_ct = 0i64;
+    let mut prev_action_elements: Vec<crate::UIElement> = Vec::new(); // 上一步执行前所见的页面元素，用于算"新出现的元素"增量
     let mut finish: Option<(bool, String)> = None;
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
@@ -318,10 +328,17 @@ pub async fn drive(
                 no_progress = 0;
             }
         }
-        // 踩实：上一步是「导航」(点击/视觉点击/切换/拖拽)且确实进入了新页面/菜单(页面变了、且新页有可断言
-        // 元素) → 本轮强制先 assert 一个该页独有元素把这步踩实，再继续往下点。空元素页(PDF/新标签)无法断言则跳过。
-        let need_checkpoint = last_was_nav && !unchanged && !p.elements.is_empty();
-        let mut checkpoint_nudges = 0usize; // 本轮已催「先踩实」几次（只催 1 次就放行，避免对弱模型空转打转）
+        // 踩实(非阻塞·基于页面 diff)：上一步是「导航」(点击/视觉点击/切换/拖拽)且确实让页面变了 → 本轮提示
+        // AI「操作有反应，但要确认方向」，并把**因上一步操作新出现的元素**单列出来，引导它从中挑一个 assert
+        // 踩实(或发现进错页就 back)。不阻塞、不打断——只引导。空元素页(PDF/新标签)无法断言则不提示。
+        let changed_after_nav = last_was_nav && !unchanged && !p.elements.is_empty();
+        // 新出现的元素索引(当前页有、上一步执行前没有)：按 to_ai_text 去重比对
+        let delta_indices: Vec<usize> = if changed_after_nav {
+            let prev_keys: std::collections::HashSet<String> = prev_action_elements.iter().map(|e| e.to_ai_text()).collect();
+            p.elements.iter().enumerate().filter(|(_, e)| !prev_keys.contains(&e.to_ai_text())).map(|(i, _)| i).collect()
+        } else {
+            Vec::new()
+        };
         // 剔除"空滑"：上一步是滑动但页面纹丝未动（已到边界/没滚起来）——这种步无用，
         // 且回放时它往往会真的滚动，导致整段脚本滑过头到底部、错过目标元素。从脚本里删掉。
         if unchanged && last_was_swipe {
@@ -386,6 +403,19 @@ pub async fn drive(
         } else if last_no_pagecheck {
             // 上一步是断言/等待/隐藏键盘——页面没变是预期，不发"无变化/打转"提示
             String::new()
+        } else if changed_after_nav {
+            // 上一步导航让页面变了 → 提示"有反应但要确认方向"，并列出新出现的元素引导 assert 踩实
+            let delta_str = if delta_indices.is_empty() {
+                "（页面已变化，但未识别出明显的新增元素；请挑当前页一个该页独有的元素 assert 确认方向）".to_string()
+            } else {
+                delta_indices
+                    .iter()
+                    .take(8)
+                    .map(|&i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 80)))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            format!("\n{}", render(&ctx.prompts.message("explorer", "confirm_direction"), &[("delta", &delta_str)]))
         } else if no_progress >= 1 {
             format!("\n{}", render(&ctx.prompts.message("explorer", "hint_no_progress"), &[("n", &no_progress.to_string())]))
         } else if revisits >= 2 {
@@ -548,34 +578,49 @@ pub async fn drive(
             match action {
                 AgentAction::Finish { success, reason, script_name: sn } => {
                     // 回执 finish 的 tool_result，避免后续 desc 生成轮因悬空 tool_call 被 API 拒
-                    sess.tool_result(primary.call_id.as_str(), "结束前先做终点校验");
-                    // —— 终点校验：把当前页面 + 用户原话需求发回模型，判断是否真到对的地方 ——
-                    //   只对"声称成功"的 finish 校验；被打回有上限，避免无限循环。
-                    if success && finish_rechecks < 2 && perceive_err.is_none() {
-                        finish_rechecks += 1;
-                        let check = render(
-                            &ctx.prompts.message("explorer", "finish_check"),
-                            &[("case", ctx.case), ("page", &list_text)],
-                        );
-                        tx.log("llm_message", serde_json::json!({ "round": round, "content": check.clone() }));
-                        sess.user(check);
-                        if let Ok(LlmReply::Text(t)) = sess.next().await {
-                            let (pt, ct) = sess.last_usage();
-                            tx.log("finish_check", serde_json::json!({ "round": round, "content": t.clone(), "prompt_tokens": pt, "completion_tokens": ct }));
-                            if let Some(obj) = parse_desc_json(&t) {
-                                if obj["done"].as_bool() == Some(false) {
-                                    let why = obj["reason"].as_str().unwrap_or("尚未真正达成").to_string();
-                                    eprintln!("  {}", paint(tty, "33", &format!("终点校验未通过：{}", brief(&why, 80))));
-                                    sess.user(render(&ctx.prompts.message("explorer", "finish_recheck_fail"), &[("why", &why)]));
-                                    continue; // 不结束，回到内层循环继续修
+                    sess.tool_result(primary.call_id.as_str(), "结束前先交监督官审查");
+                    // —— 监督官把关：独立 agent 审查「用户需求 + 全部步骤 + 最后一页元素」，放行才结束、
+                    //    否则打回继续探索（治"过早 finish/放弃"）。打回有上限，到顶后判定卡死、以失败收场。
+                    if supervisor_rejects < MAX_SUPERVISOR_REJECTS && perceive_err.is_none() {
+                        // 步骤清单：步号 · 动作 · 当时理由
+                        let steps_listing = lines
+                            .iter()
+                            .enumerate()
+                            .map(|(i, l)| {
+                                let why = step_comments.get(i).map(|c| c.trim()).filter(|c| !c.is_empty()).unwrap_or("");
+                                if why.is_empty() {
+                                    format!("{}. {}", i + 1, friendly(l))
+                                } else {
+                                    format!("{}. {}  ← {}", i + 1, friendly(l), brief(why, 60))
                                 }
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if let Some(v) =
+                            supervisor::supervise(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &steps_listing, &list_text, success, &reason).await
+                        {
+                            supervisor_pt += v.pt;
+                            supervisor_ct += v.ct;
+                            if !v.approved {
+                                supervisor_rejects += 1;
+                                eprintln!("  {}", paint(tty, "33", &format!("监督官打回（第 {} 次）：{}", supervisor_rejects, brief(&v.reason, 90))));
+                                let m = render(&ctx.prompts.message("supervisor", "pushback"), &[("reason", &v.reason)]);
+                                tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
+                                sess.user(m);
+                                continue; // 不结束，回到内层循环按监督官指引继续探索
                             }
+                            eprintln!("  {}", paint(tty, "32", &format!("监督官放行：{}", brief(&v.reason, 90))));
                         }
                     }
-                    // 结果在末尾统一 section 展示，这里只记录与收尾
-                    tx.log("finish", serde_json::json!({ "success": success, "reason": reason.clone(), "script_name": sn.clone() }));
+                    // 监督官已多次打回仍走到这 → 判定卡死，以探索失败收场（防死循环）
+                    let (eff_success, eff_reason) = if supervisor_rejects >= MAX_SUPERVISOR_REJECTS {
+                        (false, format!("监督官连续 {} 次打回仍未达成，判定探索失败：{}", supervisor_rejects, reason))
+                    } else {
+                        (success, reason)
+                    };
+                    tx.log("finish", serde_json::json!({ "success": eff_success, "reason": eff_reason.clone(), "script_name": sn.clone(), "supervisor_rejects": supervisor_rejects }));
                     script_name = sn;
-                    finish = Some((success, reason));
+                    finish = Some((eff_success, eff_reason));
                     break 'outer;
                 }
                 AgentAction::RequestScreenshot { reason } => {
@@ -639,20 +684,10 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
-                    // —— 强制踩实：刚导航进新页面/菜单却没先 assert 就想继续操作 → 拦下，提醒先断言该页独有元素 ——
-                    //   断言(含视觉断言)/收尾(close)/返回(back，"发现点错了回退")放行；只催 1 次，
-                    //   仍不断言则放行(避免对弱模型空转打转——它若执意推进，提示已尽到，强行多拦只是浪费)。
-                    let is_assert = matches!(&device_action, AgentAction::Assert { .. } | AgentAction::AssertVisual { .. });
-                    let is_teardown = matches!(&device_action, AgentAction::Close { .. } | AgentAction::Back);
-                    if need_checkpoint && !is_assert && !is_teardown && checkpoint_nudges < 1 {
-                        checkpoint_nudges += 1;
-                        let m = ctx.prompts.message("explorer", "nudge_checkpoint");
-                        eprintln!("  {}", paint(tty, "33", "  先踩实：刚导航进新页面，请先 assert/assert_visual 一个该页独有标志；若这页找不到能证明到位的标志，多半是上一步点错了元素——回退换个元素重试"));
-                        tx.log("checkpoint_nudge", serde_json::json!({ "round": round, "blocked_tool": primary.name.clone() }));
-                        tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
-                        sess.tool_result(primary.call_id.as_str(), m);
-                        continue; // 不执行该动作，回到内层循环等它先 assert
-                    }
+                    // 踩实改为「非阻塞引导」(见上方 changed_after_nav/confirm_direction)：不再拦截动作、不打断模型，
+                    // 避免弱模型被拦后误判执行状态而放弃。是否真踩实由模型自觉 + finish 处监督官兜底把关。
+                    // 记录本步执行前所见的页面元素，供下一轮算"新出现的元素"增量(delta) 给 AI 看。
+                    prev_action_elements = p.elements.clone();
                     // 单行格式（对齐回放/tke run）：先显示「[N] 指令 ...」再操作设备，执行后接上
                     // `✓ 耗时`/`✗ 耗时`——CLI 与设备同步，且 agent 这步点啥、花多久一目了然。
                     let step_no = steps.len() + 1;
@@ -791,5 +826,5 @@ pub async fn drive(
         }
     }
 
-    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames, step_comments })
+    Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames, step_comments, supervisor_pt, supervisor_ct })
 }
