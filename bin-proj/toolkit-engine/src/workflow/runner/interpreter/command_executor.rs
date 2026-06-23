@@ -240,6 +240,16 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::HideKeyboard).await.map(|_| ())
     }
 
+    /// 按键：`按键 ["ENTER"]` / `["TAB"]` 等（归一大写传给驱动 key_event，web 映射为 WebDriver 键码）
+    pub async fn execute_key(&mut self, params: &[TksParam]) -> Result<()> {
+        let code = ParamExtractor::extract_text(&params.first().ok_or_else(|| {
+            TkeError::InvalidArgument("按键命令需要键名，如 [\"ENTER\"]".to_string())
+        })?.clone())?
+        .trim()
+        .to_uppercase();
+        execute_action(&*self.controller, ControlAction::Key { code }).await.map(|_| ())
+    }
+
     /// 返回操作
     pub async fn execute_back(&mut self) -> Result<()> {
         execute_action(&*self.controller, ControlAction::Back).await.map(|_| ())

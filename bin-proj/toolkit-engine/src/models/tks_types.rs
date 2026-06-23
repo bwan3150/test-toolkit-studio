@@ -22,6 +22,7 @@ pub enum TksCommand {
     Assert,           // 断言
     Switch,           // 切换（web 标签 / App）
     ScrollFind,       // 滚动查找（朝某方向滚动直到目标文字出现——可复现地"滚到目标可见"，替代固定距离盲滑）
+    Key,              // 按键（enter/tab/escape/backspace 等硬键/特殊键）
 }
 
 impl TksCommand {

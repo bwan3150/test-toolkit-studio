@@ -273,6 +273,53 @@ pub async fn apply(
                 Ok((line(TksCommand::Wait, vec![TksParam::Duration(1000)]), "等待 1000ms".to_string(), ActionTrace::default(), None))
             }
         }
+        AgentAction::SwipeElement { element_id, direction, distance, amount } => {
+            // 从元素起滑（列表项左滑删除、拖滑块等）：落库该元素，落 `定向滑动 [{元素}, 方向, 距离]`，
+            // 回放时实时解析元素位置——跨设备稳。距离取屏幕比例（amount 优先），缺省半屏。
+            let el = lookup(elements, *element_id)?;
+            let c = el.center();
+            let name = auto_name(el);
+            let (structure, ocr) = tier_for(el);
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
+            let (w, h) = image::image_dimensions(shot_path).unwrap_or((1080, 1920));
+            let dim = match direction.as_str() {
+                "left" | "right" => w as i32,
+                _ => h as i32,
+            };
+            let dist = match amount.as_deref() {
+                Some("full") => dim * 4 / 5,
+                Some("quarter") => dim / 4,
+                Some("half") => dim / 2,
+                _ => distance.unwrap_or(dim / 2),
+            };
+            let detail = exec(device, ControlAction::SwipeDir { from: c, direction: direction.clone(), distance: dist, duration_ms: 300 }).await?;
+            Ok((
+                line(TksCommand::DirectionalSwipe, vec![el_param(&name), TksParam::Direction(direction.clone()), TksParam::Number(dist)]),
+                detail,
+                el_trace(c, el, &name),
+                saved,
+            ))
+        }
+        AgentAction::Drag { from_id, to_id } => {
+            // 从元素A拖到元素B：两端都落库，落 `滑动 [{A}, {B}]`，回放实时解析两端位置。
+            let a = lookup(elements, *from_id)?;
+            let b = lookup(elements, *to_id)?;
+            let (ca, cb) = (a.center(), b.center());
+            let (na, nb) = (auto_name(a), auto_name(b));
+            let (sa, oa) = tier_for(a);
+            let _ = save_target(device, element_path, &na, &None, a.bounds.clone(), sa, oa, tx, round).await;
+            let (sb, ob) = tier_for(b);
+            let saved = save_target(device, element_path, &nb, &None, b.bounds.clone(), sb, ob, tx, round).await;
+            let detail = exec(device, ControlAction::Swipe { from: ca, to: cb, duration_ms: 400 }).await?;
+            let trace = ActionTrace { captured: false, points: vec![ca, cb], bounds: None, element_name: Some(na.clone()) };
+            Ok((line(TksCommand::Swipe, vec![el_param(&na), el_param(&nb)]), detail, trace, saved))
+        }
+        AgentAction::PressKey { key } => {
+            // 按键（enter/tab/escape/backspace…）：归一成大写 code，落 `按键 ["ENTER"]`。
+            let code = key.trim().to_uppercase();
+            let detail = exec(device, ControlAction::Key { code: code.clone() }).await?;
+            Ok((line(TksCommand::Key, vec![TksParam::Text(code)]), detail, ActionTrace::default(), None))
+        }
         // 控制流动作不在此处理（由主循环拦截）
         AgentAction::RequestScreenshot { .. }
         | AgentAction::AskUser { .. }

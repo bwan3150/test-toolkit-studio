@@ -60,6 +60,17 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             direction: req_str(a, "direction")?,
         },
         "back" => AgentAction::Back,
+        "swipe_element" => AgentAction::SwipeElement {
+            element_id: req_usize(a, "element_id")?,
+            direction: req_str(a, "direction")?,
+            distance: opt_i32(a, "distance"),
+            amount: opt_str(a, "amount"),
+        },
+        "drag" => AgentAction::Drag {
+            from_id: req_usize(a, "from_element_id")?,
+            to_id: req_usize(a, "to_element_id")?,
+        },
+        "press_key" => AgentAction::PressKey { key: req_str(a, "key")? },
         "switch" => AgentAction::Switch { target: req_str(a, "target")? },
         "hide_keyboard" => AgentAction::HideKeyboard,
         "wait" => AgentAction::Wait {

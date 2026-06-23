@@ -120,6 +120,38 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
                 "required": ["target", "direction"]
             }),
         },
+        ToolSchema {
+            name: "swipe_element",
+            schema: obj(
+                el_props(serde_json::json!({
+                    "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "在该元素上的滑动方向（如列表项 left=左滑出删除按钮）" },
+                    "amount": { "type": "string", "enum": ["full", "half", "quarter"], "description": "滑动幅度=屏幕比例，默认 half" },
+                    "distance": { "type": "integer", "description": "可选：直接给滑动像素距离（一般用 amount）" }
+                })),
+                serde_json::json!(["element_id", "direction"]),
+            ),
+        },
+        ToolSchema {
+            name: "drag",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "from_element_id": { "type": "integer", "description": "起点元素序号（要拖动的那个）" },
+                    "to_element_id": { "type": "integer", "description": "终点元素序号（拖放到它的位置）" }
+                },
+                "required": ["from_element_id", "to_element_id"]
+            }),
+        },
+        ToolSchema {
+            name: "press_key",
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "key": { "type": "string", "description": "键名：enter / tab / escape / backspace。输入框里输入完想提交搜索/表单，常用 enter。" }
+                },
+                "required": ["key"]
+            }),
+        },
         ToolSchema { name: "back", schema: empty_schema() },
         ToolSchema {
             name: "switch",

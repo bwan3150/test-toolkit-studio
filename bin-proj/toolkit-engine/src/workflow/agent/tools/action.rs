@@ -35,6 +35,13 @@ pub enum AgentAction {
     /// 滚动查找：朝某方向滚动直到目标文字出现（可复现地"滚到目标可见"，回放与探索滚动位置一致）。
     /// 替代"盲滑 N 次找东西"——目标在更下方就用 direction=up 滚动找它。落 .tks `滚动查找 ["文字", 方向]`。
     SwipeToFind { target: String, direction: String },
+    /// 在某元素上朝某方向滑动（列表项左滑删除、拖滑块、轮播翻页等）。
+    /// 与 swipe_direction 不同：从该**元素**起滑、回放时实时解析其位置，落 `定向滑动 [{元素}, 方向, 距离]`。
+    SwipeElement { element_id: usize, direction: String, distance: Option<i32>, amount: Option<String> },
+    /// 从元素A拖到元素B（拖拽排序/拖放）。落 `滑动 [{元素A}, {元素B}]`，回放实时解析两端位置。
+    Drag { from_id: usize, to_id: usize },
+    /// 按下一个按键（enter/tab/escape/backspace 等）。常用于输入后回车提交。落 `按键 ["enter"]`。
+    PressKey { key: String },
     /// 返回
     Back,
     /// 切换标签/App：web=标签序号 或 用新标签打开 URL；移动端=切到目标 App 包名

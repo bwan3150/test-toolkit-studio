@@ -95,6 +95,7 @@ impl ScriptInterpreter {
             TksCommand::Assert => executor.execute_assert(&step.params).await,
             TksCommand::Switch => executor.execute_switch(&step.params).await,
             TksCommand::ScrollFind => executor.execute_scroll_find(&step.params).await,
+            TksCommand::Key => executor.execute_key(&step.params).await,
         }
     }
 
