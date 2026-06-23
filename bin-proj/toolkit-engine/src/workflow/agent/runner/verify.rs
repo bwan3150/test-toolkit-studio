@@ -25,7 +25,7 @@ use super::super::transcript::Transcript;
 use super::super::prompt::{render, PromptSet};
 use super::doctor;
 use super::reflect;
-use super::flow::{brief, friendly, paint, parse_desc_json, DriveCtx};
+use super::flow::{brief, fmt_duration, friendly, paint, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 
 // 稳定性通过次数 / 修复(活体重探)上限均来自 config [harness]（params.harness），不再写死。
@@ -212,15 +212,19 @@ pub(super) async fn do_replay(params: &Arc<Params>, script_path: &Path, verbose:
         }
         match e {
             RunEvent::RunStart { total_steps, .. } => total = *total_steps,
-            RunEvent::StepEnd { index, command, success, error, .. } => {
+            // 先显示「即将执行的指令」再操作设备，执行后接上 ✓/✗ + 耗时（与 tke run 对齐）
+            RunEvent::StepStart { index, command, .. } => {
+                eprint!("    {} {} {} ", paint(tty, "2", &format!("[{:>2}/{}]", index + 1, total)), friendly(command), paint(tty, "2", "..."));
+                let _ = std::io::Write::flush(&mut std::io::stderr());
+            }
+            RunEvent::StepEnd { success, error, duration_ms, .. } => {
                 if *success {
-                    eprintln!("    {}  {}  {}", paint(tty, "32", "✓"), paint(tty, "2", &format!("步 {}/{}", index + 1, total)), friendly(command));
+                    eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &fmt_duration(*duration_ms)));
                 } else {
-                    eprintln!(
-                        "    {}  {}",
-                        paint(tty, "31", &format!("✗ 步 {}/{}  {}", index + 1, total, friendly(command))),
-                        paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 80))),
-                    );
+                    eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &fmt_duration(*duration_ms)));
+                    if let Some(err) = error {
+                        eprintln!("         {}", paint(tty, "31", &brief(err, 120)));
+                    }
                 }
             }
             _ => {}

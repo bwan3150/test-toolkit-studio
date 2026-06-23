@@ -52,6 +52,17 @@ pub(crate) fn fmt_tokens(n: i64) -> String {
     }
 }
 
+/// 时长格式化（与 tke run 的 EventPrinter 对齐）：320ms / 3.7s / 1m12s
+pub(crate) fn fmt_duration(ms: u64) -> String {
+    if ms < 1000 {
+        format!("{}ms", ms)
+    } else if ms < 60_000 {
+        format!("{:.1}s", ms as f64 / 1000.0)
+    } else {
+        format!("{}m{:02}s", ms / 60_000, (ms % 60_000) / 1000)
+    }
+}
+
 /// 取首个非空行并按字符数截断，避免模型长篇刷屏
 pub(crate) fn brief(s: &str, max: usize) -> String {
     let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
@@ -64,6 +75,50 @@ pub(crate) fn brief(s: &str, max: usize) -> String {
 }
 
 use crate::Platform;
+
+/// 「即将执行」的人类可读预览：用 AI 选中元素的文字（执行前即有），让 CLI 先于设备显示，
+/// 用户能对上 agent 这步要点啥。返回 None = 非设备动作、不预览。
+fn preview_action(action: &AgentAction, elements: &[crate::UIElement]) -> Option<String> {
+    let el = |id: usize| -> String {
+        elements
+            .get(id)
+            .map(|e| brief(&e.to_ai_text(), 40))
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("元素#{}", id))
+    };
+    Some(match action {
+        AgentAction::Launch { target, .. } => format!("启动 {}", brief(target, 60)),
+        AgentAction::Close { target } => format!("关闭 {}", brief(target, 60)),
+        AgentAction::Click { element_id, .. } => format!("点击「{}」", el(*element_id)),
+        AgentAction::Input { element_id, text, .. } => format!("输入「{}」→「{}」", brief(text, 30), el(*element_id)),
+        AgentAction::LongPress { element_id, .. } => format!("长按「{}」", el(*element_id)),
+        AgentAction::Clear { element_id, .. } => format!("清空「{}」", el(*element_id)),
+        AgentAction::Assert { element_id, exist, .. } => {
+            format!("断言「{}」{}", el(*element_id), if *exist { "存在" } else { "不存在" })
+        }
+        AgentAction::ClickVisual { .. } => "视觉点击（看图框选）".to_string(),
+        AgentAction::SwipeDir { direction, .. } => format!("定向滑动 {}", dir_cn(direction)),
+        AgentAction::SwipeToFind { target, direction } => format!("滚动查找「{}」{}", brief(target, 30), dir_cn(direction)),
+        AgentAction::Switch { target } => format!("切换 {}", brief(target, 40)),
+        AgentAction::Back => "返回".to_string(),
+        AgentAction::HideKeyboard => "隐藏键盘".to_string(),
+        AgentAction::Wait { ms: Some(ms), .. } => format!("等待 {}ms", ms),
+        AgentAction::Wait { element: Some(e), .. } => format!("等待元素「{}」", brief(e, 30)),
+        AgentAction::Wait { .. } => "等待".to_string(),
+        _ => return None, // Finish/RequestScreenshot/AskUser/Rename 非设备动作，不在此预览
+    })
+}
+
+/// 方向英文 → 中文（预览用）
+fn dir_cn(d: &str) -> &str {
+    match d {
+        "up" => "上",
+        "down" => "下",
+        "left" => "左",
+        "right" => "右",
+        other => other,
+    }
+}
 
 use super::super::execution;
 use super::super::interaction::read_user_line;
@@ -341,11 +396,16 @@ pub async fn drive(
         eprintln!();
         // 轮次头：左侧"第 N 轮"做锚点，右侧次要统计(已知/未知/OCR/标签页)整体淡色，
         // 不与下面的「思考 + 动作」主内容抢眼。OCR/标签页有值才显示。
-        let mut stat = vec![format!("{} 已知", n_known), format!("{} 未知", n_unknown)];
-        if p.ocr_filled + p.ocr_added > 0 {
-            stat.push(format!("OCR+{}", p.ocr_filled + p.ocr_added));
+        // 展示 AI 实际看到的页面构成——不再显示"已知/未知"（每轮都把未标注元素给 AI 看，
+        // 已知/未知对 AI 判断没意义、只会误导）。结构页面元素 + OCR 元素 +（web）标签页数，
+        // 让人清楚 agent 看到了啥、据什么判断。
+        let ocr_n = p.ocr_added;
+        let page_n = p.elements.len().saturating_sub(ocr_n);
+        let mut stat = vec![format!("{} 页面元素", page_n)];
+        if ocr_n > 0 {
+            stat.push(format!("{} OCR元素", ocr_n));
         }
-        if p.tabs.len() > 1 {
+        if !p.tabs.is_empty() {
             stat.push(format!("{} 标签页", p.tabs.len()));
         }
         let notready = if perceive_err.is_some() {
@@ -543,6 +603,11 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
+                    // 先显示「即将执行」的指令、再操作设备——否则浏览器先动、CLI 后显示，
+                    // 用户对不上、看不出 agent 这步对不对。用 AI 选中元素的文字描述（执行前就有）。
+                    if let Some(pv) = preview_action(&device_action, &p.elements) {
+                        eprintln!("  {} {}", paint(tty, "2", "▸"), pv);
+                    }
                     let is_swipe = matches!(&device_action, AgentAction::SwipeDir { .. });
                     match execution::apply(
                         ctx.device,

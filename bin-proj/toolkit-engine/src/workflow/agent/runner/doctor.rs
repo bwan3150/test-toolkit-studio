@@ -33,7 +33,7 @@ use super::super::execution::{auto_name, visual_auto_name};
 use super::super::perception::{capture, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, fmt_tokens, friendly, paint, parse_desc_json, DriveCtx};
+use super::flow::{brief, fmt_duration, fmt_tokens, friendly, paint, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 
@@ -296,15 +296,19 @@ pub(super) async fn diagnose(
         }
         match e {
             RunEvent::RunStart { total_steps, .. } => total = *total_steps,
-            RunEvent::StepEnd { index, command, success, error, .. } => {
+            // 先显示「即将执行的指令」再操作设备，执行后接上 ✓/✗ + 耗时（与 tke run 对齐）
+            RunEvent::StepStart { index, command, .. } => {
+                eprint!("    {} {} {} ", paint(tty, "2", &format!("[{:>2}/{}]", index + 1, total)), friendly(command), paint(tty, "2", "..."));
+                let _ = std::io::Write::flush(&mut std::io::stderr());
+            }
+            RunEvent::StepEnd { success, error, duration_ms, .. } => {
                 if *success {
-                    eprintln!("    {}  {}  {}", paint(tty, "32", "✓"), paint(tty, "2", &format!("步 {}/{}", index + 1, total)), friendly(command));
+                    eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &fmt_duration(*duration_ms)));
                 } else {
-                    eprintln!(
-                        "    {}  {}",
-                        paint(tty, "31", &format!("✗ 步 {}/{}  {}", index + 1, total, friendly(command))),
-                        paint(tty, "31", &format!("— {}", brief(error.as_deref().unwrap_or(""), 80))),
-                    );
+                    eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &fmt_duration(*duration_ms)));
+                    if let Some(err) = error {
+                        eprintln!("         {}", paint(tty, "31", &brief(err, 120)));
+                    }
                 }
             }
             _ => {}
