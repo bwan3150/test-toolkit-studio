@@ -33,7 +33,7 @@ use super::super::execution::{auto_name, visual_auto_name};
 use super::super::perception::{capture, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, fmt_duration, fmt_tokens, friendly, paint, parse_desc_json, DriveCtx};
+use super::flow::{brief, fmt_duration, fmt_tokens, friendly, is_launch_line, paint, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 
@@ -582,7 +582,9 @@ async fn reposition(ctx: &DriveCtx<'_>, params: &Arc<Params>, script_path: &Path
     if cut > 0 {
         let prefix = &lines[..cut.min(lines.len())];
         let _ = write_script(script_path, case, prefix);
-        let _ = do_replay(params, script_path, false).await;
+        // verbose=true：reexplore 定位时把「回放前缀」逐步打印出来，让人看清浏览器在重走哪几步、
+        // 停到哪个页面，而不是浏览器默默动、CLI 一片空白后突然蹦出结果。
+        let _ = do_replay(params, script_path, true).await;
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }
@@ -764,6 +766,11 @@ pub(super) async fn doctor_repair(
                         continue;
                     }
                     let to = to.min(n);
+                    // 保护启动步：删除范围内若含「启动」步则拒绝——删了浏览器/App 再也起不来、重启净化也空转。
+                    if lines[(from - 1)..to].iter().any(|l| is_launch_line(l)) {
+                        editor.tool_result(primary.call_id.as_str(), "删除范围里含「启动」步——它打开浏览器/拉起 App，删了脚本就再也起不来、重启净化也会空转。请缩小范围、保留启动步。");
+                        continue;
+                    }
                     let removed: Vec<String> = lines.drain((from - 1)..to).collect();
                     eprintln!("  {}  {}", paint(tty, "32", &format!("✓ 删第 {}-{} 行", from, to)), paint(tty, "2", &removed.iter().map(|l| friendly(l)).collect::<Vec<_>>().join(" / ")));
                     editor.tool_result(primary.call_id.as_str(), format!("已删第 {}-{} 行，脚本现 {} 行。改完记得 run 验证。", from, to, lines.len()));
@@ -772,6 +779,11 @@ pub(super) async fn doctor_repair(
                     let n = lines.len();
                     if line < 1 || line > n {
                         editor.tool_result(primary.call_id.as_str(), format!("行号越界：脚本共 {} 行，无法替换第 {} 行", n, line));
+                        continue;
+                    }
+                    // 保护启动步：启动步只能改成另一个「启动」(如换网址/App)，不能改成点击/其它，否则浏览器/App 起不来。
+                    if is_launch_line(&lines[line - 1]) && !is_launch_line(&content) {
+                        editor.tool_result(primary.call_id.as_str(), format!("第 {} 步是「启动」步，只能改成另一个「启动 …」(如换网址/App)，不能改成点击/其它——否则浏览器/App 起不来。若是导航不对，请 insert_after 在它之后插入导航步。", line));
                         continue;
                     }
                     if let Err(why) = validate_line(&content, ctx.element_path) {
@@ -804,6 +816,16 @@ pub(super) async fn doctor_repair(
                     let n = lines.len();
                     if step < 1 || step > n {
                         editor.tool_result(primary.call_id.as_str(), format!("step 越界：脚本共 {} 行", n));
+                        continue;
+                    }
+                    // 保护启动步：第 step 步是「启动」(打开浏览器/拉起 App)时不能 reexplore——
+                    // reexplore 之后的 pick 会用点击覆盖这一步，毁掉脚本入口、后续重启净化空转。
+                    if is_launch_line(&lines[step - 1]) {
+                        editor.tool_result(primary.call_id.as_str(), format!(
+                            "第 {} 步是「启动」步(打开浏览器/拉起 App)，不能 reexplore 重选成点击——\
+                             那会用点击覆盖启动步、毁掉脚本入口，后续重启净化也会因找不到启动目标而空转。\
+                             若是「启动后导航入口不对」：保留这一步，用 insert_after 在它之后插入正确的导航步；\
+                             若要换网址/App：用 replace_line 把它改成另一个「启动 …」。", step));
                         continue;
                     }
                     report.repairs += 1;

@@ -12,7 +12,7 @@ use crate::{AiConfig, Fetcher, LlmReply, LlmSession, LlmTool, Params, Platform};
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, fmt_tokens, friendly, paint, parse_desc_json, DriveCtx, DriveOutcome};
+use super::flow::{brief, fmt_tokens, friendly, is_assert_line, paint, parse_desc_json, DriveCtx, DriveOutcome};
 use super::options::VerifyReport;
 
 /// 反思产物
@@ -172,7 +172,13 @@ pub(super) async fn optimize(
     if !diag.reached {
         return None;
     }
-    let noops = diag.noop_step_nos();
+    // 断言步必然是「空操作」(不改变页面)，但它是「踩实校验」的承重点——绝不能当冗余删掉。
+    // 先把断言步从可删 noop 集里剔除：AI 既看不到它是「可删空操作」，delete_step 也会被拦下。
+    let noops: std::collections::HashSet<usize> = diag
+        .noop_step_nos()
+        .into_iter()
+        .filter(|&s| !lines.get(s - 1).map(|l| is_assert_line(l)).unwrap_or(false))
+        .collect();
     let trace = diag.trace_lines();
     let pages = diag.page_groups(); // 页面访问/重复分析：同一页反复=绕路，助判冗余
     let noop_list = {
@@ -239,6 +245,12 @@ pub(super) async fn optimize(
                 }
                 if removable.contains(&step) {
                     sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_dup"), &[("step", &step.to_string())]));
+                    continue;
+                }
+                // 断言步是「踩实校验」承重点，永不删（虽然它不改变页面、看着像空操作）
+                if is_assert_line(&lines[step - 1]) {
+                    eprintln!("  {}  {}", paint(tty, "33", &format!("↩ 第 {} 步是断言(踩实校验)，不删", step)), toks);
+                    sess.tool_result(primary.call_id.as_str(), format!("第 {} 步是断言(踩实校验)——它是脚本自检的承重点，删了回放时「走错页」就不会在断言处暴露、问题定位会变难，不能删。", step));
                     continue;
                 }
                 if !noops.contains(&step) {

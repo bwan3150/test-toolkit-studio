@@ -41,6 +41,18 @@ pub(crate) fn friendly(line: &str) -> String {
         .split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// 是否「启动」步(打开浏览器/拉起 App)：脚本的结构性入口。不可被 reexplore/pick 覆盖成点击、
+/// 也不可删除——否则后续「重启净化」(reset_state)因解析不到启动目标而空转、整条脚本再也起不来。
+pub(crate) fn is_launch_line(line: &str) -> bool {
+    line.trim_start().starts_with("启动")
+}
+
+/// 是否「断言」步(踩实校验)：它不改变页面(必然被判为空操作)，但它是脚本自检的承重点——
+/// 优化阶段绝不能当冗余删掉，否则回放时「走错页」不会在断言处暴露、问题定位变难。
+pub(crate) fn is_assert_line(line: &str) -> bool {
+    line.trim_start().starts_with("断言")
+}
+
 /// 紧凑 token 显示：4443→4.4k、148693→149k、<1000 原样，避免大数字刷屏
 pub(crate) fn fmt_tokens(n: i64) -> String {
     if n < 1000 {
@@ -222,6 +234,7 @@ pub async fn drive(
     let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
     let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
     let mut last_was_close = false; // 上一步是否是主动关闭/收尾（关 app/销毁会话）——下一轮空页面不催 launch
+    let mut last_was_nav = false; // 上一步是否是「导航」动作（点击/视觉点击/切换/拖拽）——用于「踩实」判定
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -296,6 +309,10 @@ pub async fn drive(
         } else {
             no_progress = 0;
         }
+        // 踩实：上一步是「导航」(点击/视觉点击/切换/拖拽)且确实进入了新页面/菜单(页面变了、且新页有可断言
+        // 元素) → 本轮强制先 assert 一个该页独有元素把这步踩实，再继续往下点。空元素页(PDF/新标签)无法断言则跳过。
+        let need_checkpoint = last_was_nav && !unchanged && !p.elements.is_empty();
+        let mut checkpoint_nudges = 0usize; // 本轮已催「先踩实」几次（防个别页死活断言不了时卡死）
         // 剔除"空滑"：上一步是滑动但页面纹丝未动（已到边界/没滚起来）——这种步无用，
         // 且回放时它往往会真的滚动，导致整段脚本滑过头到底部、错过目标元素。从脚本里删掉。
         if unchanged && last_was_swipe {
@@ -613,6 +630,19 @@ pub async fn drive(
                     continue; // 不前进，重新询问
                 }
                 device_action => {
+                    // —— 强制踩实：刚导航进新页面/菜单却没先 assert 就想继续操作 → 拦下，要求先断言该页独有元素 ——
+                    //   断言/收尾(close)放行；连催 2 次仍不断言则放行(防个别页死活断言不了时卡死)。
+                    let is_assert = matches!(&device_action, AgentAction::Assert { .. });
+                    let is_teardown = matches!(&device_action, AgentAction::Close { .. });
+                    if need_checkpoint && !is_assert && !is_teardown && checkpoint_nudges < 2 {
+                        checkpoint_nudges += 1;
+                        let m = ctx.prompts.message("explorer", "nudge_checkpoint");
+                        eprintln!("  {}", paint(tty, "33", "  先踩实：刚进入新页面，需先 assert 一个该页独有元素再继续"));
+                        tx.log("checkpoint_nudge", serde_json::json!({ "round": round, "blocked_tool": primary.name.clone() }));
+                        tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
+                        sess.tool_result(primary.call_id.as_str(), m);
+                        continue; // 不执行该动作，回到内层循环等它先 assert
+                    }
                     // 单行格式（对齐回放/tke run）：先显示「[N] 指令 ...」再操作设备，执行后接上
                     // `✓ 耗时`/`✗ 耗时`——CLI 与设备同步，且 agent 这步点啥、花多久一目了然。
                     let step_no = steps.len() + 1;
@@ -686,6 +716,11 @@ pub async fn drive(
                             step_comments.push(comment.clone().unwrap_or_default());
                             last_was_swipe = is_swipe; // 记下这步是不是滑动，供下一轮判定空滑
                             last_was_close = matches!(&device_action, AgentAction::Close { .. }); // 记下是不是主动收尾关闭
+                            // 记下这步是不是「导航」(点击/视觉点击/切换/拖拽)——下一轮据此强制踩实(若它进了新页面)
+                            last_was_nav = matches!(
+                                &device_action,
+                                AgentAction::Click { .. } | AgentAction::ClickVisual { .. } | AgentAction::Switch { .. } | AgentAction::Drag { .. }
+                            );
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
