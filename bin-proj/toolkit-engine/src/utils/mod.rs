@@ -5,6 +5,7 @@ pub mod workarea;
 pub mod config;
 pub mod interrupt;
 pub mod params;
+pub mod scroll;
 pub mod xml;
 
 pub use json_output::JsonOutput;

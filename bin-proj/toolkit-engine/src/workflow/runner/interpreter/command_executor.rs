@@ -159,7 +159,12 @@ impl<'a> CommandExecutor<'a> {
         if params.len() < 2 {
             return Err(TkeError::InvalidArgument("滚动查找命令需要目标文字和方向: [\"文字\", 方向]".to_string()));
         }
-        let target = ParamExtractor::extract_text(&params[0])?.to_lowercase();
+        let target_raw = ParamExtractor::extract_text(&params[0])?;
+        // 多候选关键词（`|` 分隔）：任一命中即算找到。手写脚本/未收敛的多候选都支持。
+        let cands = crate::utils::scroll::targets(&target_raw);
+        if cands.is_empty() {
+            return Err(TkeError::InvalidArgument("滚动查找需要目标文字".to_string()));
+        }
         let direction = ParamExtractor::extract_direction(&params[1])?;
         // 每次滚动幅度取小（约 1/3 屏）+ 每滚一步都查，避免一次滚一整屏把目标从两次检查之间跨过去
         // （目标"路过时看到了、却查不到"就是滚太大跨过的）。次数上限相应放大。
@@ -177,8 +182,8 @@ impl<'a> CommandExecutor<'a> {
             // 只查 xml 结构文字会漏——这正是"滚动查找某些文字死活找不到"的根因）。
             self.controller.capture_ui_state(self.workarea).await?;
             self.trace.captured = true;
-            if self.page_has_text(&target, ocr_src.as_ref()).await {
-                info!("滚动查找：目标「{}」已可见（滚动 {} 次）", target, i);
+            if let Some(hit) = self.page_first_hit(&cands, ocr_src.as_ref()).await {
+                info!("滚动查找：目标「{}」已可见（滚动 {} 次）", hit, i);
                 return Ok(());
             }
             if i == MAX_SCROLLS {
@@ -191,26 +196,20 @@ impl<'a> CommandExecutor<'a> {
             .await?;
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
-        Err(TkeError::ElementNotFound(format!("滚动查找：滚动 {} 次后页面仍未出现「{}」", MAX_SCROLLS, target)))
+        Err(TkeError::ElementNotFound(format!("滚动查找：滚动 {} 次后页面仍未出现「{}」", MAX_SCROLLS, target_raw)))
     }
 
-    /// 当前页面（结构元素 + OCR 文字）是否含 target（不分大小写）。OCR 源为 None 时只查结构。
-    async fn page_has_text(&self, target_lower: &str, ocr: Option<&crate::engines::ocr::OcrSource>) -> bool {
-        let mut els = match crate::Fetcher::new().fetch_elements_from_file(&self.workarea.ui_tree_path()) {
-            Ok(e) => e,
-            Err(_) => return false,
-        };
+    /// 当前页面（结构元素 + OCR 文字）是否命中任一候选关键词（空格/大小写不敏感）。
+    /// 命中返回该候选**原文**；OCR 源为 None 时只查结构。
+    async fn page_first_hit<'c>(&self, cands: &'c [(String, String)], ocr: Option<&crate::engines::ocr::OcrSource>) -> Option<&'c str> {
+        let mut els = crate::Fetcher::new().fetch_elements_from_file(&self.workarea.ui_tree_path()).ok()?;
         if let Some(src) = ocr {
             if let Ok(bytes) = std::fs::read(self.workarea.screenshot_path()) {
                 let _ = crate::engines::ocr::enrich_with_ocr(&mut els, &bytes, src).await;
             }
         }
-        // 忽略空格匹配："Datasheet" 应能命中 OCR 的 "DATA SHEET - KSL00229"（空格/大小写不敏感）
-        let needle: String = target_lower.chars().filter(|c| !c.is_whitespace()).collect();
-        els.iter().any(|e| {
-            let hay: String = e.to_ai_text().to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
-            hay.contains(&needle)
-        })
+        let texts: Vec<String> = els.iter().map(|e| e.to_ai_text()).collect();
+        crate::utils::scroll::first_hit(&texts, cands)
     }
 
     /// 输入文本（execute_action 的 Input 已含「点击聚焦 + 等待键盘 + 输入」）

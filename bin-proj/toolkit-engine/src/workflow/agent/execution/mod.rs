@@ -180,8 +180,12 @@ pub async fn apply(
             let workarea = Workarea::for_device(Some(device))?;
             let fetcher = Fetcher::new();
             let ocr_src = crate::utils::params::ocr_source();
-            let needle: String = target.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
-            let mut found = false;
+            // 多候选关键词（target 可用 `|` 分隔）：应对不确定确切文字（空格/措辞/OCR 大小写）。
+            let cands = crate::utils::scroll::targets(target);
+            if cands.is_empty() {
+                return Err(TkeError::InvalidArgument("滚动查找需要目标文字".to_string()));
+            }
+            let mut matched: Option<String> = None; // 命中的那个候选原文（用于收敛）
             const MAX: usize = 30;
             for i in 0..=MAX {
                 if Refresh::new(device.to_string())?.run(RefreshOptions::default()).await.is_ok() {
@@ -191,12 +195,9 @@ pub async fn apply(
                                 let _ = enrich_with_ocr(&mut els, &bytes, src).await;
                             }
                         }
-                        let hit = els.iter().any(|e| {
-                            let hay: String = e.to_ai_text().to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
-                            hay.contains(&needle)
-                        });
-                        if hit {
-                            found = true;
+                        let texts: Vec<String> = els.iter().map(|e| e.to_ai_text()).collect();
+                        if let Some(hit) = crate::utils::scroll::first_hit(&texts, &cands) {
+                            matched = Some(hit.to_string());
                             break;
                         }
                     }
@@ -211,13 +212,18 @@ pub async fn apply(
                 .await?;
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
-            if !found {
+            let Some(found_kw) = matched else {
                 return Err(TkeError::ScriptExecuteError(format!("滚动查找：滚动后仍未出现「{}」", target)));
-            }
-            let detail = format!("滚动找到「{}」", target);
+            };
+            // 收敛：多候选里真正匹配上的那个，落进 .tks（定稿脚本就用这个确定的关键词）。
+            let detail = if cands.len() > 1 {
+                format!("滚动找到「{}」（候选 {} 个，收敛为此）", found_kw, cands.len())
+            } else {
+                format!("滚动找到「{}」", found_kw)
+            };
             let trace = ActionTrace { captured: false, points: vec![from], bounds: None, element_name: None };
             Ok((
-                line(TksCommand::ScrollFind, vec![TksParam::Text(target.clone()), TksParam::Direction(direction.clone())]),
+                line(TksCommand::ScrollFind, vec![TksParam::Text(found_kw), TksParam::Direction(direction.clone())]),
                 detail,
                 trace,
                 None,

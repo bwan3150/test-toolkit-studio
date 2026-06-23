@@ -114,7 +114,7 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "target": { "type": "string", "description": "要滚动找到的目标文字（页面上会出现的可见文字，如某个名称、标题、区块名、按钮或链接文字）" },
+                    "target": { "type": "string", "description": "要滚动找到的目标文字（页面上会出现的可见文字，如某个名称、标题、区块名、按钮或链接文字）。不确定确切写法时（空格/措辞/大小写可能不一样），可用 | 分隔多个候选，任一出现即算找到，如 \"登录|sign in|log in\"。" },
                     "direction": { "type": "string", "enum": ["up", "down", "left", "right"], "description": "滚动方向。目标在更下方就用 up（向上滑=看下方内容）。" }
                 },
                 "required": ["target", "direction"]
