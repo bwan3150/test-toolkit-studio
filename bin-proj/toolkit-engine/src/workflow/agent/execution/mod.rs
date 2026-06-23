@@ -186,7 +186,7 @@ pub async fn apply(
                 return Err(TkeError::InvalidArgument("滚动查找需要目标文字".to_string()));
             }
             let mut matched: Option<String> = None; // 命中的那个候选原文（用于收敛）
-            // 不定死次数：滚一次→查→比上一屏是否大部分相同。连续两次没动才算真到底（一次可能是中间
+            // 不定死次数：滚一次→查→比上一屏是否大部分相同。连续 4 次没动才算真到底（个别可能是中间
             // 嵌套区吃了手势）；第一次没动就换起点(alt)再试。安全上限防死循环。
             const SAFETY_MAX: usize = 40;
             let mut prev_texts: Option<Vec<String>> = None;
@@ -207,8 +207,8 @@ pub async fn apply(
                         }
                         if prev_texts.as_ref().map(|p| crate::utils::scroll::page_stuck(p, &texts)).unwrap_or(false) {
                             stuck += 1;
-                            if stuck >= 2 {
-                                break; // 连续两次没动 → 真滚不动了
+                            if stuck >= 4 {
+                                break; // 连续 4 次没动 → 真滚不动了
                             }
                         } else {
                             stuck = 0;

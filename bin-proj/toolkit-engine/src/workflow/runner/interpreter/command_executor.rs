@@ -198,11 +198,11 @@ impl<'a> CommandExecutor<'a> {
                 info!("滚动查找：目标「{}」已可见（滚动 {} 次）", hit, i);
                 return Ok(());
             }
-            // 与上一屏大部分相同 = 这次没滚动。**连续两次**没动才算真到底/到顶（一次可能是中间
+            // 与上一屏大部分相同 = 这次没滚动。连续 **4 次**没动才算真到底/到顶（个别可能是中间
             // 嵌套区吃了手势）；第一次没动就换起点(alt)再试。
             if prev_texts.as_ref().map(|p| crate::utils::scroll::page_stuck(p, &texts)).unwrap_or(false) {
                 stuck += 1;
-                if stuck >= 2 {
+                if stuck >= 4 {
                     break;
                 }
             } else {
