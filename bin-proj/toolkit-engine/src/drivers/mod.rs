@@ -40,7 +40,7 @@ pub fn format_tabs(tabs: &[TabInfo]) -> String {
         })
         .collect();
     format!(
-        "【浏览器共 {} 个标签页】{}\n（switch [序号] 切到某标签；switch <URL> 用新标签打开）",
+        "【浏览器共 {} 个标签页】{}\n（标 ✓当前 的就是你**正所处**的标签页——上面那些页面元素就是它的内容，**你已经在它上面了、无需再 switch 它**；只有要看**别的**标签页时才 switch [序号]，或 switch <URL> 用新标签打开。打开新标签后浏览器已自动切到新标签，别多此一举再 switch 一次。）",
         tabs.len(),
         items.join("  ")
     )
