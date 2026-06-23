@@ -235,6 +235,7 @@ pub async fn drive(
     let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
     let mut last_was_close = false; // 上一步是否是主动关闭/收尾（关 app/销毁会话）——下一轮空页面不催 launch
     let mut last_was_nav = false; // 上一步是否是「导航」动作（点击/视觉点击/切换/拖拽）——用于「踩实」判定
+    let mut last_no_pagecheck = false; // 上一步是否是「天生不改变页面」的指令（断言/等待/隐藏键盘）——这类指令执行后不做前后页面对比
     // 本轮测试对元素库的变更（供结束时人工审核）
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
@@ -303,11 +304,18 @@ pub async fn drive(
         );
         let unchanged = page_sigs.last() == Some(&struct_sig); // 与上一轮完全相同 → 上一步没生效
         let revisits = page_sigs.iter().rev().take(8).filter(|&&h| h == struct_sig).count();
-        page_sigs.push(struct_sig);
-        if unchanged {
-            no_progress += 1;
-        } else {
+        // 上一步是「天生不改变页面」的指令(断言/等待/隐藏键盘)时，页面不变是**预期**、不携带任何"有没有
+        // 前进"的信息——不记签名(免污染打转统计)、不累计 no_progress、本轮一律不做"无变化/打转"判定，
+        // 免得把正常的不变误报成"上一步没生效/原地打转"。
+        if last_no_pagecheck {
             no_progress = 0;
+        } else {
+            page_sigs.push(struct_sig);
+            if unchanged {
+                no_progress += 1;
+            } else {
+                no_progress = 0;
+            }
         }
         // 踩实：上一步是「导航」(点击/视觉点击/切换/拖拽)且确实进入了新页面/菜单(页面变了、且新页有可断言
         // 元素) → 本轮强制先 assert 一个该页独有元素把这步踩实，再继续往下点。空元素页(PDF/新标签)无法断言则跳过。
@@ -324,7 +332,7 @@ pub async fn drive(
         // 真打转 = "反复做同一操作" 且 "页面始终不变" **两者都满足**。
         // 只看其一会误杀：同一滑动但页面在翻新内容=在前进；试不同元素但页面没变=在尝试。都不算打转。
         let repeated_same = lines.len() >= 2 && lines[lines.len() - 1] == lines[lines.len() - 2];
-        if unchanged && repeated_same {
+        if !last_no_pagecheck && unchanged && repeated_same {
             loop_streak += 1;
         } else {
             loop_streak = 0;
@@ -349,7 +357,7 @@ pub async fn drive(
             finish = Some((false, format!("连续 {} 轮页面无前进、自动停止", no_progress)));
             break 'outer;
         }
-        let stuck = (no_progress >= 1 || revisits >= 2) && !p.elements.is_empty();
+        let stuck = !last_no_pagecheck && (no_progress >= 1 || revisits >= 2) && !p.elements.is_empty();
 
         tx.log(
             "page_snapshot",
@@ -374,6 +382,9 @@ pub async fn drive(
             // 否则会逼着 AI 在已完成任务后重新打开网址，把干净的 finish(success=true) 搅黄。
             let key = if last_was_close { "hint_after_close" } else { "hint_perceive_error" };
             format!("\n{}", ctx.prompts.message("explorer", key))
+        } else if last_no_pagecheck {
+            // 上一步是断言/等待/隐藏键盘——页面没变是预期，不发"无变化/打转"提示
+            String::new()
         } else if no_progress >= 1 {
             format!("\n{}", render(&ctx.prompts.message("explorer", "hint_no_progress"), &[("n", &no_progress.to_string())]))
         } else if revisits >= 2 {
@@ -387,7 +398,7 @@ pub async fn drive(
         let round_s = round.to_string();
         // 卡得更死（连续 2 次没变 / 多页打转）→ 进入**纯视觉**：元素列表已经帮不上忙了，
         // 只发当前截图、不再带元素/OCR，让 AI 直接看图用 click_visual 决策（避免被无效元素继续误导）。
-        let go_visual = (no_progress >= 2 || revisits >= 3) && perceive_err.is_none();
+        let go_visual = !last_no_pagecheck && (no_progress >= 2 || revisits >= 3) && perceive_err.is_none();
         // 渲染每轮要发给 AI 的页面消息（含框架/hint）——同时记进 conversation.json，供提示词调优复盘
         let page_msg = render(
             &ctx.prompts.message("explorer", "page_round"),
@@ -413,11 +424,9 @@ pub async fn drive(
         }
         // 轮与轮之间空一行，分隔更清楚
         eprintln!();
-        // 轮次头：左侧"第 N 轮"做锚点，右侧次要统计(已知/未知/OCR/标签页)整体淡色，
-        // 不与下面的「思考 + 动作」主内容抢眼。OCR/标签页有值才显示。
-        // 展示 AI 实际看到的页面构成——不再显示"已知/未知"（每轮都把未标注元素给 AI 看，
-        // 已知/未知对 AI 判断没意义、只会误导）。结构页面元素 + OCR 元素 +（web）标签页数，
-        // 让人清楚 agent 看到了啥、据什么判断。
+        // 页面统计头：**不再显示"第 N 轮"**——下面每个执行步前的 `[N]` tks 行号才是锚点，轮次号是冗余噪声。
+        // 这里只整体淡色列出 agent 这一刻看到的页面构成：结构页面元素 + OCR 元素 +（web）标签页数，
+        // 让人清楚它据什么判断（不显示"已知/未知"，那对 AI 判断没意义、只会误导）。重探时由 round_prefix 标「重探n·」。
         let ocr_n = p.ocr_added;
         let page_n = p.elements.len().saturating_sub(ocr_n);
         let mut stat = vec![format!("{} 页面元素", page_n)];
@@ -443,9 +452,8 @@ pub async fn drive(
             String::new()
         };
         eprintln!(
-            "{}  {}{}",
-            paint(tty, "2", &format!("{}第 {} 轮", round_prefix, round)),
-            paint(tty, "2", &stat.join(" · ")),
+            "{}{}",
+            paint(tty, "2", &format!("{}{}", round_prefix, stat.join(" · "))),
             notready
         );
         // OCR 接口报错：stat 已标「OCR调用失败」，这里红字单列具体报错 + 记日志，绝不让它被"0"掩盖。
@@ -720,6 +728,12 @@ pub async fn drive(
                             last_was_nav = matches!(
                                 &device_action,
                                 AgentAction::Click { .. } | AgentAction::ClickVisual { .. } | AgentAction::Switch { .. } | AgentAction::Drag { .. }
+                            );
+                            // 记下这步是不是「天生不改变页面」的指令(断言/等待/隐藏键盘)——下一轮不做前后页面对比，
+                            // 免得把"正常的页面没变"误报成"上一步没生效/原地打转"。
+                            last_no_pagecheck = matches!(
+                                &device_action,
+                                AgentAction::Assert { .. } | AgentAction::Wait { .. } | AgentAction::HideKeyboard
                             );
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
