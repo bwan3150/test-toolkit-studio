@@ -5,7 +5,7 @@
 
 # 启动应用
 启动 [com.example.test_toolkit, .MainActivity]
-等待 [2000]
+等待 [2s]
 
 # 使用坐标点击
 点击 [{200, 400}]

@@ -63,7 +63,8 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
         "switch" => AgentAction::Switch { target: req_str(a, "target")? },
         "hide_keyboard" => AgentAction::HideKeyboard,
         "wait" => AgentAction::Wait {
-            ms: opt_u64(a, "ms"),
+            // 带单位的时长字符串(5s/1000ms)→毫秒；兼容旧 ms 数字字段兜底
+            ms: opt_str(a, "duration").and_then(|s| parse_duration_ms(&s)).or_else(|| opt_u64(a, "ms")),
             element: opt_str(a, "element"),
         },
         "request_screenshot" => AgentAction::RequestScreenshot { reason: req_str(a, "reason")? },
@@ -109,6 +110,19 @@ fn req_usize(v: &serde_json::Value, key: &str) -> Result<usize> {
 
 fn opt_u64(v: &serde_json::Value, key: &str) -> Option<u64> {
     v.get(key).and_then(|x| x.as_u64())
+}
+
+/// 解析带单位的时长字符串为毫秒：`5s`→5000、`1000ms`→1000（ms 须先于 s 判断）。
+/// 容错：纯数字无单位也按毫秒兜底，避免 AI 偶尔漏单位时炸掉。
+fn parse_duration_ms(s: &str) -> Option<u64> {
+    let s = s.trim();
+    if let Some(v) = s.strip_suffix("ms") {
+        return v.trim().parse::<u64>().ok();
+    }
+    if let Some(v) = s.strip_suffix('s') {
+        return v.trim().parse::<u64>().ok().map(|sec| sec * 1000);
+    }
+    s.parse::<u64>().ok()
 }
 
 fn opt_i32(v: &serde_json::Value, key: &str) -> Option<i32> {

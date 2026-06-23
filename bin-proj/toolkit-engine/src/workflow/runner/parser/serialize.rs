@@ -38,12 +38,12 @@ fn param_to_token(p: &TksParam) -> String {
         },
         TksParam::Text(t) => format!("\"{}\"", t),
         TksParam::Number(n) => n.to_string(),
-        // Duration 存毫秒：整秒输出 `Ns`（可逆回 Duration），否则退化为毫秒数字
+        // Duration 存毫秒：始终带单位，人读无歧义——整秒 `Ns`，否则 `Nms`（均可逆回 Duration）
         TksParam::Duration(ms) => {
             if *ms % 1000 == 0 {
                 format!("{}s", ms / 1000)
             } else {
-                ms.to_string()
+                format!("{}ms", ms)
             }
         }
         TksParam::Direction(d) => direction_to_cn(d),
@@ -97,7 +97,8 @@ mod tests {
             "输入 [{用户名}, \"hello\"]",
             "按压 [{菜单}, 1000]",
             "定向滑动 [{540, 960}, 上, 600]",
-            "等待 [2000]",
+            "等待 [2s]",
+            "等待 [1500ms]",
             "断言 [{首页}, 存在]",
             "启动 [\"com.x.app\", \".MainActivity\"]",
             "返回",

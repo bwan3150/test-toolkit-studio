@@ -137,7 +137,7 @@ pub fn tool_schemas() -> Vec<ToolSchema> {
             schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "ms": { "type": "integer", "description": "固定等待毫秒数" },
+                    "duration": { "type": "string", "description": "固定等待时长，**必须带单位**：如 5s（5秒）、1000ms（1000毫秒，即1秒）" },
                     "element": { "type": "string", "description": "等待出现的元素名（已落库的 {名}）" }
                 }
             }),

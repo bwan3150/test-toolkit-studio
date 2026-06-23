@@ -103,7 +103,7 @@ const darkTheme = TKSSyntax.themes.dark;
 
 断言 [{相机按钮}, 存在]
 
-等待 [1000]
+等待 [1s]
 
 返回
 ```

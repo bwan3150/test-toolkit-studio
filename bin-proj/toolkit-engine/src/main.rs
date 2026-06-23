@@ -86,7 +86,7 @@ enum Commands {
         #[command(flatten)]
         args: RunArgs,
     },
-    /// [工作流] 不落文件执行一串 .tks 指令: tke steps "点击 [{登录按钮}]" "等待 [2]"
+    /// [工作流] 不落文件执行一串 .tks 指令: tke steps "点击 [{登录按钮}]" "等待 [2s]"
     Steps {
         #[command(flatten)]
         args: StepsArgs,

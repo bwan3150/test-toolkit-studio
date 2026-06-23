@@ -257,13 +257,14 @@ pub async fn apply(
         AgentAction::Wait { ms, element } => {
             if let Some(ms) = ms {
                 tokio::time::sleep(tokio::time::Duration::from_millis(*ms)).await;
-                Ok((line(TksCommand::Wait, vec![TksParam::Number(*ms as i32)]), format!("等待 {}ms", ms), ActionTrace::default(), None))
+                // 用 Duration 落库 → 序列化带单位（`1s`/`1000ms`），人读无歧义、回放同口径
+                Ok((line(TksCommand::Wait, vec![TksParam::Duration(*ms as u32)]), format!("等待 {}ms", ms), ActionTrace::default(), None))
             } else if let Some(elem) = element {
                 // v1：仅记录可回放的 .tks 行，实时不阻塞（下一轮采集会反映新状态）
                 Ok((line(TksCommand::Wait, vec![el_param(elem)]), format!("记录等待元素出现: {}", elem), ActionTrace::default(), None))
             } else {
                 tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                Ok((line(TksCommand::Wait, vec![TksParam::Number(1000)]), "等待 1000ms".to_string(), ActionTrace::default(), None))
+                Ok((line(TksCommand::Wait, vec![TksParam::Duration(1000)]), "等待 1000ms".to_string(), ActionTrace::default(), None))
             }
         }
         // 控制流动作不在此处理（由主循环拦截）

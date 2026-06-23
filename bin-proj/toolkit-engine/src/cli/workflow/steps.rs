@@ -10,7 +10,7 @@ use super::EventPrinter;
 /// Steps 命令参数
 #[derive(clap::Args)]
 pub struct StepsArgs {
-    /// 依次执行的 .tks 指令（可多条，如: "点击 [{登录按钮}]" "等待 [2]"）
+    /// 依次执行的 .tks 指令（可多条，如: "点击 [{登录按钮}]" "等待 [2s]"）
     #[arg(required = true)]
     pub lines: Vec<String>,
 }

@@ -76,23 +76,22 @@ impl ParameterParser {
             return TksParam::Text(param[1..param.len() - 1].to_string());
         }
 
-        // 2. 解析数字
+        // 2. 解析带单位的时长（等待用，人读无歧义）：必须先于裸数字、且 ms 先于 s
+        //    1000ms → 1000 毫秒；5s → 5 秒。底层统一存毫秒(Duration)。
+        if let Some(v) = param.strip_suffix("ms") {
+            if let Ok(ms) = v.trim().parse::<u32>() {
+                return TksParam::Duration(ms);
+            }
+        }
+        if let Some(v) = param.strip_suffix('s') {
+            if let Ok(seconds) = v.trim().parse::<u32>() {
+                return TksParam::Duration(seconds * 1000);
+            }
+        }
+
+        // 3. 解析数字（无单位的纯数字：按压时长/滑动幅度等仍是裸数字）
         if let Ok(num) = param.parse::<i32>() {
             return TksParam::Number(num);
-        }
-
-        // 3. 解析时间（如 10s）
-        if param.ends_with('s') {
-            if let Ok(seconds) = param[..param.len() - 1].parse::<u32>() {
-                return TksParam::Duration(seconds * 1000);
-            }
-        }
-
-        // 4. 解析时间（纯数字，秒数）
-        if let Ok(seconds) = param.parse::<u32>() {
-            if seconds <= 3600 {
-                return TksParam::Duration(seconds * 1000);
-            }
         }
 
         // 5. 解析元素引用 {元素名} 或 {元素名}&策略

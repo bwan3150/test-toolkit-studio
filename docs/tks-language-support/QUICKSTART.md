@@ -130,7 +130,7 @@ const colors = TKSSyntax.themes.dark;
 输入 [{用户名输入框}&text, admin]
 
 断言 [{按钮}, 存在]
-等待 [1000]
+等待 [1s]
 返回
 ```
 
