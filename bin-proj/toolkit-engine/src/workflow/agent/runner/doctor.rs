@@ -53,10 +53,26 @@ struct DiagStep {
     err: Option<String>,
     /// 该步执行后页面的元素列表（渲染 trace 时普通步截断、失败步/终点步给全量）
     page_full: String,
+    /// 该步执行后页面的**结构签名**（仅结构元素、排除 OCR 伪元素，OCR 噪声不影响）——
+    /// 用于稳健判断"这步有没有让页面结构变化"，不受 OCR 文字识别的轻微抖动干扰。
+    struct_sig: u64,
     /// 该步标注截图路径（落盘产物，写入 conversation.json 供复盘）
     screenshot: Option<String>,
     /// 该步页面结构文件路径
     xml: Option<String>,
+}
+
+/// 一组元素的结构签名（仅结构元素、排除 OCR 伪元素），用于判断页面结构有没有变化。
+fn struct_signature(els: &[UIElement]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    els.iter()
+        .filter(|e| e.class_name != "OcrText")
+        .map(|e| e.to_ai_text())
+        .collect::<Vec<_>>()
+        .join("|")
+        .hash(&mut h);
+    h.finish()
 }
 
 /// 一次诊断结果
@@ -73,18 +89,30 @@ pub(super) struct Diagnosis {
 }
 
 impl Diagnosis {
-    /// "页面与上一步完全相同"（即执行后**没改变页面** = 空操作）的步号集合（1-based）。
-    /// 反思官只准删这些——它们删了不影响后续状态、安全；而改变了页面/开了标签的步是**承重步**，
-    /// 删了会让后续依赖该状态的步（如随后的「切换」依赖新开的标签）失效。空页面(0元素)的步不算
-    /// 空操作（PDF/新标签等空页恰恰常是刚开出来的承重结果），保守保留。
+    /// 「无效操作步」的步号集合（1-based）——执行后**页面结构没变化**（点了个不起作用的元素），
+    /// 反思官可安全删。判据三条同时满足：
+    ///  ① 该步执行后**结构签名与上一步相同**（排除 OCR 噪声，比"page_full 精确相等"稳健得多——
+    ///     之前用 page_full 精确比，OCR 文字的轻微抖动就把"没变"误判成"变了"，导致无效点击漏网）；
+    ///  ② 当前页**非空**（0 元素的空页常是刚开出来的 PDF/新标签等承重结果，保守保留）；
+    ///  ③ **紧跟其后不是断言步**——点击后下一步就 assert，说明这步已被断言确认有效（典型：点击开新
+    ///     标签、下一步断言新标签内容；新标签不改当前页结构，光看①会误判它无效），这种保留。
+    /// 这样「点了没让结构变、又没被随后断言确认」的无效点击会被抓出来；而"有效但不改当前页结构"
+    /// 的承重点击（开新标签/下载）因②③得到保护。删错了还有反思官删后整体重诊断兜底（跑不到目标即放弃本次优化）。
     pub(super) fn noop_step_nos(&self) -> std::collections::HashSet<usize> {
         let mut set = std::collections::HashSet::new();
         for i in 1..self.steps.len() {
-            let cur = self.steps[i].page_full.trim();
-            let prev = self.steps[i - 1].page_full.trim();
-            if !cur.is_empty() && cur == prev {
-                set.insert(self.steps[i].no);
+            if self.steps[i].page_full.trim().is_empty() {
+                continue; // ② 空页不算
             }
+            if self.steps[i].struct_sig != self.steps[i - 1].struct_sig {
+                continue; // ① 结构变了 = 有效
+            }
+            if let Some(next) = self.steps.get(i + 1) {
+                if next.line.trim_start().starts_with("断言") {
+                    continue; // ③ 紧跟断言 = 已确认有效
+                }
+            }
+            set.insert(self.steps[i].no);
         }
         set
     }
@@ -344,9 +372,11 @@ pub(super) async fn diagnose(
     let mut steps: Vec<DiagStep> = Vec::with_capacity(result.steps.len());
     for st in &result.steps {
         let mut full_txt = String::new();
+        let mut struct_sig = 0u64;
         if let Some(xml_rel) = &st.xml {
             let xml_abs = run_dir.join(xml_rel);
             if let Ok(mut els) = ctx.fetcher.fetch_elements_from_file(&xml_abs) {
+                struct_sig = struct_signature(&els); // 结构签名取 OCR 增强前的纯结构元素（OCR 不影响）
                 if let (Some(src), Some(png_rel)) = (ctx.ocr, &st.screenshot) {
                     if let Ok(bytes) = std::fs::read(run_dir.join(png_rel)) {
                         let _ = enrich_with_ocr(&mut els, &bytes, src).await;
@@ -363,6 +393,7 @@ pub(super) async fn diagnose(
             ok: st.success,
             err: st.error.clone(),
             page_full: full_txt,
+            struct_sig,
             screenshot: abs(&st.screenshot),
             xml: abs(&st.xml),
         });
