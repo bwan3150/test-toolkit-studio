@@ -492,29 +492,36 @@ pub async fn drive(
             eprintln!("{}", paint(tty, "33", msg));
         }
 
-        // 1b) 自动踩实（踩实官子 agent）：上一步导航让页面变了 → 由踩实官从"新出现的元素"挑一个标志，
-        //     系统自动插一条断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。挑不出标志=疑似点错，
-        //     只记日志不插断言（交监督官在 finish 处兜底）。
-        if changed_after_nav && !super::interrupt::aborted() {
+        // 1b) 自动断言（断言官子 agent）：上一步导航让页面变了 → 由断言官**只看这一页 vs 上一页的 diff**
+        //     （新出现的元素），挑一个标志元素，系统自动插一条断言把这步踩实。**不依赖主探索 agent 记得断言**
+        //     （它总漏）。没有 diff（delta 为空）就不喂、不调（避免给它看整页、看不出本步前后对比）。
+        //     挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
+        if changed_after_nav && !delta_indices.is_empty() && !super::interrupt::aborted() {
             let action_desc = lines.last().map(|l| friendly(l)).unwrap_or_default();
-            let cand: Vec<usize> = if delta_indices.is_empty() {
-                (0..p.elements.len()).take(12).collect()
-            } else {
-                delta_indices.iter().copied().take(12).collect()
-            };
-            let delta_listing = cand.iter().map(|&i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 80))).collect::<Vec<_>>().join("\n");
+            let delta_listing = delta_indices
+                .iter()
+                .copied()
+                .take(12)
+                .map(|i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 80)))
+                .collect::<Vec<_>>()
+                .join("\n");
             let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, &delta_listing).await;
             subagent_pt += pick.pt;
             subagent_ct += pick.ct;
+            // 像 explorer 一样：先输出一行「断言官的判断 + 它本次的 token 用量」
+            let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pick.pt), fmt_tokens(pick.ct)));
+            let say = brief(if pick.reason.is_empty() { "（断言官未说明理由）" } else { &pick.reason }, 200);
+            eprintln!("  {} {}  {}", paint(tty, "36", "断言官"), say, toks);
             match pick.index {
                 Some(idx) if idx < p.elements.len() => {
                     let act = AgentAction::Assert { element_id: idx, name: String::new(), desc: None, exist: true };
                     let step_no = steps.len() + 1;
                     eprint!("  {} {} {} ", paint(tty, "2", &format!("[{:>2}]", step_no)), preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()), paint(tty, "2", "..."));
                     let _ = std::io::stderr().flush();
+                    let t0 = std::time::Instant::now();
                     match execution::apply(ctx.device, ctx.element_path, &act, &p.elements, &known_names, &p.shot_path, tx, round).await {
                         Ok((line, detail, trace, saved)) => {
-                            eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", "踩实"));
+                            eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &fmt_duration(t0.elapsed().as_millis() as u64)));
                             if let Some(s) = saved {
                                 if s.created && !created.contains(&s.name) {
                                     created.push(s.name.clone());
@@ -525,15 +532,15 @@ pub async fn drive(
                             tx.log("tks_step", serde_json::json!({ "round": round, "step": step_index + 1, "line": line.clone(), "exec": detail.clone(), "screenshot": screenshot.clone(), "xml": xml.clone(), "auto_checkpoint": true, "reason": pick.reason.clone() }));
                             steps.push(StepResult { index: step_index, command: line.clone(), success: true, error: None, duration_ms: 0, line: None, screenshot, xml });
                             lines.push(line.clone());
-                            step_comments.push(format!("踩实：{}", pick.reason));
+                            step_comments.push(format!("断言：{}", pick.reason));
                         }
                         Err(e) => {
-                            eprintln!("{} {}", paint(tty, "33", "·"), paint(tty, "2", &format!("踩实跳过：{}", brief(&e.to_string(), 50))));
+                            eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &format!("断言跳过：{}", brief(&e.to_string(), 50))));
                         }
                     }
                 }
                 _ => {
-                    eprintln!("  {}", paint(tty, "33", &format!("  踩实官：未找到可踩实标志（{}）", brief(&pick.reason, 70))));
+                    // index=null：断言官判定没到预期页/无可断言标志（理由已在上面那行输出），只记日志
                     tx.log("checkpoint_skip", serde_json::json!({ "round": round, "reason": pick.reason }));
                 }
             }
