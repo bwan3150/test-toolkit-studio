@@ -7,7 +7,7 @@
 
 use std::io::Stdout;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crossterm::{
     cursor::{Hide, Show},
@@ -223,7 +223,6 @@ struct TuiModel {
     round: usize,
     tok_up: i64,
     tok_down: i64,
-    started: Instant,
     /// 等用户回答的提问（Some=AI 在等纯文本输入）
     awaiting: Option<String>,
     /// 方向键列表选择（Some=正在从候选里选，如设备选择）
@@ -235,7 +234,6 @@ struct TuiModel {
     follow: bool,
     finished: bool,
     should_quit: bool,
-    abort_sent: bool,
 }
 
 impl TuiModel {
@@ -246,7 +244,6 @@ impl TuiModel {
             round: 0,
             tok_up: 0,
             tok_down: 0,
-            started: Instant::now(),
             awaiting: None,
             choosing: None,
             input: String::new(),
@@ -254,7 +251,6 @@ impl TuiModel {
             follow: true,
             finished: false,
             should_quit: false,
-            abort_sent: false,
         }
     }
 
@@ -548,21 +544,20 @@ impl TuiModel {
 
     /// 键盘动作 → UiCommand / 滚动 / 退出
     fn handle_key(&mut self, k: KeyEvent, tx: &UnboundedSender<UiCommand>) {
-        let waiting = self.awaiting.is_some() || self.choosing.is_some();
-
-        // Ctrl+C：软停语义。
-        //   等输入时（awaiting/choosing）→ Abort（暂停后再按一次退出，或放弃 setup 选择）
-        //   运行中（非等输入、未结束）→ Pause（软停，等用户指导再继续，不直接终止）
-        //   结束后 → 直接退出
+        // Ctrl+C：强制退出兜底（任何状态都能跳出，防卡死）
         if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
-            if self.finished {
-                self.should_quit = true;
-            } else if waiting {
+            if !self.finished {
                 let _ = tx.send(UiCommand::Abort);
-                self.abort_sent = true;
-                self.awaiting = None;
+            }
+            self.should_quit = true;
+            return;
+        }
+        // Esc：停止当前探索（软停，可继续输入指导让 AI 接着跑）；choosing 时=放弃选择并退出
+        if k.code == KeyCode::Esc {
+            if self.choosing.is_some() {
+                let _ = tx.send(UiCommand::Abort);
                 self.choosing = None;
-            } else {
+            } else if !self.finished && self.awaiting.is_none() {
                 let _ = tx.send(UiCommand::Pause);
             }
             return;
@@ -612,7 +607,15 @@ impl TuiModel {
                 self.scroll = 0;
             }
             KeyCode::Enter => {
-                if !self.input.is_empty() {
+                let cmd = self.input.trim();
+                if cmd == "/exit" || cmd == "/quit" {
+                    // 一致做法：输入 /exit 退出 TUI（运行中先终止引擎）
+                    if !self.finished {
+                        let _ = tx.send(UiCommand::Abort);
+                    }
+                    self.should_quit = true;
+                    self.input.clear();
+                } else if !self.input.is_empty() {
                     let text = self.input.clone();
                     if self.awaiting.is_some() {
                         let _ = tx.send(UiCommand::Answer { text });
@@ -626,13 +629,6 @@ impl TuiModel {
             }
             KeyCode::Backspace => {
                 self.input.pop();
-            }
-            // 结束后 q / Esc 退出（与正常输入互斥：finished 时不再当字符录入）
-            KeyCode::Char('q') if self.finished => {
-                self.should_quit = true;
-            }
-            KeyCode::Esc if self.finished => {
-                self.should_quit = true;
             }
             KeyCode::Char(c) if !k.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.input.push(c);
@@ -679,11 +675,7 @@ fn view(frame: &mut Frame, model: &TuiModel) {
             None => p.label().to_string(),
         })
         .unwrap_or_else(|| "准备中".to_string());
-    let elapsed = fmt_duration(model.started.elapsed().as_millis() as u64);
-    let top = format!(
-        " {} · 第{}轮 · ↑{} ↓{} · {} ",
-        phase_label, model.round, model.tok_up, model.tok_down, elapsed
-    );
+    let top = format!(" {} · 第{}轮 ", phase_label, model.round);
     frame.render_widget(
         Paragraph::new(Line::from(top)).style(
             Style::default()
@@ -733,13 +725,13 @@ fn view(frame: &mut Frame, model: &TuiModel) {
 
     // ---- 底栏：快捷键提示（暗灰，随状态变化）----
     let hint = if model.choosing.is_some() {
-        "↑↓ 选择 · Enter 确认 · 1-9 直选 · Ctrl+C 放弃"
+        "↑↓ 选择 · Enter 确认 · 1-9 直选 · Esc 放弃"
     } else if model.awaiting.is_some() {
-        "Enter 提交回答 · Ctrl+C 放弃"
+        "Enter 提交 · 输入指导让 AI 继续 · /exit 退出"
     } else if model.finished {
-        "q / Esc 退出"
+        "输入 /exit 退出"
     } else {
-        "打字+Enter 指导 · ↑↓ 滚动 · End 贴底 · Ctrl+C 暂停（再按退出）"
+        "Esc 停止 · 打字+Enter 指导 · ↑↓ 滚动 · End 贴底 · /exit 退出"
     };
     frame.render_widget(
         Paragraph::new(hint).style(Style::default().fg(Color::DarkGray)),
@@ -797,10 +789,15 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
     } else {
         ("指导（Enter 发送）", Style::default().fg(Color::DarkGray))
     };
+    // 累计 token 放输入框右下角（边框底部右对齐），不再占顶栏
+    let toks = Line::from(format!("↑{} ↓{}", model.tok_up, model.tok_down))
+        .right_aligned()
+        .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(
         Paragraph::new(format!("> {}", model.input)).block(
             Block::bordered()
                 .title(title)
+                .title_bottom(toks)
                 .border_style(border_style),
         ),
         area,
