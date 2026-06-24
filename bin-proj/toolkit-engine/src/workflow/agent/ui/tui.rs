@@ -234,6 +234,8 @@ struct TuiModel {
     follow: bool,
     finished: bool,
     should_quit: bool,
+    /// 最近一条「步骤进行中」行的下标；done 时原地替换成 ✓/✗（步骤保持单行，不另起一行）
+    last_step_idx: Option<usize>,
 }
 
 impl TuiModel {
@@ -251,6 +253,7 @@ impl TuiModel {
             follow: true,
             finished: false,
             should_quit: false,
+            last_step_idx: None,
         }
     }
 
@@ -276,8 +279,45 @@ impl TuiModel {
         self.push(Line::from(Span::styled(text, Style::default().fg(color))));
     }
 
+    /// 块间留一个空行（幂等：上一行已空 / 开头 则不重复加）
+    fn ensure_blank(&mut self) {
+        if let Some(last) = self.lines.last() {
+            if last.width() > 0 {
+                self.lines.push(Line::from(""));
+            }
+        }
+    }
+
+    /// Page 的 ⎿ 子项行（暗灰缩进）
+    fn push_sub(&mut self, text: String) {
+        self.push(Line::from(Span::styled(
+            format!("⎿ {}", text),
+            Style::default().fg(Color::DarkGray),
+        )));
+    }
+
+    /// 步骤完成：原地把「进行中」行替换成 ✓/✗ 结果行（步骤单行，不另起一行）
+    fn replace_step_line(&mut self, line: Line<'static>) {
+        if let Some(i) = self.last_step_idx.take() {
+            if i < self.lines.len() {
+                self.lines[i] = line;
+                return;
+            }
+        }
+        self.push(line);
+    }
+
     /// 把一个 UiEvent 转成 1~N 行彩色 Line 累积进 lines
     fn apply(&mut self, ev: UiEvent) {
+        // 块级事件之间统一留一个空行（更稀疏好读）；
+        // 只有 Step 的 Ok/Fail 是「原地更新进行中行」、不另起块，不加空行。
+        let inplace = matches!(
+            &ev,
+            UiEvent::Step { state: StepState::Ok, .. } | UiEvent::Step { state: StepState::Fail, .. }
+        );
+        if !inplace {
+            self.ensure_blank();
+        }
         match ev {
             UiEvent::Phase { phase, n } => {
                 self.phase = Some((phase, n));
@@ -285,8 +325,7 @@ impl TuiModel {
                     Some(k) => format!("━━ {} #{} ━━", phase.label(), k),
                     None => format!("━━ {} ━━", phase.label()),
                 };
-                // 空行分隔 + 粗体下划线标题
-                self.push(Line::from(""));
+                // 粗体下划线标题（块间空行由 apply 统一处理）
                 self.push(Line::from(Span::styled(
                     title,
                     Style::default()
@@ -305,31 +344,32 @@ impl TuiModel {
                 ..
             } => {
                 self.round = round;
-                let mut parts = vec![format!("{} 元素", struct_elements)];
+                // 「观察当前页面」标题 + ⎿ 分行列：页面元素 / OCR 补充 / 标签页 / 所处
+                self.push_colored("观察当前页面".to_string(), Color::Gray);
+                self.push_sub(format!("{} 页面元素", struct_elements));
                 if ocr_failed {
-                    parts.push("OCR✗".to_string());
+                    self.push_sub("OCR 调用失败".to_string());
                 } else if let Some(n) = ocr_added {
-                    parts.push(format!("+{} OCR", n));
+                    self.push_sub(format!("补充 {} OCR元素", n));
                 }
                 if tabs > 0 {
-                    parts.push(format!("{} 标签", tabs));
+                    self.push_sub(format!("{} 标签页", tabs));
                 }
                 if let Some(loc) = location {
                     let loc = loc.trim();
                     if !loc.is_empty() {
-                        parts.push(format!("所处:{}", brief(loc, 40)));
+                        self.push_sub(format!("所处 {}", brief(loc, 40)));
                     }
                 }
                 if let Some(nr) = not_ready {
-                    parts.push(
+                    self.push_sub(
                         match nr {
                             NotReady::SessionClosed => "会话已关闭（收尾）",
-                            NotReady::NeedLaunch => "待 launch",
+                            NotReady::NeedLaunch => "页面未就绪，待 launch",
                         }
                         .to_string(),
                     );
                 }
-                self.push_colored(format!("· {}", parts.join(" · ")), Color::DarkGray);
             }
             UiEvent::OcrError { error, .. } => {
                 self.push_colored(format!("! {}", brief(&error, 160)), Color::Red);
@@ -356,42 +396,35 @@ impl TuiModel {
                 ]));
             }
             UiEvent::Step { step, state, preview, duration_ms, error, .. } => match state {
-                // Running：用 spinner 字符示意进行中（最新一行即可，不强求覆盖）
+                // 进行中：`[ N] 动作 ...`（记下行号，done 时原地替换，不另起一行）
                 StepState::Running => {
                     self.push(Line::from(vec![
-                        Span::styled(
-                            format!("[{:>2}] ", step),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                        Span::styled("⟳ ", Style::default().fg(Color::Cyan)),
+                        Span::styled(format!("[{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
+                        Span::styled(" ...", Style::default().fg(Color::DarkGray)),
                     ]));
+                    self.last_step_idx = Some(self.lines.len() - 1);
                 }
+                // 成功：原地替换为 `[ N] 动作 ... ✓ 耗时`
                 StepState::Ok => {
                     let dur = duration_ms.map(fmt_duration).unwrap_or_default();
-                    self.push(Line::from(vec![
-                        Span::styled(
-                            format!("[{:>2}] ", step),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                        Span::styled("✓ ", Style::default().fg(Color::Green)),
+                    self.replace_step_line(Line::from(vec![
+                        Span::styled(format!("[{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
-                        Span::styled(format!("  {}", dur), Style::default().fg(Color::DarkGray)),
+                        Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("✓", Style::default().fg(Color::Green)),
+                        Span::styled(format!(" {}", dur), Style::default().fg(Color::DarkGray)),
                     ]));
                 }
+                // 失败：原地替换为 `[ N] 动作 ... ✗ 错误`
                 StepState::Fail => {
                     let e = error.unwrap_or_default();
-                    self.push(Line::from(vec![
-                        Span::styled(
-                            format!("[{:>2}] ", step),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                        Span::styled("✗ ", Style::default().fg(Color::Red)),
+                    self.replace_step_line(Line::from(vec![
+                        Span::styled(format!("[{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
-                        Span::styled(
-                            format!("  {}", brief(&e, 120)),
-                            Style::default().fg(Color::Red),
-                        ),
+                        Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
+                        Span::styled("✗", Style::default().fg(Color::Red)),
+                        Span::styled(format!(" {}", brief(&e, 120)), Style::default().fg(Color::Red)),
                     ]));
                 }
             },
