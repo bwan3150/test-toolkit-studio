@@ -309,13 +309,10 @@ impl TuiModel {
 
     /// 把一个 UiEvent 转成 1~N 行彩色 Line 累积进 lines
     fn apply(&mut self, ev: UiEvent) {
-        // 块级事件之间统一留一个空行（更稀疏好读）；
-        // 只有 Step 的 Ok/Fail 是「原地更新进行中行」、不另起块，不加空行。
-        let inplace = matches!(
-            &ev,
-            UiEvent::Step { state: StepState::Ok, .. } | UiEvent::Step { state: StepState::Fail, .. }
-        );
-        if !inplace {
+        // Step（进行中/完成/失败）紧贴在触发它的「● AI 回复」下面、缩进显示，不另加块间空行；
+        // 其余块级事件（● 回复 / 观察 / 阶段 …）之间统一留一个空行。
+        let is_step = matches!(&ev, UiEvent::Step { .. });
+        if !is_step {
             self.ensure_blank();
         }
         match ev {
@@ -379,18 +376,19 @@ impl TuiModel {
             }
             UiEvent::AgentThought { text, tokens, .. } => {
                 self.add_tokens(tokens);
+                // 探索主 agent 的回复：● 白点 + 句子（单独一行，指令执行缩进在下面）
                 self.push(Line::from(vec![
+                    Span::styled("● ", Style::default().fg(Color::White)),
                     Span::raw(brief(&text, 200)),
                     Self::tok_span(tokens),
                 ]));
             }
             UiEvent::SubAgent { kind, level, text, tokens } => {
                 self.add_tokens(tokens);
+                // 子 agent 回复：● 点用该 agent 专属色 + 名称 + 句子
                 self.push(Line::from(vec![
-                    Span::styled(
-                        format!("└ {} ", kind.label()),
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    Span::styled("● ", Style::default().fg(subagent_color(kind))),
+                    Span::styled(format!("{} ", kind.label()), Style::default().fg(Color::DarkGray)),
                     Span::styled(brief(&text, 200), Style::default().fg(level_color(level))),
                     Self::tok_span(tokens),
                 ]));
@@ -399,7 +397,7 @@ impl TuiModel {
                 // 进行中：`[ N] 动作 ...`（记下行号，done 时原地替换，不另起一行）
                 StepState::Running => {
                     self.push(Line::from(vec![
-                        Span::styled(format!("[{:>2}] ", step), Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("  [{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
                         Span::styled(" ...", Style::default().fg(Color::DarkGray)),
                     ]));
@@ -409,7 +407,7 @@ impl TuiModel {
                 StepState::Ok => {
                     let dur = duration_ms.map(fmt_duration).unwrap_or_default();
                     self.replace_step_line(Line::from(vec![
-                        Span::styled(format!("[{:>2}] ", step), Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("  [{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
                         Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
                         Span::styled("✓", Style::default().fg(Color::Green)),
@@ -420,7 +418,7 @@ impl TuiModel {
                 StepState::Fail => {
                     let e = error.unwrap_or_default();
                     self.replace_step_line(Line::from(vec![
-                        Span::styled(format!("[{:>2}] ", step), Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("  [{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
                         Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
                         Span::styled("✗", Style::default().fg(Color::Red)),
@@ -668,6 +666,17 @@ impl TuiModel {
             }
             _ => {}
         }
+    }
+}
+
+/// 子 agent 专属点色（● 标注；不同 agent 不同色，便于一眼区分谁在说话）
+fn subagent_color(kind: SubAgent) -> Color {
+    match kind {
+        SubAgent::Asserter => Color::Cyan,
+        SubAgent::Supervisor => Color::Yellow,
+        SubAgent::Reflector => Color::Magenta,
+        SubAgent::Doctor => Color::LightBlue,
+        SubAgent::Optimizer => Color::Green,
     }
 }
 
