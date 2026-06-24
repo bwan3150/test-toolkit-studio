@@ -492,20 +492,28 @@ pub async fn drive(
             eprintln!("{}", paint(tty, "33", msg));
         }
 
-        // 1b) 自动断言（断言官子 agent）：上一步导航让页面变了 → 由断言官**只看这一页 vs 上一页的 diff**
-        //     （新出现的元素），挑一个标志元素，系统自动插一条断言把这步踩实。**不依赖主探索 agent 记得断言**
-        //     （它总漏）。没有 diff（delta 为空）就不喂、不调（避免给它看整页、看不出本步前后对比）。
-        //     挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
-        if changed_after_nav && !delta_indices.is_empty() && !super::interrupt::aborted() {
+        // 1b) 自动断言（断言官子 agent）：上一步导航让页面变了 → 由断言官挑一个标志元素，系统自动插一条
+        //     断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。给断言官**两页的完整元素**
+        //     （点击前 + 点击后），并在点击后那页**标★出本次新出现的元素**——既有完整上下文、又一眼看出本步
+        //     前后变化。挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
+        if changed_after_nav && !super::interrupt::aborted() {
             let action_desc = lines.last().map(|l| friendly(l)).unwrap_or_default();
-            let delta_listing = delta_indices
+            // 点击前那页（完整）
+            let prev_listing = prev_action_elements
                 .iter()
-                .copied()
-                .take(12)
-                .map(|i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 80)))
+                .map(|e| format!("- {}", brief(&e.to_ai_text(), 100)))
                 .collect::<Vec<_>>()
                 .join("\n");
-            let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, &delta_listing).await;
+            // 点击后那页（完整）：★ = 本次新出现的元素；断言官从这里挑 index
+            let new_set: std::collections::HashSet<usize> = delta_indices.iter().copied().collect();
+            let current_listing = p
+                .elements
+                .iter()
+                .enumerate()
+                .map(|(i, e)| format!("[{}]{} {}", i, if new_set.contains(&i) { " ★新" } else { "" }, brief(&e.to_ai_text(), 100)))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, &prev_listing, &current_listing).await;
             subagent_pt += pick.pt;
             subagent_ct += pick.ct;
             // 像 explorer 一样：先输出一行「断言官的判断 + 它本次的 token 用量」

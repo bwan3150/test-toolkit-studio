@@ -19,7 +19,8 @@ pub(super) struct Pick {
     pub ct: i64,
 }
 
-/// 让断言官从"新出现的元素"里挑一个标志元素断言。会话/解析失败时返回 index=None（上层据此跳过、不插断言）。
+/// 让断言官挑一个标志元素断言。给它**两页的完整元素**（点击前 prev_listing + 点击后 current_listing，
+/// 后者已标出哪些是本次新出现的），它据此挑当前页的一个 index。会话/解析失败返回 index=None（上层跳过）。
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn pick_checkpoint(
     ai: &AiConfig,
@@ -28,7 +29,8 @@ pub(super) async fn pick_checkpoint(
     device: &str,
     case: &str,
     action_desc: &str,
-    delta_listing: &str,
+    prev_listing: &str,
+    current_listing: &str,
 ) -> Pick {
     let none = |reason: String| Pick { index: None, reason, pt: 0, ct: 0 };
     let platform = Platform::from_device(Some(device));
@@ -44,7 +46,7 @@ pub(super) async fn pick_checkpoint(
 
     let prompt = render(
         &prompts.message("asserter", "pick"),
-        &[("case", case), ("action", action_desc), ("delta", delta_listing)],
+        &[("case", case), ("action", action_desc), ("prev", prev_listing), ("current", current_listing)],
     );
     tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
     sess.user(prompt);
