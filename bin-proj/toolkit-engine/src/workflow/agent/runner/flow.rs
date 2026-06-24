@@ -134,8 +134,10 @@ fn dir_cn(d: &str) -> &str {
 }
 
 use super::super::execution;
-use super::super::interaction::read_user_line;
 use super::super::perception::{capture, match_known, render_element_list, Perceived};
+use super::super::ui::{
+    Frontend, Level, NotReady, StepState, SubAgent, Tokens, UiCommand, UiEvent,
+};
 use super::super::prompt::{render, PromptSet};
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
@@ -158,6 +160,8 @@ pub struct DriveCtx<'a> {
     pub case: &'a str,
     /// AI 配置：供 finish 时新建独立的「监督官」会话审查（与探索会话分开）
     pub ai: &'a crate::AiConfig,
+    /// UI 前端：引擎的所有渲染事件经 emit 发出，安全点 drain_commands 取命令
+    pub ui: &'a dyn Frontend,
 }
 
 /// 循环结果
@@ -195,7 +199,9 @@ pub async fn drive(
     txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
     spinner: bool,
-    round_prefix: &str,
+    // 重探批次前缀（如「重探1·」）。Page 事件不再携带它（前缀语义改由 Phase::Reexplore 表达），
+    // 故本函数内部已不消费；保留参数以兼容调用方，待后续阶段如需可并入 Page。
+    _round_prefix: &str,
 ) -> Result<DriveOutcome> {
     // 进入「探索 agent」作用域：本函数（首次探索 与 reexplore 活体重探都走它）产出的所有事件
     // 都归属 explorer。Drop 守卫保证任何退出路径都弹栈（被 doctor 调用时弹回 doctor 作用域）。
@@ -252,8 +258,21 @@ pub async fn drive(
     let mut created: Vec<String> = Vec::new();
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
     let mut updated_names: Vec<String> = Vec::new(); // 去重用
+    let mut pending_guidance: Vec<String> = Vec::new(); // 安全点收到的用户中途指导，下一轮注入会话
 
     'outer: while round < ctx.max_rounds {
+        // 安全点：取前端命令（本阶段只处理 Abort，优雅停在此处）
+        for c in ctx.ui.drain_commands() {
+            match c {
+                UiCommand::Abort => {
+                    aborted = true;
+                    finish = Some((false, "已终止（用户中断）".to_string()));
+                    break 'outer;
+                }
+                UiCommand::Guidance { text } => pending_guidance.push(text),
+                _ => {}
+            }
+        }
         if super::interrupt::aborted() {
             aborted = true;
             finish = Some((false, "已终止（用户中断 Ctrl+C）".to_string()));
@@ -360,7 +379,7 @@ pub async fn drive(
         if loop_streak >= LOOP_ABORT && !p.elements.is_empty() {
             let act = lines.last().map(|l| friendly(l)).unwrap_or_default();
             tx.log("stuck_abort", serde_json::json!({ "round": round, "loop_streak": loop_streak, "kind": "same_action_no_change", "action": act }));
-            eprintln!("{}", paint(tty, "31", &format!("  反复执行同一无效操作「{}」且页面始终不变，自动停止", act)));
+            ctx.ui.emit(UiEvent::AutoStop { reason: format!("反复执行同一无效操作「{}」且页面始终不变，自动停止", act) });
             finish = Some((false, format!("反复执行同一无效操作「{}」、自动停止", act)));
             break 'outer;
         }
@@ -369,10 +388,7 @@ pub async fn drive(
         const NO_PROGRESS_BACKSTOP: usize = 12;
         if no_progress >= NO_PROGRESS_BACKSTOP && !p.elements.is_empty() {
             tx.log("stuck_abort", serde_json::json!({ "round": round, "no_progress": no_progress, "kind": "no_progress" }));
-            eprintln!(
-                "{}",
-                paint(tty, "31", &format!("  连续 {} 轮页面始终无前进，自动停止（避免空烧 token）", no_progress))
-            );
+            ctx.ui.emit(UiEvent::AutoStop { reason: format!("连续 {} 轮页面始终无前进，自动停止（避免空烧 token）", no_progress) });
             finish = Some((false, format!("连续 {} 轮页面无前进、自动停止", no_progress)));
             break 'outer;
         }
@@ -418,6 +434,17 @@ pub async fn drive(
         // 卡得更死（连续 2 次没变 / 多页打转）→ 进入**纯视觉**：元素列表已经帮不上忙了，
         // 只发当前截图、不再带元素/OCR，让 AI 直接看图用 click_visual 决策（避免被无效元素继续误导）。
         let go_visual = !last_no_pagecheck && (no_progress >= 2 || revisits >= 3) && perceive_err.is_none();
+        // 中途指导注入：把安全点收到的用户指导，在本轮采集完页面、发 page 消息给 LLM 之前注入会话，
+        // 让 AI 据此调整接下来的方向（与 page 消息一并下发，下一轮即生效）。
+        if !pending_guidance.is_empty() {
+            for g in pending_guidance.drain(..) {
+                let m = format!("【用户中途指导】{}\n请据此调整接下来的操作方向。", g);
+                tx.log("user_guidance", serde_json::json!({ "round": round, "content": m.clone() }));
+                sess.user(m);
+                ctx.ui.emit(UiEvent::GuidanceAccepted { text: g });
+            }
+        }
+
         // 渲染每轮要发给 AI 的页面消息（含框架/hint）——同时记进 conversation.json，供提示词调优复盘
         let page_msg = render(
             &ctx.prompts.message("explorer", "page_round"),
@@ -441,55 +468,38 @@ pub async fn drive(
             tx.log("llm_message", serde_json::json!({ "round": round, "content": page_msg }));
             sess.user_page(page_msg);
         }
-        // 轮与轮之间空一行，分隔更清楚
-        eprintln!();
-        // 页面统计头：**不再显示"第 N 轮"**——下面每个执行步前的 `[N]` tks 行号才是锚点，轮次号是冗余噪声。
-        // 这里只整体淡色列出 agent 这一刻看到的页面构成：结构页面元素 + OCR 元素 +（web）标签页数，
-        // 让人清楚它据什么判断（不显示"已知/未知"，那对 AI 判断没意义、只会误导）。重探时由 round_prefix 标「重探n·」。
-        let ocr_n = p.ocr_added;
-        let page_n = p.elements.len().saturating_sub(ocr_n);
-        let mut stat = vec![format!("{} 页面元素", page_n)];
-        // OCR：正常只显示**新增**伪元素数（这些元素只有 OCR 一个锚点，是 OCR 的独有贡献）；
-        // 接口报错则标 ✗，详情在下面红字单列——绝不用一个静默的 0 掩盖报错。
-        if ctx.ocr.is_some() {
-            if p.ocr_error.is_some() {
-                stat.push("OCR调用失败".to_string());
+        // 页面观察头：emit 一个 Page 事件，前端各自渲染（结构元素 / OCR 新增 / 标签页 / 未就绪原因）。
+        // 不再显示"第 N 轮"——下面每个执行步前的 `[N]` tks 行号才是锚点；不显示"已知/未知"对 AI 判断无意义。
+        ctx.ui.emit(UiEvent::Page {
+            round,
+            struct_elements: p.elements.len().saturating_sub(p.ocr_added),
+            ocr_added: if ctx.ocr.is_some() && p.ocr_error.is_none() { Some(p.ocr_added) } else { None },
+            ocr_failed: ctx.ocr.is_some() && p.ocr_error.is_some(),
+            tabs: p.tabs.len(),
+            known: n_known,
+            unknown: n_unknown,
+            revisits,
+            not_ready: if perceive_err.is_some() {
+                Some(if last_was_close { NotReady::SessionClosed } else { NotReady::NeedLaunch })
             } else {
-                stat.push(format!("+{} OCR元素", p.ocr_added));
-            }
-        }
-        if !p.tabs.is_empty() {
-            stat.push(format!("{} 标签页", p.tabs.len()));
-        }
-        let notready = if perceive_err.is_some() {
-            if last_was_close {
-                paint(tty, "2", "  · 会话已关闭（收尾）")
-            } else {
-                paint(tty, "33", "  · 页面未就绪，待 launch")
-            }
-        } else {
-            String::new()
-        };
-        eprintln!(
-            "{}{}",
-            paint(tty, "2", &format!("{}{}", round_prefix, stat.join(" · "))),
-            notready
-        );
-        // OCR 接口报错：stat 已标「OCR调用失败」，这里红字单列具体报错 + 记日志，绝不让它被"0"掩盖。
+                None
+            },
+        });
+        // OCR 接口报错：单列具体报错 + 记日志，绝不让它被"0"掩盖。
         if let Some(err) = &p.ocr_error {
-            eprintln!("  {}", paint(tty, "31", &brief(err, 160)));
             tx.log("ocr_error", serde_json::json!({ "round": round, "error": err }));
+            ctx.ui.emit(UiEvent::OcrError { round, error: err.clone() });
         }
-        // 卡住提示：淡黄一行，不用 emoji（与 ✓/✗ 状态色区分开）
+        // 卡住提示
         if stuck {
             let msg = if no_progress >= 2 || revisits >= 3 {
-                "  上一步没生效/原地打转，已附截图让 AI 看图"
+                "上一步没生效/原地打转，已附截图让 AI 看图"
             } else if no_progress >= 1 {
-                "  上一步操作后页面无变化，已提示 AI 换做法"
+                "上一步操作后页面无变化，已提示 AI 换做法"
             } else {
-                "  在多页间打转，已提示 AI 换路径"
+                "在多页间打转，已提示 AI 换路径"
             };
-            eprintln!("{}", paint(tty, "33", msg));
+            ctx.ui.emit(UiEvent::Stuck { round, message: msg.to_string() });
         }
 
         // 1b) 自动断言（断言官子 agent）：上一步导航让页面变了 → 由断言官挑一个标志元素，系统自动插一条
@@ -516,20 +526,36 @@ pub async fn drive(
             let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, &prev_listing, &current_listing).await;
             subagent_pt += pick.pt;
             subagent_ct += pick.ct;
-            // 像 explorer 一样：先输出一行「断言官的判断 + 它本次的 token 用量」
-            let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pick.pt), fmt_tokens(pick.ct)));
-            let say = brief(if pick.reason.is_empty() { "（断言官未说明理由）" } else { &pick.reason }, 200);
-            eprintln!("  {} {}  {}", paint(tty, "36", "断言官"), say, toks);
+            // 先 emit 一句「断言官的判断 + 它本次的 token 用量」
+            ctx.ui.emit(UiEvent::SubAgent {
+                kind: SubAgent::Asserter,
+                level: if pick.index.is_some() { Level::Info } else { Level::Warn },
+                text: if pick.reason.is_empty() { "（断言官未说明理由）".to_string() } else { pick.reason.clone() },
+                tokens: Tokens::new(pick.pt, pick.ct),
+            });
             match pick.index {
                 Some(idx) if idx < p.elements.len() => {
                     let act = AgentAction::Assert { element_id: idx, name: String::new(), desc: None, exist: true };
                     let step_no = steps.len() + 1;
-                    eprint!("  {} {} {} ", paint(tty, "2", &format!("[{:>2}]", step_no)), preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()), paint(tty, "2", "..."));
-                    let _ = std::io::stderr().flush();
+                    ctx.ui.emit(UiEvent::Step {
+                        step: step_no,
+                        state: StepState::Running,
+                        preview: preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()),
+                        line: None,
+                        duration_ms: None,
+                        error: None,
+                    });
                     let t0 = std::time::Instant::now();
                     match execution::apply(ctx.device, ctx.element_path, &act, &p.elements, &known_names, &p.shot_path, tx, round).await {
                         Ok((line, detail, trace, saved)) => {
-                            eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &fmt_duration(t0.elapsed().as_millis() as u64)));
+                            ctx.ui.emit(UiEvent::Step {
+                                step: step_no,
+                                state: StepState::Ok,
+                                preview: preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()),
+                                line: Some(line.clone()),
+                                duration_ms: Some(t0.elapsed().as_millis() as u64),
+                                error: None,
+                            });
                             if let Some(s) = saved {
                                 if s.created && !created.contains(&s.name) {
                                     created.push(s.name.clone());
@@ -543,7 +569,14 @@ pub async fn drive(
                             step_comments.push(format!("断言：{}", pick.reason));
                         }
                         Err(e) => {
-                            eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &format!("断言跳过：{}", brief(&e.to_string(), 50))));
+                            ctx.ui.emit(UiEvent::Step {
+                                step: step_no,
+                                state: StepState::Fail,
+                                preview: preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()),
+                                line: None,
+                                duration_ms: Some(t0.elapsed().as_millis() as u64),
+                                error: Some(format!("断言跳过：{}", e)),
+                            });
                         }
                     }
                 }
@@ -556,6 +589,14 @@ pub async fn drive(
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
         loop {
+            // 安全点：取前端命令（本阶段只处理 Abort，优雅停在此处）
+            for c in ctx.ui.drain_commands() {
+                if matches!(c, UiCommand::Abort) {
+                    aborted = true;
+                    finish = Some((false, "已终止（用户中断）".to_string()));
+                    break 'outer;
+                }
+            }
             if super::interrupt::aborted() {
                 aborted = true;
                 finish = Some((false, "已终止（用户中断 Ctrl+C）".to_string()));
@@ -576,16 +617,15 @@ pub async fn drive(
                 }
             };
 
-            // 本次 LLM 调用的 token 用量（上行/输入、下行/输出），着色、显示在 comment 之后
+            // 本次 LLM 调用的 token 用量（上行/输入、下行/输出），随 emit 一并发出
             let (pt, ct) = sess.last_usage();
-            let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pt), fmt_tokens(ct)));
             tx.log("llm_usage", serde_json::json!({ "round": round, "seq": llm_calls, "prompt_tokens": pt, "completion_tokens": ct }));
 
             let (thinking, calls) = match reply {
                 LlmReply::Text(t) => {
                     let b = brief(&t, 200);
                     let say = if b.is_empty() { "（未调用工具，已提示其用工具或 finish）".to_string() } else { b };
-                    eprintln!("  {}  {}", say, toks);
+                    ctx.ui.emit(UiEvent::AgentThought { round, text: say.clone(), tokens: Tokens::new(pt, ct) });
                     tx.log("llm_text", serde_json::json!({ "round": round, "content": t }));
                     let m = ctx.prompts.message("explorer", "nudge_use_tool");
                     tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
@@ -614,8 +654,7 @@ pub async fn drive(
                 serde_json::json!({ "round": round, "tool": primary.name.clone(), "comment": comment.clone(), "arguments": primary.arguments.clone() }),
             );
 
-            // 每次 LLM 调用打印一行思考（comment 优先，其次模型文字，再次 reason，最后工具名）
-            // + token 着色在后；不显示"AI"标签
+            // 每次 LLM 调用一句思考（comment 优先，其次模型文字，再次 reason，最后工具名）
             let say = comment
                 .as_deref()
                 .map(|s| brief(s, 200))
@@ -623,7 +662,7 @@ pub async fn drive(
                 .or_else(|| thinking.as_deref().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
                 .or_else(|| action.intent().map(|s| brief(s, 200)).filter(|s| !s.is_empty()))
                 .unwrap_or_else(|| format!("调用 {}", primary.name));
-            eprintln!("  {}  {}", say, toks);
+            ctx.ui.emit(UiEvent::AgentThought { round, text: say.clone(), tokens: Tokens::new(pt, ct) });
 
             match action {
                 AgentAction::Finish { success, reason, script_name: sn } => {
@@ -653,13 +692,23 @@ pub async fn drive(
                             subagent_ct += v.ct;
                             if !v.approved {
                                 supervisor_rejects += 1;
-                                eprintln!("  {}", paint(tty, "33", &format!("监督官打回（第 {} 次）：{}", supervisor_rejects, brief(&v.reason, 90))));
+                                ctx.ui.emit(UiEvent::SubAgent {
+                                    kind: SubAgent::Supervisor,
+                                    level: Level::Warn,
+                                    text: format!("打回（第 {} 次）：{}", supervisor_rejects, v.reason),
+                                    tokens: Tokens::new(v.pt, v.ct),
+                                });
                                 let m = render(&ctx.prompts.message("supervisor", "pushback"), &[("reason", &v.reason)]);
                                 tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
                                 sess.user(m);
                                 continue; // 不结束，回到内层循环按监督官指引继续探索
                             }
-                            eprintln!("  {}", paint(tty, "32", &format!("监督官放行：{}", brief(&v.reason, 90))));
+                            ctx.ui.emit(UiEvent::SubAgent {
+                                kind: SubAgent::Supervisor,
+                                level: Level::Ok,
+                                text: format!("放行：{}", v.reason),
+                                tokens: Tokens::new(v.pt, v.ct),
+                            });
                         }
                     }
                     // 监督官已多次打回仍走到这 → 判定卡死，以探索失败收场（防死循环）
@@ -694,7 +743,10 @@ pub async fn drive(
                 }
                 AgentAction::AskUser { question } => {
                     tx.log("ask_user", serde_json::json!({ "round": round, "question": question.clone() }));
-                    let answer = read_user_line(&question).await;
+                    let answer = match ctx.ui.await_answer(round, question.clone()).await {
+                        Some(a) => a,
+                        None => { aborted = true; finish = Some((false, "已终止（用户中断）".to_string())); break 'outer; }
+                    };
                     tx.log("user_reply", serde_json::json!({ "round": round, "answer": answer.clone() }));
                     sess.tool_result(primary.call_id.as_str(), format!("用户答复：{}", answer));
                     continue; // 不前进，重新询问
@@ -723,7 +775,7 @@ pub async fn drive(
                         }
                         renames.push((old_name.clone(), new_name.clone()));
                         tx.log("rename_element", serde_json::json!({ "round": round, "old": old_name.clone(), "new": new_name.clone() }));
-                        eprintln!("  {}", paint(tty, "35", &format!("✎ 改名：{} → {}", old_name, new_name)));
+                        ctx.ui.emit(UiEvent::Rename { old: old_name.clone(), new: new_name.clone() });
                         sess.tool_result(primary.call_id.as_str(), format!("已改名：{} → {}（库与脚本引用已同步）", old_name, new_name));
                     } else {
                         sess.tool_result(
@@ -742,10 +794,14 @@ pub async fn drive(
                     // `✓ 耗时`/`✗ 耗时`——CLI 与设备同步，且 agent 这步点啥、花多久一目了然。
                     let step_no = steps.len() + 1;
                     let preview = preview_action(&device_action, &p.elements);
-                    if let Some(pv) = &preview {
-                        eprint!("  {} {} {} ", paint(tty, "2", &format!("[{:>2}]", step_no)), pv, paint(tty, "2", "..."));
-                        let _ = std::io::stderr().flush();
-                    }
+                    ctx.ui.emit(UiEvent::Step {
+                        step: step_no,
+                        state: StepState::Running,
+                        preview: preview.clone().unwrap_or_default(),
+                        line: None,
+                        duration_ms: None,
+                        error: None,
+                    });
                     let act_t0 = std::time::Instant::now();
                     let is_swipe = matches!(&device_action, AgentAction::SwipeDir { .. });
                     match execution::apply(
@@ -761,13 +817,14 @@ pub async fn drive(
                     .await
                     {
                         Ok((line, detail, trace, saved)) => {
-                            let dur = fmt_duration(act_t0.elapsed().as_millis() as u64);
-                            if preview.is_some() {
-                                // 接上之前那行「[N] 指令 ...」
-                                eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &dur));
-                            } else {
-                                eprintln!("  {} {} {}", paint(tty, "32", "✓"), friendly(&line), paint(tty, "2", &dur));
-                            }
+                            ctx.ui.emit(UiEvent::Step {
+                                step: step_no,
+                                state: StepState::Ok,
+                                preview: preview.clone().unwrap_or_else(|| friendly(&line)),
+                                line: Some(line.clone()),
+                                duration_ms: Some(act_t0.elapsed().as_millis() as u64),
+                                error: None,
+                            });
                             // 记录元素库变更（去重），供结束时人工审核
                             if let Some(s) = saved {
                                 if s.created {
@@ -825,11 +882,14 @@ pub async fn drive(
                             sess.tool_result(primary.call_id.as_str(), format!("已执行：{}（.tks: {}）", detail, line));
                         }
                         Err(e) => {
-                            let dur = fmt_duration(act_t0.elapsed().as_millis() as u64);
-                            if preview.is_some() {
-                                eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &dur));
-                            }
-                            eprintln!("  {} {}", paint(tty, "31", "✗ 执行失败:"), e);
+                            ctx.ui.emit(UiEvent::Step {
+                                step: step_no,
+                                state: StepState::Fail,
+                                preview: preview.clone().unwrap_or_default(),
+                                line: None,
+                                duration_ms: Some(act_t0.elapsed().as_millis() as u64),
+                                error: Some(e.to_string()),
+                            });
                             tx.log("exec_error", serde_json::json!({ "round": round, "error": e.to_string() }));
                             sess.tool_result(primary.call_id.as_str(), format!("执行失败: {}", e));
                             continue; // 同一页面重试
@@ -857,7 +917,7 @@ pub async fn drive(
     // desc 写进 element.json（持久化）；最终「元素库更新」框由上层据库中 desc 渲染。
     if !created.is_empty() {
         if aborted {
-            eprintln!("{}", paint(tty, "33", "退出中：正在为新建元素生成描述…（再次 Ctrl+C 强制退出）"));
+            ctx.ui.emit(UiEvent::ExitingNote { message: "退出中：正在为新建元素生成描述…（再次 Ctrl+C 强制退出）".to_string() });
         }
         let desc_msg = render(&ctx.prompts.message("explorer", "desc_pass"), &[("elements", &created.join("、"))]);
         tx.log("llm_message", serde_json::json!({ "content": desc_msg.clone() }));

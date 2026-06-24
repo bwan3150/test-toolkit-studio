@@ -12,7 +12,6 @@ pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
 
-use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use crate::models::Platform;
@@ -23,17 +22,21 @@ use super::knowledge::{Knowledge, KnowledgeOutcome};
 use super::prompt::{render, PromptSet};
 use super::tools::build_tools;
 use super::transcript::Transcript;
+use super::ui::{
+    ElementItem, Frontend, Level, Phase, StatusLine, SubAgent, Tokens, UiEvent,
+};
 use flow::{drive, DriveCtx};
 
 /// AI 探索测试编排器
 pub struct AgentRunner;
 
 impl AgentRunner {
-    pub async fn run(opts: AgentRunOptions) -> Result<AgentResult> {
+    pub async fn run(opts: AgentRunOptions, ui: &dyn Frontend) -> Result<AgentResult> {
         // 统一中断：安装进程级 Ctrl+C 监听，探索/诊断/验证/医生各阶段共用同一中断标志
         interrupt::install();
-        let device = opts.params.device().unwrap_or_default();
-        let platform = Platform::from_device(Some(&device));
+        // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
+        let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
+        let platform = opts.platform.unwrap_or_else(|| Platform::from_device(Some(&device)));
 
         // 脚本输出目录确保存在（.tks 文件名由 AI 在 finish 起、落库时去重）
         std::fs::create_dir_all(&opts.script_dir).ok();
@@ -120,8 +123,8 @@ impl AgentRunner {
             prompts: &prompts,
             case: &opts.case,
             ai: &opts.ai,
+            ui,
         };
-        let tty = std::io::stderr().is_terminal();
 
         // —— 开局净化：关掉可能残留的旧会话（如上次没关的浏览器）——
         // 否则探索会直接从那张旧页面开始：① 状态被污染；② 因为 web `launch` 会复用存活会话，
@@ -150,17 +153,25 @@ impl AgentRunner {
         let mut reexplore_n = 0;
         while !outcome.success && !outcome.aborted && reexplore_n < max_reexplore {
             reexplore_n += 1;
+            let refl_pt_this;
+            let refl_ct_this;
             let guidance = match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, &opts.case, &outcome, false).await {
                 Some(r) => {
                     refl_pt += r.prompt_tokens;
                     refl_ct += r.completion_tokens;
+                    refl_pt_this = r.prompt_tokens;
+                    refl_ct_this = r.completion_tokens;
                     r.report
                 }
                 None => break,
             };
-            eprintln!();
-            eprintln!("{}", flow::paint(tty, "1;36", &format!("◆ 探索未达成——反思官给出重探指导（第 {} 次重探）：", reexplore_n)));
-            eprintln!("{}", flow::paint(tty, "2", &flow::brief(&guidance, 300)));
+            ui.emit(UiEvent::Phase { phase: Phase::Reexplore, n: Some(reexplore_n as u32) });
+            ui.emit(UiEvent::SubAgent {
+                kind: SubAgent::Reflector,
+                level: Level::Info,
+                text: guidance.clone(),
+                tokens: Tokens::new(refl_pt_this, refl_ct_this),
+            });
             // 旧探索会话即将弃用，先记下它的 token
             let (dp, dc) = sess.total_usage();
             discarded_pt += dp;
@@ -207,15 +218,7 @@ impl AgentRunner {
         write_script(&script_path, &opts.case, &final_lines)?;
         // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
         let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        eprintln!();
-        if outcome.success {
-            eprintln!("{}", flow::paint(tty, "1;32", &format!("✓ 脚本生成完毕：{}（{} 步）", fname, final_lines.len())));
-        } else {
-            eprintln!(
-                "{}",
-                flow::paint(tty, "1;33", &format!("⚠ 探索未达成，脚本不完整：{}（{} 步，已保存当前进度，跳过验证）", fname, final_lines.len()))
-            );
-        }
+        ui.emit(UiEvent::ScriptGenerated { name: fname.clone(), steps: final_lines.len(), success: outcome.success });
 
         // —— 再验证：回放提炼后的脚本，失败让 AI 续接修复，连过 2 次才算稳定 ——
         // 仅当探索**达成且未被中断**时才验证：脚本没完成就别去验证一个半成品。
@@ -341,6 +344,7 @@ impl AgentRunner {
             &display_created,
             committed,
             &real_element_path,
+            ui,
         );
 
         Ok(AgentResult {
@@ -372,76 +376,52 @@ fn render_summary(
     created: &[String],
     committed: usize,
     element_path: &Path,
+    ui: &dyn Frontend,
 ) {
-    use flow::{brief, fmt_tokens, paint};
-    let tty = std::io::stderr().is_terminal();
-
-    // ① 探索状态
-    let explore_status = if aborted {
-        paint(tty, "33", &format!("■ 已终止 · 原始 {} 步（{} 轮）", explore_steps, rounds))
+    // ① 探索状态（原 paint 颜色 → Level：绿32→Ok、红31→Err、黄33→Warn、灰2→Dim）
+    let explore = if aborted {
+        StatusLine::new(Level::Warn, format!("■ 已终止 · 原始 {} 步（{} 轮）", explore_steps, rounds))
     } else if success {
-        paint(tty, "32", &format!("✓ 达成 · 原始 {} 步（{} 轮）", explore_steps, rounds))
+        StatusLine::new(Level::Ok, format!("✓ 达成 · 原始 {} 步（{} 轮）", explore_steps, rounds))
     } else {
-        paint(tty, "31", &format!("✗ 未达成 · {} 步（{} 轮）", explore_steps, rounds))
+        StatusLine::new(Level::Err, format!("✗ 未达成 · {} 步（{} 轮）", explore_steps, rounds))
     };
     // ② 诊断状态（脚本医生复跑修复）
-    let diagnose_status = match verified {
-        None => paint(tty, "2", "未运行（未开启 --verify 或探索未达成）"),
-        Some(r) if !r.reached => paint(tty, "31", "✗ 修复失败（脚本仍跑不到目标）"),
-        Some(r) if r.hit_iter_limit => paint(tty, "33", &format!("■ 优化达上限·仍可跑（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
-        Some(r) => paint(tty, "32", &format!("✓ 优化完成（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
+    let diagnose = match verified {
+        None => StatusLine::new(Level::Dim, "未运行（未开启 --verify 或探索未达成）"),
+        Some(r) if !r.reached => StatusLine::new(Level::Err, "✗ 修复失败（脚本仍跑不到目标）"),
+        Some(r) if r.hit_iter_limit => StatusLine::new(Level::Warn, format!("■ 优化达上限·仍可跑（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
+        Some(r) => StatusLine::new(Level::Ok, format!("✓ 优化完成（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
     };
     // ③ 验证状态（稳定性测试）
-    let verify_status = match verified {
-        None => paint(tty, "2", "未验证"),
-        Some(r) if r.passed => paint(tty, "32", &format!("✓ 验证通过（连续 {} 次到达目标）", r.stability_passes)),
-        Some(r) if !r.reached => paint(tty, "2", "未验证（诊断未修复，未进入稳定性测试）"),
-        Some(r) => paint(tty, "31", &format!("✗ 验证未通过（连续到达 {} 次）", r.stability_passes)),
+    let verify = match verified {
+        None => StatusLine::new(Level::Dim, "未验证"),
+        Some(r) if r.passed => StatusLine::new(Level::Ok, format!("✓ 验证通过（连续 {} 次到达目标）", r.stability_passes)),
+        Some(r) if !r.reached => StatusLine::new(Level::Dim, "未验证（诊断未修复，未进入稳定性测试）"),
+        Some(r) => StatusLine::new(Level::Err, format!("✗ 验证未通过（连续到达 {} 次）", r.stability_passes)),
     };
 
-    eprintln!();
-    eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
-    eprintln!("  {}   {}", paint(tty, "2", "探索"), explore_status);
-    eprintln!("  {}   {}", paint(tty, "2", "诊断"), diagnose_status);
-    eprintln!("  {}   {}", paint(tty, "2", "验证"), verify_status);
-    eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(reason, 200));
-    eprintln!("  {}   {}", paint(tty, "2", "模型"), model);
-    eprintln!(
-        "  {}  {}",
-        paint(tty, "2", "Token"),
-        paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tp), fmt_tokens(tc), fmt_tokens(tp + tc)))
-    );
-    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+    ui.emit(UiEvent::Summary {
+        explore,
+        diagnose,
+        verify,
+        reason: reason.to_string(),
+        model: model.to_string(),
+        tokens: Tokens::new(tp, tc),
+    });
 
-    // 元素库更新：合并探索+修复阶段新增，desc 从库里读（探索/修复各自的 desc-pass 已写入）
-    eprintln!();
-    eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
-    let overall = !aborted && success && verified.map(|r| r.passed).unwrap_or(true);
-    if !overall {
-        // 运行未成功：探索/修复全程只写临时库(随 run_dir 丢弃)，正式库从未被碰——天然不污染。
-        eprintln!(
-            "  {}",
-            paint(tty, "33", "未稳定通过——脚本未保存；本次元素只存在临时库（随运行目录丢弃），正式元素库未改动")
-        );
-        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
-        return;
-    }
-    // 成功：最终脚本用到的元素已从临时库提交到正式库；desc 从正式库读
+    // 元素库更新：committed_to_lib = 是否整体稳定通过（成功且未中断且验证通过/未验证）。
+    let committed_to_lib = !aborted && success && verified.map(|r| r.passed).unwrap_or(true);
+    // 成功时 desc 从正式库读；未成功时 created 仍照传（前端据 committed_to_lib=false 显示未提交提示）。
     let descs = read_descs(element_path, created);
-    if created.is_empty() {
-        eprintln!("  {}   {}", paint(tty, "2", "提交"), paint(tty, "2", "（无新元素）"));
-    } else {
-        let line_for = |c: &String| match descs.get(c) {
-            Some(Some(d)) => format!("{} · {}", c, brief(d, 80)),
-            _ => c.clone(),
-        };
-        eprintln!("  {}   {}", paint(tty, "2", &format!("提交 {} 个", committed)), paint(tty, "32", &line_for(&created[0])));
-        for c in &created[1..] {
-            eprintln!("         {}", paint(tty, "32", &line_for(c)));
-        }
-        eprintln!("  {}", paint(tty, "2", "（最终脚本用到的元素已写入正式库，desc 据实际作用生成，请人工二次审核）"));
-    }
-    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+    let items: Vec<ElementItem> = created
+        .iter()
+        .map(|name| ElementItem {
+            name: name.clone(),
+            desc: descs.get(name).cloned().flatten(),
+        })
+        .collect();
+    ui.emit(UiEvent::Elements { committed, items, committed_to_lib });
 }
 
 /// 从 element.json 读出若干元素的 desc（用于最终汇总展示）

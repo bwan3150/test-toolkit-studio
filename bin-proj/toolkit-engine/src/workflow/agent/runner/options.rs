@@ -24,6 +24,10 @@ pub struct AgentRunOptions {
     /// 生成脚本后自检+自修复：重启净化→整脚本 tke run 回放→失败让 AI 从失败步续接修复，
     /// 直到连续通过 2 次。`--verify` 显式开启（默认关）。
     pub verify: bool,
+    /// 目标平台覆盖（向导/--platform）；None 则由设备推断
+    pub platform: Option<crate::models::Platform>,
+    /// 设备覆盖（向导选的）；None 则用 params.device()
+    pub device: Option<String>,
     /// 统一参数表（device/element/log/knowledge 查表取参）
     pub params: Arc<Params>,
 }

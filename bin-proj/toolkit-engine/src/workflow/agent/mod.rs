@@ -21,7 +21,9 @@ pub mod provider;
 pub mod runner;
 pub mod tools;
 pub mod transcript;
+pub mod ui;
 
 pub use prompt::{PromptSet, PromptSpec};
 pub use provider::{LlmReply, LlmSession, LlmTool, LlmToolCall};
 pub use runner::{AgentResult, AgentRunOptions, AgentRunner};
+pub use ui::{Frontend, JsonFrontend, PlainFrontend, TuiFrontend, UiCommand, UiEvent};

@@ -49,6 +49,11 @@ base64 = "0.22"
 # AI 通用客户端：统一接口对接 openai/anthropic/gemini/deepseek/doubao/qwen
 # （doubao/qwen 走 OpenAI 兼容端点，经 base_url 指定）
 genai = "0.6"
+# 终端 TUI（harness 交互式前端）：ratatui 渲染 + crossterm 终端控制/键盘事件
+ratatui = "0.29"
+crossterm = "0.28"
+# trait 内 async 方法（Frontend 前端抽象用）
+async-trait = "0.1"
 
 [features]
 # 默认启用在线和离线 OCR
