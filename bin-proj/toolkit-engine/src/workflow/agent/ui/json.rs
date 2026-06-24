@@ -76,7 +76,7 @@ impl Frontend for JsonFrontend {
 
     async fn await_answer(&self, round: usize, question: String) -> Option<String> {
         // 先告知前端「正在等输入」，前端据此提示用户并回 Answer / Abort
-        self.emit(UiEvent::AwaitingInput { round, question });
+        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new() });
         // 轮询：每 50ms 取一次命令。不可跨 await 持有 std Mutex——锁只在同步块内用。
         loop {
             {
@@ -116,6 +116,7 @@ mod tests {
             ocr_added: None,
             ocr_failed: false,
             tabs: 0,
+            location: None,
             known: 0,
             unknown: 3,
             revisits: 0,

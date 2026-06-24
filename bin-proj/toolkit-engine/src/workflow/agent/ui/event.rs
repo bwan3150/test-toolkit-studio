@@ -134,6 +134,7 @@ pub enum UiEvent {
         ocr_added: Option<usize>, // None=未开 OCR；Some(n)=本轮 OCR 新增伪元素数
         ocr_failed: bool,         // OCR 接口报错
         tabs: usize,              // web 标签页数（0=无）
+        location: Option<String>, // 当前所处页/应用（web=活动标签标题或 URL；移动端暂 None）
         known: usize,             // 命中库的元素数（供 TUI 详情）
         unknown: usize,
         revisits: usize,
@@ -177,8 +178,9 @@ pub enum UiEvent {
     /// 退出中（为新建元素生成 desc）
     ExitingNote { message: String },
 
-    /// 引擎等用户输入（ask_user 触发；前端必须回 UiCommand::Answer）
-    AwaitingInput { round: usize, question: String },
+    /// 引擎等用户输入（ask_user / setup 触发；前端必须回 UiCommand::Answer）。
+    /// options 非空=候选项（设备选择等），前端可渲染成方向键可选列表；空=纯文本输入。
+    AwaitingInput { round: usize, question: String, options: Vec<String> },
 
     /// 指导已采纳回显（收到 Guidance 后引擎确认）
     GuidanceAccepted { text: String },

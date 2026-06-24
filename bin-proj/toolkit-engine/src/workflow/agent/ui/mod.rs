@@ -35,6 +35,21 @@ pub trait Frontend: Send + Sync {
     /// ask_user：发 AwaitingInput 后阻塞等一个 Answer。返回 None = 期间收到 Abort。
     async fn await_answer(&self, round: usize, question: String) -> Option<String>;
 
+    /// 从候选里选一个（设备选择等）。默认：把选项编号拼进问题文本走 await_answer + 解析序号；
+    /// TUI 可 override 成方向键列表选择。返回选中下标(0-based)；None=放弃/中断。
+    async fn await_choice(&self, prompt: String, options: Vec<String>) -> Option<usize> {
+        let mut q = prompt;
+        for (i, o) in options.iter().enumerate() {
+            q.push_str(&format!("\n  [{}] {}", i + 1, o));
+        }
+        let ans = self.await_answer(0, q).await?;
+        ans.trim()
+            .parse::<usize>()
+            .ok()
+            .filter(|n| *n >= 1 && *n <= options.len())
+            .map(|n| n - 1)
+    }
+
     /// 引擎结束时调用：让前端收尾（TUI 退出 alt-screen / JSON flush / 线程 join）。
     async fn shutdown(self: Box<Self>);
 }

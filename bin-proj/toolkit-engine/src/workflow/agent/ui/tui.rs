@@ -17,9 +17,9 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Position},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Paragraph, Wrap},
     Frame, Terminal,
 };
@@ -74,7 +74,7 @@ impl Frontend for TuiFrontend {
 
     async fn await_answer(&self, round: usize, question: String) -> Option<String> {
         // 先告知 TUI「正在等回答」（高亮输入框、回显提问）
-        self.emit(UiEvent::AwaitingInput { round, question });
+        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new() });
         // 轮询：每 50ms 取一次命令。不可跨 await 持 std Mutex——锁只在同步块内用。
         loop {
             {
@@ -87,6 +87,36 @@ impl Frontend for TuiFrontend {
                         UiCommand::Answer { text } => return Some(text),
                         UiCommand::Abort => return None,
                         // Guidance/Pause/Resume：等回答期间忽略
+                        _ => {}
+                    }
+                }
+            } // 锁在此释放，再 await
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    /// 从候选里选一个（设备选择等）：TUI 渲染成方向键可选列表。
+    /// emit AwaitingInput{options 非空} → model 进 choosing 模式；
+    /// 用户用 ↑↓ 选、Enter 提交 → handle_key 发 Answer{text=选中下标字符串}。
+    /// 这里轮询 commands_rx：Answer 里是下标 → parse 成 usize 返回；Abort → None。
+    async fn await_choice(&self, prompt: String, options: Vec<String>) -> Option<usize> {
+        self.emit(UiEvent::AwaitingInput {
+            round: 0,
+            question: prompt,
+            options: options.clone(),
+        });
+        // 与 await_answer 同模式：同步块取锁 try_recv，绝不跨 await 持 std Mutex。
+        loop {
+            {
+                let mut rx = match self.commands_rx.lock() {
+                    Ok(rx) => rx,
+                    Err(_) => return None,
+                };
+                while let Ok(c) = rx.try_recv() {
+                    match c {
+                        UiCommand::Answer { text } => return text.trim().parse::<usize>().ok(),
+                        UiCommand::Abort => return None,
+                        // Guidance/Pause/Resume：选择期间忽略
                         _ => {}
                     }
                 }
@@ -178,6 +208,13 @@ fn run_loop(
 
 // ============================ 渲染状态 ============================
 
+/// 方向键列表选择状态（设备选择等）：options 非空时进入。
+struct ChoiceState {
+    prompt: String,
+    options: Vec<String>,
+    selected: usize,
+}
+
 /// TUI 渲染状态：apply 把 UiEvent 转成若干彩色 Line 累积；view 据此画屏。
 struct TuiModel {
     /// 滚动消息流（owned String 保证 'static）
@@ -187,8 +224,10 @@ struct TuiModel {
     tok_up: i64,
     tok_down: i64,
     started: Instant,
-    /// 等用户回答的提问（Some=AI 在等输入）
+    /// 等用户回答的提问（Some=AI 在等纯文本输入）
     awaiting: Option<String>,
+    /// 方向键列表选择（Some=正在从候选里选，如设备选择）
+    choosing: Option<ChoiceState>,
     input: String,
     /// 从底向上的滚动偏移（仅 follow=false 时生效）
     scroll: u16,
@@ -209,6 +248,7 @@ impl TuiModel {
             tok_down: 0,
             started: Instant::now(),
             awaiting: None,
+            choosing: None,
             input: String::new(),
             scroll: 0,
             follow: true,
@@ -264,6 +304,7 @@ impl TuiModel {
                 ocr_added,
                 ocr_failed,
                 tabs,
+                location,
                 not_ready,
                 ..
             } => {
@@ -276,6 +317,12 @@ impl TuiModel {
                 }
                 if tabs > 0 {
                     parts.push(format!("{} 标签", tabs));
+                }
+                if let Some(loc) = location {
+                    let loc = loc.trim();
+                    if !loc.is_empty() {
+                        parts.push(format!("所处:{}", brief(loc, 40)));
+                    }
                 }
                 if let Some(nr) = not_ready {
                     parts.push(
@@ -361,9 +408,31 @@ impl TuiModel {
             UiEvent::ExitingNote { message } => {
                 self.push_colored(message, Color::Yellow);
             }
-            UiEvent::AwaitingInput { question, .. } => {
-                self.push_colored(format!("AI 提问：{}", question), Color::Cyan);
-                self.awaiting = Some(question);
+            UiEvent::AwaitingInput { question, options, .. } => {
+                if !options.is_empty() {
+                    // 候选项 → 进 choosing 模式（方向键列表），不进文本输入。
+                    // 提示回显进消息流，列表本身在输入区渲染。
+                    self.push_colored(format!("? {}", question), Color::Cyan);
+                    self.choosing = Some(ChoiceState {
+                        prompt: question,
+                        options,
+                        selected: 0,
+                    });
+                    self.follow = true;
+                    self.scroll = 0;
+                } else {
+                    // 纯文本输入：question 可能多行——逐行渲染，避免挤成一行
+                    let mut iter = question.lines();
+                    if let Some(first) = iter.next() {
+                        self.push_colored(format!("AI 提问：{}", first), Color::Cyan);
+                    }
+                    for line in iter {
+                        self.push_colored(format!("  {}", line), Color::Cyan);
+                    }
+                    self.awaiting = Some(question);
+                    self.follow = true;
+                    self.scroll = 0;
+                }
             }
             UiEvent::GuidanceAccepted { text } => {
                 self.push_colored(
@@ -479,13 +548,53 @@ impl TuiModel {
 
     /// 键盘动作 → UiCommand / 滚动 / 退出
     fn handle_key(&mut self, k: KeyEvent, tx: &UnboundedSender<UiCommand>) {
-        // Ctrl+C：第一次发 Abort，第二次强制退出
+        let waiting = self.awaiting.is_some() || self.choosing.is_some();
+
+        // Ctrl+C：软停语义。
+        //   等输入时（awaiting/choosing）→ Abort（暂停后再按一次退出，或放弃 setup 选择）
+        //   运行中（非等输入、未结束）→ Pause（软停，等用户指导再继续，不直接终止）
+        //   结束后 → 直接退出
         if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
-            if !self.abort_sent {
+            if self.finished {
+                self.should_quit = true;
+            } else if waiting {
                 let _ = tx.send(UiCommand::Abort);
                 self.abort_sent = true;
+                self.awaiting = None;
+                self.choosing = None;
             } else {
-                self.should_quit = true;
+                let _ = tx.send(UiCommand::Pause);
+            }
+            return;
+        }
+
+        // ---- choosing 模式：方向键列表选择，优先于一般按键 ----
+        if let Some(ch) = self.choosing.as_mut() {
+            let n = ch.options.len();
+            match k.code {
+                KeyCode::Up | KeyCode::Char('k') => {
+                    ch.selected = ch.selected.saturating_sub(1);
+                }
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if ch.selected + 1 < n {
+                        ch.selected += 1;
+                    }
+                }
+                KeyCode::Enter => {
+                    let _ = tx.send(UiCommand::Answer {
+                        text: ch.selected.to_string(),
+                    });
+                    self.choosing = None;
+                }
+                // 数字键 1..9 直接选对应项并提交（增强）
+                KeyCode::Char(c @ '1'..='9') => {
+                    let idx = (c as usize) - ('1' as usize);
+                    if idx < n {
+                        let _ = tx.send(UiCommand::Answer { text: idx.to_string() });
+                        self.choosing = None;
+                    }
+                }
+                _ => {}
             }
             return;
         }
@@ -509,6 +618,7 @@ impl TuiModel {
                         let _ = tx.send(UiCommand::Answer { text });
                         self.awaiting = None;
                     } else {
+                        // 运行中（非等输入）打字 + Enter = 中途指导
                         let _ = tx.send(UiCommand::Guidance { text });
                     }
                     self.input.clear();
@@ -545,12 +655,18 @@ fn level_color(l: Level) -> Color {
 
 // ============================ 视图 ============================
 
-/// 四段布局：顶栏(1) / 消息区(min) / 输入框(3) / 底栏(1)
+/// 四段布局：顶栏(1) / 消息区(min) / 输入框(动态) / 底栏(1)
 fn view(frame: &mut Frame, model: &TuiModel) {
+    // choosing 模式时输入区要容纳 prompt + 选项列表，按需放大；否则固定 3 行单行输入框。
+    let input_h: u16 = match model.choosing.as_ref() {
+        // 边框 2 + prompt 1 + 每项 1，封顶 12 行免吃满屏
+        Some(ch) => (ch.options.len() as u16 + 3).clamp(4, 12),
+        None => 3,
+    };
     let chunks = Layout::vertical([
         Constraint::Length(1),
         Constraint::Min(0),
-        Constraint::Length(3),
+        Constraint::Length(input_h),
         Constraint::Length(1),
     ])
     .split(frame.area());
@@ -562,7 +678,7 @@ fn view(frame: &mut Frame, model: &TuiModel) {
             Some(k) => format!("{} #{}", p.label(), k),
             None => p.label().to_string(),
         })
-        .unwrap_or_else(|| "harness".to_string());
+        .unwrap_or_else(|| "准备中".to_string());
     let elapsed = fmt_duration(model.started.elapsed().as_millis() as u64);
     let top = format!(
         " {} · 第{}轮 · ↑{} ↓{} · {} ",
@@ -578,28 +694,104 @@ fn view(frame: &mut Frame, model: &TuiModel) {
         chunks[0],
     );
 
-    // ---- 消息区：自动换行；follow 贴底 / scroll 从底向上偏移 ----
+    // ---- 消息区：自动换行 + 准确贴底 ----
+    // ratatui 0.29 的 Paragraph::line_count 是 unstable 私有方法，不能用；
+    // 退而按宽度逐行估算 wrap 后行数累加（每条按显示宽度 ceil 折行），比按 lines.len() 估算准，
+    // 长文本折多行也能正确贴底，最新内容始终可见。
     let msg_area = chunks[1];
-    let total = model.lines.len() as u16;
     let height = msg_area.height;
-    // 文本通常会换行，行数会比 lines 多，这里用 lines 数粗略估算贴底偏移（够用即可）
-    let max_top = total.saturating_sub(height);
+    let width = msg_area.width.max(1);
+    let total_wrapped: u16 = model
+        .lines
+        .iter()
+        .map(|l| {
+            let w = l.width() as u16;
+            // 空行算 1 行；否则 ceil(w / width)
+            (w / width + if w % width != 0 { 1 } else { 0 }).max(1)
+        })
+        .sum();
+    let max_top = total_wrapped.saturating_sub(height);
     let y = if model.follow {
         max_top
     } else {
         max_top.saturating_sub(model.scroll)
     };
     frame.render_widget(
-        Paragraph::new(model.lines.clone())
+        Paragraph::new(Text::from(model.lines.clone()))
             .wrap(Wrap { trim: false })
             .scroll((y, 0)),
         msg_area,
     );
 
-    // ---- 输入框：awaiting 时高亮提示 ----
-    let (title, border_style) = if model.awaiting.is_some() {
+    // ---- 输入区：choosing 列表 / awaiting 文本输入 / 普通指导 ----
+    let input_area = chunks[2];
+    if let Some(ch) = model.choosing.as_ref() {
+        render_choice(frame, input_area, ch);
+    } else {
+        render_input(frame, input_area, model);
+    }
+
+    // ---- 底栏：快捷键提示（暗灰，随状态变化）----
+    let hint = if model.choosing.is_some() {
+        "↑↓ 选择 · Enter 确认 · 1-9 直选 · Ctrl+C 放弃"
+    } else if model.awaiting.is_some() {
+        "Enter 提交回答 · Ctrl+C 放弃"
+    } else if model.finished {
+        "q / Esc 退出"
+    } else {
+        "打字+Enter 指导 · ↑↓ 滚动 · End 贴底 · Ctrl+C 暂停（再按退出）"
+    };
+    frame.render_widget(
+        Paragraph::new(hint).style(Style::default().fg(Color::DarkGray)),
+        chunks[3],
+    );
+}
+
+/// choosing 模式：在输入区渲染 prompt + 高亮选项列表（方向键选择）。
+fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceState) {
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    lines.push(Line::from(Span::styled(
+        ch.prompt.clone(),
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    )));
+    for (i, opt) in ch.options.iter().enumerate() {
+        if i == ch.selected {
+            // 选中项：反白高亮 + ▶ 前导
+            lines.push(Line::from(Span::styled(
+                format!("▶ {}", opt),
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )));
+        } else {
+            lines.push(Line::from(Span::styled(
+                format!("  {}", opt),
+                Style::default().fg(Color::Gray),
+            )));
+        }
+    }
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .title("选择设备（↑↓ 选择 · Enter 确认）")
+                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        ),
+        area,
+    );
+}
+
+/// 普通/awaiting 文本输入框 + 可见光标。
+fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel) {
+    let (title, border_style) = if let Some(q) = model.awaiting.as_ref() {
+        // setup 用例输入更像「发消息」；其它 ask_user 用「回答」措辞。
+        let title = if is_case_prompt(q) {
+            "描述你要测什么（Enter 发送）"
+        } else {
+            "AI 在等你回答（Enter 提交）"
+        };
         (
-            "AI 在等你回答（Enter 提交）",
+            title,
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         )
     } else {
@@ -611,15 +803,18 @@ fn view(frame: &mut Frame, model: &TuiModel) {
                 .title(title)
                 .border_style(border_style),
         ),
-        chunks[2],
+        area,
     );
+    // 光标定位到输入文本末尾：边框内 x = 1（边框）+ "> "(2) + 输入显示宽度；y = 边框内行。
+    let input_w = Span::raw(model.input.as_str()).width() as u16;
+    let cursor_x = area.x + 1 + 2 + input_w;
+    let cursor_y = area.y + 1;
+    // 夹在区域内，避免越界
+    let cx = cursor_x.min(area.x + area.width.saturating_sub(1));
+    frame.set_cursor_position(Position::new(cx, cursor_y));
+}
 
-    // ---- 底栏：快捷键提示（暗灰）----
-    frame.render_widget(
-        Paragraph::new(
-            "Enter 发送 · ↑↓ 滚动 · End 贴底 · Ctrl+C 中断（再按强制退出）· 结束后 q 退出",
-        )
-        .style(Style::default().fg(Color::DarkGray)),
-        chunks[3],
-    );
+/// 粗略判断 awaiting 的提问是不是「setup 用例输入」（用于切换输入框措辞）。
+fn is_case_prompt(q: &str) -> bool {
+    q.contains("测") || q.contains("用例") || q.contains("describe") || q.contains("test")
 }

@@ -270,6 +270,22 @@ pub async fn drive(
                     break 'outer;
                 }
                 UiCommand::Guidance { text } => pending_guidance.push(text),
+                UiCommand::Pause => {
+                    // 软停：暂停当前探索，等用户给指导再带着继续；放弃（再按 Ctrl+C）则终止
+                    match ctx
+                        .ui
+                        .await_answer(round, "已暂停。输入指导让 AI 带着继续，或再按 Ctrl+C 退出".to_string())
+                        .await
+                    {
+                        Some(g) if !g.trim().is_empty() => pending_guidance.push(g),
+                        Some(_) => {}
+                        None => {
+                            aborted = true;
+                            finish = Some((false, "已终止（用户中断）".to_string()));
+                            break 'outer;
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -476,6 +492,9 @@ pub async fn drive(
             ocr_added: if ctx.ocr.is_some() && p.ocr_error.is_none() { Some(p.ocr_added) } else { None },
             ocr_failed: ctx.ocr.is_some() && p.ocr_error.is_some(),
             tabs: p.tabs.len(),
+            location: p.tabs.iter().find(|t| t.active).map(|t| {
+                if t.title.is_empty() { t.url.clone() } else { t.title.clone() }
+            }),
             known: n_known,
             unknown: n_unknown,
             revisits,
@@ -589,12 +608,41 @@ pub async fn drive(
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束
         loop {
-            // 安全点：取前端命令（本阶段只处理 Abort，优雅停在此处）
+            // 安全点：取前端命令（Abort 终止；Guidance 即时注入会话；Pause 软停等指导再继续）
             for c in ctx.ui.drain_commands() {
-                if matches!(c, UiCommand::Abort) {
-                    aborted = true;
-                    finish = Some((false, "已终止（用户中断）".to_string()));
-                    break 'outer;
+                match c {
+                    UiCommand::Abort => {
+                        aborted = true;
+                        finish = Some((false, "已终止（用户中断）".to_string()));
+                        break 'outer;
+                    }
+                    UiCommand::Guidance { text } => {
+                        let m = format!("【用户中途指导】{}\n请据此调整接下来的操作方向。", text);
+                        tx.log("user_guidance", serde_json::json!({ "round": round, "content": m.clone() }));
+                        sess.user(m);
+                        ctx.ui.emit(UiEvent::GuidanceAccepted { text });
+                    }
+                    UiCommand::Pause => {
+                        match ctx
+                            .ui
+                            .await_answer(round, "已暂停。输入指导让 AI 带着继续，或再按 Ctrl+C 退出".to_string())
+                            .await
+                        {
+                            Some(g) if !g.trim().is_empty() => {
+                                let m = format!("【用户中途指导】{}\n请据此调整接下来的操作方向。", g);
+                                tx.log("user_guidance", serde_json::json!({ "round": round, "content": m.clone() }));
+                                sess.user(m);
+                                ctx.ui.emit(UiEvent::GuidanceAccepted { text: g });
+                            }
+                            Some(_) => {}
+                            None => {
+                                aborted = true;
+                                finish = Some((false, "已终止（用户中断）".to_string()));
+                                break 'outer;
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
             if super::interrupt::aborted() {
