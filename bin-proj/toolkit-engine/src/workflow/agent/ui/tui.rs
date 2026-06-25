@@ -316,6 +316,15 @@ impl TuiModel {
         self.cursor = 0;
     }
 
+    /// 把可用 / 指令列表推进消息流（/help）
+    fn push_help(&mut self) {
+        self.ensure_blank();
+        self.push_colored("可用指令：".to_string(), Color::Cyan);
+        for (name, desc) in SLASH_COMMANDS {
+            self.push_sub(format!("{}  {}", name, desc));
+        }
+    }
+
     /// 把一个 UiEvent 转成 1~N 行彩色 Line 累积进 lines
     fn apply(&mut self, ev: UiEvent) {
         // Step（进行中/完成/失败）紧贴在触发它的「● AI 回复」下面、缩进显示，不另加块间空行；
@@ -611,10 +620,10 @@ impl TuiModel {
         if let Some(ch) = self.choosing.as_mut() {
             let n = ch.options.len();
             match k.code {
-                KeyCode::Up | KeyCode::Char('k') => {
+                KeyCode::Up => {
                     ch.selected = ch.selected.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j') => {
+                KeyCode::Down => {
                     if ch.selected + 1 < n {
                         ch.selected += 1;
                     }
@@ -675,14 +684,38 @@ impl TuiModel {
             KeyCode::End => {
                 self.cursor = self.input.chars().count();
             }
-            KeyCode::Enter => {
-                let cmd = self.input.trim();
-                if cmd == "/exit" || cmd == "/quit" {
-                    // 一致做法：输入 /exit 退出 TUI（运行中先终止引擎）
-                    if !self.finished {
-                        let _ = tx.send(UiCommand::Abort);
+            // Tab：/ 指令补全到第一个匹配项
+            KeyCode::Tab => {
+                if self.input.starts_with('/') {
+                    if let Some((name, _)) = slash_matches(&self.input).first() {
+                        self.input = name.to_string();
+                        self.cursor = self.input.chars().count();
                     }
-                    self.should_quit = true;
+                }
+            }
+            KeyCode::Enter => {
+                let cmd = self.input.trim().to_string();
+                if cmd.starts_with('/') {
+                    // / 指令体系
+                    match cmd.as_str() {
+                        "/exit" | "/quit" => {
+                            if !self.finished {
+                                let _ = tx.send(UiCommand::Abort);
+                            }
+                            self.should_quit = true;
+                        }
+                        "/stop" => {
+                            // 软停当前探索（等同 Esc）
+                            if !self.finished && self.awaiting.is_none() {
+                                let _ = tx.send(UiCommand::Pause);
+                            }
+                        }
+                        "/help" => self.push_help(),
+                        other => self.push_colored(
+                            format!("未知指令：{}（输入 / 看可用指令）", other),
+                            Color::Yellow,
+                        ),
+                    }
                     self.clear_input();
                 } else if !self.input.is_empty() {
                     let text = self.input.clone();
@@ -724,6 +757,19 @@ impl TuiModel {
     }
 }
 
+/// 可用的 / 指令（输入 / 弹提示，Tab 补全）
+const SLASH_COMMANDS: &[(&str, &str)] = &[
+    ("/exit", "退出 TUI"),
+    ("/stop", "停止当前探索（可继续输入指导）"),
+    ("/help", "显示可用指令"),
+];
+
+/// 按 input 前缀过滤匹配的 / 指令
+fn slash_matches(input: &str) -> Vec<&'static (&'static str, &'static str)> {
+    let q = input.trim();
+    SLASH_COMMANDS.iter().filter(|(n, _)| n.starts_with(q)).collect()
+}
+
 /// 子 agent 专属点色（● 标注；不同 agent 不同色，便于一眼区分谁在说话）
 fn subagent_color(kind: SubAgent) -> Color {
     match kind {
@@ -751,10 +797,14 @@ fn level_color(l: Level) -> Color {
 /// 四段布局：顶栏(1) / 消息区(min) / 输入框(动态) / 底栏(1)
 fn view(frame: &mut Frame, model: &TuiModel) {
     // choosing 模式时输入区要容纳 prompt + 选项列表，按需放大；否则固定 3 行单行输入框。
-    let input_h: u16 = match model.choosing.as_ref() {
+    let input_h: u16 = if let Some(ch) = model.choosing.as_ref() {
         // 边框 2 + prompt 1 + 每项 1，封顶 12 行免吃满屏
-        Some(ch) => (ch.options.len() as u16 + 3).clamp(4, 12),
-        None => 3,
+        (ch.options.len() as u16 + 3).clamp(4, 12)
+    } else if model.input.starts_with('/') {
+        // slash 指令菜单：匹配项 + 输入行 + 边框
+        (slash_matches(&model.input).len() as u16 + 3).clamp(3, 10)
+    } else {
+        3
     };
     let chunks = Layout::vertical([
         Constraint::Length(1),
@@ -830,8 +880,10 @@ fn view(frame: &mut Frame, model: &TuiModel) {
         "Enter 提交 · 输入指导让 AI 继续 · /exit 退出"
     } else if model.finished {
         "输入 /exit 退出"
+    } else if model.input.starts_with('/') {
+        "Tab 补全 · Enter 执行 · 输入 / 看指令"
     } else {
-        "Esc 停止 · 打字+Enter 指导 · ↑↓ 滚动 · End 贴底 · /exit 退出"
+        "Esc 停止 · 打字+Enter 指导 · / 指令 · ↑↓ 滚动 · /exit 退出"
     };
     frame.render_widget(
         Paragraph::new(hint).style(Style::default().fg(Color::DarkGray)),
@@ -893,8 +945,24 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
     let toks = Line::from(format!("↑{} ↓{}", model.tok_up, model.tok_down))
         .right_aligned()
         .style(Style::default().fg(Color::DarkGray));
+    // slash 菜单：input 以 / 开头时，输入行上方列出匹配指令（首个高亮，Tab 补全）
+    let mut body: Vec<Line<'static>> = Vec::new();
+    if model.input.starts_with('/') {
+        for (i, (name, desc)) in slash_matches(&model.input).iter().enumerate() {
+            let name_style = if i == 0 {
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+            body.push(Line::from(vec![
+                Span::styled(format!("{:<8}", name), name_style),
+                Span::styled(desc.to_string(), Style::default().fg(Color::DarkGray)),
+            ]));
+        }
+    }
+    body.push(Line::from(format!("> {}", model.input)));
     frame.render_widget(
-        Paragraph::new(format!("> {}", model.input)).block(
+        Paragraph::new(body).block(
             Block::bordered()
                 .title(Line::from(title))
                 .title_bottom(toks)
@@ -902,11 +970,11 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
         ),
         area,
     );
-    // 光标定位到 model.cursor 处：边框内 x = 1（边框）+ "> "(2) + 光标前子串显示宽度。
+    // 光标定位到 model.cursor 处（输入行是块内最后一行）：x = 边框1 + "> "2 + 光标前子串宽度。
     let prefix: String = model.input.chars().take(model.cursor).collect();
     let pre_w = Span::raw(prefix).width() as u16;
     let cursor_x = area.x + 1 + 2 + pre_w;
-    let cursor_y = area.y + 1;
+    let cursor_y = area.y + area.height.saturating_sub(2);
     // 夹在区域内，避免越界
     let cx = cursor_x.min(area.x + area.width.saturating_sub(1));
     frame.set_cursor_position(Position::new(cx, cursor_y));
