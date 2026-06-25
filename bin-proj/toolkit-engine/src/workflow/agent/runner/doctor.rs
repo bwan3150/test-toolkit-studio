@@ -32,7 +32,7 @@ use super::super::execution::{auto_name, visual_auto_name};
 use super::super::perception::{capture, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::super::ui::{Level, Phase, StepState, SubAgent, Tokens, UiEvent};
+use super::super::ui::{Level, Phase, StepState, SubAgent, Tokens, UiCommand, UiEvent};
 use super::flow::{brief, friendly, is_launch_line, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
@@ -730,6 +730,43 @@ pub(super) async fn doctor_repair(
         let mut edit_calls = 0usize;
         let mut go_finish = false;
         loop {
+            // 安全点：取前端命令（Abort 终止；Guidance 即时注入医生会话；Pause 软停等用户给医生建议再继续）。
+            // 回放/滚动查找被 Esc 软停后控制权回到本循环，下一轮顶部就能 drain 到 Pause（仿 flow.rs）。
+            for c in ctx.ui.drain_commands() {
+                match c {
+                    UiCommand::Abort => {
+                        ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "已终止（用户中断），停止医生修复".into() });
+                        return None;
+                    }
+                    UiCommand::Guidance { text } => {
+                        let m = format!("【用户给诊断医生的建议】{}\n请据此调整诊断/修复方向。", text);
+                        tx.log("user_guidance", serde_json::json!({ "iter": iter, "content": m.clone() }));
+                        editor.user(m);
+                        ctx.ui.emit(UiEvent::GuidanceAccepted { text });
+                    }
+                    UiCommand::Pause => {
+                        super::interrupt::clear_pause(); // 已响应软停，清标志（回放/诊断动作已停下）
+                        match ctx
+                            .ui
+                            .await_answer(0, "已暂停。给诊断医生一条建议（或回车让它自行诊断），再按 Ctrl+C 退出".to_string())
+                            .await
+                        {
+                            Some(g) if !g.trim().is_empty() => {
+                                let m = format!("【用户给诊断医生的建议】{}\n请据此调整诊断/修复方向。", g);
+                                tx.log("user_guidance", serde_json::json!({ "iter": iter, "content": m.clone() }));
+                                editor.user(m);
+                                ctx.ui.emit(UiEvent::GuidanceAccepted { text: g });
+                            }
+                            Some(_) => {}
+                            None => {
+                                ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "已终止（用户中断），停止医生修复".into() });
+                                return None;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
             if super::interrupt::aborted() {
                 ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "已中断（Ctrl+C），停止医生修复".into() });
                 return None;
