@@ -226,6 +226,7 @@ pub async fn drive(
     let mut script_name: Option<String> = None; // AI 在 finish 时起的脚本名
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
     let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
+    let mut pingpong_streak = 0usize; // 连续"页面变了但回到旧页、且没探出新页面"的次数（A↔B 横跳信号）
     let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
     let mut last_was_close = false; // 上一步是否是主动关闭/收尾（关 app/销毁会话）——下一轮空页面不催 launch
     let mut last_was_nav = false; // 上一步是否是「导航」动作（点击/视觉点击/切换/拖拽）——用于「踩实」判定
@@ -378,6 +379,24 @@ pub async fn drive(
             tx.log("stuck_abort", serde_json::json!({ "round": round, "no_progress": no_progress, "kind": "no_progress" }));
             ctx.ui.emit(UiEvent::AutoStop { reason: format!("连续 {} 轮页面始终无前进，自动停止（避免空烧 token）", no_progress) });
             finish = Some((false, format!("连续 {} 轮页面无前进、自动停止", no_progress)));
+            break 'outer;
+        }
+        // 横跳止损（填盲区）：页面**变了**但回到了近期出现过的旧页（revisits>=2），且一直没探出任何
+        // 从未见过的新页面——典型是反复点一个"点了会跳回首页/旧页"的元素（点歪到 logo、顶栏悬停同名项、
+        // 纯图标点不中跳走）。上面 loop_streak/no_progress 两道闸门都要求"页面不变"，对这种 A↔B 横跳是
+        // **结构性盲区**（每步 unchanged=false，二者全程归零），故单独计数，连续横跳到上限就止损。
+        if !last_no_pagecheck {
+            if revisits == 0 {
+                pingpong_streak = 0; // 探出了从未见过的新页面 → 不是横跳，真有进展
+            } else if !unchanged && revisits >= 2 {
+                pingpong_streak += 1; // 页面变了却又回到旧页、还没探出新页 → 横跳一次
+            }
+        }
+        const PINGPONG_ABORT: usize = 6;
+        if pingpong_streak >= PINGPONG_ABORT && !p.elements.is_empty() {
+            tx.log("stuck_abort", serde_json::json!({ "round": round, "pingpong": pingpong_streak, "kind": "pingpong" }));
+            ctx.ui.emit(UiEvent::AutoStop { reason: format!("在少数几个页面间反复横跳 {} 次、始终没探出新页面，自动停止（避免空烧 token）", pingpong_streak) });
+            finish = Some((false, format!("在少数几个页面间反复横跳 {} 次、自动停止", pingpong_streak)));
             break 'outer;
         }
         let stuck = !last_no_pagecheck && (no_progress >= 1 || revisits >= 2) && !p.elements.is_empty();
