@@ -134,6 +134,11 @@ impl AdbDriver {
         Ok(())
     }
 
+    // 悬停：移动端无"鼠标悬停"概念，不支持（hover 为 web 独有）
+    pub fn hover(&self, _x: i32, _y: i32) -> Result<()> {
+        Err(TkeError::InvalidArgument("Android 不支持悬停(hover 为 web 独有)".to_string()))
+    }
+
     // 滑动
     pub fn swipe(&self, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<()> {
         self.run_adb_command(&[

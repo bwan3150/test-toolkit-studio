@@ -23,6 +23,7 @@ pub enum TksCommand {
     Switch,           // 切换（web 标签 / App）
     ScrollFind,       // 滚动查找（朝某方向滚动直到目标文字出现——可复现地"滚到目标可见"，替代固定距离盲滑）
     Key,              // 按键（enter/tab/escape/backspace 等硬键/特殊键）
+    Hover,            // 悬停（web 独有：鼠标移到元素上触发 hover，展开悬停下拉/菜单，不点击）
 }
 
 impl TksCommand {

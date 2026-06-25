@@ -18,9 +18,9 @@ use super::prompt::PromptSet;
 /// 组装工具集：schema 来自 schema 表，description 来自 PromptSet（可自定义）
 /// 给所有"动作类"工具统一注入 comment 字段（AI 每步的思考），finish/ask_user/
 /// request_screenshot 本身已有 reason/question，不注入。
-pub fn build_tools(prompts: &PromptSet) -> Vec<LlmTool> {
+pub fn build_tools(prompts: &PromptSet, platform: crate::Platform) -> Vec<LlmTool> {
     const NO_COMMENT: [&str; 3] = ["finish", "ask_user", "request_screenshot"];
-    schema::tool_schemas()
+    schema::tool_schemas(platform)
         .into_iter()
         .map(|mut t| {
             if !NO_COMMENT.contains(&t.name) {

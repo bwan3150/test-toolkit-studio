@@ -100,6 +100,16 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::Click { point }).await.map(|_| ())
     }
 
+    /// 悬停操作（web 独有）：把鼠标移到目标元素上触发 hover、展开悬停下拉/菜单，不点击
+    pub async fn execute_hover(&mut self, params: &[TksParam]) -> Result<()> {
+        if params.is_empty() {
+            return Err(TkeError::InvalidArgument("悬停命令需要目标参数".to_string()));
+        }
+
+        let point = self.resolve_target(&params[0]).await?;
+        execute_action(&*self.controller, ControlAction::Hover { point }).await.map(|_| ())
+    }
+
     /// 长按操作
     pub async fn execute_press(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {

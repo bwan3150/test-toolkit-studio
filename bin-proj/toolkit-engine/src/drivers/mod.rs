@@ -95,6 +95,15 @@ impl Controller {
         }
     }
 
+    /// 悬停（web 独有）：鼠标移到坐标触发 hover，展开悬停下拉/菜单。移动端驱动会返回不支持。
+    pub fn hover(&self, x: i32, y: i32) -> Result<()> {
+        match &self.driver {
+            Driver::Adb(d) => d.hover(x, y),
+            Driver::Web(d) => d.hover(x, y),
+            Driver::Wda(d) => d.hover(x, y),
+        }
+    }
+
     pub fn swipe(&self, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<()> {
         match &self.driver {
             Driver::Adb(d) => d.swipe(x1, y1, x2, y2, duration_ms),

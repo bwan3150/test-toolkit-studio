@@ -333,6 +333,11 @@ impl WdaDriver {
         Ok(())
     }
 
+    /// 悬停：移动端无"鼠标悬停"概念，不支持（hover 为 web 独有）
+    pub fn hover(&self, _x: i32, _y: i32) -> Result<()> {
+        Err(TkeError::InvalidArgument("iOS 不支持悬停(hover 为 web 独有)".to_string()))
+    }
+
     pub fn press(&self, x: i32, y: i32, duration_ms: u32) -> Result<()> {
         let conn = self.ensure_existing()?;
         let (px, py) = (x as f64 / conn.scale, y as f64 / conn.scale);

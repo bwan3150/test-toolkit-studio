@@ -9,6 +9,9 @@ pub enum AgentAction {
     Close { target: String },
     /// 点击元素
     Click { element_id: usize, name: String, desc: Option<String> },
+    /// 悬停元素（web 独有）：鼠标移到元素上触发 hover，展开顶栏下拉/悬停菜单，不点击。
+    /// 用于"顶栏菜单点不动、需先悬停展开再点子项"的场景。落 `悬停 [{元素}]`。
+    Hover { element_id: usize, name: String, desc: Option<String> },
     /// 在元素处输入文本
     Input { element_id: usize, name: String, desc: Option<String>, text: String },
     /// 长按元素

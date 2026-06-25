@@ -84,6 +84,7 @@ impl ScriptInterpreter {
             TksCommand::Launch => executor.execute_launch(&step.params).await,
             TksCommand::Close => executor.execute_close(&step.params).await,
             TksCommand::Click => executor.execute_click(&step.params).await,
+            TksCommand::Hover => executor.execute_hover(&step.params).await,
             TksCommand::Press => executor.execute_press(&step.params).await,
             TksCommand::Swipe => executor.execute_swipe(&step.params).await,
             TksCommand::DirectionalSwipe => executor.execute_directional_swipe(&step.params).await,

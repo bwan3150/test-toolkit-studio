@@ -20,6 +20,11 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             name: opt_str(a, "name").unwrap_or_default(),
             desc: opt_str(a, "desc"),
         },
+        "hover" => AgentAction::Hover {
+            element_id: req_usize(a, "element_id")?,
+            name: opt_str(a, "name").unwrap_or_default(),
+            desc: opt_str(a, "desc"),
+        },
         "input" => AgentAction::Input {
             element_id: req_usize(a, "element_id")?,
             name: opt_str(a, "name").unwrap_or_default(),

@@ -33,6 +33,8 @@ pub enum ControlAction {
     Key { code: String },
     /// 切换：web=目标标签序号 或 用新标签打开 URL；移动端=把目标 App 包名切到前台
     Switch { target: String },
+    /// 悬停 hover x,y（web 独有：鼠标移到坐标触发 hover，展开悬停下拉/菜单，不按下）
+    Hover { point: Point },
 }
 
 /// control 原子方法
@@ -140,6 +142,10 @@ pub async fn execute_action(controller: &Controller, action: ControlAction) -> R
         ControlAction::Switch { target } => {
             controller.switch(&target)?;
             Ok(serde_json::json!({ "action": "switch", "target": target }))
+        }
+        ControlAction::Hover { point } => {
+            controller.hover(point.x, point.y)?;
+            Ok(serde_json::json!({ "action": "hover", "x": point.x, "y": point.y }))
         }
     }
 }

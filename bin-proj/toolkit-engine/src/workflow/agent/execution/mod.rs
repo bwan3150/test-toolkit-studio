@@ -48,6 +48,17 @@ pub async fn apply(
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             Ok((line(TksCommand::Click, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
         }
+        AgentAction::Hover { element_id, .. } => {
+            // 悬停（web 独有）：移到元素上触发 hover 展开下拉/菜单，不点击。落库同 click（同一元素），
+            // 产出 `悬停 [{元素}]`。移动端驱动会返回不支持（且工具按平台 gate，移动端 AI 看不到）。
+            let el = lookup(elements, *element_id)?;
+            let c = el.center();
+            let name = auto_name(el);
+            let (structure, ocr) = tier_for(el);
+            let saved = save_target(device, element_path, &name, &None, el.bounds.clone(), structure, ocr, tx, round).await;
+            let detail = exec(device, ControlAction::Hover { point: c }).await?;
+            Ok((line(TksCommand::Hover, vec![el_param(&name)]), detail, el_trace(c, el, &name), saved))
+        }
         AgentAction::Input { element_id, text, .. } => {
             let el = lookup(elements, *element_id)?;
             let c = el.center();

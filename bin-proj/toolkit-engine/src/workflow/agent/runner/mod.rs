@@ -87,7 +87,7 @@ impl AgentRunner {
             }),
         );
 
-        let tools = build_tools(&prompts);
+        let tools = build_tools(&prompts, platform);
         // 工具定义全集（AI 每轮实际收到的输入的一部分：名字 + description 提示词 + 参数 schema，
         // 含统一注入的 comment 字段）。记进 transcript，使 conversation.json 不漏 AI 所见的任何输入。
         tx.log(
@@ -179,7 +179,7 @@ impl AgentRunner {
             discarded_pt += dp;
             discarded_ct += dc;
             // 全新探索会话 + 用例 + 重探指导，从头带指导重探（避免旧会话 N 步的混乱上下文）
-            sess = LlmSession::new(&opts.ai, prompts.system(&device, platform.name()), build_tools(&prompts))?;
+            sess = LlmSession::new(&opts.ai, prompts.system(&device, platform.name()), build_tools(&prompts, platform))?;
             let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", &opts.case)]);
             tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
             sess.user(case_msg);

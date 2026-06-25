@@ -134,6 +134,7 @@ pub fn default_tool_description(name: &str) -> &'static str {
         "launch" => include_str!("builtin/tools/launch.md"),
         "close" => include_str!("builtin/tools/close.md"),
         "click" => include_str!("builtin/tools/click.md"),
+        "hover" => include_str!("builtin/tools/hover.md"),
         "input" => include_str!("builtin/tools/input.md"),
         "long_press" => include_str!("builtin/tools/long_press.md"),
         "clear" => include_str!("builtin/tools/clear.md"),

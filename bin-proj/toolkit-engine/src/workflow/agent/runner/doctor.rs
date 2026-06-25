@@ -258,7 +258,7 @@ fn doctor_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
                 "properties": {
                     "id": { "type": "integer", "description": "reexplore 给的实时元素列表里的元素序号" },
                     "name": { "type": "string", "description": "给该元素起的稳定语义名（落库+写进 .tks；列表里标了「已收录」的复用其库名）" },
-                    "action": { "type": "string", "enum": ["click", "input", "long_press", "clear", "assert"], "description": "对该元素的操作，默认 click" },
+                    "action": { "type": "string", "enum": ["click", "hover", "input", "long_press", "clear", "assert"], "description": "对该元素的操作，默认 click；hover=悬停展开下拉(仅 web)" },
                     "text": { "type": "string", "description": "action=input 时要输入的文本" }
                 },
                 "required": ["id", "name"]
@@ -273,7 +273,7 @@ fn doctor_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
                     "x": { "type": "integer", "description": "无 region 时给点击点 x（像素）" },
                     "y": { "type": "integer", "description": "无 region 时给点击点 y（像素）" },
                     "name": { "type": "string", "description": "给该目标起的稳定语义名（落库+写进 .tks）" },
-                    "action": { "type": "string", "enum": ["click", "input", "long_press", "clear", "assert"], "description": "对该目标的操作，默认 click" },
+                    "action": { "type": "string", "enum": ["click", "hover", "input", "long_press", "clear", "assert"], "description": "对该目标的操作，默认 click；hover=悬停展开下拉(仅 web)" },
                     "text": { "type": "string", "description": "action=input 时要输入的文本" }
                 },
                 "required": ["name"]
@@ -542,7 +542,7 @@ fn validate_line(content: &str, element_path: &Path) -> std::result::Result<(), 
         //    文本搜索、极不可靠，且通常是"想点一个还没存库的元素"的错误写法。该用 reexplore+pick。
         let targeting = matches!(
             step.command,
-            TksCommand::Click | TksCommand::Press | TksCommand::Input | TksCommand::Clear | TksCommand::Assert
+            TksCommand::Click | TksCommand::Hover | TksCommand::Press | TksCommand::Input | TksCommand::Clear | TksCommand::Assert
         );
         if targeting && !matches!(step.params.first(), Some(TksParam::Element { .. }) | Some(TksParam::Coordinate(_))) {
             return Err(format!(
@@ -649,11 +649,12 @@ fn build_action_line(action: &str, name: &str, text: Option<&str>) -> std::resul
     let el = TksParam::Element { name: name.to_string(), strategy: LocatorStrategy::Auto };
     let (command, params) = match action {
         "click" => (TksCommand::Click, vec![el]),
+        "hover" => (TksCommand::Hover, vec![el]),
         "input" => (TksCommand::Input, vec![el, TksParam::Text(text.unwrap_or_default().to_string())]),
         "long_press" => (TksCommand::Press, vec![el, TksParam::Number(1000)]),
         "clear" => (TksCommand::Clear, vec![el]),
         "assert" => (TksCommand::Assert, vec![el, TksParam::Text("存在".to_string())]),
-        other => return Err(format!("不支持的动作「{}」（仅 click/input/long_press/clear/assert）", other)),
+        other => return Err(format!("不支持的动作「{}」（仅 click/hover/input/long_press/clear/assert）", other)),
     };
     Ok(step_to_source(&TksStep { command, params, raw: String::new(), line_number: 0 }))
 }

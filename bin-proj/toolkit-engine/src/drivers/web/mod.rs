@@ -319,6 +319,21 @@ impl WebDriver {
         clicked
     }
 
+    /// 悬停（web 独有）：把目标滚入视口并夹紧后，**只做 pointerMove** 移到其上——触发真实的
+    /// mouseover/mousemove 事件，让 CSS `:hover` / JS 悬停菜单（顶栏下拉导航）展开，但**不按下**
+    /// （不 pointerDown/Up）。移动后等一小段让下拉渲染稳定，再返回（下一步即可点展开后的子项）。
+    pub fn hover(&self, x: i32, y: i32) -> Result<()> {
+        let dpr = self.device_pixel_ratio()?;
+        let (cx0, cy0) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
+        let (cx, cy) = self.center_into_viewport(cx0, cy0);
+        self.pointer_actions(serde_json::json!([
+            { "type": "pointerMove", "duration": 0, "x": cx, "y": cy }
+        ]))?;
+        // 等悬停下拉/菜单展开渲染稳定（CSS 动画 / JS）
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        Ok(())
+    }
+
     /// 当前窗口/标签页数量（失败按 0 计）
     fn handle_count(&self) -> usize {
         self.get("/window/handles")

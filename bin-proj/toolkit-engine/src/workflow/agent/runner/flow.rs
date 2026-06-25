@@ -96,6 +96,7 @@ fn preview_action(action: &AgentAction, elements: &[crate::UIElement]) -> Option
         AgentAction::Launch { target, .. } => format!("启动 {}", brief(target, 60)),
         AgentAction::Close { target } => format!("关闭 {}", brief(target, 60)),
         AgentAction::Click { element_id, .. } => format!("点击 {}", name(*element_id)),
+        AgentAction::Hover { element_id, .. } => format!("悬停 {}", name(*element_id)),
         AgentAction::Input { element_id, text, .. } => format!("输入 {} \"{}\"", name(*element_id), brief(text, 30)),
         AgentAction::LongPress { element_id, duration_ms, .. } => format!("按压 {} {}ms", name(*element_id), duration_ms),
         AgentAction::Clear { element_id, .. } => format!("清空 {}", name(*element_id)),
