@@ -215,6 +215,11 @@ pub async fn apply(
             let mut stuck = 0u32;
             let mut origin = from;
             for _ in 0..SAFETY_MAX {
+                // 中断（Ctrl+C）/软停（Esc）：每次滑动前查，立刻停止滚动并按「未找到」走下面返回路径
+                // （matched 仍为 None → 返回「滚动后仍未出现」错误，让上层进入暂停/收尾）。
+                if crate::utils::interrupt::aborted() || crate::utils::interrupt::pause_requested() {
+                    break;
+                }
                 if Refresh::new(device.to_string())?.run(RefreshOptions::default()).await.is_ok() {
                     if let Ok(mut els) = fetcher.fetch_elements_from_file(&workarea.ui_tree_path()) {
                         if let Some(src) = &ocr_src {

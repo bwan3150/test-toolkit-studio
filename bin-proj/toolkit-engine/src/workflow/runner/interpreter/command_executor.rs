@@ -182,7 +182,8 @@ impl<'a> CommandExecutor<'a> {
         let mut prev_texts: Option<Vec<String>> = None;
         let mut stuck = 0u32; // 连续"页面没变"的次数
         for i in 0..SAFETY_MAX {
-            if crate::utils::interrupt::aborted() {
+            // 中断（Ctrl+C）/软停（Esc）：每滚一次前都查，立即停下滚动查找（不必等滚到底/到顶）。
+            if crate::utils::interrupt::aborted() || crate::utils::interrupt::pause_requested() {
                 return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
             }
             self.controller.capture_ui_state(self.workarea).await?;
