@@ -185,6 +185,9 @@ pub enum UiEvent {
     /// 指导已采纳回显（收到 Guidance 后引擎确认）
     GuidanceAccepted { text: String },
 
+    /// setup 完成后的会话参数（设备/平台/用例），前端显示在顶部
+    SessionInfo { device: String, platform: String, case: String },
+
     /// 脚本生成完毕
     ScriptGenerated { name: String, steps: usize, success: bool },
 

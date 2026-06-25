@@ -236,6 +236,8 @@ struct TuiModel {
     should_quit: bool,
     /// 最近一条「步骤进行中」行的下标；done 时原地替换成 ✓/✗（步骤保持单行，不另起一行）
     last_step_idx: Option<usize>,
+    /// 输入框光标位置（字符索引，0..=input.chars().count()）
+    cursor: usize,
 }
 
 impl TuiModel {
@@ -254,6 +256,7 @@ impl TuiModel {
             finished: false,
             should_quit: false,
             last_step_idx: None,
+            cursor: 0,
         }
     }
 
@@ -307,6 +310,12 @@ impl TuiModel {
         self.push(line);
     }
 
+    /// 清空输入框（光标归零）
+    fn clear_input(&mut self) {
+        self.input.clear();
+        self.cursor = 0;
+    }
+
     /// 把一个 UiEvent 转成 1~N 行彩色 Line 累积进 lines
     fn apply(&mut self, ev: UiEvent) {
         // Step（进行中/完成/失败）紧贴在触发它的「● AI 回复」下面、缩进显示，不另加块间空行；
@@ -329,6 +338,18 @@ impl TuiModel {
                         .add_modifier(Modifier::BOLD)
                         .add_modifier(Modifier::UNDERLINED),
                 )));
+            }
+            UiEvent::SessionInfo { device, platform, case } => {
+                // setup 选好的参数，显示在最上面（探索开始前的第一条）
+                self.push(Line::from(vec![
+                    Span::styled("● ", Style::default().fg(Color::Green)),
+                    Span::styled("准备就绪", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        format!("  设备 {} · 平台 {}", device, platform),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ]));
+                self.push_sub(format!("用例：{}", brief(&case, 80)));
             }
             UiEvent::Page {
                 round,
@@ -437,9 +458,7 @@ impl TuiModel {
             }
             UiEvent::AwaitingInput { question, options, .. } => {
                 if !options.is_empty() {
-                    // 候选项 → 进 choosing 模式（方向键列表），不进文本输入。
-                    // 提示回显进消息流，列表本身在输入区渲染。
-                    self.push_colored(format!("? {}", question), Color::Cyan);
+                    // 候选项 → 进 choosing 模式（方向键列表，在输入区渲染）；不灌消息流
                     self.choosing = Some(ChoiceState {
                         prompt: question,
                         options,
@@ -448,15 +467,9 @@ impl TuiModel {
                     self.follow = true;
                     self.scroll = 0;
                 } else {
-                    // 纯文本输入：question 可能多行——逐行渲染，避免挤成一行
-                    let mut iter = question.lines();
-                    if let Some(first) = iter.next() {
-                        self.push_colored(format!("AI 提问：{}", first), Color::Cyan);
-                    }
-                    for line in iter {
-                        self.push_colored(format!("  {}", line), Color::Cyan);
-                    }
+                    // 纯文本输入：问题直接显示在输入框标题处（不再灌进消息流），更像 opencode
                     self.awaiting = Some(question);
+                    self.cursor = 0;
                     self.follow = true;
                     self.scroll = 0;
                 }
@@ -626,16 +639,41 @@ impl TuiModel {
         }
 
         match k.code {
-            KeyCode::Up | KeyCode::Char('k') => {
+            // ↑↓ / PageUp·PageDown 滚动消息区（不再用 j/k，避免吃掉字母输入）
+            KeyCode::Up => {
                 self.scroll = self.scroll.saturating_add(1);
                 self.follow = false;
             }
-            KeyCode::Down | KeyCode::Char('j') => {
+            KeyCode::Down => {
                 self.scroll = self.scroll.saturating_sub(1);
+                if self.scroll == 0 {
+                    self.follow = true;
+                }
+            }
+            KeyCode::PageUp => {
+                self.scroll = self.scroll.saturating_add(10);
+                self.follow = false;
+            }
+            KeyCode::PageDown => {
+                self.scroll = self.scroll.saturating_sub(10);
+                if self.scroll == 0 {
+                    self.follow = true;
+                }
+            }
+            // ←→ Home End 移动输入光标
+            KeyCode::Left => {
+                self.cursor = self.cursor.saturating_sub(1);
+            }
+            KeyCode::Right => {
+                if self.cursor < self.input.chars().count() {
+                    self.cursor += 1;
+                }
+            }
+            KeyCode::Home => {
+                self.cursor = 0;
             }
             KeyCode::End => {
-                self.follow = true;
-                self.scroll = 0;
+                self.cursor = self.input.chars().count();
             }
             KeyCode::Enter => {
                 let cmd = self.input.trim();
@@ -645,7 +683,7 @@ impl TuiModel {
                         let _ = tx.send(UiCommand::Abort);
                     }
                     self.should_quit = true;
-                    self.input.clear();
+                    self.clear_input();
                 } else if !self.input.is_empty() {
                     let text = self.input.clone();
                     if self.awaiting.is_some() {
@@ -655,14 +693,31 @@ impl TuiModel {
                         // 运行中（非等输入）打字 + Enter = 中途指导
                         let _ = tx.send(UiCommand::Guidance { text });
                     }
-                    self.input.clear();
+                    self.clear_input();
                 }
             }
+            // 在光标处删除/插入（支持中文按字符）
             KeyCode::Backspace => {
-                self.input.pop();
+                if self.cursor > 0 {
+                    let mut chars: Vec<char> = self.input.chars().collect();
+                    chars.remove(self.cursor - 1);
+                    self.input = chars.into_iter().collect();
+                    self.cursor -= 1;
+                }
+            }
+            KeyCode::Delete => {
+                let mut chars: Vec<char> = self.input.chars().collect();
+                if self.cursor < chars.len() {
+                    chars.remove(self.cursor);
+                    self.input = chars.into_iter().collect();
+                }
             }
             KeyCode::Char(c) if !k.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.input.push(c);
+                let mut chars: Vec<char> = self.input.chars().collect();
+                let at = self.cursor.min(chars.len());
+                chars.insert(at, c);
+                self.input = chars.into_iter().collect();
+                self.cursor = at + 1;
             }
             _ => {}
         }
@@ -710,14 +765,17 @@ fn view(frame: &mut Frame, model: &TuiModel) {
     .split(frame.area());
 
     // ---- 顶栏：阶段 · 轮次 · token · 用时（反色粗体）----
-    let phase_label = model
-        .phase
-        .map(|(p, n)| match n {
-            Some(k) => format!("{} #{}", p.label(), k),
-            None => p.label().to_string(),
-        })
-        .unwrap_or_else(|| "准备中".to_string());
-    let top = format!(" {} · 第{}轮 ", phase_label, model.round);
+    // 准备阶段没有「轮」的概念，只显示「准备中」；运行后才显示阶段 + 轮次
+    let top = match model.phase {
+        Some((p, n)) => {
+            let label = match n {
+                Some(k) => format!("{} #{}", p.label(), k),
+                None => p.label().to_string(),
+            };
+            format!(" {} · 第{}轮 ", label, model.round)
+        }
+        None => " 准备中 ".to_string(),
+    };
     frame.render_widget(
         Paragraph::new(Line::from(top)).style(
             Style::default()
@@ -817,19 +875,19 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
 
 /// 普通/awaiting 文本输入框 + 可见光标。
 fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel) {
-    let (title, border_style) = if let Some(q) = model.awaiting.as_ref() {
-        // setup 用例输入更像「发消息」；其它 ask_user 用「回答」措辞。
-        let title = if is_case_prompt(q) {
-            "描述你要测什么（Enter 发送）"
+    let (title, border_style): (String, Style) = if let Some(q) = model.awaiting.as_ref() {
+        // AI 提问直接显示在输入框标题处（opencode 风格）；setup 用例提示走「描述你要测什么」
+        let label = if is_case_prompt(q) {
+            "描述你要测什么（Enter 发送）".to_string()
         } else {
-            "AI 在等你回答（Enter 提交）"
+            format!("? {}", brief(q, 70))
         };
-        (
-            title,
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-        )
+        (label, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
     } else {
-        ("指导（Enter 发送）", Style::default().fg(Color::DarkGray))
+        (
+            "指导（Enter 发送 · /exit 退出）".to_string(),
+            Style::default().fg(Color::DarkGray),
+        )
     };
     // 累计 token 放输入框右下角（边框底部右对齐），不再占顶栏
     let toks = Line::from(format!("↑{} ↓{}", model.tok_up, model.tok_down))
@@ -838,15 +896,16 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
     frame.render_widget(
         Paragraph::new(format!("> {}", model.input)).block(
             Block::bordered()
-                .title(title)
+                .title(Line::from(title))
                 .title_bottom(toks)
                 .border_style(border_style),
         ),
         area,
     );
-    // 光标定位到输入文本末尾：边框内 x = 1（边框）+ "> "(2) + 输入显示宽度；y = 边框内行。
-    let input_w = Span::raw(model.input.as_str()).width() as u16;
-    let cursor_x = area.x + 1 + 2 + input_w;
+    // 光标定位到 model.cursor 处：边框内 x = 1（边框）+ "> "(2) + 光标前子串显示宽度。
+    let prefix: String = model.input.chars().take(model.cursor).collect();
+    let pre_w = Span::raw(prefix).width() as u16;
+    let cursor_x = area.x + 1 + 2 + pre_w;
     let cursor_y = area.y + 1;
     // 夹在区域内，避免越界
     let cx = cursor_x.min(area.x + area.width.saturating_sub(1));

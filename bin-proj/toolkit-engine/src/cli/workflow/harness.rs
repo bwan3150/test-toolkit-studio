@@ -137,6 +137,16 @@ pub async fn handle(
             )
         };
 
+    // setup 选好的参数显示在 TUI 顶部（探索开始前的第一条）
+    frontend.emit(tke::UiEvent::SessionInfo {
+        device: dev_override
+            .clone()
+            .or_else(|| params.device())
+            .unwrap_or_else(|| "(web)".to_string()),
+        platform: platform.map(|p| p.name().to_string()).unwrap_or_else(|| "(推断)".to_string()),
+        case: case_text.lines().next().unwrap_or("").trim().to_string(),
+    });
+
     // 合并 AI 配置：CLI --ai-* 覆盖 config [ai] 段（查 params.ai）
     let merged_ai = AiConfig {
         provider: args.ai_provider.or(params.ai.provider.clone()),

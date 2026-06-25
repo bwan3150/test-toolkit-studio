@@ -177,6 +177,12 @@ impl Frontend for PlainFrontend {
             }
             // 行式模式下：ask_user 由 await_answer 直接走 read_user_line（自带提问输出），
             // 这里不再重复打印；Done 的产物路径由 harness::handle 在收尾时统一打印。
+            UiEvent::SessionInfo { device, platform, case } => {
+                eprintln!(
+                    "{}",
+                    paint(tty, "1", &format!("准备就绪 · 设备 {} · 平台 {} · 用例 {}", device, platform, brief(&case, 80)))
+                );
+            }
             UiEvent::AwaitingInput { .. } | UiEvent::Done { .. } => {}
         }
     }
