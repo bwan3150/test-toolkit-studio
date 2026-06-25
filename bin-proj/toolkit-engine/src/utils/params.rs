@@ -167,6 +167,15 @@ impl Params {
         p.element = Some(path);
         p
     }
+
+    /// 返回一个把设备覆盖为 `device` 的 Params 副本。
+    /// harness 交互向导选的设备（如 web）没经 -d，必须传播给诊断/验证回放（ScriptRunner），
+    /// 否则回放取不到设备、会退回默认 adb（web 用例就会报「adb: no devices」）。
+    pub fn with_device(&self, device: Option<String>) -> Self {
+        let mut p = self.clone();
+        p.device = device;
+        p
+    }
 }
 
 /// 供库层在缺省时复用的默认查找（与 Params 同一份常量），用于尚未持有 Params 的入口

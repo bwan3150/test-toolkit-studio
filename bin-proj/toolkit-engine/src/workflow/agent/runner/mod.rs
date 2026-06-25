@@ -227,7 +227,12 @@ impl AgentRunner {
         // result_script_lines：最终落盘的完整脚本（验证后可能更短）；用于 run_end 完整记录。
         let mut result_script_lines = final_lines.clone();
         // 诊断/验证回放也必须读**临时库**（探索把元素落在这里）——否则 ScriptRunner 用正式库会全"元素未定义"。
-        let tmp_params = std::sync::Arc::new(opts.params.with_element_lib(element_path.clone()));
+        // 诊断/验证回放也要用探索同一个设备（含向导选的 web）——否则回放退回默认 adb。
+        let tmp_params = std::sync::Arc::new(
+            opts.params
+                .with_element_lib(element_path.clone())
+                .with_device(Some(device.clone())),
+        );
         let verified = if opts.verify && outcome.success && !outcome.aborted {
             // 回放产物（标注截图/页面结构）落在 run_dir/verify 下，便于复盘哪步怎么错
             let verify_log = run_dir.join("verify");
