@@ -12,7 +12,6 @@
 // 本文件保留「回放 / 目标校验」基础设施(goal_probe / do_replay / reset_state / strip_trailing_close /
 // page_contains / launch_spec)，供 doctor.rs 复用；真正的「编辑→跑→看→改」主循环在 doctor.rs。
 
-use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -25,7 +24,8 @@ use super::super::transcript::Transcript;
 use super::super::prompt::{render, PromptSet};
 use super::doctor;
 use super::reflect;
-use super::flow::{brief, fmt_duration, friendly, paint, parse_desc_json, DriveCtx};
+use super::super::ui::{Frontend, Level, Phase, StepState, UiEvent};
+use super::flow::{brief, friendly, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 
 // 稳定性通过次数 / 修复(活体重探)上限均来自 config [harness]（params.harness），不再写死。
@@ -46,14 +46,13 @@ pub async fn verify_and_repair(
     verify_log: Option<&Path>,
     lines: Vec<String>,
 ) -> (Vec<String>, VerifyReport) {
-    let tty = std::io::stderr().is_terminal();
     let mut report = VerifyReport { ran: true, ..Default::default() };
     // 次数上限来自 config [harness]（缺省 stability=2 / repairs=6）
     let need_pass = params.harness.stability;
     let max_repairs = params.harness.repairs;
 
     if lines.is_empty() {
-        eprintln!("{}", paint(tty, "33", "自检跳过：没有生成可回放的步骤"));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "自检跳过：没有生成可回放的步骤".into() });
         return (lines, report);
     }
     let _ = verify_log; // 诊断回放会反复进行，产物落点由 doctor 内部管理
@@ -69,8 +68,8 @@ pub async fn verify_and_repair(
     // 每轮：医生先把脚本修到「能跑通 + 到达用户目标」(硬)；正确后反思官删绕路/冗余(软)；
     // 反思官删完可能跑挂/跑偏 → 下一轮医生再复检修。直到：反思官无可删 或 回到见过的达标版本 或 到上限。
     // 始终以"最后一个医生确认正确的版本"为准，绝不输出未经医生复检的优化结果。
-    eprintln!();
-    eprintln!("{}", paint(tty, "1", "╭─ 诊断优化（医生保正确 ⇄ 反思官优路径，交替收敛）─"));
+    ctx.ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
+    ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: "诊断优化（医生保正确 ⇄ 反思官优路径，交替收敛）".into() });
     let mut lines = lines;
     let mut best_correct: Option<Vec<String>> = None;
     let mut seen: std::collections::HashSet<u64> = std::collections::HashSet::new();
@@ -105,38 +104,34 @@ pub async fn verify_and_repair(
     report.final_steps = lines.len();
     if !report.reached {
         tx.log("verify_end", serde_json::json!({ "passed": false, "reached": false, "repairs": report.repairs }));
-        eprintln!("  {}   {}", paint(tty, "2", "诊断"), paint(tty, "31", "✗ 修复失败（脚本仍跑不到目标）"));
-        eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: "诊断：✗ 修复失败（脚本仍跑不到目标）".into() });
         return (Vec::new(), report);
     }
-    let opt = if report.hit_iter_limit {
-        paint(tty, "33", &format!("■ 优化达上限（仍正确、未必最短）· {} 步", lines.len()))
+    if report.hit_iter_limit {
+        ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("诊断优化：■ 优化达上限（仍正确、未必最短）· {} 步", lines.len()) });
     } else {
-        paint(tty, "32", &format!("✓ 正确且已优化 · {} 步", lines.len()))
-    };
-    eprintln!("  {}   {}", paint(tty, "2", "诊断优化"), opt);
-    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("诊断优化：✓ 正确且已优化 · {} 步", lines.len()) });
+    }
 
     // ============ 稳定性测试 ============
     // 连续 need_pass 次重启净化后回放都到达目标才算稳定；中途不稳就再请医生修一轮。
-    eprintln!();
-    eprintln!("{}", paint(tty, "1", &format!("╭─ 稳定性测试（连续 {} 次重启净化后回放都须到达目标）─", need_pass)));
+    ctx.ui.emit(UiEvent::Phase { phase: Phase::Verify, n: None });
+    ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: format!("稳定性测试（连续 {} 次重启净化后回放都须到达目标）", need_pass) });
     let mut streak = 0usize;
     let mut replay_no = 0usize;
     loop {
         if super::interrupt::aborted() {
-            eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止稳定性测试"));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "已中断（Ctrl+C），停止稳定性测试".into() });
             break;
         }
         replay_no += 1;
-        eprintln!();
-        eprintln!("  {}", paint(tty, "1;36", &format!("▶ 第 {} 次稳定回放（重启净化中…）", replay_no)));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 第 {} 次稳定回放（重启净化中…）", replay_no) });
         // 用 diagnose 跑（与诊断同格式、同样把逐步成败/截图/页面结构记进 conversation.json）
         let reached = doctor::diagnose(tx, ctx, params, script_path, case, &lines, &marker, "verify_stability", replay_no, true).await.reached;
         if reached {
             streak += 1;
             report.stability_passes = streak;
-            eprintln!("  {} 到达目标（连续 {}/{}）", paint(tty, "32", "✓"), streak, need_pass);
+            ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 到达目标（连续 {}/{}）", streak, need_pass) });
             if streak >= need_pass {
                 report.passed = true;
                 break;
@@ -146,7 +141,7 @@ pub async fn verify_and_repair(
         streak = 0;
         report.stability_passes = 0;
         if report.repairs >= max_repairs {
-            eprintln!("  {}", paint(tty, "33", &format!("已达修复上限 {} 次，停止", max_repairs)));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("已达修复上限 {} 次，停止", max_repairs) });
             break;
         }
         // 不稳 → 再请医生修一轮（克隆传入：医生放弃时仍保留当前最好版本供落盘）
@@ -171,13 +166,11 @@ pub async fn verify_and_repair(
         }),
     );
 
-    let summary = if report.passed {
-        paint(tty, "32", &format!("✓ 验证通过（连续 {} 次到达目标）", report.stability_passes))
+    if report.passed {
+        ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("验证：✓ 验证通过（连续 {} 次到达目标）", report.stability_passes) });
     } else {
-        paint(tty, "33", &format!("✗ 验证未通过（连续到达 {}/{} 次，已保留当前最好版本）", report.stability_passes, need_pass))
-    };
-    eprintln!("  {}   {}", paint(tty, "2", "验证"), summary);
-    eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("验证：✗ 验证未通过（连续到达 {}/{} 次，已保留当前最好版本）", report.stability_passes, need_pass) });
+    }
 
     (lines, report)
 }
@@ -202,30 +195,35 @@ async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Tr
     Some(obj["goal_marker"].as_str().unwrap_or("").trim().to_string())
 }
 
-/// 回放一遍：verbose=true 逐步流式打印（像 tke run）。
-pub(super) async fn do_replay(params: &Arc<Params>, script_path: &Path, verbose: bool) -> Result<ExecutionResult> {
-    let tty = std::io::stderr().is_terminal();
-    let mut total = 0usize;
+/// 回放一遍：verbose=true 时逐步经 ui.emit(Step) 流式上报（不再裸 eprintln 撕裂 TUI）。
+pub(super) async fn do_replay(params: &Arc<Params>, script_path: &Path, verbose: bool, ui: &dyn Frontend) -> Result<ExecutionResult> {
+    let mut last_preview = String::new();
     let mut sink = |e: &RunEvent| {
         if !verbose {
             return;
         }
         match e {
-            RunEvent::RunStart { total_steps, .. } => total = *total_steps,
             // 先显示「即将执行的指令」再操作设备，执行后接上 ✓/✗ + 耗时（与 tke run 对齐）
             RunEvent::StepStart { index, command, .. } => {
-                eprint!("    {} {} {} ", paint(tty, "2", &format!("[{:>2}/{}]", index + 1, total)), friendly(command), paint(tty, "2", "..."));
-                let _ = std::io::Write::flush(&mut std::io::stderr());
+                last_preview = friendly(command);
+                ui.emit(UiEvent::Step {
+                    step: index + 1,
+                    state: StepState::Running,
+                    preview: last_preview.clone(),
+                    line: None,
+                    duration_ms: None,
+                    error: None,
+                });
             }
-            RunEvent::StepEnd { success, error, duration_ms, .. } => {
-                if *success {
-                    eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &fmt_duration(*duration_ms)));
-                } else {
-                    eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &fmt_duration(*duration_ms)));
-                    if let Some(err) = error {
-                        eprintln!("         {}", paint(tty, "31", &brief(err, 120)));
-                    }
-                }
+            RunEvent::StepEnd { index, success, error, duration_ms, .. } => {
+                ui.emit(UiEvent::Step {
+                    step: index + 1,
+                    state: if *success { StepState::Ok } else { StepState::Fail },
+                    preview: last_preview.clone(),
+                    line: None,
+                    duration_ms: Some(*duration_ms),
+                    error: if *success { None } else { error.as_ref().map(|e| brief(e, 120)) },
+                });
             }
             _ => {}
         }

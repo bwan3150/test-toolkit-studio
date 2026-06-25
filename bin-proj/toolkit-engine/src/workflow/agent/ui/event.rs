@@ -178,6 +178,9 @@ pub enum UiEvent {
     /// 退出中（为新建元素生成 desc）
     ExitingNote { message: String },
 
+    /// 通用信息行（诊断/验证/优化等阶段的杂项输出，按 level 上色）
+    Notice { level: Level, text: String },
+
     /// 引擎等用户输入（ask_user / setup 触发；前端必须回 UiCommand::Answer）。
     /// options 非空=候选项（设备选择等），前端可渲染成方向键可选列表；空=纯文本输入。
     AwaitingInput { round: usize, question: String, options: Vec<String> },

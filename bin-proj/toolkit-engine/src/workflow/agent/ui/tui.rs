@@ -465,6 +465,9 @@ impl TuiModel {
             UiEvent::ExitingNote { message } => {
                 self.push_colored(message, Color::Yellow);
             }
+            UiEvent::Notice { level, text } => {
+                self.push_colored(text, level_color(level));
+            }
             UiEvent::AwaitingInput { question, options, .. } => {
                 if !options.is_empty() {
                     // 候选项 → 进 choosing 模式（方向键列表，在输入区渲染）；不灌消息流
@@ -807,24 +810,30 @@ fn view(frame: &mut Frame, model: &TuiModel) {
         3
     };
     let chunks = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(0),
-        Constraint::Length(input_h),
-        Constraint::Length(1),
+        Constraint::Length(1),       // 顶栏
+        Constraint::Min(0),          // 消息区
+        Constraint::Length(1),       // 空行，隔开消息区与输入框
+        Constraint::Length(input_h), // 输入框
+        Constraint::Length(1),       // 底栏
     ])
     .split(frame.area());
 
-    // ---- 顶栏：阶段 · 轮次 · token · 用时（反色粗体）----
-    // 准备阶段没有「轮」的概念，只显示「准备中」；运行后才显示阶段 + 轮次
-    let top = match model.phase {
-        Some((p, n)) => {
-            let label = match n {
-                Some(k) => format!("{} #{}", p.label(), k),
-                None => p.label().to_string(),
-            };
-            format!(" {} · 第{}轮 ", label, model.round)
+    // ---- 顶栏：随当前进程状态变化（反色粗体）----
+    // 准备中 / 等待回复 / 已暂停 / 探索中 / 诊断修复中 / 稳定性验证中 …
+    let top = if let Some(q) = model.awaiting.as_ref() {
+        if q.starts_with("已暂停") {
+            " ● 已暂停 · 等待指令 ".to_string()
+        } else {
+            " ● 等待回复 ".to_string()
         }
-        None => " 准备中 ".to_string(),
+    } else if let Some((p, n)) = model.phase {
+        let label = match n {
+            Some(k) => format!("{}#{}", p.label(), k),
+            None => p.label().to_string(),
+        };
+        format!(" ● {}中 · 第{}轮 ", label, model.round)
+    } else {
+        " ● 准备中 ".to_string()
     };
     frame.render_widget(
         Paragraph::new(Line::from(top)).style(
@@ -866,7 +875,7 @@ fn view(frame: &mut Frame, model: &TuiModel) {
     );
 
     // ---- 输入区：choosing 列表 / awaiting 文本输入 / 普通指导 ----
-    let input_area = chunks[2];
+    let input_area = chunks[3];
     if let Some(ch) = model.choosing.as_ref() {
         render_choice(frame, input_area, ch);
     } else {
@@ -887,7 +896,14 @@ fn view(frame: &mut Frame, model: &TuiModel) {
     };
     frame.render_widget(
         Paragraph::new(hint).style(Style::default().fg(Color::DarkGray)),
-        chunks[3],
+        chunks[4],
+    );
+    // 总 token 显示在底栏右侧（与提示同一行，不再内嵌输入框）
+    frame.render_widget(
+        Paragraph::new(format!("↑{} ↓{} ", model.tok_up, model.tok_down))
+            .right_aligned()
+            .style(Style::default().fg(Color::DarkGray)),
+        chunks[4],
     );
 }
 
@@ -930,21 +946,15 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
     let (title, border_style): (String, Style) = if let Some(q) = model.awaiting.as_ref() {
         // AI 提问直接显示在输入框标题处（opencode 风格）；setup 用例提示走「描述你要测什么」
         let label = if is_case_prompt(q) {
-            "描述你要测什么（Enter 发送）".to_string()
+            "描述你要测什么".to_string()
         } else {
             format!("? {}", brief(q, 70))
         };
         (label, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
     } else {
-        (
-            "指导（Enter 发送 · /exit 退出）".to_string(),
-            Style::default().fg(Color::DarkGray),
-        )
+        // 普通状态：输入框左上角不显示提示文字（提示统一在底栏）
+        (String::new(), Style::default().fg(Color::DarkGray))
     };
-    // 累计 token 放输入框右下角（边框底部右对齐），不再占顶栏
-    let toks = Line::from(format!("↑{} ↓{}", model.tok_up, model.tok_down))
-        .right_aligned()
-        .style(Style::default().fg(Color::DarkGray));
     // slash 菜单：input 以 / 开头时，输入行上方列出匹配指令（首个高亮，Tab 补全）
     let mut body: Vec<Line<'static>> = Vec::new();
     if model.input.starts_with('/') {
@@ -965,7 +975,6 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
         Paragraph::new(body).block(
             Block::bordered()
                 .title(Line::from(title))
-                .title_bottom(toks)
                 .border_style(border_style),
         ),
         area,

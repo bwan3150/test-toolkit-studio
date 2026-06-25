@@ -126,6 +126,9 @@ impl Frontend for PlainFrontend {
             UiEvent::ExitingNote { message } => {
                 eprintln!("  {}", paint(tty, "33", &message));
             }
+            UiEvent::Notice { level, text } => {
+                eprintln!("  {}", paint(tty, lc(level), &text));
+            }
             UiEvent::GuidanceAccepted { text } => {
                 eprintln!("  {}", paint(tty, "36", &format!("↳ 已采纳指导：{}", brief(&text, 200))));
             }

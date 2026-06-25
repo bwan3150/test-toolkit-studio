@@ -2,10 +2,7 @@
 // 产物经 RunArtifacts 统一保存：每个执行步存 screenshots/step_NNN + page/step_NNN，
 // 与 tke run 同构；conversation.jsonl（AI 原始对话）由 transcript 写在同一运行目录。
 
-use std::io::{IsTerminal, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use crate::engines::ocr::OcrSource;
 use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
@@ -198,7 +195,7 @@ pub async fn drive(
     sess: &mut LlmSession,
     txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
-    spinner: bool,
+    _spinner: bool,
     // 重探批次前缀（如「重探1·」）。Page 事件不再携带它（前缀语义改由 Phase::Reexplore 表达），
     // 故本函数内部已不消费；保留参数以兼容调用方，待后续阶段如需可并入 Page。
     _round_prefix: &str,
@@ -207,30 +204,9 @@ pub async fn drive(
     // 都归属 explorer。Drop 守卫保证任何退出路径都弹栈（被 doctor 调用时弹回 doctor 作用域）。
     let mut _ascope = txp.scoped("explorer");
     let tx = &mut *_ascope;
-    let tty = std::io::stderr().is_terminal();
 
     // 用户中断（Ctrl+C）：查进程级统一中断标志（由 interrupt::install 在运行开始时安装监听），
     // 监听到则在下一个决策点优雅停止、照常出总结。
-
-    // 启动加载动画：采集首屏前有数秒空窗，转个 spinner 让用户知道在跑（仅 TTY、且初次探索）
-    let spin_stop = Arc::new(AtomicBool::new(false));
-    let mut spin_handle = if spinner && tty {
-        let stop = spin_stop.clone();
-        Some(tokio::spawn(async move {
-            let frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-            let mut i = 0usize;
-            while !stop.load(Ordering::Relaxed) {
-                eprint!("\r{} 正在启动…", frames[i % frames.len()]);
-                let _ = std::io::stderr().flush();
-                i += 1;
-                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-            }
-            eprint!("\r\x1b[K"); // 清除 spinner 行
-            let _ = std::io::stderr().flush();
-        }))
-    } else {
-        None
-    };
 
     let mut aborted = false;
     let mut page_sigs: Vec<u64> = Vec::new(); // 各轮结构签名，检测原地打转
@@ -318,11 +294,6 @@ pub async fn drive(
                 )
             }
         };
-        // 首屏采集完毕，停掉加载动画
-        if let Some(h) = spin_handle.take() {
-            spin_stop.store(true, Ordering::Relaxed);
-            let _ = h.await;
-        }
 
         // 元素库对照：**只在内部用于落库时复用库名**（避免重复造名/库膨胀），**不再展示给 AI**。
         // —— AI 每轮看到的是干净的纯页面元素，选择完全基于当前页面真实情况，不受历史库诱导（之前
@@ -949,12 +920,6 @@ pub async fn drive(
                 }
             }
         }
-    }
-
-    // 收尾：确保加载动画已停（如中断发生在首屏采集之前）
-    if let Some(h) = spin_handle.take() {
-        spin_stop.store(true, Ordering::Relaxed);
-        let _ = h.await;
     }
 
     let (success, reason) = finish.unwrap_or((false, format!("达到最大轮数({})未结束", ctx.max_rounds)));

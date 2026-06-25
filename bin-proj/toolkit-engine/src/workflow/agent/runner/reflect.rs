@@ -4,7 +4,6 @@
 //     （大胆删、不逐条验证；删坏了由医生在下一轮复检兜底——医生⇄反思官交替收敛）。
 // 独立会话(无工具)，按作用域归属 "reflector"；token 单独计、并入总量。
 
-use std::io::IsTerminal;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -12,7 +11,8 @@ use crate::{AiConfig, Fetcher, LlmReply, LlmSession, LlmTool, Params, Platform};
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, fmt_tokens, friendly, is_assert_line, paint, parse_desc_json, DriveCtx, DriveOutcome};
+use super::super::ui::{Level, SubAgent, Tokens, UiEvent};
+use super::flow::{brief, friendly, is_assert_line, parse_desc_json, DriveCtx, DriveOutcome};
 use super::options::VerifyReport;
 
 /// 反思产物
@@ -163,7 +163,6 @@ pub(super) async fn optimize(
     lines: &[String],
     report: &mut VerifyReport,
 ) -> Option<Vec<String>> {
-    let tty = std::io::stderr().is_terminal();
     let mut scope = tx.scoped("reflector");
     let tx = &mut *scope;
 
@@ -223,7 +222,6 @@ pub(super) async fn optimize(
         let (pt, ct) = sess.last_usage();
         report.extra_prompt += pt;
         report.extra_completion += ct;
-        let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pt), fmt_tokens(ct)));
         let primary = calls[0].clone();
         for extra in &calls[1..] {
             sess.tool_result(extra.call_id.as_str(), "已忽略：每轮仅处理第一个工具调用");
@@ -234,7 +232,7 @@ pub(super) async fn optimize(
         let why = if !raw_reason.is_empty() { brief(raw_reason, 160) } else { text.as_deref().map(|s| brief(s, 160)).filter(|s| !s.is_empty()).unwrap_or_else(|| "（未说明理由）".to_string()) };
         match primary.name.as_str() {
             "done" => {
-                eprintln!("  {}  {}  {}", paint(tty, "1;36", "✓ 优化结束"), paint(tty, "2", &why), toks);
+                ctx.ui.emit(UiEvent::SubAgent { kind: SubAgent::Optimizer, level: Level::Ok, text: format!("✓ 优化结束：{}", why), tokens: Tokens::new(pt, ct) });
                 break;
             }
             "delete_step" => {
@@ -249,17 +247,17 @@ pub(super) async fn optimize(
                 }
                 // 断言步是「踩实校验」承重点，永不删（虽然它不改变页面、看着像空操作）
                 if is_assert_line(&lines[step - 1]) {
-                    eprintln!("  {}  {}", paint(tty, "33", &format!("↩ 第 {} 步是断言(踩实校验)，不删", step)), toks);
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("↩ 第 {} 步是断言(踩实校验)，不删", step) });
                     sess.tool_result(primary.call_id.as_str(), format!("第 {} 步是断言(踩实校验)——它是脚本自检的承重点，删了回放时「走错页」就不会在断言处暴露、问题定位会变难，不能删。", step));
                     continue;
                 }
                 if !noops.contains(&step) {
-                    eprintln!("  {}  {}", paint(tty, "33", &format!("↩ 第 {} 步改变了页面（承重步），不删", step)), toks);
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("↩ 第 {} 步改变了页面（承重步），不删", step) });
                     sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_loadbearing"), &[("step", &step.to_string())]));
                     continue;
                 }
                 removable.insert(step);
-                eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ 删第 {} 步", step)), paint(tty, "2", &format!("{}（{}）", why, friendly(&lines[step - 1]))), toks);
+                ctx.ui.emit(UiEvent::SubAgent { kind: SubAgent::Optimizer, level: Level::Info, text: format!("⟫ 删第 {} 步：{}（{}）", step, why, friendly(&lines[step - 1])), tokens: Tokens::new(pt, ct) });
                 sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_step_deleted"), &[("step", &step.to_string())]));
             }
             "merge_swipes" => {
@@ -282,7 +280,7 @@ pub(super) async fn optimize(
                 }
                 let dir_cn = match direction.as_str() { "down" => "下", "left" => "左", "right" => "右", _ => "上" };
                 let mline = format!("滚动查找 [\"{}\", {}]", target, dir_cn);
-                eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ 合并第 {}–{} 步 → {}", from, to, mline)), paint(tty, "2", &why), toks);
+                ctx.ui.emit(UiEvent::SubAgent { kind: SubAgent::Optimizer, level: Level::Info, text: format!("⟫ 合并第 {}–{} 步 → {}：{}", from, to, mline, why), tokens: Tokens::new(pt, ct) });
                 merges.push(Merge { from, to, line: mline });
                 spans.push((from, to));
                 sess.tool_result(primary.call_id.as_str(), render(&prompts.message("optimizer", "fb_merge_done"), &[("from", &from.to_string()), ("to", &to.to_string())]));
@@ -294,7 +292,7 @@ pub(super) async fn optimize(
     }
 
     if removable.is_empty() && merges.is_empty() {
-        eprintln!("  {}", paint(tty, "2", "脚本优化官：当前路径已无可删冗余/可合并的盲滑"));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Dim, text: "脚本优化官：当前路径已无可删冗余/可合并的盲滑".into() });
         return None;
     }
 
@@ -320,10 +318,10 @@ pub(super) async fn optimize(
     // 一次性验证：重建后还到不到目标？到不了就放弃本次优化（上层用医生确认的正确版本兜底）。
     let verify = super::doctor::diagnose(tx, ctx, params, script_path, case, &new, marker, "reflect_verify", 0, false).await;
     if !verify.reached {
-        eprintln!("  {}", paint(tty, "33", "↩ 优化后跑不到目标，放弃本次优化（保留医生的正确版本）"));
+        ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "↩ 优化后跑不到目标，放弃本次优化（保留医生的正确版本）".into() });
         return None;
     }
-    eprintln!("  {}  {} 步 → {} 步", paint(tty, "1;36", "◇ 优化完成"), lines.len(), new.len());
+    ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("◇ 优化完成  {} 步 → {} 步", lines.len(), new.len()) });
     Some(new)
 }
 

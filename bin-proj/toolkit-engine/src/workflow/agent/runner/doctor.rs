@@ -16,7 +16,6 @@
 // 与旧版的本质区别：旧版只会「从某点把尾巴整段重探」，删不掉中间冗余步、改不了单行坏参数、
 // 也看不到每步页面。医生能看每步去了哪、做最小必要的外科手术。
 
-use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -33,7 +32,8 @@ use super::super::execution::{auto_name, visual_auto_name};
 use super::super::perception::{capture, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::{brief, fmt_duration, fmt_tokens, friendly, is_launch_line, paint, parse_desc_json, DriveCtx};
+use super::super::ui::{Level, Phase, StepState, SubAgent, Tokens, UiEvent};
+use super::flow::{brief, friendly, is_launch_line, parse_desc_json, DriveCtx};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 
@@ -321,7 +321,6 @@ pub(super) async fn diagnose(
     iter: usize,
     verbose: bool,
 ) -> Diagnosis {
-    let tty = std::io::stderr().is_terminal();
     let check = strip_trailing_close(lines);
     if check.is_empty() {
         tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
@@ -333,27 +332,35 @@ pub(super) async fn diagnose(
     // 一次带产物的完整回放：每步落盘 screenshots/step_NNN + page/step_NNN
     let log_root = ctx.artifacts.run_dir.join("doctor");
     let _ = std::fs::create_dir_all(&log_root);
-    let mut total = 0usize;
+    // 回放逐步进度：经 emit 走前端（Step 事件），不再裸 eprintln 撕裂 TUI。
+    // StepStart 先发 Running（带预览），StepEnd 发 Ok/Fail（带耗时/错误）。
+    let mut last_preview = String::new();
     let mut sink = |e: &RunEvent| {
         if !verbose {
             return;
         }
         match e {
-            RunEvent::RunStart { total_steps, .. } => total = *total_steps,
             // 先显示「即将执行的指令」再操作设备，执行后接上 ✓/✗ + 耗时（与 tke run 对齐）
             RunEvent::StepStart { index, command, .. } => {
-                eprint!("    {} {} {} ", paint(tty, "2", &format!("[{:>2}/{}]", index + 1, total)), friendly(command), paint(tty, "2", "..."));
-                let _ = std::io::Write::flush(&mut std::io::stderr());
+                last_preview = friendly(command);
+                ctx.ui.emit(UiEvent::Step {
+                    step: index + 1,
+                    state: StepState::Running,
+                    preview: last_preview.clone(),
+                    line: None,
+                    duration_ms: None,
+                    error: None,
+                });
             }
-            RunEvent::StepEnd { success, error, duration_ms, .. } => {
-                if *success {
-                    eprintln!("{} {}", paint(tty, "32", "✓"), paint(tty, "2", &fmt_duration(*duration_ms)));
-                } else {
-                    eprintln!("{} {}", paint(tty, "31", "✗"), paint(tty, "2", &fmt_duration(*duration_ms)));
-                    if let Some(err) = error {
-                        eprintln!("         {}", paint(tty, "31", &brief(err, 120)));
-                    }
-                }
+            RunEvent::StepEnd { index, success, error, duration_ms, .. } => {
+                ctx.ui.emit(UiEvent::Step {
+                    step: index + 1,
+                    state: if *success { StepState::Ok } else { StepState::Fail },
+                    preview: last_preview.clone(),
+                    line: None,
+                    duration_ms: Some(*duration_ms),
+                    error: if *success { None } else { error.as_ref().map(|e| brief(e, 120)) },
+                });
             }
             _ => {}
         }
@@ -430,9 +437,9 @@ pub(super) async fn diagnose(
 
     if verbose {
         if reached {
-            eprintln!("    {}  {}", paint(tty, "32", "✓ 到达目标"), brief(marker, 40));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 到达目标  {}", brief(marker, 40)) });
         } else {
-            eprintln!("    {}  {}", paint(tty, "31", "✗ 未达目标"), brief(&note, 70));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: format!("✗ 未达目标  {}", brief(&note, 70)) });
         }
     }
 
@@ -615,7 +622,7 @@ async fn reposition(ctx: &DriveCtx<'_>, params: &Arc<Params>, script_path: &Path
         let _ = write_script(script_path, case, prefix);
         // verbose=true：reexplore 定位时把「回放前缀」逐步打印出来，让人看清浏览器在重走哪几步、
         // 停到哪个页面，而不是浏览器默默动、CLI 一片空白后突然蹦出结果。
-        let _ = do_replay(params, script_path, true).await;
+        let _ = do_replay(params, script_path, true, ctx.ui).await;
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }
@@ -671,7 +678,6 @@ pub(super) async fn doctor_repair(
     // 进入「脚本医生 agent」作用域：本函数产出的事件（会话/请求/编辑/诊断/重选元素）都归属 doctor。
     let mut _dscope = txp.scoped("doctor");
     let tx = &mut *_dscope;
-    let tty = std::io::stderr().is_terminal();
 
     // 独立医生会话(独立工具集)。系统提示词与工具描述均走 PromptSet（内置 md，可外部覆盖）。
     // 其 token 单独累计、最后并入总量(报告 extra_*)。
@@ -681,7 +687,7 @@ pub(super) async fn doctor_repair(
     let mut editor = match LlmSession::new(ai, system.clone(), tools.clone()) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("  {}", paint(tty, "31", &format!("脚本医生会话创建失败：{}", e)));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: format!("脚本医生会话创建失败：{}", e) });
             return None;
         }
     };
@@ -700,11 +706,11 @@ pub(super) async fn doctor_repair(
 
     for iter in 1..=params.harness.doctor_iters {
         if super::interrupt::aborted() {
-            eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止医生修复"));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "已中断（Ctrl+C），停止医生修复".into() });
             return None;
         }
-        eprintln!();
-        eprintln!("  {}", paint(tty, "1;36", &format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter)));
+        ctx.ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
+        ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter) });
         let diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
 
         // 医生只管**正确性**：一旦能跑通且到达目标，立即把正确脚本交回上层（路径优化是反思官的事）
@@ -717,7 +723,6 @@ pub(super) async fn doctor_repair(
         tx.log("doctor_request", serde_json::json!({ "iter": iter, "reached": false, "prompt": prompt.clone() }));
         // user_trace：自动省略上一轮 trace 的页面详情，只保留最新一份完整 trace（防上下文暴涨）
         editor.user_trace(prompt);
-        eprintln!(); // 诊断输出与医生编辑之间空一行，分隔更清楚
 
         // 内层：收医生的编辑动作，直到它 run / finish / 触发重新诊断
         let lines_before = lines.clone();
@@ -726,18 +731,18 @@ pub(super) async fn doctor_repair(
         let mut go_finish = false;
         loop {
             if super::interrupt::aborted() {
-                eprintln!("  {}", paint(tty, "33", "已中断（Ctrl+C），停止医生修复"));
+                ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "已中断（Ctrl+C），停止医生修复".into() });
                 return None;
             }
             if edit_calls >= MAX_EDITS_PER_ITER {
-                eprintln!("  {}", paint(tty, "33", "医生单轮编辑过多，强制重新诊断"));
+                ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "医生单轮编辑过多，强制重新诊断".into() });
                 break;
             }
             edit_calls += 1;
             let reply = match editor.next().await {
                 Ok(r) => r,
                 Err(e) => {
-                    eprintln!("  {}", paint(tty, "31", &format!("医生决策出错：{}", e)));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: format!("医生决策出错：{}", e) });
                     return None;
                 }
             };
@@ -745,12 +750,16 @@ pub(super) async fn doctor_repair(
             // 医生会话独立计 token，累进报告的 extra（最终并入总量统计）
             report.extra_prompt += pt;
             report.extra_completion += ct;
-            let toks = paint(tty, "2", &format!("↑{} ↓{}", fmt_tokens(pt), fmt_tokens(ct)));
 
             let (text, calls) = match reply {
                 LlmReply::Text(t) => {
                     let b = brief(&t, 160);
-                    eprintln!("  {}  {}", if b.is_empty() { "（未调用工具）".into() } else { b }, toks);
+                    ctx.ui.emit(UiEvent::SubAgent {
+                        kind: SubAgent::Doctor,
+                        level: Level::Dim,
+                        text: if b.is_empty() { "（未调用工具）".into() } else { b },
+                        tokens: Tokens::new(pt, ct),
+                    });
                     let m = prompts.message("doctor", "nudge_use_tool");
                     tx.log("llm_message", serde_json::json!({ "iter": iter, "content": m.clone() }));
                     editor.user(m);
@@ -781,7 +790,12 @@ pub(super) async fn doctor_repair(
                 .map(|s| brief(s, 180))
                 .or_else(|| text.as_deref().map(|s| brief(s, 180)).filter(|s| !s.is_empty()))
                 .unwrap_or_else(|| "（未说明理由）".to_string());
-            eprintln!("  {}  {}  {}", paint(tty, "1;35", &format!("⟫ {}", primary.name)), say, toks);
+            ctx.ui.emit(UiEvent::SubAgent {
+                kind: SubAgent::Doctor,
+                level: Level::Info,
+                text: format!("⟫ {}：{}", primary.name, say),
+                tokens: Tokens::new(pt, ct),
+            });
             // 编辑前脚本全貌（变更后由各 arm 记 doctor_edit_applied）
             let script_before = lines.clone();
             tx.log(
@@ -803,7 +817,7 @@ pub(super) async fn doctor_repair(
                         continue;
                     }
                     let removed: Vec<String> = lines.drain((from - 1)..to).collect();
-                    eprintln!("  {}  {}", paint(tty, "32", &format!("✓ 删第 {}-{} 行", from, to)), paint(tty, "2", &removed.iter().map(|l| friendly(l)).collect::<Vec<_>>().join(" / ")));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 删第 {}-{} 行  {}", from, to, removed.iter().map(|l| friendly(l)).collect::<Vec<_>>().join(" / ")) });
                     editor.tool_result(primary.call_id.as_str(), format!("已删第 {}-{} 行，脚本现 {} 行。改完记得 run 验证。", from, to, lines.len()));
                 }
                 EditOp::Replace { line, content } => {
@@ -822,7 +836,7 @@ pub(super) async fn doctor_repair(
                         continue;
                     }
                     let old = std::mem::replace(&mut lines[line - 1], content.trim().to_string());
-                    eprintln!("  {}  {} → {}", paint(tty, "32", &format!("✓ 改第 {} 行", line)), paint(tty, "2", &friendly(&old)), paint(tty, "2", &friendly(&lines[line - 1])));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 改第 {} 行  {} → {}", line, friendly(&old), friendly(&lines[line - 1])) });
                     editor.tool_result(primary.call_id.as_str(), format!("已替换第 {} 行。改完记得 run 验证。", line));
                 }
                 EditOp::Insert { after, content } => {
@@ -836,7 +850,7 @@ pub(super) async fn doctor_repair(
                         continue;
                     }
                     lines.insert(after, content.trim().to_string());
-                    eprintln!("  {}  {}", paint(tty, "32", &format!("✓ 在第 {} 行后插入", after)), paint(tty, "2", &friendly(&lines[after])));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 在第 {} 行后插入  {}", after, friendly(&lines[after])) });
                     editor.tool_result(primary.call_id.as_str(), format!("已插入，脚本现 {} 行。改完记得 run 验证。", lines.len()));
                 }
                 EditOp::Reexplore { step, reason } => {
@@ -862,8 +876,7 @@ pub(super) async fn doctor_repair(
                     report.repairs += 1;
                     let cut = step - 1; // 回放到目标步的前一步
                     tx.log("doctor_reexplore", serde_json::json!({ "iter": iter, "step": step, "kept_prefix": cut, "reason": reason }));
-                    eprintln!();
-                    eprintln!("  {}", paint(tty, "1;33", &format!("◆ 重新定位到第 {} 步（重启+回放前 {} 步）：{}", step, cut, brief(&reason, 50))));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("◆ 重新定位到第 {} 步（重启+回放前 {} 步）：{}", step, cut, brief(&reason, 50)) });
                     reposition(ctx, params, script_path, case, &lines, cut).await;
                     // fetch 实时页面，交给医生重选
                     match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
@@ -931,7 +944,7 @@ pub(super) async fn doctor_repair(
                     if step_idx < lines.len() {
                         lines[step_idx] = line.clone();
                     }
-                    eprintln!("  {}  {} → {}", paint(tty, "32", &format!("✓ 重选第 {} 步元素", pend.step)), paint(tty, "2", &friendly(&old)), paint(tty, "2", &friendly(&line)));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 重选第 {} 步元素  {} → {}", pend.step, friendly(&old), friendly(&line)) });
                     tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": "pick", "step": pend.step, "name": eff_name, "script_after": lines.clone() }));
                     editor.tool_result(primary.call_id.as_str(), format!("已把第 {} 步改为「{}」（元素「{}」已实时存库）。请 run 验证。", pend.step, friendly(&line), eff_name));
                     pending = None;
@@ -978,7 +991,7 @@ pub(super) async fn doctor_repair(
                     if step_idx < lines.len() {
                         lines[step_idx] = line.clone();
                     }
-                    eprintln!("  {}  {} → {}", paint(tty, "32", &format!("✓ 视觉重选第 {} 步元素", pend.step)), paint(tty, "2", &friendly(&old)), paint(tty, "2", &friendly(&line)));
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Ok, text: format!("✓ 视觉重选第 {} 步元素  {} → {}", pend.step, friendly(&old), friendly(&line)) });
                     tx.log("doctor_edit_applied", serde_json::json!({ "iter": iter, "tool": "pick_visual", "step": pend.step, "name": name, "script_after": lines.clone() }));
                     editor.tool_result(primary.call_id.as_str(), format!("已把第 {} 步改为视觉点击「{}」（img 模板已存库）。请 run 验证。", pend.step, friendly(&line)));
                     pending = None;
@@ -1003,8 +1016,7 @@ pub(super) async fn doctor_repair(
 
         // 收尾：finish 后再诊断一次确认是否真达标；达标即返回正确脚本，否则打回继续修
         if go_finish {
-            eprintln!();
-            eprintln!("  {}", paint(tty, "1;36", "▶ 收尾兜底诊断（重启净化中…）"));
+            ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: "▶ 收尾兜底诊断（重启净化中…）".into() });
             let final_diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
             if final_diag.reached {
                 // 终点校验：把最终页面 + 用户原话需求发给医生判断是否真到对的地方（marker 命中只是文本，
@@ -1022,7 +1034,7 @@ pub(super) async fn doctor_repair(
                         if let Some(obj) = parse_desc_json(&t) {
                             if obj["done"].as_bool() == Some(false) {
                                 let why = obj["reason"].as_str().unwrap_or("最终页面不符合用户需求").to_string();
-                                eprintln!("  {}", paint(tty, "33", &format!("终点校验未通过：{}", brief(&why, 80))));
+                                ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("终点校验未通过：{}", brief(&why, 80)) });
                                 let m = format!("终点校验未通过：{}。脚本最终到的页面不是用户要的目的地，请继续修（看下面的最新 trace）。", why);
                                 tx.log("llm_message", serde_json::json!({ "iter": iter, "content": m.clone() }));
                                 editor.user(m);
@@ -1045,7 +1057,7 @@ pub(super) async fn doctor_repair(
         if unchanged && !did_reexplore && !diag.reached {
             stagnation += 1;
             if stagnation >= 2 {
-                eprintln!("  {}", paint(tty, "33", "医生连续两轮无有效改动且未达标，放弃修复"));
+                ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "医生连续两轮无有效改动且未达标，放弃修复".into() });
                 return None;
             }
         } else {
@@ -1053,6 +1065,6 @@ pub(super) async fn doctor_repair(
         }
     }
 
-    eprintln!("  {}", paint(tty, "33", &format!("已达医生诊断轮数上限（{} 轮）仍未修到目标", params.harness.doctor_iters)));
+    ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("已达医生诊断轮数上限（{} 轮）仍未修到目标", params.harness.doctor_iters) });
     None
 }
