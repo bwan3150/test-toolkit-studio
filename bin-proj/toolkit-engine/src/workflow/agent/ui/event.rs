@@ -47,14 +47,14 @@ pub enum SubAgent {
 }
 
 impl SubAgent {
-    /// 中文标签（Plain/TUI 显示用）
+    /// 英文标签（Plain/TUI 显示用；统一用英文名）
     pub fn label(&self) -> &'static str {
         match self {
-            SubAgent::Asserter => "断言官",
-            SubAgent::Supervisor => "监督官",
-            SubAgent::Reflector => "反思官",
-            SubAgent::Doctor => "脚本医生",
-            SubAgent::Optimizer => "优化官",
+            SubAgent::Asserter => "Asserter",
+            SubAgent::Supervisor => "Supervisor",
+            SubAgent::Reflector => "Reflector",
+            SubAgent::Doctor => "Doctor",
+            SubAgent::Optimizer => "Optimizer",
         }
     }
 }

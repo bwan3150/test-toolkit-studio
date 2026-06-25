@@ -28,3 +28,22 @@ pub fn install() {
 pub fn aborted() -> bool {
     ABORTED.load(Ordering::Relaxed)
 }
+
+// —— 软停（Esc）：请求中断「当前正在执行的动作」（滚动查找/回放等长动作轮询此标志立即停下）——
+// 与 aborted 的区别：这是「停下当前动作、转入暂停等用户指导」，不是终止整个流程。
+static PAUSE: AtomicBool = AtomicBool::new(false);
+
+/// 请求软停当前动作（TUI 按 Esc 时调）；长动作内部轮询 `pause_requested()` 立即停。
+pub fn request_pause() {
+    PAUSE.store(true, Ordering::Relaxed);
+}
+
+/// 当前动作是否被请求软停（滚动查找/回放等长循环每次迭代查询）
+pub fn pause_requested() -> bool {
+    PAUSE.load(Ordering::Relaxed)
+}
+
+/// 清除软停标志（引擎进入暂停处理、或恢复运行时调）
+pub fn clear_pause() {
+    PAUSE.store(false, Ordering::Relaxed);
+}

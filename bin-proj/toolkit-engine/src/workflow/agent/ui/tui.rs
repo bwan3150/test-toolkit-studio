@@ -238,6 +238,8 @@ struct TuiModel {
     last_step_idx: Option<usize>,
     /// 输入框光标位置（字符索引，0..=input.chars().count()）
     cursor: usize,
+    /// 当前平台（从 SessionInfo 取，用于 Page 行的平台图标）
+    platform: Option<String>,
 }
 
 impl TuiModel {
@@ -257,6 +259,7 @@ impl TuiModel {
             should_quit: false,
             last_step_idx: None,
             cursor: 0,
+            platform: None,
         }
     }
 
@@ -349,6 +352,7 @@ impl TuiModel {
                 )));
             }
             UiEvent::SessionInfo { device, platform, case } => {
+                self.platform = Some(platform.clone());
                 // setup 选好的参数，显示在最上面（探索开始前的第一条）
                 self.push(Line::from(vec![
                     Span::styled("● ", Style::default().fg(Color::Green)),
@@ -371,8 +375,12 @@ impl TuiModel {
                 ..
             } => {
                 self.round = round;
-                // 「观察当前页面」标题 + ⎿ 分行列：页面元素 / OCR 补充 / 标签页 / 所处
-                self.push_colored("观察当前页面".to_string(), Color::Gray);
+                // 平台图标 + 「观察当前页面」标题 + ⎿ 分行（页面元素 / OCR / 标签页 / 所处）
+                let icon = platform_icon(self.platform.as_deref());
+                self.push(Line::from(Span::styled(
+                    format!("{} 观察当前页面", icon),
+                    Style::default().fg(Color::Gray),
+                )));
                 self.push_sub(format!("{} 页面元素", struct_elements));
                 if ocr_failed {
                     self.push_sub("OCR 调用失败".to_string());
@@ -406,20 +414,22 @@ impl TuiModel {
             }
             UiEvent::AgentThought { text, tokens, .. } => {
                 self.add_tokens(tokens);
-                // 探索主 agent 的回复：● 白点 + 句子（单独一行，指令执行缩进在下面）
+                // Explorer 回复：● + 名字高亮（白），句子用默认色
                 self.push(Line::from(vec![
                     Span::styled("● ", Style::default().fg(Color::White)),
+                    Span::styled("Explorer ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
                     Span::raw(brief(&text, 200)),
                     Self::tok_span(tokens),
                 ]));
             }
-            UiEvent::SubAgent { kind, level, text, tokens } => {
+            UiEvent::SubAgent { kind, text, tokens, .. } => {
                 self.add_tokens(tokens);
-                // 子 agent 回复：● 点用该 agent 专属色 + 名称 + 句子
+                // 子 agent 回复：● + 英文名高亮（agent 专属色），句子用默认色
+                let color = subagent_color(kind);
                 self.push(Line::from(vec![
-                    Span::styled("● ", Style::default().fg(subagent_color(kind))),
-                    Span::styled(format!("{} ", kind.label()), Style::default().fg(Color::DarkGray)),
-                    Span::styled(brief(&text, 200), Style::default().fg(level_color(level))),
+                    Span::styled("● ", Style::default().fg(color)),
+                    Span::styled(format!("{} ", kind.label()), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                    Span::raw(brief(&text, 200)),
                     Self::tok_span(tokens),
                 ]));
             }
@@ -486,11 +496,9 @@ impl TuiModel {
                     self.scroll = 0;
                 }
             }
-            UiEvent::GuidanceAccepted { text } => {
-                self.push_colored(
-                    format!("↳ 已采纳指导：{}", brief(&text, 200)),
-                    Color::Magenta,
-                );
+            UiEvent::GuidanceAccepted { .. } => {
+                // 用户的话已在发送时本地回显；这里只确认「已采纳」（前后空行由 ensure_blank 保证）
+                self.push_colored("↳ 已采纳指导".to_string(), Color::Magenta);
             }
             UiEvent::ScriptGenerated { name, steps, success } => {
                 if success {
@@ -614,6 +622,8 @@ impl TuiModel {
                 let _ = tx.send(UiCommand::Abort);
                 self.choosing = None;
             } else if !self.finished && self.awaiting.is_none() {
+                // 立即请求中断当前动作（滚动查找/回放等长动作轮询此标志会立刻停），再发 Pause 进暂停
+                crate::utils::interrupt::request_pause();
                 let _ = tx.send(UiCommand::Pause);
             }
             return;
@@ -722,6 +732,12 @@ impl TuiModel {
                     self.clear_input();
                 } else if !self.input.is_empty() {
                     let text = self.input.clone();
+                    // 本地立即回显用户输入（让用户知道已发送、不必连发）
+                    self.ensure_blank();
+                    self.push(Line::from(vec![
+                        Span::styled("❯ ", Style::default().fg(Color::Blue)),
+                        Span::raw(text.clone()),
+                    ]));
                     if self.awaiting.is_some() {
                         let _ = tx.send(UiCommand::Answer { text });
                         self.awaiting = None;
@@ -771,6 +787,16 @@ const SLASH_COMMANDS: &[(&str, &str)] = &[
 fn slash_matches(input: &str) -> Vec<&'static (&'static str, &'static str)> {
     let q = input.trim();
     SLASH_COMMANDS.iter().filter(|(n, _)| n.starts_with(q)).collect()
+}
+
+/// 平台图标（Nerd Font）：iOS / Android / Web
+fn platform_icon(platform: Option<&str>) -> &'static str {
+    match platform.map(|s| s.to_lowercase()) {
+        Some(ref s) if s.contains("ios") => "󰀵",
+        Some(ref s) if s.contains("android") => "󰀲",
+        Some(ref s) if s.contains("web") => "󰖟",
+        _ => "·",
+    }
 }
 
 /// 子 agent 专属点色（● 标注；不同 agent 不同色，便于一眼区分谁在说话）

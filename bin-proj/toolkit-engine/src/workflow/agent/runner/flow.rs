@@ -247,6 +247,7 @@ pub async fn drive(
                 }
                 UiCommand::Guidance { text } => pending_guidance.push(text),
                 UiCommand::Pause => {
+                    super::interrupt::clear_pause(); // 已响应软停，清标志（当前动作已停下）
                     // 软停：暂停当前探索，等用户给指导再带着继续；放弃（再按 Ctrl+C）则终止
                     match ctx
                         .ui
@@ -594,6 +595,7 @@ pub async fn drive(
                         ctx.ui.emit(UiEvent::GuidanceAccepted { text });
                     }
                     UiCommand::Pause => {
+                        super::interrupt::clear_pause(); // 已响应软停，清标志（当前动作已停下）
                         match ctx
                             .ui
                             .await_answer(round, "已暂停。输入指导让 AI 带着继续，或再按 Ctrl+C 退出".to_string())

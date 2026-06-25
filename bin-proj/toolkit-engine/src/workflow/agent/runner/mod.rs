@@ -135,6 +135,8 @@ impl AgentRunner {
             let _ = super::execution::device::exec(&device, crate::ControlAction::Close { package: String::new() }).await;
         }
 
+        // 顶栏状态：进入初探（否则探索时顶栏仍显示「准备中」）
+        ui.emit(UiEvent::Phase { phase: Phase::Explore, n: None });
         let mut outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
 
         // 反思官 token + 被弃用(重探)的旧探索会话 token + 监督官 token，最终并入总量
