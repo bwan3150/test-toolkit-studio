@@ -92,11 +92,6 @@ pub async fn handle(
 ) -> Result<()> {
     use std::io::IsTerminal;
 
-    // 脚本输出目录：尽早校验（setup 之前），避免交互完才报错
-    let script_dir = params.scripts.clone().unwrap_or_else(|| {
-        JsonOutput::error("harness 必须指定脚本输出目录: --scripts <目录>（也可写入 config 的 scripts）")
-    });
-
     // —— 前端：在 setup 之前就建好 ——
     //   --json → JsonFrontend（被 Electron app spawn，NDJSON 双向）
     //   真 TTY（stdin+stderr 都是终端）→ TuiFrontend（ratatui 全屏，失败回落 Plain）
@@ -114,28 +109,51 @@ pub async fn handle(
         Box::new(tke::PlainFrontend::new())
     };
 
-    // —— 用例 / 设备 / 平台 ——
-    // tke 默认就是个对话式测试 agent：用例靠对话给（编排官会问），`--testcase` 只是**可选开场白**。
-    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform。
-    //   无 --testcase + 终端：进交互向导**只选设备/平台**，用例留空进对话。
-    //   无 --testcase + --json / 非终端：用例留空（app 经 NDJSON 发首条消息 / 管道场景），设备走 -d。
-    let (case_text, dev_override, platform): (String, Option<String>, Option<Platform>) =
-        if let Some(tc) = args.testcase.clone() {
-            (load_case(&tc), None, args.platform.map(|p| p.to_platform()))
-        } else if !params.json && std::io::stdin().is_terminal() {
-            // 交互向导：只挑设备/平台，用例留空（开场后由编排官 ask_user 问）
-            match interactive_setup(frontend.as_ref()).await {
-                Some((dev, plat)) => (String::new(), dev, plat),
-                None => {
-                    // setup 阶段用户 Ctrl+C / 放弃：恢复终端后安静退出
-                    frontend.shutdown().await;
-                    std::process::exit(130);
-                }
+    // 合并 AI 配置（提前到 setup 前：准备阶段向导要显示当前模型/供应商/推理）
+    let merged_ai = AiConfig {
+        provider: args.ai_provider.or(params.ai.provider.clone()),
+        model: args.ai_model.or(params.ai.model.clone()),
+        api_key: args.ai_key.or(params.ai.api_key.clone()),
+        base_url: args.ai_base_url.or(params.ai.base_url.clone()),
+        max_rounds: args.max_rounds.or(params.ai.max_rounds),
+        prompts_dir: params.ai.prompts_dir.clone(),
+        reasoning_effort: args.reasoning_effort.or(params.ai.reasoning_effort.clone()),
+    };
+
+    // 非交互场景下脚本目录必填（提前校验）；交互向导里则让用户填/跳过
+    let require_scripts = || {
+        params.scripts.clone().unwrap_or_else(|| {
+            JsonOutput::error("harness 必须指定脚本输出目录: --scripts <目录>（也可写入 config 的 scripts）")
+        })
+    };
+
+    // —— 用例 / 设备 / 平台 / 脚本目录 / log ——
+    // tke 默认就是个对话式 agent：任务靠对话给（编排官会问），`--testcase` 只是**可选开场白**。
+    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform；脚本/log 走参数（必填脚本）。
+    //   无 --testcase + 终端：进交互向导**选设备/平台 + 看/填配置（脚本、log）**，用例留空进对话。
+    //   无 --testcase + --json / 非终端：用例留空，设备/平台/脚本/log 走参数（app 经 NDJSON 发首条消息）。
+    let (case_text, dev_override, platform, script_dir, run_log): (
+        String,
+        Option<String>,
+        Option<Platform>,
+        PathBuf,
+        Option<PathBuf>,
+    ) = if let Some(tc) = args.testcase.clone() {
+        (load_case(&tc), None, args.platform.map(|p| p.to_platform()), require_scripts(), params.log.clone())
+    } else if !params.json && std::io::stdin().is_terminal() {
+        // 交互向导：挑设备/平台 + 显示/填配置（脚本目录、log）；用例留空（开场后编排官 ask_user 问）
+        match interactive_setup(frontend.as_ref(), &merged_ai, params.scripts.clone(), params.log.clone()).await {
+            Some(s) => (String::new(), s.device, s.platform, s.script_dir, s.log),
+            None => {
+                // setup 阶段用户 Ctrl+C / 放弃：恢复终端后安静退出
+                frontend.shutdown().await;
+                std::process::exit(130);
             }
-        } else {
-            // --json（app spawn）/ 非终端：用例留空，设备/平台走参数（app 之后经 NDJSON 发首条消息）
-            (String::new(), None, args.platform.map(|p| p.to_platform()))
-        };
+        }
+    } else {
+        // --json（app spawn）/ 非终端：用例留空，设备/平台/脚本/log 走参数
+        (String::new(), None, args.platform.map(|p| p.to_platform()), require_scripts(), params.log.clone())
+    };
 
     // 操作目标兜底校验：既没设备也没平台时无法确定操作什么（web 需 --platform web 或 -d web）
     if dev_override.is_none() && params.device().is_none() && platform.is_none() {
@@ -154,16 +172,8 @@ pub async fn handle(
         case: case_text.lines().next().unwrap_or("").trim().to_string(),
     });
 
-    // 合并 AI 配置：CLI --ai-* 覆盖 config [ai] 段（查 params.ai）
-    let merged_ai = AiConfig {
-        provider: args.ai_provider.or(params.ai.provider.clone()),
-        model: args.ai_model.or(params.ai.model.clone()),
-        api_key: args.ai_key.or(params.ai.api_key.clone()),
-        base_url: args.ai_base_url.or(params.ai.base_url.clone()),
-        max_rounds: args.max_rounds.or(params.ai.max_rounds),
-        prompts_dir: params.ai.prompts_dir.clone(),
-        reasoning_effort: args.reasoning_effort.or(params.ai.reasoning_effort.clone()),
-    };
+    // 产物日志目录：用准备阶段解析出的 run_log 覆盖（向导里用户填/跳过的结果）
+    let params_run = Arc::new(params.with_log(run_log));
 
     // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir
     let prompt = PromptSpec {
@@ -198,7 +208,7 @@ pub async fn handle(
             verify,
             platform,
             device: dev_override,
-            params: params.clone(),
+            params: params_run.clone(),
         },
         frontend.as_ref(),
     )
@@ -242,18 +252,30 @@ fn load_case(s: &str) -> String {
 /// 交互式 setup：在已建好的前端（通常是全屏 TUI）里**只挑设备 / 平台**。
 /// 用例不在这里问——开场后由编排官 ask_user 在对话里问（tke 是对话式 agent）。
 /// 全程走前端的 await_choice/await_answer（TUI 下是列表/输入框，Ctrl+C 即时退出）。
-/// 返回 (设备覆盖(web→Some("web")), 平台覆盖)；用户中途 Ctrl+C / 放弃返回 None。
+/// 准备阶段向导的解析结果：设备/平台 + 脚本目录（必有，跳过=临时）+ log（None=不输出）。
+struct SetupResult {
+    device: Option<String>,
+    platform: Option<Platform>,
+    script_dir: PathBuf,
+    log: Option<PathBuf>,
+}
+
+/// 交互式准备阶段：选设备/平台 + **显示当前配置**（模型/供应商/推理，来自 CLI/config）
+/// + 对未设置的输出参数（脚本目录、log）让用户**填入或跳过**（跳过=不保存/不输出）。
+/// 用户中途 Ctrl+C / 放弃返回 None。
 async fn interactive_setup(
     ui: &dyn tke::Frontend,
-) -> Option<(Option<String>, Option<Platform>)> {
+    ai: &AiConfig,
+    cur_scripts: Option<PathBuf>,
+    cur_log: Option<PathBuf>,
+) -> Option<SetupResult> {
+    // —— 设备/平台 ——
     // 列 Android 设备（仅 Android 有列举能力；iOS 手填、Web 直接 Chrome）
     let devices: Vec<String> = match tke::drivers::AdbDriver::new(None) {
         Ok(adb) => adb.get_devices().unwrap_or_default(),
         Err(_) => Vec::new(),
     };
-
     // 候选按平台**分组**（选项串用「组\t标签」编码，render_choice 按组渲染小标题）。
-    // 文案精简：Android 列设备 ID / iOS 一项手填 / Web 一项 Chrome。
     enum Kind {
         Android(String),
         Ios,
@@ -286,5 +308,70 @@ async fn interactive_setup(
         }
     };
 
-    Some((device, platform))
+    // —— 配置一览：显示当前生效的模型/供应商/推理（来自 CLI/--config，未设则标默认）——
+    let model_disp = ai.model.clone().unwrap_or_else(|| "默认（按供应商）".to_string());
+    let prov_disp = ai.provider.clone().unwrap_or_else(|| "默认".to_string());
+    let reason_disp = ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string());
+    ui.emit(tke::UiEvent::Notice {
+        level: tke::Level::Info,
+        text: format!("配置 · 模型 {} · 供应商 {} · 推理 {}", model_disp, prov_disp, reason_disp),
+    });
+
+    // —— 脚本输出目录：有值则沿用并显示；无值让用户填或跳过（跳过=临时目录，不保存到指定位置）——
+    let tmp_scripts = || std::env::temp_dir().join("tke-scripts");
+    let script_dir = match cur_scripts {
+        Some(p) => {
+            ui.emit(tke::UiEvent::Notice {
+                level: tke::Level::Info,
+                text: format!("脚本输出目录：{}（来自参数/配置）", p.display()),
+            });
+            p
+        }
+        None => {
+            let pick = ui
+                .await_choice(
+                    "脚本输出目录（.tks 落点）——未设置".to_string(),
+                    vec!["不保存脚本（仅本次临时目录）".to_string(), "填入目录".to_string()],
+                )
+                .await?;
+            if pick == 0 {
+                let t = tmp_scripts();
+                ui.emit(tke::UiEvent::Notice { level: tke::Level::Warn, text: format!("脚本不另存（临时 {}）", t.display()) });
+                t
+            } else {
+                let s = ui.await_answer(0, "输入脚本输出目录".to_string()).await?;
+                let s = s.trim();
+                if s.is_empty() { tmp_scripts() } else { PathBuf::from(s) }
+            }
+        }
+    };
+
+    // —— 产物日志目录：有值显示；无值让用户填或跳过（跳过=不输出 log）——
+    let log = match cur_log {
+        Some(p) => {
+            ui.emit(tke::UiEvent::Notice {
+                level: tke::Level::Info,
+                text: format!("日志目录：{}（来自参数/配置）", p.display()),
+            });
+            Some(p)
+        }
+        None => {
+            let pick = ui
+                .await_choice(
+                    "产物日志目录（log）——未设置".to_string(),
+                    vec!["不输出 log".to_string(), "填入目录".to_string()],
+                )
+                .await?;
+            if pick == 0 {
+                ui.emit(tke::UiEvent::Notice { level: tke::Level::Dim, text: "不输出 log".to_string() });
+                None
+            } else {
+                let s = ui.await_answer(0, "输入 log 目录".to_string()).await?;
+                let s = s.trim();
+                if s.is_empty() { None } else { Some(PathBuf::from(s)) }
+            }
+        }
+    };
+
+    Some(SetupResult { device, platform, script_dir, log })
 }

@@ -62,7 +62,7 @@ pub use workflow::agent::{
     LlmSession, LlmTool, LlmToolCall, LlmReply,
     AgentRunner, AgentRunOptions, AgentResult,
     PromptSet, PromptSpec,
-    Frontend, JsonFrontend, PlainFrontend, TuiFrontend, UiCommand, UiEvent,
+    Frontend, JsonFrontend, Level, PlainFrontend, TuiFrontend, UiCommand, UiEvent,
 };
 
 // ④ 自有工具

@@ -176,6 +176,13 @@ impl Params {
         p.device = device;
         p
     }
+
+    /// 覆盖产物日志目录（准备阶段向导里用户填/跳过后回填；None=不输出产物）
+    pub fn with_log(&self, log: Option<PathBuf>) -> Self {
+        let mut p = self.clone();
+        p.log = log;
+        p
+    }
 }
 
 /// 供库层在缺省时复用的默认查找（与 Params 同一份常量），用于尚未持有 Params 的入口
