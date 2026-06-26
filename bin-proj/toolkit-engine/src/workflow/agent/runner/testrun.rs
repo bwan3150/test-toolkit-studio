@@ -9,11 +9,15 @@
 // 借用要点：DriveCtx 借的是各字段的引用，故每个方法里**临时重建 ctx**（借 &self 的离散字段），
 // 再配合 &mut self.sess / &mut self.tx 的不相交借用驱动——字段两两不同，NLL 下可过。
 
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::models::Platform;
-use crate::{ExecutionResult, Fetcher, LlmSession, Result, RunArtifacts, Workarea};
+use crate::{ControlAction, ExecutionResult, Fetcher, LlmSession, Point, Result, RunArtifacts, Workarea};
+
+use super::super::perception::capture;
 
 use super::super::execution::script::write_script;
 use super::super::knowledge::Knowledge;
@@ -62,6 +66,17 @@ pub(crate) struct TestRun {
     // —— 验证结果（收尾用）——
     result_lines: Vec<String>, // 最终落盘脚本（验证后可能更短）
     verified: Option<VerifyReport>,
+
+    // —— 模式 + 通用任务交付物 ——
+    /// 轻模式（通用任务/不要求校验）：驱动时跳过踩实官(自动断言)与监督官(finish 把关)；
+    /// 仍照常产 .tks/log/元素。false=完整测试（开断言+把关，脚本可验证）。
+    task_mode: bool,
+    /// 末页可读文字（驱动结束后捕获，read_full 时滚动逐屏收集）——供"读内容/存 md/答问"。
+    final_text: String,
+    /// 末页截图路径——供"截图/下载头像"交付。
+    final_shot: PathBuf,
+    /// 非设备动作（存文件等）的留痕——finalize 时作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过）。
+    notes: Vec<String>,
 }
 
 /// 在调用点内联展开出一个 DriveCtx（借 $r 的**离散字段**，与 $r.sess/$r.tx 的 &mut 不相交）。
@@ -80,19 +95,27 @@ macro_rules! drive_ctx {
             case: &$r.case,
             ai: &$opts.ai,
             ui: $ui,
-            task_mode: false,
+            task_mode: $r.task_mode,
         }
     };
 }
 
 impl TestRun {
-    /// 阶段一：装配环境 + 初探 + 失败重探 + 落探索原始脚本。返回带完整运行态的 TestRun。
+    /// 阶段一：朝目标驱动设备 + 失败重探 + 落 .tks/log/元素，再捕获末页文字/截图。返回运行态。
+    /// 统一路径：测试与通用任务同一套（同提示词、同产物）。
+    /// `goal`=任务目标；`note`=编排官下发的额外约束；
+    /// `full_test`=true 走完整测试（开踩实官自动断言+监督官把关，脚本可验证）；false=轻模式
+    ///   （通用任务/不要求校验：跳过断言+把关，仍照常产 .tks/元素）。
+    /// `read_full`=true 时驱动结束后滚动逐屏收集全部文字（读长内容）；false 只取末页一屏。
     pub(crate) async fn explore(
         opts: &AgentRunOptions,
         ui: &dyn Frontend,
-        case: &str,
+        goal: &str,
         note: Option<&str>,
+        full_test: bool,
+        read_full: bool,
     ) -> Result<TestRun> {
+        let case = goal; // 目标即用例（统一）
         // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
         let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
         let platform = opts.platform.unwrap_or_else(|| Platform::from_device(Some(&device)));
@@ -203,6 +226,10 @@ impl TestRun {
             explore_created: Vec::new(),
             result_lines: Vec::new(),
             verified: None,
+            task_mode: !full_test,
+            final_text: String::new(),
+            final_shot: PathBuf::new(),
+            notes: Vec::new(),
         };
 
         // —— 开局净化：关掉可能残留的旧会话（如上次没关的浏览器）——
@@ -292,7 +319,39 @@ impl TestRun {
         run.final_lines = final_lines;
         run.script_path = script_path;
         run.outcome = outcome;
+
+        // 末页交付物捕获：read_full→滚动逐屏收全文（读长内容）；否则只取末页一屏。
+        let (text, shot) = if read_full {
+            extract_scrolling(&run.device, &run.workarea, &run.fetcher, opts.ocr.as_ref()).await
+        } else {
+            match capture(&run.device, &run.workarea, &run.fetcher, opts.ocr.as_ref()).await {
+                Ok(p) => {
+                    let t = p.elements.iter()
+                        .filter_map(|e| e.text.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+                        .collect::<Vec<_>>().join("\n");
+                    (t, p.shot_path)
+                }
+                Err(_) => (String::new(), run.workarea.screenshot_path()),
+            }
+        };
+        run.final_text = text;
+        run.final_shot = shot;
         Ok(run)
+    }
+
+    /// 末页可读文字（通用任务交付：存 md / 答问取材）。
+    pub(crate) fn final_text(&self) -> &str {
+        &self.final_text
+    }
+
+    /// 末页截图路径（通用任务交付：截图 / 下载头像）。
+    pub(crate) fn final_shot(&self) -> &std::path::Path {
+        &self.final_shot
+    }
+
+    /// 记一条非设备动作的留痕（如"保存文件 X"）——finalize 时作为 .tks 注释追加。
+    pub(crate) fn note(&mut self, text: &str) {
+        self.notes.push(text.to_string());
     }
 
     /// 探索是否达成（供编排官决定下一步：达成才值得验证）。
@@ -452,6 +511,15 @@ impl TestRun {
             let _ = std::fs::remove_file(&self.script_path);
             (feat_names, 0)
         };
+        // 非设备动作留痕：把 notes 作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过；脚本已写完才追加，不被覆盖）。
+        if overall_success && !self.notes.is_empty() {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&self.script_path) {
+                for note in &self.notes {
+                    let _ = writeln!(f, "# 注：{}", note);
+                }
+            }
+        }
         render_summary(
             self.outcome.success,
             self.outcome.aborted,
@@ -477,4 +545,61 @@ impl TestRun {
             aborted: self.outcome.aborted,
         })
     }
+}
+
+/// 多屏提取：从当前页起**向下滚动逐屏收集可读文字**，到底（与上屏文字相同）或达上限即停。
+/// 按出现顺序去重拼接；返回 (全文, 最后一屏截图)。中断(Ctrl+C)则提前结束。
+async fn extract_scrolling(
+    device: &str,
+    workarea: &Workarea,
+    fetcher: &Fetcher,
+    ocr: Option<&crate::engines::ocr::OcrSource>,
+) -> (String, PathBuf) {
+    const MAX_SCROLLS: usize = 12;
+    let mut ordered: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut last_sig: Option<u64> = None;
+    let mut last_shot = workarea.screenshot_path();
+
+    for _ in 0..MAX_SCROLLS {
+        if super::interrupt::aborted() {
+            break;
+        }
+        let p = match capture(device, workarea, fetcher, ocr).await {
+            Ok(p) => p,
+            Err(_) => break,
+        };
+        last_shot = p.shot_path.clone();
+        let mut sig_src = String::new();
+        let (mut w, mut h) = (1080i32, 1920i32);
+        for e in &p.elements {
+            w = w.max(e.bounds.x2);
+            h = h.max(e.bounds.y2);
+            if let Some(t) = e.text.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                sig_src.push_str(t);
+                sig_src.push('|');
+                if seen.insert(t.to_string()) {
+                    ordered.push(t.to_string());
+                }
+            }
+        }
+        // 本屏结构与上屏相同 → 到底，停。
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        sig_src.hash(&mut hasher);
+        let sig = hasher.finish();
+        if Some(sig) == last_sig {
+            break;
+        }
+        last_sig = Some(sig);
+        // 向下滚一屏（内容上移=swipe up）
+        let from = Point { x: w / 2, y: (h as f32 * 0.65) as i32 };
+        let _ = super::super::execution::device::exec(
+            device,
+            ControlAction::SwipeDir { from, direction: "up".to_string(), distance: (h as f32 * 0.5) as i32, duration_ms: 400 },
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    }
+
+    (ordered.join("\n"), last_shot)
 }

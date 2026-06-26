@@ -17,7 +17,6 @@ use super::super::prompt::PromptSet;
 use super::super::ui::{Level, TodoItem, TodoStatus, Tokens};
 use super::options::{AgentResult, AgentRunOptions};
 use super::testrun::TestRun;
-use super::operate::operate;
 use super::interrupt;
 
 /// 编排官工具集（手写 schema；description 走 PromptSet 角色化，可外部覆盖）。
@@ -31,26 +30,16 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             json!({
                 "type": "object",
                 "properties": {
-                    "testcase": { "type": "string", "description": "要探索的完整测试用例描述" },
-                    "note": { "type": "string", "description": "可选：给探索的额外约束/提示（用户纠偏、已否定路径、需留意的细节）" }
-                },
-                "required": ["testcase"]
-            }),
-        ),
-        LlmTool::new("verify", desc("verify"), empty()),
-        LlmTool::new("finalize", desc("finalize"), empty()),
-        LlmTool::new(
-            "operate",
-            desc("operate"),
-            json!({
-                "type": "object",
-                "properties": {
-                    "goal": { "type": "string", "description": "要在设备上完成的一般任务目标（非测试），如『进入隐私政策页』『找到并截取用户头像』" },
-                    "read_full": { "type": "boolean", "description": "任务是读取长内容（如整页 policy）时设 true：到达后会滚动逐屏收集全部文字。只是截图/找元素时留 false（默认），别乱滚走开。" }
+                    "goal": { "type": "string", "description": "要在设备上完成的任务目标——测试用例 或 一般任务（如『进入隐私政策页』『找到并截取用户头像』）" },
+                    "note": { "type": "string", "description": "可选：额外约束/提示（用户纠偏、已否定路径、需留意的细节）" },
+                    "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 verify）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
+                    "read_full": { "type": "boolean", "description": "任务是读**长内容**（整页 policy 等）时设 true：到达目标后滚动逐屏收集全文。截图/找元素留 false（默认，不乱滚）" }
                 },
                 "required": ["goal"]
             }),
         ),
+        LlmTool::new("verify", desc("verify"), empty()),
+        LlmTool::new("finalize", desc("finalize"), empty()),
         LlmTool::new(
             "save_file",
             desc("save_file"),
@@ -194,10 +183,12 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                     match call.name.as_str() {
                         // —— 探索：开一条新用例的 TestRun（若上条还没收尾，先收尾、不丢产物）——
                         "explore" => {
-                            let tc = arg_str(&call.arguments, "testcase");
+                            let goal = arg_str(&call.arguments, "goal");
                             let note = call.arguments.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
-                            if tc.trim().is_empty() {
-                                sess.tool_result(call.call_id, "未提供 testcase，无法探索。");
+                            let make_test = call.arguments.get("make_test").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let read_full = call.arguments.get("read_full").and_then(|v| v.as_bool()).unwrap_or(false);
+                            if goal.trim().is_empty() {
+                                sess.tool_result(call.call_id, "未提供 goal，无法开始。");
                                 continue;
                             }
                             if let Some(prev) = current.take() {
@@ -205,10 +196,17 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                     last_result = Some(r);
                                 }
                             }
-                            emit_orch(ui, &sess, &format!("开始探索：{}", first_line(&tc)));
-                            let run = TestRun::explore(opts, ui, &tc, note.as_deref()).await?;
+                            emit_orch(ui, &sess, &format!("开始：{}", first_line(&goal)));
+                            let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full).await?;
                             ran_any = true;
-                            let brief = run.explore_brief();
+                            // 工具结果 = 摘要 + 末页可读文字(截断) + 截图路径——通用任务靠它答问/存文件
+                            let mut brief = run.explore_brief();
+                            let text = run.final_text().trim();
+                            if !text.is_empty() {
+                                let snippet: String = text.chars().take(4000).collect();
+                                brief.push_str(&format!("\n- 末页可读文字（截断 4000 字）：\n{}", snippet));
+                            }
+                            brief.push_str(&format!("\n- 末页截图：{}", run.final_shot().display()));
                             current = Some(run);
                             sess.tool_result(call.call_id, brief);
                         }
@@ -238,33 +236,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 sess.tool_result(call.call_id, "没有进行中的运行可收尾（请先 explore）。");
                             }
                         },
-                        // —— 通用任务：朝目标驱动设备（不产脚本/不验证），返回末页文字+截图供交付 ——
-                        "operate" => {
-                            let goal = arg_str(&call.arguments, "goal");
-                            if goal.trim().is_empty() {
-                                sess.tool_result(call.call_id, "未提供 goal，无法执行。");
-                                continue;
-                            }
-                            let read_full = call.arguments.get("read_full").and_then(|v| v.as_bool()).unwrap_or(false);
-                            emit_orch(ui, &sess, &format!("开始任务：{}", first_line(&goal)));
-                            let r = operate(opts, ui, &goal, read_full).await?;
-                            ran_any = true;
-                            let mut msg = format!(
-                                "任务完成：{}。\n- 结果依据：{}\n- 轮数：{}\n- 末页截图：{}",
-                                if r.success { "达成" } else { "未完全达成" },
-                                r.summary,
-                                r.rounds,
-                                r.screenshot.display()
-                            );
-                            let text = r.final_text.trim();
-                            if !text.is_empty() {
-                                // 末页可读文字给编排官取材（存 md / 答问）；截断防爆 token
-                                let snippet: String = text.chars().take(4000).collect();
-                                msg.push_str(&format!("\n- 末页可读文字（截断 4000 字）：\n{}", snippet));
-                            }
-                            sess.tool_result(call.call_id, msg);
-                        }
-                        // —— 把内容写成文件交付（如 policy.md）——
+                        // —— 把内容写成文件交付（如 policy.md）。非设备动作→给当前 .tks 追加一行注释留痕 ——
                         "save_file" => {
                             let filename = arg_str(&call.arguments, "filename");
                             let content = arg_str(&call.arguments, "content");
@@ -280,6 +252,10 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let path = opts.script_dir.join(&safe);
                             match std::fs::write(&path, content.as_bytes()) {
                                 Ok(()) => {
+                                    // 非设备动作→给当前 .tks 追加注释留痕（如果有进行中的运行）
+                                    if let Some(run) = current.as_mut() {
+                                        run.note(&format!("保存文件 {}", safe));
+                                    }
                                     emit_orch(ui, &sess, &format!("已保存文件：{}", path.display()));
                                     sess.tool_result(call.call_id, format!("已保存到 {}", path.display()));
                                 }
