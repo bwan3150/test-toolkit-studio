@@ -973,19 +973,32 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
         ch.prompt.clone(),
         Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
     )));
+    // 选项串可用「组\t标签」编码分组：组变了就先插一行小标题，选项缩进列在其下。
+    let mut last_group: Option<&str> = None;
     for (i, opt) in ch.options.iter().enumerate() {
+        let (group, label) = match opt.split_once('\t') {
+            Some((g, l)) => (Some(g), l),
+            None => (None, opt.as_str()),
+        };
+        if let Some(g) = group {
+            if last_group != Some(g) {
+                lines.push(Line::from(Span::styled(
+                    g.to_string(),
+                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                )));
+                last_group = Some(g);
+            }
+        }
+        let indent = if group.is_some() { "  " } else { "" };
         if i == ch.selected {
             // 选中项：反白高亮 + ▶ 前导
             lines.push(Line::from(Span::styled(
-                format!("▶ {}", opt),
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
+                format!("{}▶ {}", indent, label),
+                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
             )));
         } else {
             lines.push(Line::from(Span::styled(
-                format!("  {}", opt),
+                format!("{}  {}", indent, label),
                 Style::default().fg(Color::Gray),
             )));
         }
@@ -1003,13 +1016,9 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
 /// 普通/awaiting 文本输入框 + 可见光标。
 fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel) {
     let (title, border_style): (String, Style) = if let Some(q) = model.awaiting.as_ref() {
-        // AI 提问直接显示在输入框标题处（opencode 风格）；setup 用例提示走「描述你要测什么」
-        let label = if is_case_prompt(q) {
-            "描述你要测什么".to_string()
-        } else {
-            format!("? {}", brief(q, 70))
-        };
-        (label, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        // AI 提问直接显示在输入框标题处（opencode 风格）。不再写死"描述你要测什么"——
+        // 问什么由编排官提示词决定（tke 是通用设备 agent，测试只是其一），UI 只如实显示它问的那句。
+        (format!("? {}", brief(q, 70)), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
     } else {
         // 普通状态：输入框左上角不显示提示文字（提示统一在底栏）
         (String::new(), Style::default().fg(Color::DarkGray))
@@ -1046,9 +1055,4 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
     // 夹在区域内，避免越界
     let cx = cursor_x.min(area.x + area.width.saturating_sub(1));
     frame.set_cursor_position(Position::new(cx, cursor_y));
-}
-
-/// 粗略判断 awaiting 的提问是不是「setup 用例输入」（用于切换输入框措辞）。
-fn is_case_prompt(q: &str) -> bool {
-    q.contains("测") || q.contains("用例") || q.contains("describe") || q.contains("test")
 }

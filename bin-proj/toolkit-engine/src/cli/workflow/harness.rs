@@ -246,30 +246,43 @@ fn load_case(s: &str) -> String {
 async fn interactive_setup(
     ui: &dyn tke::Frontend,
 ) -> Option<(Option<String>, Option<Platform>)> {
-    // 列 Android 设备（仅 Android 有列举能力；iOS/Web 让用户手填 / 选）
+    // 列 Android 设备（仅 Android 有列举能力；iOS 手填、Web 直接 Chrome）
     let devices: Vec<String> = match tke::drivers::AdbDriver::new(None) {
         Ok(adb) => adb.get_devices().unwrap_or_default(),
         Err(_) => Vec::new(),
     };
-    // 候选 = 已连 Android 设备 + Web + 手动输入（iOS/wda 暂无列举能力，走手动）
-    let mut options: Vec<String> = devices.clone();
-    options.push("web — 网页测试（无设备）".to_string());
-    options.push("手动输入设备 ID（iOS UDID / wda:.. 等）".to_string());
-    let idx = ui.await_choice("选择目标设备".to_string(), options).await?;
-    let (device, platform): (Option<String>, Option<Platform>) = if idx < devices.len() {
-        (Some(devices[idx].clone()), Some(Platform::Android))
-    } else if idx == devices.len() {
-        (Some("web".to_string()), Some(Platform::Web))
-    } else {
-        // 手动输入设备 ID
-        let id = ui
-            .await_answer(0, "请输入设备 ID（iOS UDID / wda:.. 等）".to_string())
-            .await?;
-        let id = id.trim().to_string();
-        if id.is_empty() {
-            (Some("web".to_string()), Some(Platform::Web))
-        } else {
-            (Some(id.clone()), Some(Platform::from_device(Some(&id))))
+
+    // 候选按平台**分组**（选项串用「组\t标签」编码，render_choice 按组渲染小标题）。
+    // 文案精简：Android 列设备 ID / iOS 一项手填 / Web 一项 Chrome。
+    enum Kind {
+        Android(String),
+        Ios,
+        Web,
+    }
+    let mut opts: Vec<String> = Vec::new();
+    let mut kinds: Vec<Kind> = Vec::new();
+    for d in &devices {
+        opts.push(format!("Android\t{}", d));
+        kinds.push(Kind::Android(d.clone()));
+    }
+    // 无 Android 设备就不显示 Android 组；iOS / Web 始终在
+    opts.push("iOS\t输入设备 ID（UDID / wda:..）".to_string());
+    kinds.push(Kind::Ios);
+    opts.push("Web\tChrome".to_string());
+    kinds.push(Kind::Web);
+
+    let idx = ui.await_choice("选择设备".to_string(), opts).await?;
+    let (device, platform): (Option<String>, Option<Platform>) = match &kinds[idx] {
+        Kind::Android(id) => (Some(id.clone()), Some(Platform::Android)),
+        Kind::Web => (Some("web".to_string()), Some(Platform::Web)),
+        Kind::Ios => {
+            let id = ui.await_answer(0, "输入设备 ID（iOS UDID / wda:..）".to_string()).await?;
+            let id = id.trim().to_string();
+            if id.is_empty() {
+                (Some("web".to_string()), Some(Platform::Web))
+            } else {
+                (Some(id.clone()), Some(Platform::from_device(Some(&id))))
+            }
         }
     };
 
