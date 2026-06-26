@@ -860,8 +860,18 @@ fn level_color(l: Level) -> Color {
 fn view(frame: &mut Frame, model: &TuiModel) {
     // choosing 模式时输入区要容纳 prompt + 选项列表，按需放大；否则固定 3 行单行输入框。
     let input_h: u16 = if let Some(ch) = model.choosing.as_ref() {
-        // 边框 2 + prompt 1 + 每项 1，封顶 12 行免吃满屏
-        (ch.options.len() as u16 + 3).clamp(4, 12)
+        // 边框 2 + prompt 1 + 每项 1 + 每个分组小标题 1（「组\t标签」渲染时组变插一行标题）
+        let mut groups: u16 = 0;
+        let mut last: Option<&str> = None;
+        for o in &ch.options {
+            if let Some((g, _)) = o.split_once('\t') {
+                if last != Some(g) {
+                    groups += 1;
+                    last = Some(g);
+                }
+            }
+        }
+        (ch.options.len() as u16 + groups + 3).clamp(4, 16)
     } else if model.input.starts_with('/') {
         // slash 指令菜单：匹配项 + 输入行 + 边框
         (slash_matches(&model.input).len() as u16 + 3).clamp(3, 10)
