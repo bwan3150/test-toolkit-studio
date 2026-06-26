@@ -163,6 +163,7 @@ pub struct DriveCtx<'a> {
 }
 
 /// 循环结果
+#[derive(Default)]
 pub struct DriveOutcome {
     pub success: bool,
     pub reason: String,

@@ -9,24 +9,20 @@ pub mod options;
 pub mod orchestrator;
 pub mod reflect;
 pub mod supervisor;
+pub mod testrun;
 pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
 
+// 一条用例的探索→验证→收尾已抽进 runner::testrun（TestRun 三阶段）；本文件只剩
+// run() 装配 + run_one_testcase 串接 + 收尾渲染辅助（render_summary 等）。
 use std::path::{Path, PathBuf};
 
-use crate::models::Platform;
-use crate::{ExecutionResult, Fetcher, LlmSession, Result, RunArtifacts, Workarea};
+use crate::Result;
 
-use super::execution::script::write_script;
-use super::knowledge::{Knowledge, KnowledgeOutcome};
-use super::prompt::{render, PromptSet};
-use super::tools::build_tools;
+use super::knowledge::KnowledgeOutcome;
 use super::transcript::Transcript;
-use super::ui::{
-    ElementItem, Frontend, Level, Phase, StatusLine, SubAgent, Tokens, UiEvent,
-};
-use flow::{drive, DriveCtx};
+use super::ui::{ElementItem, Frontend, Level, StatusLine, Tokens, UiEvent};
 
 /// AI 探索测试编排器
 pub struct AgentRunner;
@@ -45,348 +41,18 @@ impl AgentRunner {
 }
 
 /// 执行单条测试用例的完整子流程（探索→重探→落脚本→验证修复→收尾），返回结果。
-/// 从原 run() 抽出、行为不变；现由编排官(orchestrator)按需调度，可在一场会话里跑多条。
-/// `case`=本次要测的用例（替代 opts.case）；`note`=编排官下发的额外约束（用户纠偏/已否定路径等），无则 None。
+/// 已抽成 TestRun 三阶段（explore/verify/finalize），这里按序串起来——**行为不变**。
+/// 编排官(orchestrator)后续可改为分别调度这三个阶段（slice 2：各阶段当独立工具，验证三段变 todo）。
+/// `case`=本次要测的用例；`note`=编排官下发的额外约束（用户纠偏/已否定路径等），无则 None。
 pub(crate) async fn run_one_testcase(
     opts: &AgentRunOptions,
     ui: &dyn Frontend,
     case: &str,
     note: Option<&str>,
 ) -> Result<AgentResult> {
-        // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
-        let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
-        let platform = opts.platform.unwrap_or_else(|| Platform::from_device(Some(&device)));
-
-        // 脚本输出目录确保存在（.tks 文件名由 AI 在 finish 起、落库时去重）
-        std::fs::create_dir_all(&opts.script_dir).ok();
-
-        // 正式元素库（参数层查表；缺省落脚本目录下的 element.json，整目录脚本共享一份库）。
-        // **探索/修复/验证全程不直接写它**——只在脚本定稿(稳定通过)后，把最终脚本实际用到的元素提交进来。
-        let real_element_path: PathBuf = opts
-            .params
-            .element_lib()
-            .unwrap_or_else(|| opts.script_dir.join("element.json"));
-
-        // —— 产物目录：复用 RunArtifacts，与 tke run 同构 ——
-        // log 根：--log/config 优先；缺省落脚本目录下（harness 始终保留探索记录）。
-        // run_dir 名用「用例 slug」（最终 .tks 文件名由 AI 起，两者解耦，run_end 里有脚本路径）
-        let stem = slug(case, 30);
-        let log_root = opts.params.log.clone().unwrap_or_else(|| opts.script_dir.clone());
-        let artifacts = RunArtifacts::create(&log_root, &stem)?;
-        let run_dir = artifacts.run_dir.clone();
-        // 临时元素库：本次运行隔离（run_dir 下）。探索/修复/验证全程都读写它——随便造、随便试，
-        // 不污染正式库；失败则连同 run_dir 一起丢弃、正式库纹丝不动；成功则把最终脚本用到的元素提交到正式库。
-        let element_path = run_dir.join("element.json");
-        let conversation_path = run_dir.join("conversation.jsonl");
-
-        let mut tx = Transcript::create(conversation_path.clone())?;
-
-        // —— 提示词（可自定义：注入文本 / .md 文件 / 目录覆盖）——
-        let prompts = PromptSet::resolve(&opts.prompt)?;
-
-        // —— 记忆 + 知识库（本期：未配置则跳过真实调用，记 skipped）——
-        let knowledge = Knowledge::new(&opts.params.knowledge);
-        record_knowledge(&mut tx, "memory_query", knowledge.query_memory(case));
-        record_knowledge(&mut tx, "rag_query", knowledge.query_rag(case));
-
-        // —— 会话 ——
-        let system_prompt = prompts.role_system("explorer", &device, platform.name());
-        tx.log("system_prompt", serde_json::json!({ "content": system_prompt.clone() }));
-        tx.log(
-            "case",
-            serde_json::json!({ "content": case, "device": device.clone(), "platform": platform.name() }),
-        );
-        tx.log(
-            "config",
-            serde_json::json!({
-                "provider": opts.ai.provider.clone().unwrap_or_else(|| "anthropic".into()),
-                "model": opts.ai.model.clone().unwrap_or_default(),
-                "element_library": element_path.to_string_lossy(),
-                "run_dir": run_dir.to_string_lossy(),
-            }),
-        );
-
-        let tools = build_tools(&prompts, platform);
-        // 工具定义全集（AI 每轮实际收到的输入的一部分：名字 + description 提示词 + 参数 schema，
-        // 含统一注入的 comment 字段）。记进 transcript，使 conversation.json 不漏 AI 所见的任何输入。
-        tx.log(
-            "tools",
-            serde_json::json!({
-                "count": tools.len(),
-                "tools": tools.iter().map(|t| serde_json::json!({
-                    "name": t.name,
-                    "description": t.description,
-                    "schema": t.schema,
-                })).collect::<Vec<_>>(),
-            }),
-        );
-        let mut sess = LlmSession::new(&opts.ai, system_prompt, tools)?;
-        tx.log("model", serde_json::json!({ "model": sess.model() }));
-        let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", case)]);
-        tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
-        sess.user(case_msg);
-        // 编排官下发的额外约束（用户纠偏/已否定路径等）：作为硬约束追加在用例之后
-        if let Some(n) = note.map(str::trim).filter(|s| !s.is_empty()) {
-            let guide = format!("【编排官下发的约束/提示，请务必遵守】\n{}", n);
-            tx.log("llm_message", serde_json::json!({ "content": guide.clone() }));
-            sess.user(guide);
-        }
-
-        // —— 驱动循环 ——
-        let workarea = Workarea::for_device(Some(&device))?;
-        let fetcher = Fetcher::new();
-        let max_rounds = opts.ai.max_rounds.unwrap_or(40) as usize;
-        let start_time = chrono::Local::now().to_rfc3339();
-        let ctx = DriveCtx {
-            device: &device,
-            element_path: &element_path,
-            workarea: &workarea,
-            fetcher: &fetcher,
-            artifacts: &artifacts,
-            ocr: opts.ocr.as_ref(),
-            max_rounds,
-            prompts: &prompts,
-            case: case,
-            ai: &opts.ai,
-            ui,
-        };
-
-        // —— 开局净化：关掉可能残留的旧会话（如上次没关的浏览器）——
-        // 否则探索会直接从那张旧页面开始：① 状态被污染；② 因为 web `launch` 会复用存活会话，
-        // AI 连「启动」都不发，生成的脚本缺少启动步、后续验证回放还得医生补。
-        // 关掉后首屏采集失败→AI 收到「请先 launch」提示→发启动建全新会话，干净且脚本完整。
-        // （web 关会话忽略 package；移动端起始包名未知、且 launch 自带 force-stop，暂不处理。）
-        if matches!(platform, Platform::Web) {
-            let _ = super::execution::device::exec(&device, crate::ControlAction::Close { package: String::new() }).await;
-        }
-
-        // 顶栏状态：进入初探（否则探索时顶栏仍显示「准备中」）
-        ui.emit(UiEvent::Phase { phase: Phase::Explore, n: None });
-        let mut outcome = drive(&mut sess, &mut tx, &ctx, true, "").await?;
-
-        // 反思官 token + 被弃用(重探)的旧探索会话 token + 监督官 token，最终并入总量
-        let mut refl_pt = 0i64;
-        let mut refl_ct = 0i64;
-        let mut discarded_pt = 0i64;
-        let mut discarded_ct = 0i64;
-        // 子 agent(踩实官 + finish 监督官)独立会话 token，跨初探+各重探累计
-        let mut sup_pt = outcome.subagent_pt;
-        let mut sup_ct = outcome.subagent_ct;
-        // 跨重探累计的新建元素（失败重探也可能造元素，最终失败要一并回滚，防泄漏）
-        let mut explore_created: Vec<String> = outcome.created.clone();
-
-        // —— 失败/卡住 → 反思官给「重探指导」，带指导从头重探（次数上限来自 config [harness].reexplore）——
-        let max_reexplore = opts.params.harness.reexplore;
-        let mut reexplore_n = 0;
-        while !outcome.success && !outcome.aborted && reexplore_n < max_reexplore {
-            reexplore_n += 1;
-            let refl_pt_this;
-            let refl_ct_this;
-            let guidance = match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, case, &outcome, false).await {
-                Some(r) => {
-                    refl_pt += r.prompt_tokens;
-                    refl_ct += r.completion_tokens;
-                    refl_pt_this = r.prompt_tokens;
-                    refl_ct_this = r.completion_tokens;
-                    r.report
-                }
-                None => break,
-            };
-            ui.emit(UiEvent::Phase { phase: Phase::Reexplore, n: Some(reexplore_n as u32) });
-            ui.emit(UiEvent::SubAgent {
-                kind: SubAgent::Reflector,
-                level: Level::Info,
-                text: guidance.clone(),
-                tokens: Tokens::new(refl_pt_this, refl_ct_this),
-            });
-            // 旧探索会话即将弃用，先记下它的 token
-            let (dp, dc) = sess.total_usage();
-            discarded_pt += dp;
-            discarded_ct += dc;
-            // 全新探索会话 + 用例 + 重探指导，从头带指导重探（避免旧会话 N 步的混乱上下文）
-            sess = LlmSession::new(&opts.ai, prompts.role_system("explorer", &device, platform.name()), build_tools(&prompts, platform))?;
-            let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", case)]);
-            tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
-            sess.user(case_msg);
-            let guide_msg = format!(
-                "【上一轮探索没找到目标。探索反思官给的重探指导】\n{}\n\n请据此从头重新探索，直接走对的路、别再重蹈覆辙。",
-                guidance
-            );
-            tx.log("llm_message", serde_json::json!({ "content": guide_msg.clone() }));
-            sess.user(guide_msg);
-            outcome = drive(&mut sess, &mut tx, &ctx, true, &format!("重探{}·", reexplore_n)).await?;
-            sup_pt += outcome.subagent_pt;
-            sup_ct += outcome.subagent_ct;
-            for c in &outcome.created {
-                if !explore_created.contains(c) {
-                    explore_created.push(c.clone());
-                }
-            }
-        }
-
-        // 注：成功后的"路径优化"已不在此处——它移进了 verify 的「医生⇄反思官交替收敛」循环里
-        // （反思官 reflect::optimize 在脚本正确后才优化、删完交医生复检）。
-
-        let end_time = chrono::Local::now().to_rfc3339();
-
-        // —— 脚本文件名：用 AI 在 finish 起的名（概括本次测试），兜底用例 slug；
-        //    在脚本目录内去重，绝不覆盖已有脚本 ——
-        let base = outcome
-            .script_name
-            .as_deref()
-            .map(|s| slug(s, 50))
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| slug(case, 40));
-        let script_path = unique_script_path(&opts.script_dir, &base);
-
-        // 先落探索原始脚本；提炼(删冗余步)在 verify 阶段做——靠"删一步就重跑验证"
-        // 来决定能不能删，而不是对着文本想当然，避免删掉必需步把脚本搞断。
-        let final_lines = outcome.lines.clone();
-        write_script(&script_path, case, &final_lines)?;
-        // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
-        let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        ui.emit(UiEvent::ScriptGenerated { name: fname.clone(), steps: final_lines.len(), success: outcome.success });
-
-        // —— 再验证：回放提炼后的脚本，失败让 AI 续接修复，连过 2 次才算稳定 ——
-        // 仅当探索**达成且未被中断**时才验证：脚本没完成就别去验证一个半成品。
-        // result_script_lines：最终落盘的完整脚本（验证后可能更短）；用于 run_end 完整记录。
-        let mut result_script_lines = final_lines.clone();
-        // 诊断/验证回放也必须读**临时库**（探索把元素落在这里）——否则 ScriptRunner 用正式库会全"元素未定义"。
-        // 诊断/验证回放也要用探索同一个设备（含向导选的 web）——否则回放退回默认 adb。
-        let tmp_params = std::sync::Arc::new(
-            opts.params
-                .with_element_lib(element_path.clone())
-                .with_device(Some(device.clone())),
-        );
-        let verified = if opts.verify && outcome.success && !outcome.aborted {
-            // 回放产物（标注截图/页面结构）落在 run_dir/verify 下，便于复盘哪步怎么错
-            let verify_log = run_dir.join("verify");
-            let (verified_lines, rep) = verify::verify_and_repair(
-                &mut sess,
-                &opts.ai,
-                &prompts,
-                &mut tx,
-                &ctx,
-                &tmp_params,
-                &script_path,
-                case,
-                Some(verify_log.as_path()),
-                final_lines.clone(),
-            )
-            .await;
-            if !verified_lines.is_empty() {
-                result_script_lines = verified_lines;
-            }
-            Some(rep)
-        } else {
-            None
-        };
-        // 最终成败：探索达成 且（未自检 或 自检稳定通过）
-        let stable = verified.as_ref().map(|r| r.passed);
-        let overall_success = outcome.success && stable.unwrap_or(true);
-
-        // —— log.json(ExecutionResult，与 run 同构) ——
-        // 总 token = 探索会话(含活体重探复用的同一会话) + 脚本医生独立会话(report.extra_*)
-        let (mut total_prompt, mut total_completion) = sess.total_usage();
-        // 并入：被弃用的重探旧会话 + 反思官会话 + 监督官会话 + 脚本医生独立会话
-        total_prompt += discarded_pt + refl_pt + sup_pt;
-        total_completion += discarded_ct + refl_ct + sup_ct;
-        if let Some(r) = &verified {
-            total_prompt += r.extra_prompt;
-            total_completion += r.extra_completion;
-        }
-        tx.log(
-            "run_end",
-            serde_json::json!({
-                "success": overall_success,
-                "explore_success": outcome.success,
-                "reason": outcome.reason.clone(),
-                "rounds": outcome.rounds,
-                "steps": outcome.steps.len(),
-                "script": script_path.to_string_lossy(),
-                "final_script": result_script_lines,
-                "model": sess.model(),
-                "prompt_tokens": total_prompt,
-                "completion_tokens": total_completion,
-                "total_tokens": total_prompt + total_completion,
-                "elements_created": outcome.created.clone(),
-                "elements_updated": outcome.updated.clone(),
-                "verify": verified.as_ref().map(|r| serde_json::json!({
-                    "ran": r.ran, "passed": r.passed, "repairs": r.repairs, "final_steps": r.final_steps
-                })),
-            }),
-        );
-
-        let exec_result = ExecutionResult {
-            success: overall_success,
-            case_id: String::new(),
-            script_name: stem,
-            start_time,
-            end_time,
-            steps: outcome.steps,
-            error: if overall_success { None } else { Some(outcome.reason.clone()) },
-            script_path: Some(script_path.to_string_lossy().to_string()),
-            run_dir: Some(run_dir.to_string_lossy().to_string()),
-            launched_packages: Vec::new(),
-        };
-        let _ = artifacts.write_log(&exec_result);
-
-        // 导出人类可读的 conversation.json（缩进美化数组）；conversation.jsonl 仍在（抗崩溃流式）
-        let conversation_json = run_dir.join("conversation.json");
-        let _ = tx.finalize(&conversation_json);
-
-        // —— 统一在最末尾渲染「结果 + 元素库」框：放到 verify 之后，
-        //    token 总量才覆盖探索+验证+修复全程；并多给一行「验证状态」——
-        // 本次运行新建的所有元素（跨重探累计 + 验证/修复阶段）
-        let mut all_created = explore_created.clone();
-        if let Some(r) = &verified {
-            for c in &r.created {
-                if !all_created.contains(c) {
-                    all_created.push(c.clone());
-                }
-            }
-        }
-        // 防污染（临时库架构）：探索/修复全程只写临时库 element_path(run_dir 下)，正式库从未被碰。
-        //  - 成功（稳定通过）→ 把**最终脚本实际引用的元素**从临时库提交到正式库(连 img 一起)；临时库随 run_dir 留存复盘。
-        //  - 失败 → 删脚本；临时库随 run_dir 丢弃即可，正式库纹丝不动，无需任何回滚。
-        let referenced = referenced_element_names(&result_script_lines);
-        let feat_names: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
-        let (display_created, committed) = if overall_success {
-            // 定稿语义命名：把终稿用到的「特征自动名」元素改成语义名(改临时库 key + 脚本引用)，再提交正式库
-            let (renamed, semantic) =
-                reflect::finalize_names(&opts.ai, &prompts, &mut tx, &element_path, &result_script_lines, &feat_names).await;
-            result_script_lines = renamed;
-            let _ = write_script(&script_path, case, &result_script_lines); // 落盘改名后的脚本
-            let n = crate::tools::element::commit_elements(&element_path, &real_element_path, &semantic).unwrap_or(0);
-            (semantic, n)
-        } else {
-            let _ = std::fs::remove_file(&script_path);
-            (feat_names, 0)
-        };
-        render_summary(
-            outcome.success,
-            outcome.aborted,
-            &outcome.reason,
-            outcome.rounds,
-            final_lines.len(),
-            verified.as_ref(),
-            sess.model(),
-            total_prompt,
-            total_completion,
-            &display_created,
-            committed,
-            &real_element_path,
-            ui,
-        );
-
-        Ok(AgentResult {
-            success: overall_success,
-            rounds: outcome.rounds,
-            script: script_path,
-            conversation: conversation_json,
-            finish_reason: outcome.reason,
-            aborted: outcome.aborted,
-        })
+    let mut run = testrun::TestRun::explore(opts, ui, case, note).await?;
+    run.verify(opts, ui).await;
+    run.finalize(opts, ui).await
 }
 
 /// 末尾统一渲染「结果 + 元素库更新」框（在 verify 之后调用，token 覆盖全程）。
