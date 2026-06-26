@@ -136,19 +136,19 @@ impl Recognizer {
         match strategy {
             LocatorStrategy::Auto => self.find_auto(locator, structural.as_ref()).await,
             LocatorStrategy::XPath => {
-                xml::find_by_xpath(&ui_tree, name, structural.as_ref().ok_or_else(missing)?)
+                xml::find_by_xpath(&ui_tree, name, structural.as_ref().ok_or_else(missing)?, locator.anchor_center())
             }
             LocatorStrategy::ResourceId => {
-                xml::find_by_resource_id(&ui_tree, name, structural.as_ref().ok_or_else(missing)?)
+                xml::find_by_resource_id(&ui_tree, name, structural.as_ref().ok_or_else(missing)?, locator.anchor_center())
             }
             LocatorStrategy::Text => {
-                xml::find_by_text(&ui_tree, name, structural.as_ref().ok_or_else(missing)?)
+                xml::find_by_text(&ui_tree, name, structural.as_ref().ok_or_else(missing)?, locator.anchor_center())
             }
             LocatorStrategy::ContentDesc => {
-                xml::find_by_content_desc(&ui_tree, name, structural.as_ref().ok_or_else(missing)?)
+                xml::find_by_content_desc(&ui_tree, name, structural.as_ref().ok_or_else(missing)?, locator.anchor_center())
             }
             LocatorStrategy::ClassName => {
-                xml::find_by_class_name(&ui_tree, name, structural.as_ref().ok_or_else(missing)?)
+                xml::find_by_class_name(&ui_tree, name, structural.as_ref().ok_or_else(missing)?, locator.anchor_center())
             }
             LocatorStrategy::Ocr => ocr::find_by_ocr(&screenshot, locator).await,
             LocatorStrategy::Img => {
@@ -171,31 +171,31 @@ impl Recognizer {
         // 1. 尝试结构标识（按优先级）
         if let Some(st) = structural {
             if st.resource_id.is_some() {
-                if let Ok(r) = xml::find_by_resource_id(&ui_tree, &locator.name, st) {
+                if let Ok(r) = xml::find_by_resource_id(&ui_tree, &locator.name, st, locator.anchor_center()) {
                     info!("ResourceId/Id 策略成功找到元素 '{}'", locator.name);
                     return Ok(r);
                 }
             }
             if st.xpath.is_some() {
-                if let Ok(r) = xml::find_by_xpath(&ui_tree, &locator.name, st) {
+                if let Ok(r) = xml::find_by_xpath(&ui_tree, &locator.name, st, locator.anchor_center()) {
                     info!("XPath 策略成功找到元素 '{}'", locator.name);
                     return Ok(r);
                 }
             }
             if st.text.is_some() {
-                if let Ok(r) = xml::find_by_text(&ui_tree, &locator.name, st) {
+                if let Ok(r) = xml::find_by_text(&ui_tree, &locator.name, st, locator.anchor_center()) {
                     info!("Text 策略成功找到元素 '{}'", locator.name);
                     return Ok(r);
                 }
             }
             if st.content_desc.is_some() {
-                if let Ok(r) = xml::find_by_content_desc(&ui_tree, &locator.name, st) {
+                if let Ok(r) = xml::find_by_content_desc(&ui_tree, &locator.name, st, locator.anchor_center()) {
                     info!("ContentDesc/Aria 策略成功找到元素 '{}'", locator.name);
                     return Ok(r);
                 }
             }
             if st.class_name.is_some() {
-                if let Ok(r) = xml::find_by_class_name(&ui_tree, &locator.name, st) {
+                if let Ok(r) = xml::find_by_class_name(&ui_tree, &locator.name, st, locator.anchor_center()) {
                     info!("ClassName/Tag 策略成功找到元素 '{}'", locator.name);
                     return Ok(r);
                 }

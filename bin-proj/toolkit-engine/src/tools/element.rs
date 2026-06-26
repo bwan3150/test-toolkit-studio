@@ -217,6 +217,10 @@ pub async fn add_element(
     if !old_channel_valid {
         entry[channel_key] = channel_value.clone();
     }
+    // anchor：探索落库时该元素的边界框，**仅作回放消歧 tiebreak**（同名多命中选离它最近的，
+    // 点回探索时那一个）。每次采集都更新为最新位置；绝不作主定位/点击坐标。
+    let b = &target.bounds;
+    entry["anchor"] = serde_json::json!([b.x1, b.y1, b.x2, b.y2]);
     // img/ocr 为通用通道：仅在为 null 时填充，--force 强制覆盖。
     // 注意：不删 img_abs——文件名按元素名固定，重复 add 同名元素会把首次存好的模板误删。
     // 已有元素时本次裁的图覆盖了同名文件（内容是当前页，无害），不更新 entry 即可。
@@ -470,6 +474,9 @@ pub async fn add_element_target(
         });
     }
     let entry = &mut lib["elements"][name];
+    // anchor：探索落库时该元素的框，**仅作回放消歧 tiebreak**（同名多命中选离它最近的，点回探索那一个）。
+    // 每次采集都更新为最新位置；绝不作主定位/点击坐标。
+    entry["anchor"] = serde_json::json!([bounds.x1, bounds.y1, bounds.x2, bounds.y2]);
     // desc 更新检测：已有元素 + AI 给了与库里不同的 desc → 视为"更新描述"（供人工审核）
     let old_desc = entry["desc"].as_str().map(|s| s.to_string());
     let desc_updated = existed && desc.as_deref().is_some_and(|d| old_desc.as_deref() != Some(d));

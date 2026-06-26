@@ -172,9 +172,20 @@ pub struct Locator {
     /// OCR 文字内容
     #[serde(default)]
     pub ocr: Option<String>,
+
+    /// 探索落库时该元素的边界框 [x1,y1,x2,y2]，**仅作消歧 tiebreak**——
+    /// 当同名/同 text 在页面上有多个匹配时，回放选离这里最近的那个（点回探索时那一个），
+    /// 而不是盲取第一个。**绝不作主定位、绝不作点击坐标**（点击点仍来自实时匹配到的元素）。
+    #[serde(default)]
+    pub anchor: Option<[i32; 4]>,
 }
 
 impl Locator {
+    /// anchor 中心点（消歧用）。无 anchor 返回 None。
+    pub fn anchor_center(&self) -> Option<(i32, i32)> {
+        self.anchor.map(|[x1, y1, x2, y2]| ((x1 + x2) / 2, (y1 + y2) / 2))
+    }
+
     /// 取当前平台的结构标识，统一映射为 AndroidLocator 形态供匹配引擎使用
     /// （web/ios 页面均已归一化为 uiautomator 风格 XML:
     ///   web: id→resource-id, aria→content-desc, tag→class
