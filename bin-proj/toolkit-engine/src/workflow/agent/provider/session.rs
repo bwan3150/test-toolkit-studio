@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use genai::chat::{ChatMessage, ChatRequest, ContentPart, Tool, ToolResponse};
+use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ContentPart, ReasoningEffort, Tool, ToolResponse};
 use genai::Client;
 
 use crate::utils::AiConfig;
@@ -11,6 +11,32 @@ use crate::{Result, TkeError};
 
 use super::client::build_client;
 use super::types::{LlmReply, LlmTool, LlmToolCall};
+
+/// 把 `[ai].reasoning_effort` 字符串解析成 genai 的 ReasoningEffort（供应商无关）。
+/// 缺省（None）→ Medium（默认开启思考）；显式 "none"/"off" → None（关闭）。
+/// 取值：none/off · low · medium · high · xhigh · max · budget:N。无法识别按 Medium。
+fn parse_reasoning_effort(spec: Option<&str>) -> Option<ReasoningEffort> {
+    let s = match spec {
+        None => return Some(ReasoningEffort::Medium), // 缺省即开
+        Some(s) => s.trim().to_lowercase(),
+    };
+    match s.as_str() {
+        "none" | "off" | "" => None,
+        "low" => Some(ReasoningEffort::Low),
+        "medium" => Some(ReasoningEffort::Medium),
+        "high" => Some(ReasoningEffort::High),
+        "xhigh" => Some(ReasoningEffort::XHigh),
+        "max" => Some(ReasoningEffort::Max),
+        other => {
+            // budget:N → 固定 token 预算
+            if let Some(n) = other.strip_prefix("budget:").and_then(|n| n.trim().parse::<u32>().ok()) {
+                Some(ReasoningEffort::Budget(n))
+            } else {
+                Some(ReasoningEffort::Medium)
+            }
+        }
+    }
+}
 
 /// 一次 AI 探索会话：内部持有 genai 客户端 + 累积的对话请求
 ///
@@ -33,6 +59,8 @@ use super::types::{LlmReply, LlmTool, LlmToolCall};
 pub struct LlmSession {
     client: Client,
     model: String,
+    /// 每轮请求选项（含供应商无关的 reasoning effort）。一次会话固定，每次 exec_chat 复用。
+    options: ChatOptions,
     /// 累积的对话请求（genai 以"整段 messages"为请求单位，逐轮 append）
     req: ChatRequest,
     /// 最近一次 next() 的 token 用量 (上行/输入, 下行/输出)
@@ -79,9 +107,17 @@ impl LlmSession {
             req = req.with_tools(genai_tools);
         }
 
+        // 推理强度（供应商无关）：缺省 medium；显式 none 则不开。
+        // normalize_reasoning_content：把 deepseek/qwen 等 <think>…</think> 抽成 reasoning_content。
+        let mut options = ChatOptions::default().with_normalize_reasoning_content(true);
+        if let Some(effort) = parse_reasoning_effort(cfg.reasoning_effort.as_deref()) {
+            options = options.with_reasoning_effort(effort);
+        }
+
         Ok(Self {
             client,
             model,
+            options,
             req,
             last_usage: (0, 0),
             total_usage: (0, 0),
@@ -173,7 +209,7 @@ impl LlmSession {
     pub async fn next(&mut self) -> Result<LlmReply> {
         let res = self
             .client
-            .exec_chat(&self.model, self.req.clone(), None)
+            .exec_chat(&self.model, self.req.clone(), Some(&self.options))
             .await
             .map_err(|e| TkeError::LlmError(e.to_string()))?;
 

@@ -26,6 +26,7 @@ async fn main() {
         base_url: None,
         max_rounds: None,
         prompts_dir: None,
+        reasoning_effort: None,
     };
 
     // ===== ① 纯文本回复 =====

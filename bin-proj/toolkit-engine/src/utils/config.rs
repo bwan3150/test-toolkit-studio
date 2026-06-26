@@ -66,6 +66,10 @@ pub struct AiConfig {
     pub max_rounds: Option<u32>,
     /// 自定义提示词目录（约定 agents/*.md、tools/*.md；CLI 同名参数优先）
     pub prompts_dir: Option<String>,
+    /// 推理强度（供应商无关，经 genai 映射到各家原生 reasoning：anthropic 思考预算 /
+    /// openai o-系列 / gemini thinking / deepseek reasoner）。取值：
+    /// none(关) / low / medium / high / xhigh / max / budget:N。缺省 = medium。
+    pub reasoning_effort: Option<String>,
 }
 
 /// [knowledge] 段：mem0 记忆 + RAG 知识库的远端服务地址

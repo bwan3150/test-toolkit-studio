@@ -51,6 +51,10 @@ pub struct HarnessArgs {
     /// 覆盖 [ai].base_url（OpenAI 兼容端点：doubao/qwen）
     #[arg(long)]
     pub ai_base_url: Option<String>,
+    /// 覆盖 [ai].reasoning_effort（供应商无关推理强度）：
+    /// none(关) / low / medium / high / xhigh / max / budget:N。缺省 medium。
+    #[arg(long)]
+    pub reasoning_effort: Option<String>,
     /// 覆盖探索最大轮数
     #[arg(long)]
     pub max_rounds: Option<u32>,
@@ -155,6 +159,7 @@ pub async fn handle(
         base_url: args.ai_base_url.or(params.ai.base_url.clone()),
         max_rounds: args.max_rounds.or(params.ai.max_rounds),
         prompts_dir: params.ai.prompts_dir.clone(),
+        reasoning_effort: args.reasoning_effort.or(params.ai.reasoning_effort.clone()),
     };
 
     // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir

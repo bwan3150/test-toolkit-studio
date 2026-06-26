@@ -67,14 +67,18 @@ fn is_openai_compatible(provider: &str) -> bool {
 
 /// 各 provider 的缺省模型（未配 [ai].model 时使用；建议显式配置）
 /// 注意：模型名需为对应服务商 API 接受的真实 id。
+/// anthropic 用 4-6（adaptive thinking 路径）：开 reasoning 时 genai 发 `thinking:{type:adaptive}`，
+/// 不强制把思考块随工具回带；而旧的 4-5 走 legacy budget_tokens 严格模式，配 reasoning + 多轮工具会 400。
 fn default_model(provider: &str) -> String {
     match provider {
-        "anthropic" => "claude-sonnet-4-5",
-        "openai" => "gpt-4o",
+        "anthropic" => "claude-sonnet-4-6",
+        // gpt-5.x 是 reasoning 模型，接受 reasoning_effort；旧的 gpt-4o 非 reasoning，
+        // reasoning 默认常开下会 400，故缺省升到 gpt-5.5-mini（mini 省钱）。
+        "openai" => "gpt-5.5-mini",
         "gemini" => "gemini-2.5-flash",
         "deepseek" => "deepseek-chat",
         // doubao/qwen 无通用缺省模型，必须由 [ai].model 指定
-        _ => "claude-sonnet-4-5",
+        _ => "claude-sonnet-4-6",
     }
     .to_string()
 }
