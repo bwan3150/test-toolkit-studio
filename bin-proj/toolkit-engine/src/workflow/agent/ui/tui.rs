@@ -435,6 +435,26 @@ impl TuiModel {
                     Self::tok_span(tokens),
                 ]));
             }
+            // 主 AI 的计划清单：每项一行，状态用符号+色（☐待办 ▶进行中 ☑完成，完成项划掉）。
+            UiEvent::Todo { items } => {
+                self.push(Line::from(Span::styled("  计划", Style::default().fg(Color::DarkGray))));
+                for it in &items {
+                    let (mark, color) = match it.status {
+                        TodoStatus::Pending => ("☐", Color::DarkGray),
+                        TodoStatus::InProgress => ("▶", Color::Yellow),
+                        TodoStatus::Done => ("☑", Color::Green),
+                    };
+                    let text_style = if it.status == TodoStatus::Done {
+                        Style::default().fg(Color::DarkGray).add_modifier(Modifier::CROSSED_OUT)
+                    } else {
+                        Style::default()
+                    };
+                    self.push(Line::from(vec![
+                        Span::styled(format!("    {} ", mark), Style::default().fg(color)),
+                        Span::styled(it.text.clone(), text_style),
+                    ]));
+                }
+            }
             UiEvent::SubAgent { kind, text, tokens, .. } => {
                 self.add_tokens(tokens);
                 // 子 agent 回复：● + 英文名高亮（agent 专属色），句子用默认色

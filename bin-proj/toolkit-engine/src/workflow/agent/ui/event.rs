@@ -120,6 +120,22 @@ pub struct ElementItem {
     pub desc: Option<String>,
 }
 
+/// 编排官 todo 项状态
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoStatus {
+    Pending,    // 待办
+    InProgress, // 进行中
+    Done,       // 已完成
+}
+
+/// 编排官计划里的一个 todo 项（主 AI 把"探索/验证/收尾"等列成可见可勾选的计划）
+#[derive(Debug, Clone, Serialize)]
+pub struct TodoItem {
+    pub text: String,
+    pub status: TodoStatus,
+}
+
 /// 面向渲染的引擎事件。serde 外部标签 → NDJSON `{"type":"phase", ...}`。
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -152,6 +168,9 @@ pub enum UiEvent {
 
     /// 主 AI（编排官）对用户说的一句话 —— 它是助手本体，渲染成纯文本：无 ● 标记、无名字、无专属色。
     Assistant { text: String, tokens: Tokens },
+
+    /// 主 AI 的计划清单（探索/验证/收尾等步骤，可见可勾选）。每次替换整张清单。
+    Todo { items: Vec<TodoItem> },
 
     /// 子 agent 一句话（断言官 / 监督官 / 反思官 / 医生 / 优化官）。
     /// text 已是要展示的核心句（如监督官「打回（第2次）：…」由引擎拼好），level 决定色调。

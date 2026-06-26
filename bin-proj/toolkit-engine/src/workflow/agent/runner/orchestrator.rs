@@ -14,7 +14,7 @@ use crate::models::Platform;
 use crate::{Frontend, LlmReply, LlmSession, LlmTool, Result, UiCommand, UiEvent};
 
 use super::super::prompt::PromptSet;
-use super::super::ui::{Level, Tokens};
+use super::super::ui::{Level, TodoItem, TodoStatus, Tokens};
 use super::options::{AgentResult, AgentRunOptions};
 use super::testrun::TestRun;
 use super::interrupt;
@@ -38,6 +38,28 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
         ),
         LlmTool::new("verify", desc("verify"), empty()),
         LlmTool::new("finalize", desc("finalize"), empty()),
+        LlmTool::new(
+            "update_todos",
+            desc("update_todos"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "todos": {
+                        "type": "array",
+                        "description": "完整的当前计划（每次替换整张清单，不是增量）",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": { "type": "string", "description": "这一步要做什么" },
+                                "status": { "type": "string", "enum": ["pending", "in_progress", "completed"], "description": "状态：pending 待办 / in_progress 进行中 / completed 已完成" }
+                            },
+                            "required": ["text", "status"]
+                        }
+                    }
+                },
+                "required": ["todos"]
+            }),
+        ),
         LlmTool::new(
             "ask_user",
             desc("ask_user"),
@@ -188,6 +210,13 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 sess.tool_result(call.call_id, "没有进行中的运行可收尾（请先 explore）。");
                             }
                         },
+                        // —— 更新计划清单（把探索/验证/收尾等列成可见可勾选的 todo）——
+                        "update_todos" => {
+                            let items = parse_todos(&call.arguments);
+                            let n = items.len();
+                            ui.emit(UiEvent::Todo { items });
+                            sess.tool_result(call.call_id, format!("计划已更新（{} 项）。继续执行下一步。", n));
+                        }
                         "ask_user" => {
                             let q = call
                                 .arguments
@@ -239,6 +268,29 @@ fn arg_str(args: &serde_json::Value, key: &str) -> String {
 /// 取一段文字的首行（用于事件里简短展示用例）
 fn first_line(s: &str) -> &str {
     s.lines().next().unwrap_or("").trim()
+}
+
+/// 解析 update_todos 的 todos 数组 → Vec<TodoItem>（空 text 跳过；未知状态当 pending）
+fn parse_todos(args: &serde_json::Value) -> Vec<TodoItem> {
+    args.get("todos")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|t| {
+                    let text = t.get("text").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                    if text.is_empty() {
+                        return None;
+                    }
+                    let status = match t.get("status").and_then(|v| v.as_str()).unwrap_or("pending") {
+                        "in_progress" => TodoStatus::InProgress,
+                        "completed" | "done" => TodoStatus::Done,
+                        _ => TodoStatus::Pending,
+                    };
+                    Some(TodoItem { text, status })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// 主 AI（编排官）对用户说的一句话：作为助手本体发 Assistant 事件（前端渲染成纯文本、无名无色）。

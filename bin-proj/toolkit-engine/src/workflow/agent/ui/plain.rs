@@ -90,6 +90,18 @@ impl Frontend for PlainFrontend {
             UiEvent::Assistant { text, tokens } => {
                 eprintln!("  {}  {}", brief(&text, 400), self.toks(tokens));
             }
+            // 主 AI 的计划清单：每项一行（[ ]待办 [~]进行中 [x]完成）。
+            UiEvent::Todo { items } => {
+                eprintln!("  计划：");
+                for it in &items {
+                    let mark = match it.status {
+                        TodoStatus::Pending => "[ ]",
+                        TodoStatus::InProgress => "[~]",
+                        TodoStatus::Done => "[x]",
+                    };
+                    eprintln!("    {} {}", mark, it.text);
+                }
+            }
             UiEvent::SubAgent { kind, level, text, tokens } => {
                 eprintln!(
                     "  {} {}  {}",
