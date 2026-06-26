@@ -30,12 +30,16 @@ pub const DEFAULT_ASSERTER_SYSTEM: &str = include_str!("builtin/agents/asserter.
 /// 默认编排官系统提示词（角色 orchestrator：与用户对话、调度整条探索→验证子流程）
 pub const DEFAULT_ORCHESTRATOR_SYSTEM: &str = include_str!("builtin/agents/orchestrator.md");
 
+/// 默认操作员系统提示词（角色 operator：通用设备任务驱动 agent，非测试、不产脚本）
+pub const DEFAULT_OPERATOR_SYSTEM: &str = include_str!("builtin/agents/operator.md");
+
 /// 某角色的默认系统提示词（外部 <prompts_dir>/agents/<role>.md 可覆盖）。
 /// 全角色对称：每个角色显式一支；orchestrator 是 primary（CLI --system-prompt 覆盖它），
 /// explorer/doctor/… 都是被调度的 worker，地位相同。
 pub fn default_role_system(role: &str) -> &'static str {
     match role {
         "orchestrator" => DEFAULT_ORCHESTRATOR_SYSTEM,
+        "operator" => DEFAULT_OPERATOR_SYSTEM,
         "explorer" => DEFAULT_EXPLORER_SYSTEM,
         "doctor" => DEFAULT_DOCTOR_SYSTEM,
         "reflector" => DEFAULT_REFLECTOR_SYSTEM,

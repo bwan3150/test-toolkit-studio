@@ -45,7 +45,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             json!({
                 "type": "object",
                 "properties": {
-                    "goal": { "type": "string", "description": "要在设备上完成的一般任务目标（非测试），如『进入隐私政策页』『找到并截取用户头像』" }
+                    "goal": { "type": "string", "description": "要在设备上完成的一般任务目标（非测试），如『进入隐私政策页』『找到并截取用户头像』" },
+                    "read_full": { "type": "boolean", "description": "任务是读取长内容（如整页 policy）时设 true：到达后会滚动逐屏收集全部文字。只是截图/找元素时留 false（默认），别乱滚走开。" }
                 },
                 "required": ["goal"]
             }),
@@ -244,8 +245,9 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 sess.tool_result(call.call_id, "未提供 goal，无法执行。");
                                 continue;
                             }
+                            let read_full = call.arguments.get("read_full").and_then(|v| v.as_bool()).unwrap_or(false);
                             emit_orch(ui, &sess, &format!("开始任务：{}", first_line(&goal)));
-                            let r = operate(opts, ui, &goal).await?;
+                            let r = operate(opts, ui, &goal, read_full).await?;
                             ran_any = true;
                             let mut msg = format!(
                                 "任务完成：{}。\n- 结果依据：{}\n- 轮数：{}\n- 末页截图：{}",
