@@ -17,6 +17,7 @@ use super::super::prompt::PromptSet;
 use super::super::ui::{Level, TodoItem, TodoStatus, Tokens};
 use super::options::{AgentResult, AgentRunOptions};
 use super::testrun::TestRun;
+use super::operate::operate;
 use super::interrupt;
 
 /// 编排官工具集（手写 schema；description 走 PromptSet 角色化，可外部覆盖）。
@@ -38,6 +39,29 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
         ),
         LlmTool::new("verify", desc("verify"), empty()),
         LlmTool::new("finalize", desc("finalize"), empty()),
+        LlmTool::new(
+            "operate",
+            desc("operate"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "goal": { "type": "string", "description": "要在设备上完成的一般任务目标（非测试），如『进入隐私政策页』『找到并截取用户头像』" }
+                },
+                "required": ["goal"]
+            }),
+        ),
+        LlmTool::new(
+            "save_file",
+            desc("save_file"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "filename": { "type": "string", "description": "文件名（如 policy.md；只取文件名部分，存到脚本输出目录）" },
+                    "content": { "type": "string", "description": "要写入的完整内容" }
+                },
+                "required": ["filename", "content"]
+            }),
+        ),
         LlmTool::new(
             "update_todos",
             desc("update_todos"),
@@ -95,9 +119,12 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
     // 开场：把用户给的初始用例交给编排官（半自动：有用例就让它直接安排）
     let opening = opts.case.trim();
     if opening.is_empty() {
-        sess.user("会话已开始，用户还没有给出测试用例。请先用 ask_user 简短地问用户想测什么。".to_string());
+        sess.user("会话已开始，用户还没有说要做什么。请先用 ask_user 简短地问用户想让你在这台设备上做什么。".to_string());
     } else {
-        sess.user(format!("用户要测的用例：\n{}\n\n请安排执行（常规：explore → verify → finalize）。", opening));
+        sess.user(format!(
+            "用户给的任务：\n{}\n\n请先判断这是「要可回放脚本的测试」还是「一般任务」，再选对工具安排执行。",
+            opening
+        ));
     }
 
     // 当前进行中的运行（一条用例的 TestRun，跨工具调用存活）；最近一次 finalize 的结果。
@@ -144,7 +171,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 }
                 if !ui.is_interactive() && !ran_any && nudge < 2 {
                     nudge += 1;
-                    sess.user("请直接调用 explore 开始探索用户给的用例（不要只用文字回复）。".to_string());
+                    sess.user("请直接用对应工具开始（测试用 explore，一般任务用 operate），不要只用文字回复。".to_string());
                     continue;
                 }
                 if !ui.is_interactive() {
@@ -210,6 +237,55 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 sess.tool_result(call.call_id, "没有进行中的运行可收尾（请先 explore）。");
                             }
                         },
+                        // —— 通用任务：朝目标驱动设备（不产脚本/不验证），返回末页文字+截图供交付 ——
+                        "operate" => {
+                            let goal = arg_str(&call.arguments, "goal");
+                            if goal.trim().is_empty() {
+                                sess.tool_result(call.call_id, "未提供 goal，无法执行。");
+                                continue;
+                            }
+                            emit_orch(ui, &sess, &format!("开始任务：{}", first_line(&goal)));
+                            let r = operate(opts, ui, &goal).await?;
+                            ran_any = true;
+                            let mut msg = format!(
+                                "任务完成：{}。\n- 结果依据：{}\n- 轮数：{}\n- 末页截图：{}",
+                                if r.success { "达成" } else { "未完全达成" },
+                                r.summary,
+                                r.rounds,
+                                r.screenshot.display()
+                            );
+                            let text = r.final_text.trim();
+                            if !text.is_empty() {
+                                // 末页可读文字给编排官取材（存 md / 答问）；截断防爆 token
+                                let snippet: String = text.chars().take(4000).collect();
+                                msg.push_str(&format!("\n- 末页可读文字（截断 4000 字）：\n{}", snippet));
+                            }
+                            sess.tool_result(call.call_id, msg);
+                        }
+                        // —— 把内容写成文件交付（如 policy.md）——
+                        "save_file" => {
+                            let filename = arg_str(&call.arguments, "filename");
+                            let content = arg_str(&call.arguments, "content");
+                            // 只取文件名部分，防目录穿越；存到脚本输出目录
+                            let safe = std::path::Path::new(&filename)
+                                .file_name()
+                                .map(|s| s.to_string_lossy().to_string())
+                                .unwrap_or_default();
+                            if safe.is_empty() {
+                                sess.tool_result(call.call_id, "未提供有效 filename。");
+                                continue;
+                            }
+                            let path = opts.script_dir.join(&safe);
+                            match std::fs::write(&path, content.as_bytes()) {
+                                Ok(()) => {
+                                    emit_orch(ui, &sess, &format!("已保存文件：{}", path.display()));
+                                    sess.tool_result(call.call_id, format!("已保存到 {}", path.display()));
+                                }
+                                Err(e) => {
+                                    sess.tool_result(call.call_id, format!("保存失败：{}", e));
+                                }
+                            }
+                        }
                         // —— 更新计划清单（把探索/验证/收尾等列成可见可勾选的 todo）——
                         "update_todos" => {
                             let items = parse_todos(&call.arguments);

@@ -5,6 +5,7 @@ pub mod asserter;
 pub mod doctor;
 pub mod flow;
 pub mod interrupt;
+pub mod operate;
 pub mod options;
 pub mod orchestrator;
 pub mod reflect;

@@ -80,6 +80,7 @@ macro_rules! drive_ctx {
             case: &$r.case,
             ai: &$opts.ai,
             ui: $ui,
+            task_mode: false,
         }
     };
 }

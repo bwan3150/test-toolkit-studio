@@ -160,6 +160,9 @@ pub struct DriveCtx<'a> {
     pub ai: &'a crate::AiConfig,
     /// UI 前端：引擎的所有渲染事件经 emit 发出，安全点 drain_commands 取命令
     pub ui: &'a dyn Frontend,
+    /// 通用任务模式（operate）：朝任意目标驱动设备、不产可回放脚本——跳过测试专属的
+    /// 踩实官(自动断言)与监督官(finish 把关)。false=测试探索（行为不变）。
+    pub task_mode: bool,
 }
 
 /// 循环结果
@@ -518,7 +521,7 @@ pub async fn drive(
         //     断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。给断言官**两页的完整元素**
         //     （点击前 + 点击后），并在点击后那页**标★出本次新出现的元素**——既有完整上下文、又一眼看出本步
         //     前后变化。挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
-        if changed_after_nav && !super::interrupt::aborted() {
+        if changed_after_nav && !ctx.task_mode && !super::interrupt::aborted() {
             let action_desc = lines.last().map(|l| friendly(l)).unwrap_or_default();
             // 点击前那页（完整）
             let prev_listing = prev_action_elements
@@ -712,7 +715,8 @@ pub async fn drive(
                     sess.tool_result(primary.call_id.as_str(), "结束前先交监督官审查");
                     // —— 监督官把关：独立 agent 审查「用户需求 + 全部步骤 + 最后一页元素」，放行才结束、
                     //    否则打回继续探索（治"过早 finish/放弃"）。打回有上限，到顶后判定卡死、以失败收场。
-                    if supervisor_rejects < MAX_SUPERVISOR_REJECTS && perceive_err.is_none() {
+                    // 通用任务模式(operate)跳过把关——它不是"完成测试用例"，agent 说做完就做完。
+                    if !ctx.task_mode && supervisor_rejects < MAX_SUPERVISOR_REJECTS && perceive_err.is_none() {
                         // 步骤清单：步号 · 动作 · 当时理由
                         let steps_listing = lines
                             .iter()

@@ -62,6 +62,8 @@ fn default_orchestrator_tool_description(name: &str) -> &'static str {
         "explore" => include_str!("builtin/tools/orchestrator/explore.md"),
         "verify" => include_str!("builtin/tools/orchestrator/verify.md"),
         "finalize" => include_str!("builtin/tools/orchestrator/finalize.md"),
+        "operate" => include_str!("builtin/tools/orchestrator/operate.md"),
+        "save_file" => include_str!("builtin/tools/orchestrator/save_file.md"),
         "update_todos" => include_str!("builtin/tools/orchestrator/update_todos.md"),
         "ask_user" => include_str!("builtin/tools/orchestrator/ask_user.md"),
         "finish" => include_str!("builtin/tools/orchestrator/finish.md"),
