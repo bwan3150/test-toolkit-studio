@@ -1,6 +1,8 @@
 // Harness 命令处理器（③ 工作流）
-// tke harness <用例.md|"用例文字"> --script <导出.tks路径> [-d 设备] [-c 配置]
-// AI 在真机上探索测试并生成 .tks 脚本（tke 内置 AI 闭环，已替代废弃的 tester-ai）
+// tke harness --script <导出.tks目录> [-d 设备 | --platform web] [--testcase 开场白] [-c 配置]
+// tke 是一个**对话式、测试领域专精的 AI agent**（CLI/TUI/JSON spawn 三前端），能操作
+// 安卓/iOS/web，探索测试并生成 .tks 脚本。默认就进对话——用例靠对话给（编排官会问），
+// `--testcase` 只是可选开场白；不再是"接到指令就走过场"的单次触发。
 //
 // 参数来源优先级：CLI 显式 --ai-* / --system-prompt* > 配置文件 [ai] 段。
 // 敏感 key 建议放 -c 配置文件，避免出现在进程命令行。
@@ -31,7 +33,8 @@ impl PlatformArg {
 /// Harness 命令参数
 #[derive(clap::Args)]
 pub struct HarnessArgs {
-    /// 测试用例：.md/.txt 文件路径，或一段文字描述（不传则进入交互式向导）
+    /// 可选开场白：.md/.txt 文件路径，或一段用例文字。不传则进对话——
+    /// 终端下向导只选设备/平台、用例由编排官在对话里问；app(--json) 经 NDJSON 发首条消息。
     #[arg(long)]
     pub testcase: Option<String>,
 
@@ -112,23 +115,17 @@ pub async fn handle(
     };
 
     // —— 用例 / 设备 / 平台 ——
-    //   --testcase 直跑：文件则读取、否则当文字；platform 来自 --platform；设备走全局 -d
-    //   无 --testcase + 终端：在前端里交互 setup（选设备/输入用例）
-    //   无 --testcase + --json / 非终端：报错（app/管道场景必须显式给 --testcase）
+    // tke 默认就是个对话式测试 agent：用例靠对话给（编排官会问），`--testcase` 只是**可选开场白**。
+    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform。
+    //   无 --testcase + 终端：进交互向导**只选设备/平台**，用例留空进对话。
+    //   无 --testcase + --json / 非终端：用例留空（app 经 NDJSON 发首条消息 / 管道场景），设备走 -d。
     let (case_text, dev_override, platform): (String, Option<String>, Option<Platform>) =
         if let Some(tc) = args.testcase.clone() {
-            let text = load_case(&tc);
-            if params.device().is_none() {
-                JsonOutput::error(
-                    "harness 需指定设备：-d/--device <设备ID>（或不带 --testcase 启动进入交互向导）",
-                );
-            }
-            (text, None, args.platform.map(|p| p.to_platform()))
-        } else if params.json {
-            JsonOutput::error("--json 模式必须用 --testcase 提供用例（app 集成不进交互向导）");
-        } else if std::io::stdin().is_terminal() {
+            (load_case(&tc), None, args.platform.map(|p| p.to_platform()))
+        } else if !params.json && std::io::stdin().is_terminal() {
+            // 交互向导：只挑设备/平台，用例留空（开场后由编排官 ask_user 问）
             match interactive_setup(frontend.as_ref()).await {
-                Some(s) => s,
+                Some((dev, plat)) => (String::new(), dev, plat),
                 None => {
                     // setup 阶段用户 Ctrl+C / 放弃：恢复终端后安静退出
                     frontend.shutdown().await;
@@ -136,10 +133,16 @@ pub async fn handle(
                 }
             }
         } else {
-            JsonOutput::error(
-                "harness 需要 --testcase <用例>（或在终端中无参启动以进入交互向导）",
-            )
+            // --json（app spawn）/ 非终端：用例留空，设备/平台走参数（app 之后经 NDJSON 发首条消息）
+            (String::new(), None, args.platform.map(|p| p.to_platform()))
         };
+
+    // 操作目标兜底校验：既没设备也没平台时无法确定操作什么（web 需 --platform web 或 -d web）
+    if dev_override.is_none() && params.device().is_none() && platform.is_none() {
+        JsonOutput::error(
+            "需要指定操作目标：-d/--device <设备ID>，或 --platform web（终端下无参启动可用向导选择）",
+        );
+    }
 
     // setup 选好的参数显示在 TUI 顶部（探索开始前的第一条）
     frontend.emit(tke::UiEvent::SessionInfo {
@@ -236,12 +239,13 @@ fn load_case(s: &str) -> String {
     }
 }
 
-/// 交互式 setup：在已建好的前端（通常是全屏 TUI）里逐项问设备 / 用例。
-/// 全程走前端的 await_answer（TUI 下是输入框，Ctrl+C 即时退出）。
-/// 返回 (用例文字, 设备覆盖(web→Some("web")), 平台覆盖)；用户中途 Ctrl+C / 放弃返回 None。
+/// 交互式 setup：在已建好的前端（通常是全屏 TUI）里**只挑设备 / 平台**。
+/// 用例不在这里问——开场后由编排官 ask_user 在对话里问（tke 是对话式 agent）。
+/// 全程走前端的 await_choice/await_answer（TUI 下是列表/输入框，Ctrl+C 即时退出）。
+/// 返回 (设备覆盖(web→Some("web")), 平台覆盖)；用户中途 Ctrl+C / 放弃返回 None。
 async fn interactive_setup(
     ui: &dyn tke::Frontend,
-) -> Option<(String, Option<String>, Option<Platform>)> {
+) -> Option<(Option<String>, Option<Platform>)> {
     // 列 Android 设备（仅 Android 有列举能力；iOS/Web 让用户手填 / 选）
     let devices: Vec<String> = match tke::drivers::AdbDriver::new(None) {
         Ok(adb) => adb.get_devices().unwrap_or_default(),
@@ -269,10 +273,5 @@ async fn interactive_setup(
         }
     };
 
-    let case_in = ui
-        .await_answer(0, "请输入测试用例（一段描述，或 .md/.txt 文件路径）".to_string())
-        .await?;
-    let case_text = load_case(case_in.trim());
-
-    Some((case_text, device, platform))
+    Some((device, platform))
 }
