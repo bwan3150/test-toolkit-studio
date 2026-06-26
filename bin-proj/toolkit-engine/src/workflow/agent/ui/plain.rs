@@ -84,7 +84,11 @@ impl Frontend for PlainFrontend {
                 eprintln!("  {}", paint(tty, "33", &format!("~ {}", message)));
             }
             UiEvent::AgentThought { text, tokens, .. } => {
-                eprintln!("  {}  {}", brief(&text, 200), self.toks(tokens));
+                eprintln!("  {} {}  {}", paint(tty, "2", "└ Explorer"), brief(&text, 200), self.toks(tokens));
+            }
+            // 主 AI（编排官）：助手本体，纯文本一行，无名字前缀。
+            UiEvent::Assistant { text, tokens } => {
+                eprintln!("  {}  {}", brief(&text, 400), self.toks(tokens));
             }
             UiEvent::SubAgent { kind, level, text, tokens } => {
                 eprintln!(

@@ -26,7 +26,7 @@ pub fn build_tools(prompts: &PromptSet, platform: crate::Platform) -> Vec<LlmToo
             if !NO_COMMENT.contains(&t.name) {
                 inject_comment(&mut t.schema);
             }
-            LlmTool::new(t.name, prompts.tool_description(t.name), t.schema)
+            LlmTool::new(t.name, prompts.role_tool_description("explorer", t.name), t.schema)
         })
         .collect()
 }

@@ -6,6 +6,7 @@ pub mod doctor;
 pub mod flow;
 pub mod interrupt;
 pub mod options;
+pub mod orchestrator;
 pub mod reflect;
 pub mod supervisor;
 pub mod verify;
@@ -31,9 +32,27 @@ use flow::{drive, DriveCtx};
 pub struct AgentRunner;
 
 impl AgentRunner {
+    /// 入口：安装统一中断 + 开一场编排官会话。
+    /// 编排官(orchestrator)与用户对话、按需调度 `run_one_testcase` 执行各条用例。
     pub async fn run(opts: AgentRunOptions, ui: &dyn Frontend) -> Result<AgentResult> {
         // 统一中断：安装进程级 Ctrl+C 监听，探索/诊断/验证/医生各阶段共用同一中断标志
         interrupt::install();
+        // 脚本输出目录确保存在（会话级，建一次）
+        std::fs::create_dir_all(&opts.script_dir).ok();
+        // 编排官接管整场会话：以 opts.case 为开场用例，调度各次 run_one_testcase
+        orchestrator::serve(&opts, ui).await
+    }
+}
+
+/// 执行单条测试用例的完整子流程（探索→重探→落脚本→验证修复→收尾），返回结果。
+/// 从原 run() 抽出、行为不变；现由编排官(orchestrator)按需调度，可在一场会话里跑多条。
+/// `case`=本次要测的用例（替代 opts.case）；`note`=编排官下发的额外约束（用户纠偏/已否定路径等），无则 None。
+pub(crate) async fn run_one_testcase(
+    opts: &AgentRunOptions,
+    ui: &dyn Frontend,
+    case: &str,
+    note: Option<&str>,
+) -> Result<AgentResult> {
         // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
         let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
         let platform = opts.platform.unwrap_or_else(|| Platform::from_device(Some(&device)));
@@ -51,7 +70,7 @@ impl AgentRunner {
         // —— 产物目录：复用 RunArtifacts，与 tke run 同构 ——
         // log 根：--log/config 优先；缺省落脚本目录下（harness 始终保留探索记录）。
         // run_dir 名用「用例 slug」（最终 .tks 文件名由 AI 起，两者解耦，run_end 里有脚本路径）
-        let stem = slug(&opts.case, 30);
+        let stem = slug(case, 30);
         let log_root = opts.params.log.clone().unwrap_or_else(|| opts.script_dir.clone());
         let artifacts = RunArtifacts::create(&log_root, &stem)?;
         let run_dir = artifacts.run_dir.clone();
@@ -67,15 +86,15 @@ impl AgentRunner {
 
         // —— 记忆 + 知识库（本期：未配置则跳过真实调用，记 skipped）——
         let knowledge = Knowledge::new(&opts.params.knowledge);
-        record_knowledge(&mut tx, "memory_query", knowledge.query_memory(&opts.case));
-        record_knowledge(&mut tx, "rag_query", knowledge.query_rag(&opts.case));
+        record_knowledge(&mut tx, "memory_query", knowledge.query_memory(case));
+        record_knowledge(&mut tx, "rag_query", knowledge.query_rag(case));
 
         // —— 会话 ——
-        let system_prompt = prompts.system(&device, platform.name());
+        let system_prompt = prompts.role_system("explorer", &device, platform.name());
         tx.log("system_prompt", serde_json::json!({ "content": system_prompt.clone() }));
         tx.log(
             "case",
-            serde_json::json!({ "content": opts.case.clone(), "device": device.clone(), "platform": platform.name() }),
+            serde_json::json!({ "content": case, "device": device.clone(), "platform": platform.name() }),
         );
         tx.log(
             "config",
@@ -103,9 +122,15 @@ impl AgentRunner {
         );
         let mut sess = LlmSession::new(&opts.ai, system_prompt, tools)?;
         tx.log("model", serde_json::json!({ "model": sess.model() }));
-        let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", &opts.case)]);
+        let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", case)]);
         tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
         sess.user(case_msg);
+        // 编排官下发的额外约束（用户纠偏/已否定路径等）：作为硬约束追加在用例之后
+        if let Some(n) = note.map(str::trim).filter(|s| !s.is_empty()) {
+            let guide = format!("【编排官下发的约束/提示，请务必遵守】\n{}", n);
+            tx.log("llm_message", serde_json::json!({ "content": guide.clone() }));
+            sess.user(guide);
+        }
 
         // —— 驱动循环 ——
         let workarea = Workarea::for_device(Some(&device))?;
@@ -121,7 +146,7 @@ impl AgentRunner {
             ocr: opts.ocr.as_ref(),
             max_rounds,
             prompts: &prompts,
-            case: &opts.case,
+            case: case,
             ai: &opts.ai,
             ui,
         };
@@ -157,7 +182,7 @@ impl AgentRunner {
             reexplore_n += 1;
             let refl_pt_this;
             let refl_ct_this;
-            let guidance = match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, &opts.case, &outcome, false).await {
+            let guidance = match reflect::reflect(&opts.ai, &prompts, &mut tx, &device, &fetcher, &run_dir, case, &outcome, false).await {
                 Some(r) => {
                     refl_pt += r.prompt_tokens;
                     refl_ct += r.completion_tokens;
@@ -179,8 +204,8 @@ impl AgentRunner {
             discarded_pt += dp;
             discarded_ct += dc;
             // 全新探索会话 + 用例 + 重探指导，从头带指导重探（避免旧会话 N 步的混乱上下文）
-            sess = LlmSession::new(&opts.ai, prompts.system(&device, platform.name()), build_tools(&prompts, platform))?;
-            let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", &opts.case)]);
+            sess = LlmSession::new(&opts.ai, prompts.role_system("explorer", &device, platform.name()), build_tools(&prompts, platform))?;
+            let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", case)]);
             tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
             sess.user(case_msg);
             let guide_msg = format!(
@@ -211,13 +236,13 @@ impl AgentRunner {
             .as_deref()
             .map(|s| slug(s, 50))
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| slug(&opts.case, 40));
+            .unwrap_or_else(|| slug(case, 40));
         let script_path = unique_script_path(&opts.script_dir, &base);
 
         // 先落探索原始脚本；提炼(删冗余步)在 verify 阶段做——靠"删一步就重跑验证"
         // 来决定能不能删，而不是对着文本想当然，避免删掉必需步把脚本搞断。
         let final_lines = outcome.lines.clone();
-        write_script(&script_path, &opts.case, &final_lines)?;
+        write_script(&script_path, case, &final_lines)?;
         // 明确标出生成结果，与后续验证阶段分开（不再把生成完成信息混在步骤里）。
         let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         ui.emit(UiEvent::ScriptGenerated { name: fname.clone(), steps: final_lines.len(), success: outcome.success });
@@ -244,7 +269,7 @@ impl AgentRunner {
                 &ctx,
                 &tmp_params,
                 &script_path,
-                &opts.case,
+                case,
                 Some(verify_log.as_path()),
                 final_lines.clone(),
             )
@@ -331,7 +356,7 @@ impl AgentRunner {
             let (renamed, semantic) =
                 reflect::finalize_names(&opts.ai, &prompts, &mut tx, &element_path, &result_script_lines, &feat_names).await;
             result_script_lines = renamed;
-            let _ = write_script(&script_path, &opts.case, &result_script_lines); // 落盘改名后的脚本
+            let _ = write_script(&script_path, case, &result_script_lines); // 落盘改名后的脚本
             let n = crate::tools::element::commit_elements(&element_path, &real_element_path, &semantic).unwrap_or(0);
             (semantic, n)
         } else {
@@ -362,7 +387,6 @@ impl AgentRunner {
             finish_reason: outcome.reason,
             aborted: outcome.aborted,
         })
-    }
 }
 
 /// 末尾统一渲染「结果 + 元素库更新」框（在 verify 之后调用，token 覆盖全程）。

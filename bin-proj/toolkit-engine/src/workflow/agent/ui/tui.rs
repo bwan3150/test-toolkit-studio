@@ -62,6 +62,11 @@ impl Frontend for TuiFrontend {
         let _ = self.events_tx.send(ev);
     }
 
+    /// TUI 是唯一可与用户多轮对话的前端：编排官跑完一条用例后可在此等下一句（REPL）。
+    fn is_interactive(&self) -> bool {
+        true
+    }
+
     fn drain_commands(&self) -> Vec<UiCommand> {
         let mut cmds = Vec::new();
         if let Ok(mut rx) = self.commands_rx.lock() {
@@ -414,11 +419,19 @@ impl TuiModel {
             }
             UiEvent::AgentThought { text, tokens, .. } => {
                 self.add_tokens(tokens);
-                // Explorer 回复：● + 名字高亮（白），句子用默认色
+                // Explorer 子 agent 回复：● + 名字高亮（专属蓝色），句子用默认色
                 self.push(Line::from(vec![
-                    Span::styled("● ", Style::default().fg(Color::White)),
-                    Span::styled("Explorer ", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    Span::styled("● ", Style::default().fg(Color::Blue)),
+                    Span::styled("Explorer ", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
                     Span::raw(brief(&text, 200)),
+                    Self::tok_span(tokens),
+                ]));
+            }
+            // 主 AI（编排官）：助手本体，纯文本渲染——无 ● 无名字无专属色，与子 agent 区分开。
+            UiEvent::Assistant { text, tokens } => {
+                self.add_tokens(tokens);
+                self.push(Line::from(vec![
+                    Span::raw(brief(&text, 400)),
                     Self::tok_span(tokens),
                 ]));
             }

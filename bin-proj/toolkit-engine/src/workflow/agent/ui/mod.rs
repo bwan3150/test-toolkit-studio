@@ -29,6 +29,13 @@ pub trait Frontend: Send + Sync {
     /// 单向：发一个渲染事件（永不阻塞引擎）
     fn emit(&self, ev: UiEvent);
 
+    /// 是否是可与用户多轮对话的交互式前端（真 TTY 的 TUI）。
+    /// 编排官据此决定：交互式 → 跑完一条用例后等用户下一句（REPL）；
+    /// 非交互式（管道/CI/被 app spawn 的 JSON）→ 跑完即结束，绝不阻塞等输入。
+    fn is_interactive(&self) -> bool {
+        false
+    }
+
     /// 安全点非阻塞取命令（每轮开始/LLM 调用前/步骤后调），返回本次累积的所有命令。
     fn drain_commands(&self) -> Vec<UiCommand>;
 

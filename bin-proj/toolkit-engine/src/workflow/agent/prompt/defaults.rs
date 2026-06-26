@@ -9,8 +9,8 @@
 // 回落链：CLI 注入文本 > CLI .md 文件 > --prompts-dir 目录文件 > 这里的内置文件。
 // 占位 {device}/{platform} 由 PromptSet::system 渲染替换。
 
-/// 默认主系统提示词（角色 explorer）
-pub const DEFAULT_SYSTEM: &str = include_str!("builtin/agents/explorer.md");
+/// 默认探索官系统提示词（角色 explorer——被编排官调度的 worker，非 primary）
+pub const DEFAULT_EXPLORER_SYSTEM: &str = include_str!("builtin/agents/explorer.md");
 
 /// 默认脚本医生系统提示词（角色 doctor）
 pub const DEFAULT_DOCTOR_SYSTEM: &str = include_str!("builtin/agents/doctor.md");
@@ -27,15 +27,22 @@ pub const DEFAULT_SUPERVISOR_SYSTEM: &str = include_str!("builtin/agents/supervi
 /// 默认踩实官系统提示词（角色 asserter：每次导航后据 diff 挑标志元素自动断言踩实）
 pub const DEFAULT_ASSERTER_SYSTEM: &str = include_str!("builtin/agents/asserter.md");
 
-/// 某角色的默认系统提示词（外部 <prompts_dir>/agents/<role>.md 可覆盖）
+/// 默认编排官系统提示词（角色 orchestrator：与用户对话、调度整条探索→验证子流程）
+pub const DEFAULT_ORCHESTRATOR_SYSTEM: &str = include_str!("builtin/agents/orchestrator.md");
+
+/// 某角色的默认系统提示词（外部 <prompts_dir>/agents/<role>.md 可覆盖）。
+/// 全角色对称：每个角色显式一支；orchestrator 是 primary（CLI --system-prompt 覆盖它），
+/// explorer/doctor/… 都是被调度的 worker，地位相同。
 pub fn default_role_system(role: &str) -> &'static str {
     match role {
+        "orchestrator" => DEFAULT_ORCHESTRATOR_SYSTEM,
+        "explorer" => DEFAULT_EXPLORER_SYSTEM,
         "doctor" => DEFAULT_DOCTOR_SYSTEM,
         "reflector" => DEFAULT_REFLECTOR_SYSTEM,
         "optimizer" => DEFAULT_OPTIMIZER_SYSTEM,
         "supervisor" => DEFAULT_SUPERVISOR_SYSTEM,
         "asserter" => DEFAULT_ASSERTER_SYSTEM,
-        _ => DEFAULT_SYSTEM, // explorer 及未知角色回落主提示词
+        _ => DEFAULT_EXPLORER_SYSTEM, // 未知角色兜底（不应出现；给探索提示词避免空 system）
     }
 }
 
@@ -44,7 +51,18 @@ pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
     match role {
         "doctor" => default_doctor_tool_description(name),
         "optimizer" => default_optimizer_tool_description(name),
+        "orchestrator" => default_orchestrator_tool_description(name),
         _ => default_tool_description(name),
+    }
+}
+
+/// 编排官各工具默认 description（外部 <prompts_dir>/tools/orchestrator/<name>.md 可覆盖）
+fn default_orchestrator_tool_description(name: &str) -> &'static str {
+    match name {
+        "run_testcase" => include_str!("builtin/tools/orchestrator/run_testcase.md"),
+        "ask_user" => include_str!("builtin/tools/orchestrator/ask_user.md"),
+        "finish" => include_str!("builtin/tools/orchestrator/finish.md"),
+        _ => "",
     }
 }
 

@@ -66,14 +66,14 @@ pub struct HarnessArgs {
     #[arg(long)]
     pub verify: bool,
 
-    // ===== 提示词自定义（三选一，优先级从上到下）=====
-    /// 直接注入主系统提示词文本（最高优先级）
+    // ===== 提示词自定义 =====
+    /// 直接注入【编排官(primary)】系统提示词文本（最高优先级；只覆盖编排官，不影响 explorer 等 worker）
     #[arg(long)]
     pub system_prompt: Option<String>,
-    /// 主系统提示词 .md 文件路径
+    /// 【编排官(primary)】系统提示词 .md 文件路径（explorer/doctor 等 worker 角色请用 --prompts-dir）
     #[arg(long)]
     pub system_prompt_file: Option<PathBuf>,
-    /// 提示词目录（约定 agents/*.md、tools/*.md；覆盖内置默认）
+    /// 提示词目录（约定 agents/<role>.md、tools/...、messages/...；可覆盖任意角色，含编排官与各 worker）
     #[arg(long)]
     pub prompts_dir: Option<PathBuf>,
 }

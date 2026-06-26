@@ -150,6 +150,9 @@ pub enum UiEvent {
     /// 主探索 agent 一句思考 + 本次 token
     AgentThought { round: usize, text: String, tokens: Tokens },
 
+    /// 主 AI（编排官）对用户说的一句话 —— 它是助手本体，渲染成纯文本：无 ● 标记、无名字、无专属色。
+    Assistant { text: String, tokens: Tokens },
+
     /// 子 agent 一句话（断言官 / 监督官 / 反思官 / 医生 / 优化官）。
     /// text 已是要展示的核心句（如监督官「打回（第2次）：…」由引擎拼好），level 决定色调。
     SubAgent {
