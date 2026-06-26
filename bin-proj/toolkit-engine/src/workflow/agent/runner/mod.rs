@@ -29,30 +29,15 @@ pub struct AgentRunner;
 
 impl AgentRunner {
     /// 入口：安装统一中断 + 开一场编排官会话。
-    /// 编排官(orchestrator)与用户对话、按需调度 `run_one_testcase` 执行各条用例。
+    /// 编排官(orchestrator)与用户对话、把 explore/verify/finalize 当独立工具分别调度（见 runner::testrun）。
     pub async fn run(opts: AgentRunOptions, ui: &dyn Frontend) -> Result<AgentResult> {
         // 统一中断：安装进程级 Ctrl+C 监听，探索/诊断/验证/医生各阶段共用同一中断标志
         interrupt::install();
         // 脚本输出目录确保存在（会话级，建一次）
         std::fs::create_dir_all(&opts.script_dir).ok();
-        // 编排官接管整场会话：以 opts.case 为开场用例，调度各次 run_one_testcase
+        // 编排官接管整场会话：以 opts.case 为开场用例
         orchestrator::serve(&opts, ui).await
     }
-}
-
-/// 执行单条测试用例的完整子流程（探索→重探→落脚本→验证修复→收尾），返回结果。
-/// 已抽成 TestRun 三阶段（explore/verify/finalize），这里按序串起来——**行为不变**。
-/// 编排官(orchestrator)后续可改为分别调度这三个阶段（slice 2：各阶段当独立工具，验证三段变 todo）。
-/// `case`=本次要测的用例；`note`=编排官下发的额外约束（用户纠偏/已否定路径等），无则 None。
-pub(crate) async fn run_one_testcase(
-    opts: &AgentRunOptions,
-    ui: &dyn Frontend,
-    case: &str,
-    note: Option<&str>,
-) -> Result<AgentResult> {
-    let mut run = testrun::TestRun::explore(opts, ui, case, note).await?;
-    run.verify(opts, ui).await;
-    run.finalize(opts, ui).await
 }
 
 /// 末尾统一渲染「结果 + 元素库更新」框（在 verify 之后调用，token 覆盖全程）。

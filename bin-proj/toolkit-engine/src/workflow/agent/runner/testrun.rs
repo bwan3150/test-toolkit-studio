@@ -294,8 +294,54 @@ impl TestRun {
         Ok(run)
     }
 
+    /// 探索是否达成（供编排官决定下一步：达成才值得验证）。
+    pub(crate) fn explore_succeeded(&self) -> bool {
+        self.outcome.success && !self.outcome.aborted
+    }
+
+    /// 给编排官看的探索结果摘要（一句话）。
+    pub(crate) fn explore_brief(&self) -> String {
+        let head = if self.outcome.aborted {
+            "被中断"
+        } else if self.outcome.success {
+            "达成"
+        } else {
+            "未达成"
+        };
+        let tail = if self.outcome.success {
+            String::new()
+        } else {
+            format!("（{}）", self.outcome.reason)
+        };
+        format!(
+            "探索{}：{} 轮，脚本草稿 {} 步，路径 {}{}",
+            head,
+            self.outcome.rounds,
+            self.final_lines.len(),
+            self.script_path.display(),
+            tail
+        )
+    }
+
+    /// 给编排官看的验证结果摘要（一句话）。
+    pub(crate) fn verify_brief(&self) -> String {
+        match &self.verified {
+            None => "未验证（探索未达成，或尚未调用验证）".to_string(),
+            Some(r) if r.passed => format!(
+                "验证通过：连续 {} 次稳定到达目标（修复 {} 次 · 最终 {} 步）",
+                r.stability_passes, r.repairs, r.final_steps
+            ),
+            Some(r) if !r.reached => "验证失败：脚本修复后仍跑不到目标".to_string(),
+            Some(r) => format!(
+                "验证未通过：稳定性只连续到达 {} 次（修复 {} 次 · 最终 {} 步）",
+                r.stability_passes, r.repairs, r.final_steps
+            ),
+        }
+    }
+
     /// 阶段二：回放提炼后的脚本，失败让 AI 续接修复，连过 2 次才算稳定。
-    /// 仅当探索**达成且未被中断**且开启 --verify 时才真正验证；否则只是空过。
+    /// **是否验证由主 AI（编排官）调 verify 工具决定**，不再被 opts.verify 门控；
+    /// 但探索未达成/被中断时无脚本可验，直接空过。
     pub(crate) async fn verify(&mut self, opts: &AgentRunOptions, ui: &dyn Frontend) {
         // 诊断/验证回放必须读**临时库**，且用探索同一个设备（含向导选的 web）。
         let tmp_params = Arc::new(
@@ -303,7 +349,7 @@ impl TestRun {
                 .with_element_lib(self.element_path.clone())
                 .with_device(Some(self.device.clone())),
         );
-        if opts.verify && self.outcome.success && !self.outcome.aborted {
+        if self.outcome.success && !self.outcome.aborted {
             let verify_log = self.run_dir.join("verify");
             let ctx = drive_ctx!(self, opts, ui);
             let (verified_lines, rep) = verify::verify_and_repair(

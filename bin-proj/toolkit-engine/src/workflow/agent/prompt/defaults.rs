@@ -59,7 +59,9 @@ pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
 /// 编排官各工具默认 description（外部 <prompts_dir>/tools/orchestrator/<name>.md 可覆盖）
 fn default_orchestrator_tool_description(name: &str) -> &'static str {
     match name {
-        "run_testcase" => include_str!("builtin/tools/orchestrator/run_testcase.md"),
+        "explore" => include_str!("builtin/tools/orchestrator/explore.md"),
+        "verify" => include_str!("builtin/tools/orchestrator/verify.md"),
+        "finalize" => include_str!("builtin/tools/orchestrator/finalize.md"),
         "ask_user" => include_str!("builtin/tools/orchestrator/ask_user.md"),
         "finish" => include_str!("builtin/tools/orchestrator/finish.md"),
         _ => "",
