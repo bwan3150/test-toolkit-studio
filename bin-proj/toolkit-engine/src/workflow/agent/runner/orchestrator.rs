@@ -46,7 +46,7 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             json!({
                 "type": "object",
                 "properties": {
-                    "filename": { "type": "string", "description": "文件名（如 policy.md；只取文件名部分，存到脚本输出目录）" },
+                    "filename": { "type": "string", "description": "相对文件名（如 policy.md 或 docs/policy.md）——存到用户启动 tke 时的当前目录树内，可含子目录（自动建）。不接受绝对路径或 .. 跳出。" },
                     "content": { "type": "string", "description": "要写入的完整内容" }
                 },
                 "required": ["filename", "content"]
@@ -240,26 +240,25 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                         "save_file" => {
                             let filename = arg_str(&call.arguments, "filename");
                             let content = arg_str(&call.arguments, "content");
-                            // 只取文件名部分，防目录穿越；存到脚本输出目录
-                            let safe = std::path::Path::new(&filename)
-                                .file_name()
-                                .map(|s| s.to_string_lossy().to_string())
-                                .unwrap_or_default();
-                            if safe.is_empty() {
-                                sess.tool_result(call.call_id, "未提供有效 filename。");
-                                continue;
+                            // 工作区 = 启动 tke 时的当前目录（及子目录）；只能在这棵树内写（与 coding agent 一致）
+                            let path = match resolve_in_workspace(&filename) {
+                                Ok(p) => p,
+                                Err(e) => {
+                                    sess.tool_result(call.call_id, e);
+                                    continue;
+                                }
+                            };
+                            // 允许子目录：先建好父目录
+                            if let Some(parent) = path.parent() {
+                                let _ = std::fs::create_dir_all(parent);
                             }
-                            let path = opts.script_dir.join(&safe);
                             match std::fs::write(&path, content.as_bytes()) {
                                 Ok(()) => {
-                                    // 解析成**绝对路径**再报（script_dir 可能相对/临时目录，相对路径用户找不到）
-                                    let abs = std::fs::canonicalize(&path)
-                                        .unwrap_or_else(|_| {
-                                            std::env::current_dir().map(|d| d.join(&path)).unwrap_or_else(|_| path.clone())
-                                        });
+                                    let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
                                     // 非设备动作→给当前 .tks 追加注释留痕（如果有进行中的运行）
                                     if let Some(run) = current.as_mut() {
-                                        run.note(&format!("保存文件 {}", safe));
+                                        let rel = filename.trim();
+                                        run.note(&format!("保存文件 {}", rel));
                                     }
                                     emit_orch(ui, &sess, &format!("已保存文件：{}", abs.display()));
                                     // 明确叮嘱主 AI：把这个完整路径**原样告诉用户**（别只说"已保存"）
@@ -326,6 +325,31 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
 /// 取字符串参数（缺省空串）
 fn arg_str(args: &serde_json::Value, key: &str) -> String {
     args.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string()
+}
+
+/// 把用户给的文件名解析到**工作区（启动 tke 时的当前目录）**内。
+/// 允许相对子目录（如 `docs/policy.md`，会自动建目录），但**拒绝绝对路径和 `..` 跳出**
+/// ——与 coding agent 一致：只能动当前目录树内的文件。返回解析后的路径或一句拒绝原因。
+fn resolve_in_workspace(requested: &str) -> std::result::Result<std::path::PathBuf, String> {
+    use std::path::{Component, Path};
+    let req = Path::new(requested.trim());
+    if req.as_os_str().is_empty() {
+        return Err("未提供 filename。".to_string());
+    }
+    if req.is_absolute() {
+        return Err("只能保存到当前工作目录树内，不接受绝对路径。请给相对文件名（可含子目录，如 docs/policy.md）。".to_string());
+    }
+    let root = std::env::current_dir().map_err(|e| format!("无法确定当前工作目录：{}", e))?;
+    let mut p = root;
+    for comp in req.components() {
+        match comp {
+            Component::Normal(c) => p.push(c),
+            Component::CurDir => {}
+            // ParentDir / RootDir / Prefix 一律拒绝（防跳出工作区）
+            _ => return Err("路径不能用 `..` 跳出当前目录。".to_string()),
+        }
+    }
+    Ok(p)
 }
 
 /// 取一段文字的首行（用于事件里简短展示用例）
