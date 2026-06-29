@@ -252,12 +252,21 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let path = opts.script_dir.join(&safe);
                             match std::fs::write(&path, content.as_bytes()) {
                                 Ok(()) => {
+                                    // 解析成**绝对路径**再报（script_dir 可能相对/临时目录，相对路径用户找不到）
+                                    let abs = std::fs::canonicalize(&path)
+                                        .unwrap_or_else(|_| {
+                                            std::env::current_dir().map(|d| d.join(&path)).unwrap_or_else(|_| path.clone())
+                                        });
                                     // 非设备动作→给当前 .tks 追加注释留痕（如果有进行中的运行）
                                     if let Some(run) = current.as_mut() {
                                         run.note(&format!("保存文件 {}", safe));
                                     }
-                                    emit_orch(ui, &sess, &format!("已保存文件：{}", path.display()));
-                                    sess.tool_result(call.call_id, format!("已保存到 {}", path.display()));
+                                    emit_orch(ui, &sess, &format!("已保存文件：{}", abs.display()));
+                                    // 明确叮嘱主 AI：把这个完整路径**原样告诉用户**（别只说"已保存"）
+                                    sess.tool_result(
+                                        call.call_id,
+                                        format!("已保存。文件完整路径（请原样转告用户，这是用户能找到文件的唯一位置）：\n{}", abs.display()),
+                                    );
                                 }
                                 Err(e) => {
                                     sess.tool_result(call.call_id, format!("保存失败：{}", e));
