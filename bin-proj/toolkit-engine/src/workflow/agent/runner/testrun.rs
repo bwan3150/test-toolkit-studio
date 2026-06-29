@@ -183,6 +183,13 @@ impl TestRun {
         let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", case)]);
         tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
         sess.user(case_msg);
+        // read_full（读长内容）分工：explorer 只负责**导航到内容页**，到达即 finish；
+        // 全文由系统逐屏读取——绝不要为"读完/确认到底"反复滚动（那会到底页面不变、被误判打转）。
+        if read_full {
+            let nav_only = "【读取长内容模式】你的任务**只是导航到目标内容页并停在那里**——一看到目标内容（如政策正文开头）就**立刻 finish**。全文会由系统自动逐屏读取，你**不要**为了“读完整篇/确认到底”反复向下滚动；到达内容页即视为完成。";
+            tx.log("llm_message", serde_json::json!({ "content": nav_only }));
+            sess.user(nav_only.to_string());
+        }
         // 编排官下发的额外约束（用户纠偏/已否定路径等）：作为硬约束追加在用例之后
         if let Some(n) = note.map(str::trim).filter(|s| !s.is_empty()) {
             let guide = format!("【编排官下发的约束/提示，请务必遵守】\n{}", n);
@@ -248,7 +255,9 @@ impl TestRun {
         run.explore_created = outcome.created.clone();
 
         // —— 失败/卡住 → 反思官给「重探指导」，带指导从头重探 ——
-        let max_reexplore = opts.params.harness.reexplore;
+        // 仅**测试任务**(full_test)重探：通用任务不从头重跑，失败也直接带着已有结果收尾交付
+        // （从头重探是测试为"走出可回放脚本"才需要的；通用任务该一次到位、不浪费）。
+        let max_reexplore = if full_test { opts.params.harness.reexplore } else { 0 };
         let mut reexplore_n = 0;
         while !outcome.success && !outcome.aborted && reexplore_n < max_reexplore {
             reexplore_n += 1;
@@ -281,7 +290,7 @@ impl TestRun {
             run.tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
             run.sess.user(case_msg);
             let guide_msg = format!(
-                "【上一轮探索没找到目标。探索反思官给的重探指导】\n{}\n\n请据此从头重新探索，直接走对的路、别再重蹈覆辙。",
+                "【上一轮没到达目标。反思官复盘了它走过的每个页面，给出下面这份**修正后的重探计划**】\n{}\n\n请**照这份计划一步步走**，直接走对的路、别再重蹈覆辙。",
                 guidance
             );
             run.tx.log("llm_message", serde_json::json!({ "content": guide_msg.clone() }));
