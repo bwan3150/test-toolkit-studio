@@ -130,10 +130,10 @@ impl TestRun {
             .element_lib()
             .unwrap_or_else(|| opts.script_dir.join("element.json"));
 
-        // —— 产物目录：复用 RunArtifacts，与 tke run 同构 ——
+        // —— 运行中间文件目录：落到 cache（--cache 或系统临时目录）；与脚本/交付文件分开、不展示给用户 ——
         let stem = slug(case, 30);
-        let log_root = opts.params.log.clone().unwrap_or_else(|| opts.script_dir.clone());
-        let artifacts = RunArtifacts::create(&log_root, &stem)?;
+        let cache_root = opts.params.cache_root();
+        let artifacts = RunArtifacts::create(&cache_root, &stem)?;
         let run_dir = artifacts.run_dir.clone();
         // 临时元素库：本次运行隔离（run_dir 下）。
         let element_path = run_dir.join("element.json");

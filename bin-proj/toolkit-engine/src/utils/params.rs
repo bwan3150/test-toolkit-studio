@@ -93,6 +93,9 @@ pub struct Params {
     pub log: Option<PathBuf>,
     /// 脚本输出目录（harness 生成 .tks 落点）
     pub scripts: Option<PathBuf>,
+    /// 缓存目录：运行中间文件（截图/页面/会话日志/临时元素库）落点；不设用系统临时目录。
+    /// 这些只是运行中产物、不展示给用户，用 cache_root() 取最终落点。
+    pub cache: Option<PathBuf>,
     /// 强制 NDJSON 输出
     pub json: bool,
     /// 在线 OCR 服务地址
@@ -117,6 +120,7 @@ impl Params {
         cli_element: Option<PathBuf>,
         cli_log: Option<PathBuf>,
         cli_scripts: Option<PathBuf>,
+        cli_cache: Option<PathBuf>,
         json: bool,
         config: TkeConfig,
     ) -> Self {
@@ -125,6 +129,7 @@ impl Params {
             element: cli_element.or(config.element),
             log: cli_log.or(config.log),
             scripts: cli_scripts.or(config.scripts),
+            cache: cli_cache.or(config.cache),
             json,
             ocr_url: config.ocr_url.unwrap_or_else(|| DEFAULT_OCR_URL.to_string()),
             ocr: config.ocr,
@@ -182,6 +187,14 @@ impl Params {
         let mut p = self.clone();
         p.log = log;
         p
+    }
+
+    /// 运行中间文件的落点根目录：显式 --cache 优先，否则系统临时目录下的 `tke/cache`。
+    /// 截图/页面结构/会话日志/临时元素库等都落这里——只是运行中产物，不展示给用户。
+    pub fn cache_root(&self) -> PathBuf {
+        self.cache
+            .clone()
+            .unwrap_or_else(|| std::env::temp_dir().join("tke").join("cache"))
     }
 }
 

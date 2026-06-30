@@ -127,33 +127,29 @@ pub async fn handle(
         })
     };
 
-    // —— 用例 / 设备 / 平台 / 脚本目录 / log ——
+    // —— 用例 / 设备 / 平台 / 脚本目录 ——
     // tke 默认就是个对话式 agent：任务靠对话给（编排官会问），`--testcase` 只是**可选开场白**。
-    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform；脚本/log 走参数（必填脚本）。
-    //   无 --testcase + 终端：进交互向导**选设备/平台 + 看/填配置（脚本、log）**，用例留空进对话。
-    //   无 --testcase + --json / 非终端：用例留空，设备/平台/脚本/log 走参数（app 经 NDJSON 发首条消息）。
-    let (case_text, dev_override, platform, script_dir, run_log): (
-        String,
-        Option<String>,
-        Option<Platform>,
-        PathBuf,
-        Option<PathBuf>,
-    ) = if let Some(tc) = args.testcase.clone() {
-        (load_case(&tc), None, args.platform.map(|p| p.to_platform()), require_scripts(), params.log.clone())
-    } else if !params.json && std::io::stdin().is_terminal() {
-        // 交互向导：挑设备/平台 + 显示/填配置（脚本目录、log）；用例留空（开场后编排官 ask_user 问）
-        match interactive_setup(frontend.as_ref(), &merged_ai, params.scripts.clone(), params.log.clone()).await {
-            Some(s) => (String::new(), s.device, s.platform, s.script_dir, s.log),
-            None => {
-                // setup 阶段用户 Ctrl+C / 放弃：恢复终端后安静退出
-                frontend.shutdown().await;
-                std::process::exit(130);
+    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform；脚本走参数（必填脚本）。
+    //   无 --testcase + 终端：进交互向导**选设备/平台 + 看/填脚本目录**，用例留空进对话。
+    //   无 --testcase + --json / 非终端：用例留空，设备/平台/脚本走参数（app 经 NDJSON 发首条消息）。
+    // 运行中间文件统一落 cache（--cache 或临时目录），不在这里问（不展示给用户）。
+    let (case_text, dev_override, platform, script_dir): (String, Option<String>, Option<Platform>, PathBuf) =
+        if let Some(tc) = args.testcase.clone() {
+            (load_case(&tc), None, args.platform.map(|p| p.to_platform()), require_scripts())
+        } else if !params.json && std::io::stdin().is_terminal() {
+            // 交互向导：挑设备/平台 + 显示配置 + 脚本目录（填/跳过）；用例留空（开场后编排官 ask_user 问）
+            match interactive_setup(frontend.as_ref(), &merged_ai, params.scripts.clone()).await {
+                Some(s) => (String::new(), s.device, s.platform, s.script_dir),
+                None => {
+                    // setup 阶段用户 Ctrl+C / 放弃：恢复终端后安静退出
+                    frontend.shutdown().await;
+                    std::process::exit(130);
+                }
             }
-        }
-    } else {
-        // --json（app spawn）/ 非终端：用例留空，设备/平台/脚本/log 走参数
-        (String::new(), None, args.platform.map(|p| p.to_platform()), require_scripts(), params.log.clone())
-    };
+        } else {
+            // --json（app spawn）/ 非终端：用例留空，设备/平台/脚本走参数
+            (String::new(), None, args.platform.map(|p| p.to_platform()), require_scripts())
+        };
 
     // 操作目标兜底校验：既没设备也没平台时无法确定操作什么（web 需 --platform web 或 -d web）
     if dev_override.is_none() && params.device().is_none() && platform.is_none() {
@@ -171,9 +167,6 @@ pub async fn handle(
         platform: platform.map(|p| p.name().to_string()).unwrap_or_else(|| "(推断)".to_string()),
         case: case_text.lines().next().unwrap_or("").trim().to_string(),
     });
-
-    // 产物日志目录：用准备阶段解析出的 run_log 覆盖（向导里用户填/跳过的结果）
-    let params_run = Arc::new(params.with_log(run_log));
 
     // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir
     let prompt = PromptSpec {
@@ -208,7 +201,7 @@ pub async fn handle(
             verify,
             platform,
             device: dev_override,
-            params: params_run.clone(),
+            params: params.clone(),
         },
         frontend.as_ref(),
     )
@@ -252,22 +245,21 @@ fn load_case(s: &str) -> String {
 /// 交互式 setup：在已建好的前端（通常是全屏 TUI）里**只挑设备 / 平台**。
 /// 用例不在这里问——开场后由编排官 ask_user 在对话里问（tke 是对话式 agent）。
 /// 全程走前端的 await_choice/await_answer（TUI 下是列表/输入框，Ctrl+C 即时退出）。
-/// 准备阶段向导的解析结果：设备/平台 + 脚本目录（必有，跳过=临时）+ log（None=不输出）。
+/// 准备阶段向导的解析结果：设备/平台 + 脚本目录（必有，跳过=cache 临时）。
+/// 运行中间文件不在这里管——统一落 cache（--cache 或临时目录）。
 struct SetupResult {
     device: Option<String>,
     platform: Option<Platform>,
     script_dir: PathBuf,
-    log: Option<PathBuf>,
 }
 
 /// 交互式准备阶段：选设备/平台 + **显示当前配置**（模型/供应商/推理，来自 CLI/config）
-/// + 对未设置的输出参数（脚本目录、log）让用户**填入或跳过**（跳过=不保存/不输出）。
+/// + 对未设置的脚本目录让用户**填入或跳过**（跳过=落 cache 临时、不另存）。
 /// 用户中途 Ctrl+C / 放弃返回 None。
 async fn interactive_setup(
     ui: &dyn tke::Frontend,
     ai: &AiConfig,
     cur_scripts: Option<PathBuf>,
-    cur_log: Option<PathBuf>,
 ) -> Option<SetupResult> {
     // —— 设备/平台 ——
     // 列 Android 设备（仅 Android 有列举能力；iOS 手填、Web 直接 Chrome）
@@ -346,32 +338,5 @@ async fn interactive_setup(
         }
     };
 
-    // —— 产物日志目录：有值显示；无值让用户填或跳过（跳过=不输出 log）——
-    let log = match cur_log {
-        Some(p) => {
-            ui.emit(tke::UiEvent::Notice {
-                level: tke::Level::Info,
-                text: format!("日志目录：{}（来自参数/配置）", p.display()),
-            });
-            Some(p)
-        }
-        None => {
-            let pick = ui
-                .await_choice(
-                    "产物日志目录（log）——未设置".to_string(),
-                    vec!["不输出 log".to_string(), "填入目录".to_string()],
-                )
-                .await?;
-            if pick == 0 {
-                ui.emit(tke::UiEvent::Notice { level: tke::Level::Dim, text: "不输出 log".to_string() });
-                None
-            } else {
-                let s = ui.await_answer(0, "输入 log 目录".to_string()).await?;
-                let s = s.trim();
-                if s.is_empty() { None } else { Some(PathBuf::from(s)) }
-            }
-        }
-    };
-
-    Some(SetupResult { device, platform, script_dir, log })
+    Some(SetupResult { device, platform, script_dir })
 }

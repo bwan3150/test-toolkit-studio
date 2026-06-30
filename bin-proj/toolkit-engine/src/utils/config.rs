@@ -20,6 +20,8 @@ pub struct TkeConfig {
     pub log: Option<PathBuf>,
     /// 脚本输出目录（harness 生成的 .tks 落点；CLI/显式参数优先）
     pub scripts: Option<PathBuf>,
+    /// 缓存目录：运行中间文件（截图/页面/会话日志/临时元素库）落点；不设用系统临时目录
+    pub cache: Option<PathBuf>,
     /// 在线 OCR 服务地址（缺省用内置默认；私有部署/换服务时配置）
     pub ocr_url: Option<String>,
     /// OCR 来源模式（harness/run 用）：online / offline / http(s)://... ；CLI --ocr 优先
