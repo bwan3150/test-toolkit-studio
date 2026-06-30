@@ -243,7 +243,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 }
                 if !ui.is_interactive() && !ran_any && nudge < 2 {
                     nudge += 1;
-                    sess.user("请直接用对应工具开始（测试用 explore，一般任务用 operate），不要只用文字回复。".to_string());
+                    sess.user("请直接用 explore 开始在设备上操作（要可回放测试脚本就 make_test=true），不要只用文字回复。".to_string());
                     continue;
                 }
                 if !ui.is_interactive() {

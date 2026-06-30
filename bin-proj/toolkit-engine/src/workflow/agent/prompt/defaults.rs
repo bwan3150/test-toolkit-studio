@@ -60,8 +60,6 @@ pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
 fn default_orchestrator_tool_description(name: &str) -> &'static str {
     match name {
         "explore" => include_str!("builtin/tools/orchestrator/explore.md"),
-        "verify" => include_str!("builtin/tools/orchestrator/verify.md"),
-        "finalize" => include_str!("builtin/tools/orchestrator/finalize.md"),
         "replay_tks" => include_str!("builtin/tools/orchestrator/replay_tks.md"),
         "repair_tks" => include_str!("builtin/tools/orchestrator/repair_tks.md"),
         "optimize_tks" => include_str!("builtin/tools/orchestrator/optimize_tks.md"),

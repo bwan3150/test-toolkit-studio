@@ -120,26 +120,19 @@ pub async fn handle(
         reasoning_effort: args.reasoning_effort.or(params.ai.reasoning_effort.clone()),
     };
 
-    // 非交互场景下脚本目录必填（提前校验）；交互向导里则让用户填/跳过
-    let require_scripts = || {
-        params.scripts.clone().unwrap_or_else(|| {
-            JsonOutput::error("harness 必须指定脚本输出目录: --scripts <目录>（也可写入 config 的 scripts）")
-        })
-    };
-
-    // —— 用例 / 设备 / 平台 / 脚本目录 ——
+    // —— 用例 / 设备 / 平台 ——
     // tke 默认就是个对话式 agent：任务靠对话给（编排官会问），`--testcase` 只是**可选开场白**。
-    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform；脚本走参数（必填脚本）。
-    //   无 --testcase + 终端：进交互向导**选设备/平台 + 看/填脚本目录**，用例留空进对话。
-    //   无 --testcase + --json / 非终端：用例留空，设备/平台/脚本走参数（app 经 NDJSON 发首条消息）。
-    // 运行中间文件统一落 cache（--cache 或临时目录），不在这里问（不展示给用户）。
-    let (case_text, dev_override, platform, script_dir): (String, Option<String>, Option<Platform>, PathBuf) =
+    //   有 --testcase：用它当开场白；设备走 -d、平台走 --platform。
+    //   无 --testcase + 终端：进交互向导**只选设备/平台 + 显示配置**，用例留空进对话。
+    //   无 --testcase + --json / 非终端：用例留空，设备/平台走参数（app 经 NDJSON 发首条消息）。
+    // 产物落点：.tks 脚本落**工作区当前目录**（AI 命名、像 coding agent）；运行中间文件落 cache。
+    // 都不在这里问、也不再需要 --scripts。
+    let (case_text, dev_override, platform): (String, Option<String>, Option<Platform>) =
         if let Some(tc) = args.testcase.clone() {
-            (load_case(&tc), None, args.platform.map(|p| p.to_platform()), require_scripts())
+            (load_case(&tc), None, args.platform.map(|p| p.to_platform()))
         } else if !params.json && std::io::stdin().is_terminal() {
-            // 交互向导：挑设备/平台 + 显示配置 + 脚本目录（填/跳过）；用例留空（开场后编排官 ask_user 问）
-            match interactive_setup(frontend.as_ref(), &merged_ai, params.scripts.clone()).await {
-                Some(s) => (String::new(), s.device, s.platform, s.script_dir),
+            match interactive_setup(frontend.as_ref(), &merged_ai).await {
+                Some(s) => (String::new(), s.device, s.platform),
                 None => {
                     // setup 阶段用户 Ctrl+C / 放弃：恢复终端后安静退出
                     frontend.shutdown().await;
@@ -147,9 +140,10 @@ pub async fn handle(
                 }
             }
         } else {
-            // --json（app spawn）/ 非终端：用例留空，设备/平台/脚本走参数
-            (String::new(), None, args.platform.map(|p| p.to_platform()), require_scripts())
+            (String::new(), None, args.platform.map(|p| p.to_platform()))
         };
+    // script_dir 已不再决定产物落点（.tks 落工作区）；保留字段兼容，给个工作区兜底值。
+    let script_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
     // 操作目标兜底校验：既没设备也没平台时无法确定操作什么（web 需 --platform web 或 -d web）
     if dev_override.is_none() && params.device().is_none() && platform.is_none() {
@@ -245,22 +239,15 @@ fn load_case(s: &str) -> String {
 /// 交互式 setup：在已建好的前端（通常是全屏 TUI）里**只挑设备 / 平台**。
 /// 用例不在这里问——开场后由编排官 ask_user 在对话里问（tke 是对话式 agent）。
 /// 全程走前端的 await_choice/await_answer（TUI 下是列表/输入框，Ctrl+C 即时退出）。
-/// 准备阶段向导的解析结果：设备/平台 + 脚本目录（必有，跳过=cache 临时）。
-/// 运行中间文件不在这里管——统一落 cache（--cache 或临时目录）。
+/// 准备阶段向导的解析结果：只挑设备/平台（.tks 落工作区、中间文件落 cache，无需在这里问目录）。
 struct SetupResult {
     device: Option<String>,
     platform: Option<Platform>,
-    script_dir: PathBuf,
 }
 
-/// 交互式准备阶段：选设备/平台 + **显示当前配置**（模型/供应商/推理，来自 CLI/config）
-/// + 对未设置的脚本目录让用户**填入或跳过**（跳过=落 cache 临时、不另存）。
+/// 交互式准备阶段：选设备/平台 + **显示当前配置**（模型/供应商/推理，来自 CLI/config）。
 /// 用户中途 Ctrl+C / 放弃返回 None。
-async fn interactive_setup(
-    ui: &dyn tke::Frontend,
-    ai: &AiConfig,
-    cur_scripts: Option<PathBuf>,
-) -> Option<SetupResult> {
+async fn interactive_setup(ui: &dyn tke::Frontend, ai: &AiConfig) -> Option<SetupResult> {
     // —— 设备/平台 ——
     // 列 Android 设备（仅 Android 有列举能力；iOS 手填、Web 直接 Chrome）
     let devices: Vec<String> = match tke::drivers::AdbDriver::new(None) {
@@ -309,34 +296,5 @@ async fn interactive_setup(
         text: format!("配置 · 模型 {} · 供应商 {} · 推理 {}", model_disp, prov_disp, reason_disp),
     });
 
-    // —— 脚本输出目录：有值则沿用并显示；无值让用户填或跳过（跳过=临时目录，不保存到指定位置）——
-    let tmp_scripts = || std::env::temp_dir().join("tke-scripts");
-    let script_dir = match cur_scripts {
-        Some(p) => {
-            ui.emit(tke::UiEvent::Notice {
-                level: tke::Level::Info,
-                text: format!("脚本输出目录：{}（来自参数/配置）", p.display()),
-            });
-            p
-        }
-        None => {
-            let pick = ui
-                .await_choice(
-                    "脚本输出目录（.tks 落点）——未设置".to_string(),
-                    vec!["不保存脚本（仅本次临时目录）".to_string(), "填入目录".to_string()],
-                )
-                .await?;
-            if pick == 0 {
-                let t = tmp_scripts();
-                ui.emit(tke::UiEvent::Notice { level: tke::Level::Warn, text: format!("脚本不另存（临时 {}）", t.display()) });
-                t
-            } else {
-                let s = ui.await_answer(0, "输入脚本输出目录".to_string()).await?;
-                let s = s.trim();
-                if s.is_empty() { tmp_scripts() } else { PathBuf::from(s) }
-            }
-        }
-    };
-
-    Some(SetupResult { device, platform, script_dir })
+    Some(SetupResult { device, platform })
 }

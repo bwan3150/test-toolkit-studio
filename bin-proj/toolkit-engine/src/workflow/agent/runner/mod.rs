@@ -34,9 +34,7 @@ impl AgentRunner {
     pub async fn run(opts: AgentRunOptions, ui: &dyn Frontend) -> Result<AgentResult> {
         // 统一中断：安装进程级 Ctrl+C 监听，探索/诊断/验证/医生各阶段共用同一中断标志
         interrupt::install();
-        // 脚本输出目录确保存在（会话级，建一次）
-        std::fs::create_dir_all(&opts.script_dir).ok();
-        // 编排官接管整场会话：以 opts.case 为开场用例
+        // 编排官接管整场会话：以 opts.case 为开场用例（脚本落工作区、中间文件落 cache，无需预建 script_dir）
         orchestrator::serve(&opts, ui).await
     }
 }

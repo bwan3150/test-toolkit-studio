@@ -119,19 +119,14 @@ impl TestRun {
         let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
         let platform = opts.platform.unwrap_or_else(|| Platform::from_device(Some(&device)));
 
-        // 脚本输出目录确保存在（.tks 文件名由 AI 在 finish 起、落库时去重）
-        std::fs::create_dir_all(&opts.script_dir).ok();
-
-        // 正式元素库（参数层查表；缺省落脚本目录下的 element.json，整目录脚本共享一份库）。
-        // **探索/修复/验证全程不直接写它**——只在脚本定稿(稳定通过)后，把最终脚本实际用到的元素提交进来。
-        let real_element_path: PathBuf = opts
-            .params
-            .element_lib()
-            .unwrap_or_else(|| opts.script_dir.join("element.json"));
-
         // —— 运行中间文件目录：落到 cache（--cache 或系统临时目录）；与脚本/交付文件分开、不展示给用户 ——
         let stem = slug(case, 30);
         let cache_root = opts.params.cache_root();
+        // 正式元素库的初值（探索期不直接写；finalize 会用调用方给的 sidecar 覆盖它）。缺省落 cache。
+        let real_element_path: PathBuf = opts
+            .params
+            .element_lib()
+            .unwrap_or_else(|| cache_root.join("element.json"));
         let artifacts = RunArtifacts::create(&cache_root, &stem)?;
         let run_dir = artifacts.run_dir.clone();
         // 临时元素库：本次运行隔离（run_dir 下）。
@@ -308,16 +303,16 @@ impl TestRun {
 
         run.end_time = chrono::Local::now().to_rfc3339();
 
-        // —— 脚本文件名：用 AI 在 finish 起的名，兜底用例 slug；目录内去重 ——
+        // —— 探索草稿脚本：落 cache（run_dir 下）；最终对外的 .tks 由 finalize 写到工作区 ——
         let base = outcome
             .script_name
             .as_deref()
             .map(|s| slug(s, 50))
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| slug(&run.case, 40));
-        let script_path = unique_script_path(&opts.script_dir, &base);
+        let script_path = unique_script_path(&run.run_dir, &base);
 
-        // 先落探索原始脚本；提炼(删冗余步)在 verify 阶段做。
+        // 先落探索原始脚本（草稿）；最终路径/命名在 finalize 决定。
         let final_lines = outcome.lines.clone();
         write_script(&script_path, &run.case, &final_lines)?;
         let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
