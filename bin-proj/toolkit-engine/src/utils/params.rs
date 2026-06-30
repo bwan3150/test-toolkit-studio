@@ -96,6 +96,8 @@ pub struct Params {
     /// 缓存目录：运行中间文件（截图/页面/会话日志/临时元素库）落点；不设用系统临时目录。
     /// 这些只是运行中产物、不展示给用户，用 cache_root() 取最终落点。
     pub cache: Option<PathBuf>,
+    /// 工作区目录：AI 文件操作（.tks/save_file 等）的范围根；不设用进程当前目录。用 workspace_root() 取。
+    pub current_dir: Option<PathBuf>,
     /// 强制 NDJSON 输出
     pub json: bool,
     /// 在线 OCR 服务地址
@@ -121,6 +123,7 @@ impl Params {
         cli_log: Option<PathBuf>,
         cli_scripts: Option<PathBuf>,
         cli_cache: Option<PathBuf>,
+        cli_current_dir: Option<PathBuf>,
         json: bool,
         config: TkeConfig,
     ) -> Self {
@@ -130,6 +133,7 @@ impl Params {
             log: cli_log.or(config.log),
             scripts: cli_scripts.or(config.scripts),
             cache: cli_cache.or(config.cache),
+            current_dir: cli_current_dir.or(config.current_dir),
             json,
             ocr_url: config.ocr_url.unwrap_or_else(|| DEFAULT_OCR_URL.to_string()),
             ocr: config.ocr,
@@ -195,6 +199,14 @@ impl Params {
         self.cache
             .clone()
             .unwrap_or_else(|| std::env::temp_dir().join("tke").join("cache"))
+    }
+
+    /// 工作区根目录：AI 文件操作（.tks/save_file/read/edit/delete）的范围根。
+    /// 显式 --current-dir 优先（app spawn 用）；否则进程当前目录（CLI/TUI 直接用）。
+    pub fn workspace_root(&self) -> PathBuf {
+        self.current_dir
+            .clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
     }
 }
 

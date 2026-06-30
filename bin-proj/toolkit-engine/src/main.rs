@@ -48,6 +48,11 @@ struct Cli {
     #[arg(long, global = true)]
     cache: Option<PathBuf>,
 
+    /// 工作区目录：AI 能读写的文件范围根（.tks 脚本、save_file 交付文件都落这里及其子目录）。
+    /// 不传则用进程的当前目录（CLI/TUI 直接用）；app spawn 时显式指定为用户项目目录。
+    #[arg(long, global = true)]
+    current_dir: Option<PathBuf>,
+
     /// 配置文件（缺省自动读 tke 同目录的 config.toml；CLI 显式参数优先于配置）
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
@@ -181,7 +186,7 @@ async fn main() -> tke::Result<()> {
     };
 
     // 参数层：CLI + config 解析一次，形成统一参数表（Arc 共享，编排层各模块持有并查表）
-    let params = Arc::new(tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.cache, cli.json, config));
+    let params = Arc::new(tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
     // 安装进程级 Ctrl+C 中断监听：run/steps/harness 各阶段（含 ScriptRunner 逐步回放）统一查中断、及时停

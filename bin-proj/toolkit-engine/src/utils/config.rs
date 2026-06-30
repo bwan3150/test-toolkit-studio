@@ -22,6 +22,8 @@ pub struct TkeConfig {
     pub scripts: Option<PathBuf>,
     /// 缓存目录：运行中间文件（截图/页面/会话日志/临时元素库）落点；不设用系统临时目录
     pub cache: Option<PathBuf>,
+    /// 工作区目录：AI 文件操作的范围根（.tks/交付文件落点）；不设用进程当前目录。app spawn 用
+    pub current_dir: Option<PathBuf>,
     /// 在线 OCR 服务地址（缺省用内置默认；私有部署/换服务时配置）
     pub ocr_url: Option<String>,
     /// OCR 来源模式（harness/run 用）：online / offline / http(s)://... ；CLI --ocr 优先

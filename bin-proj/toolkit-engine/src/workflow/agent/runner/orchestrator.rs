@@ -281,7 +281,8 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 let n = script_name.trim();
                                 if n.is_empty() { super::slug(&goal, 40) } else { super::slug(n, 50) }
                             };
-                            let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                            let workspace = opts.params.workspace_root();
+                            std::fs::create_dir_all(&workspace).ok(); // --current-dir 指的目录可能还没建
                             let tks_path = super::unique_script_path(&workspace, &base);
                             let sidecar = tksops::sidecar_path(&tks_path);
                             // 收尾前先取交付内容（finalize 会消费 run）
@@ -304,7 +305,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                         "replay_tks" | "repair_tks" | "optimize_tks" => {
                             let p = arg_str(&call.arguments, "path");
                             let goal = arg_str(&call.arguments, "goal");
-                            let path = match resolve_in_workspace(&p) {
+                            let path = match resolve_in_workspace(&opts.params.workspace_root(), &p) {
                                 Ok(p) => p,
                                 Err(e) => { sess.tool_result(call.call_id, e); continue; }
                             };
@@ -327,7 +328,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let filename = arg_str(&call.arguments, "filename");
                             let content = arg_str(&call.arguments, "content");
                             // 工作区 = 启动 tke 时的当前目录（及子目录）；只能在这棵树内写（与 coding agent 一致）
-                            let path = match resolve_in_workspace(&filename) {
+                            let path = match resolve_in_workspace(&opts.params.workspace_root(), &filename) {
                                 Ok(p) => p,
                                 Err(e) => {
                                     sess.tool_result(call.call_id, e);
@@ -361,7 +362,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                         // —— 读文件（当前目录树内，只读、免授权）——
                         "read_file" => {
                             let p = arg_str(&call.arguments, "path");
-                            let path = match resolve_in_workspace(&p) {
+                            let path = match resolve_in_workspace(&opts.params.workspace_root(), &p) {
                                 Ok(p) => p,
                                 Err(e) => { sess.tool_result(call.call_id, e); continue; }
                             };
@@ -384,9 +385,9 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                         "list_dir" => {
                             let p = arg_str(&call.arguments, "path");
                             let dir = if p.trim().is_empty() {
-                                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                                opts.params.workspace_root()
                             } else {
-                                match resolve_in_workspace(&p) {
+                                match resolve_in_workspace(&opts.params.workspace_root(), &p) {
                                     Ok(p) => p,
                                     Err(e) => { sess.tool_result(call.call_id, e); continue; }
                                 }
@@ -412,7 +413,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let p = arg_str(&call.arguments, "path");
                             let old = arg_str(&call.arguments, "old_string");
                             let new = arg_str(&call.arguments, "new_string");
-                            let path = match resolve_in_workspace(&p) {
+                            let path = match resolve_in_workspace(&opts.params.workspace_root(), &p) {
                                 Ok(p) => p,
                                 Err(e) => { sess.tool_result(call.call_id, e); continue; }
                             };
@@ -446,7 +447,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                         // —— 删文件（当前目录树内，需授权）——
                         "delete_file" => {
                             let p = arg_str(&call.arguments, "path");
-                            let path = match resolve_in_workspace(&p) {
+                            let path = match resolve_in_workspace(&opts.params.workspace_root(), &p) {
                                 Ok(p) => p,
                                 Err(e) => { sess.tool_result(call.call_id, e); continue; }
                             };
@@ -538,10 +539,10 @@ async fn ask_permission(
     }
 }
 
-/// 把用户给的文件名解析到**工作区（启动 tke 时的当前目录）**内。
+/// 把用户给的相对路径解析到**工作区 `root`**（= params.workspace_root()：--current-dir 或进程当前目录）内。
 /// 允许相对子目录（如 `docs/policy.md`，会自动建目录），但**拒绝绝对路径和 `..` 跳出**
-/// ——与 coding agent 一致：只能动当前目录树内的文件。返回解析后的路径或一句拒绝原因。
-fn resolve_in_workspace(requested: &str) -> std::result::Result<std::path::PathBuf, String> {
+/// ——与 coding agent 一致：只能动工作区树内的文件。返回解析后的路径或一句拒绝原因。
+fn resolve_in_workspace(root: &std::path::Path, requested: &str) -> std::result::Result<std::path::PathBuf, String> {
     use std::path::{Component, Path};
     let req = Path::new(requested.trim());
     if req.as_os_str().is_empty() {
@@ -550,8 +551,7 @@ fn resolve_in_workspace(requested: &str) -> std::result::Result<std::path::PathB
     if req.is_absolute() {
         return Err("只能保存到当前工作目录树内，不接受绝对路径。请给相对文件名（可含子目录，如 docs/policy.md）。".to_string());
     }
-    let root = std::env::current_dir().map_err(|e| format!("无法确定当前工作目录：{}", e))?;
-    let mut p = root;
+    let mut p = root.to_path_buf();
     for comp in req.components() {
         match comp {
             Component::Normal(c) => p.push(c),
