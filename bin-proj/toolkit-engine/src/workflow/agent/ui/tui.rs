@@ -1016,7 +1016,7 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
-                .title("选择设备（↑↓ 选择 · Enter 确认）")
+                .title("↑↓ 选择 · Enter 确认")
                 .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         ),
         area,

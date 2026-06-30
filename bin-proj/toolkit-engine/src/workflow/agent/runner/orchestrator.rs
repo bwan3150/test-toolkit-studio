@@ -53,6 +53,52 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             }),
         ),
         LlmTool::new(
+            "read_file",
+            desc("read_file"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "相对路径（当前目录树内，如 docs/policy.md）" }
+                },
+                "required": ["path"]
+            }),
+        ),
+        LlmTool::new(
+            "list_dir",
+            desc("list_dir"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "相对目录（留空=当前工作目录根）" }
+                },
+                "required": []
+            }),
+        ),
+        LlmTool::new(
+            "edit_file",
+            desc("edit_file"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "相对路径（当前目录树内）" },
+                    "old_string": { "type": "string", "description": "要被替换的原文（须在文件中唯一出现）" },
+                    "new_string": { "type": "string", "description": "替换成的新文" }
+                },
+                "required": ["path", "old_string", "new_string"]
+            }),
+        ),
+        LlmTool::new(
+            "delete_file",
+            desc("delete_file"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "相对路径（当前目录树内）" }
+                },
+                "required": ["path"]
+            }),
+        ),
+        LlmTool::new(
             "update_todos",
             desc("update_todos"),
             json!({
@@ -123,6 +169,8 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
     let mut ran_any = false;
     // 非交互模式下「还没探索过就只用文字回复」的催促次数（防空转结束、一条没跑）
     let mut nudge = 0;
+    // 会话级文件操作授权记忆：记住用户"本次都允许"的类别（write/edit/delete）——仿 opencode
+    let mut granted: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     loop {
         if interrupt::aborted() {
@@ -248,6 +296,11 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                     continue;
                                 }
                             };
+                            // 写文件要授权（仿 opencode：允许一次/本次都允许/拒绝）
+                            if !ask_permission(ui, &mut granted, "write", &format!("写入文件 {}（{} 字）", filename.trim(), content.chars().count())).await {
+                                sess.tool_result(call.call_id, "用户拒绝了写入此文件。可以换个做法，或先问用户想怎么处理。");
+                                continue;
+                            }
                             // 允许子目录：先建好父目录
                             if let Some(parent) = path.parent() {
                                 let _ = std::fs::create_dir_all(parent);
@@ -270,6 +323,114 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 Err(e) => {
                                     sess.tool_result(call.call_id, format!("保存失败：{}", e));
                                 }
+                            }
+                        }
+                        // —— 读文件（当前目录树内，只读、免授权）——
+                        "read_file" => {
+                            let p = arg_str(&call.arguments, "path");
+                            let path = match resolve_in_workspace(&p) {
+                                Ok(p) => p,
+                                Err(e) => { sess.tool_result(call.call_id, e); continue; }
+                            };
+                            match std::fs::read_to_string(&path) {
+                                Ok(c) => {
+                                    // 截断防爆 token；超长提示行数
+                                    let total = c.chars().count();
+                                    let body: String = c.chars().take(12000).collect();
+                                    let msg = if total > 12000 {
+                                        format!("（文件较大，仅前 12000 字，共 {} 字）\n{}", total, body)
+                                    } else {
+                                        body
+                                    };
+                                    sess.tool_result(call.call_id, msg);
+                                }
+                                Err(e) => sess.tool_result(call.call_id, format!("读取失败：{}", e)),
+                            }
+                        }
+                        // —— 列目录（当前目录树内，只读、免授权）——
+                        "list_dir" => {
+                            let p = arg_str(&call.arguments, "path");
+                            let dir = if p.trim().is_empty() {
+                                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                            } else {
+                                match resolve_in_workspace(&p) {
+                                    Ok(p) => p,
+                                    Err(e) => { sess.tool_result(call.call_id, e); continue; }
+                                }
+                            };
+                            match std::fs::read_dir(&dir) {
+                                Ok(rd) => {
+                                    let mut lines: Vec<String> = rd
+                                        .filter_map(|e| e.ok())
+                                        .map(|e| {
+                                            let name = e.file_name().to_string_lossy().to_string();
+                                            if e.path().is_dir() { format!("{}/", name) } else { name }
+                                        })
+                                        .collect();
+                                    lines.sort();
+                                    let body = if lines.is_empty() { "（空目录）".to_string() } else { lines.join("\n") };
+                                    sess.tool_result(call.call_id, body);
+                                }
+                                Err(e) => sess.tool_result(call.call_id, format!("列目录失败：{}", e)),
+                            }
+                        }
+                        // —— 改文件：唯一串替换（当前目录树内，需授权）——
+                        "edit_file" => {
+                            let p = arg_str(&call.arguments, "path");
+                            let old = arg_str(&call.arguments, "old_string");
+                            let new = arg_str(&call.arguments, "new_string");
+                            let path = match resolve_in_workspace(&p) {
+                                Ok(p) => p,
+                                Err(e) => { sess.tool_result(call.call_id, e); continue; }
+                            };
+                            let content = match std::fs::read_to_string(&path) {
+                                Ok(c) => c,
+                                Err(e) => { sess.tool_result(call.call_id, format!("读取失败：{}", e)); continue; }
+                            };
+                            let hits = content.matches(old.as_str()).count();
+                            if old.is_empty() || hits == 0 {
+                                sess.tool_result(call.call_id, "old_string 在文件中没找到（或为空）。请先 read_file 确认原文，old_string 要原样、且唯一。");
+                                continue;
+                            }
+                            if hits > 1 {
+                                sess.tool_result(call.call_id, format!("old_string 在文件中出现了 {} 次，不唯一。请把 old_string 写长一点、带上下文，确保唯一。", hits));
+                                continue;
+                            }
+                            if !ask_permission(ui, &mut granted, "edit", &format!("编辑文件 {}", p.trim())).await {
+                                sess.tool_result(call.call_id, "用户拒绝了编辑此文件。可以换个做法。");
+                                continue;
+                            }
+                            let updated = content.replacen(old.as_str(), new.as_str(), 1);
+                            match std::fs::write(&path, updated.as_bytes()) {
+                                Ok(()) => {
+                                    let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                                    emit_orch(ui, &sess, &format!("已编辑文件：{}", abs.display()));
+                                    sess.tool_result(call.call_id, format!("已修改 {}", abs.display()));
+                                }
+                                Err(e) => sess.tool_result(call.call_id, format!("写入失败：{}", e)),
+                            }
+                        }
+                        // —— 删文件（当前目录树内，需授权）——
+                        "delete_file" => {
+                            let p = arg_str(&call.arguments, "path");
+                            let path = match resolve_in_workspace(&p) {
+                                Ok(p) => p,
+                                Err(e) => { sess.tool_result(call.call_id, e); continue; }
+                            };
+                            if !path.is_file() {
+                                sess.tool_result(call.call_id, "目标不存在或不是文件，未删除。");
+                                continue;
+                            }
+                            if !ask_permission(ui, &mut granted, "delete", &format!("删除文件 {}", p.trim())).await {
+                                sess.tool_result(call.call_id, "用户拒绝了删除此文件。");
+                                continue;
+                            }
+                            match std::fs::remove_file(&path) {
+                                Ok(()) => {
+                                    emit_orch(ui, &sess, &format!("已删除文件：{}", p.trim()));
+                                    sess.tool_result(call.call_id, format!("已删除 {}", p.trim()));
+                                }
+                                Err(e) => sess.tool_result(call.call_id, format!("删除失败：{}", e)),
                             }
                         }
                         // —— 更新计划清单（把探索/验证/收尾等列成可见可勾选的 todo）——
@@ -325,6 +486,34 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
 /// 取字符串参数（缺省空串）
 fn arg_str(args: &serde_json::Value, key: &str) -> String {
     args.get(key).and_then(|v| v.as_str()).unwrap_or("").to_string()
+}
+
+/// 文件操作授权（仿 opencode）：读操作免授权；写/改/删要问。
+/// 三选项：允许一次 / 本次会话都允许 / 拒绝。"本次都允许"按类别（write/edit/delete）记进 granted，
+/// 后续同类不再问。返回 true=放行、false=拒绝（调用方把拒绝回灌给 AI，让它换做法）。
+/// 非交互前端（app spawn / CI，is_interactive()=false）无法弹窗 → 自动放行
+/// （用户在自己工作区主动发起的运行；app 可在协议层另做授权）。
+async fn ask_permission(
+    ui: &dyn Frontend,
+    granted: &mut std::collections::HashSet<String>,
+    kind: &str,
+    summary: &str,
+) -> bool {
+    if granted.contains(kind) {
+        return true;
+    }
+    if !ui.is_interactive() {
+        return true;
+    }
+    let opts = vec!["允许一次".to_string(), "本次会话都允许".to_string(), "拒绝".to_string()];
+    match ui.await_choice(format!("需要授权：{}", summary), opts).await {
+        Some(0) => true,
+        Some(1) => {
+            granted.insert(kind.to_string());
+            true
+        }
+        _ => false, // 拒绝 / 取消（Esc）
+    }
 }
 
 /// 把用户给的文件名解析到**工作区（启动 tke 时的当前目录）**内。
