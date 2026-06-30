@@ -81,11 +81,11 @@ pub(super) struct Diagnosis {
     pub(super) reached: bool,
     steps: Vec<DiagStep>,
     /// 第一个失败步的下标(0-based)；None=全跑通
-    fail_idx: Option<usize>,
+    pub(super) fail_idx: Option<usize>,
     /// 一句话结论(给医生 & CLI)
-    note: String,
+    pub(super) note: String,
     /// 脚本跑完后的最终页面元素（渲染文本），供医生 finish 时对照用户需求做终点校验
-    final_page: String,
+    pub(super) final_page: String,
 }
 
 impl Diagnosis {

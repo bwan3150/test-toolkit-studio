@@ -175,7 +175,24 @@ pub async fn verify_and_repair(
     (lines, report)
 }
 
-/// 问探索会话要一段「目标标志」文本：只有真正到达目标时最终页面才会出现的独特文字。
+/// 路径化工具用：脱离探索会话，**自建一次性会话**从「目标 + 脚本步骤」推出目标标志文本。
+/// 供 replay_tks / repair_tks / optimize_tks 这些独立工具复用（D2 的实现）。
+pub(super) async fn derive_marker(
+    ai: &AiConfig,
+    prompts: &PromptSet,
+    tx: &mut Transcript,
+    lines: &[String],
+    case: &str,
+) -> String {
+    let system = "你帮助从测试脚本步骤和目标描述里，找出一段“只有真正到达目标时最终页面才会出现”的独特文字，用作回放是否到位的判据。".to_string();
+    let mut sess = match LlmSession::new(ai, system, Vec::new()) {
+        Ok(s) => s,
+        Err(_) => return String::new(),
+    };
+    ask_goal_marker(prompts, &mut sess, tx, lines, case).await.unwrap_or_default()
+}
+
+/// 问会话要一段「目标标志」文本：只有真正到达目标时最终页面才会出现的独特文字。
 async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Transcript, lines: &[String], case: &str) -> Option<String> {
     let listing = lines
         .iter()

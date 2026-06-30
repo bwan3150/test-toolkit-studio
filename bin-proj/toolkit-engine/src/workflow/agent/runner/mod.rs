@@ -10,6 +10,7 @@ pub mod orchestrator;
 pub mod reflect;
 pub mod supervisor;
 pub mod testrun;
+pub mod tksops;
 pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};

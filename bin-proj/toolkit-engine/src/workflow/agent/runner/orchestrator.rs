@@ -17,6 +17,7 @@ use super::super::prompt::PromptSet;
 use super::super::ui::{Level, TodoItem, TodoStatus, Tokens};
 use super::options::{AgentResult, AgentRunOptions};
 use super::testrun::TestRun;
+use super::tksops;
 use super::interrupt;
 
 /// 编排官工具集（手写 schema；description 走 PromptSet 角色化，可外部覆盖）。
@@ -40,6 +41,42 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
         ),
         LlmTool::new("verify", desc("verify"), empty()),
         LlmTool::new("finalize", desc("finalize"), empty()),
+        LlmTool::new(
+            "replay_tks",
+            desc("replay_tks"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
+                    "goal": { "type": "string", "description": "这条脚本要达成的目标（判断回放是否到位）" }
+                },
+                "required": ["path", "goal"]
+            }),
+        ),
+        LlmTool::new(
+            "repair_tks",
+            desc("repair_tks"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
+                    "goal": { "type": "string", "description": "这条脚本要达成的目标" }
+                },
+                "required": ["path", "goal"]
+            }),
+        ),
+        LlmTool::new(
+            "optimize_tks",
+            desc("optimize_tks"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
+                    "goal": { "type": "string", "description": "这条脚本要达成的目标" }
+                },
+                "required": ["path", "goal"]
+            }),
+        ),
         LlmTool::new(
             "save_file",
             desc("save_file"),
@@ -284,6 +321,28 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 sess.tool_result(call.call_id, "没有进行中的运行可收尾（请先 explore）。");
                             }
                         },
+                        // —— 对工作区里已有的 .tks 做独立操作：回放 / 修复 / 优化（路径化，主 AI 自由调度）——
+                        "replay_tks" | "repair_tks" | "optimize_tks" => {
+                            let p = arg_str(&call.arguments, "path");
+                            let goal = arg_str(&call.arguments, "goal");
+                            let path = match resolve_in_workspace(&p) {
+                                Ok(p) => p,
+                                Err(e) => { sess.tool_result(call.call_id, e); continue; }
+                            };
+                            if !path.is_file() {
+                                sess.tool_result(call.call_id, format!("脚本不存在：{}", p.trim()));
+                                continue;
+                            }
+                            let kind = call.name.as_str();
+                            emit_orch(ui, &sess, &format!("{} {}", match kind { "replay_tks" => "回放", "repair_tks" => "修复", _ => "优化" }, p.trim()));
+                            let r = match kind {
+                                "replay_tks" => tksops::replay_tks(opts, ui, &path, &goal).await,
+                                "repair_tks" => tksops::repair_tks(opts, ui, &path, &goal).await,
+                                _ => tksops::optimize_tks(opts, ui, &path, &goal).await,
+                            }?;
+                            ran_any = true;
+                            sess.tool_result(call.call_id, r);
+                        }
                         // —— 把内容写成文件交付（如 policy.md）。非设备动作→给当前 .tks 追加一行注释留痕 ——
                         "save_file" => {
                             let filename = arg_str(&call.arguments, "filename");
