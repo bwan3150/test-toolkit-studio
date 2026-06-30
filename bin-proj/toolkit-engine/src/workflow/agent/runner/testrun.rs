@@ -12,7 +12,6 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use crate::models::Platform;
 use crate::{ControlAction, ExecutionResult, Fetcher, LlmSession, Point, Result, RunArtifacts, Workarea};
@@ -28,7 +27,7 @@ use super::super::ui::{Frontend, Level, Phase, SubAgent, Tokens, UiEvent};
 use super::flow::{drive, DriveCtx, DriveOutcome};
 use super::options::{AgentResult, AgentRunOptions, VerifyReport};
 use super::{record_knowledge, referenced_element_names, render_summary, slug, unique_script_path};
-use super::{reflect, verify};
+use super::reflect;
 
 /// 一条用例的运行态：探索阶段建好，验证/收尾阶段在其上推进。
 pub(crate) struct TestRun {
@@ -358,16 +357,6 @@ impl TestRun {
         &self.final_shot
     }
 
-    /// 记一条非设备动作的留痕（如"保存文件 X"）——finalize 时作为 .tks 注释追加。
-    pub(crate) fn note(&mut self, text: &str) {
-        self.notes.push(text.to_string());
-    }
-
-    /// 探索是否达成（供编排官决定下一步：达成才值得验证）。
-    pub(crate) fn explore_succeeded(&self) -> bool {
-        self.outcome.success && !self.outcome.aborted
-    }
-
     /// 给编排官看的探索结果摘要（一句话）。
     pub(crate) fn explore_brief(&self) -> String {
         let head = if self.outcome.aborted {
@@ -392,57 +381,19 @@ impl TestRun {
         )
     }
 
-    /// 给编排官看的验证结果摘要（一句话）。
-    pub(crate) fn verify_brief(&self) -> String {
-        match &self.verified {
-            None => "未验证（探索未达成，或尚未调用验证）".to_string(),
-            Some(r) if r.passed => format!(
-                "验证通过：连续 {} 次稳定到达目标（修复 {} 次 · 最终 {} 步）",
-                r.stability_passes, r.repairs, r.final_steps
-            ),
-            Some(r) if !r.reached => "验证失败：脚本修复后仍跑不到目标".to_string(),
-            Some(r) => format!(
-                "验证未通过：稳定性只连续到达 {} 次（修复 {} 次 · 最终 {} 步）",
-                r.stability_passes, r.repairs, r.final_steps
-            ),
-        }
-    }
-
-    /// 阶段二：回放提炼后的脚本，失败让 AI 续接修复，连过 2 次才算稳定。
-    /// **是否验证由主 AI（编排官）调 verify 工具决定**，不再被 opts.verify 门控；
-    /// 但探索未达成/被中断时无脚本可验，直接空过。
-    pub(crate) async fn verify(&mut self, opts: &AgentRunOptions, ui: &dyn Frontend) {
-        // 诊断/验证回放必须读**临时库**，且用探索同一个设备（含向导选的 web）。
-        let tmp_params = Arc::new(
-            opts.params
-                .with_element_lib(self.element_path.clone())
-                .with_device(Some(self.device.clone())),
-        );
-        if self.outcome.success && !self.outcome.aborted {
-            let verify_log = self.run_dir.join("verify");
-            let ctx = drive_ctx!(self, opts, ui);
-            let (verified_lines, rep) = verify::verify_and_repair(
-                &mut self.sess,
-                &opts.ai,
-                &self.prompts,
-                &mut self.tx,
-                &ctx,
-                &tmp_params,
-                &self.script_path,
-                &self.case,
-                Some(verify_log.as_path()),
-                self.final_lines.clone(),
-            )
-            .await;
-            if !verified_lines.is_empty() {
-                self.result_lines = verified_lines;
-            }
-            self.verified = Some(rep);
-        }
-    }
-
-    /// 阶段三：写 run_end / log.json / conversation.json，定稿命名 + 提交元素库，渲染结果框，返回结果。
-    pub(crate) async fn finalize(mut self, opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<AgentResult> {
+    /// 收尾：把 .tks 落到 `out_tks`（工作区）、引用元素提交到 `out_sidecar`（该脚本的 sidecar 库），
+    /// 写 run_end / log / conversation，渲染结果框，返回结果。**总是落盘**——哪怕没完全达成，
+    /// 也留下可被 repair_tks 修的脚本（去掉了原来"失败就删脚本"）。
+    pub(crate) async fn finalize(
+        mut self,
+        opts: &AgentRunOptions,
+        ui: &dyn Frontend,
+        out_tks: &std::path::Path,
+        out_sidecar: &std::path::Path,
+    ) -> Result<AgentResult> {
+        // 输出目标改成调用方给的工作区路径 + sidecar 元素库
+        self.script_path = out_tks.to_path_buf();
+        self.real_element_path = out_sidecar.to_path_buf();
         // 最终成败：探索达成 且（未自检 或 自检稳定通过）
         let stable = self.verified.as_ref().map(|r| r.passed);
         let overall_success = self.outcome.success && stable.unwrap_or(true);
@@ -508,20 +459,18 @@ impl TestRun {
         // 防污染（临时库架构）：成功→把终稿引用到的元素从临时库提交正式库；失败→删脚本、丢临时库即可。
         let referenced = referenced_element_names(&self.result_lines);
         let feat_names: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
-        let (display_created, committed) = if overall_success {
-            // 定稿语义命名：把终稿用到的「特征自动名」元素改成语义名(改临时库 key + 脚本引用)，再提交正式库
-            let (renamed, semantic) =
-                reflect::finalize_names(&opts.ai, &self.prompts, &mut self.tx, &self.element_path, &self.result_lines, &feat_names).await;
-            self.result_lines = renamed;
-            let _ = write_script(&self.script_path, &self.case, &self.result_lines); // 落盘改名后的脚本
-            let n = crate::tools::element::commit_elements(&self.element_path, &self.real_element_path, &semantic).unwrap_or(0);
-            (semantic, n)
+        // **总是落盘 + 提交引用元素**到 sidecar：成功才做语义命名，未达成就用特征名原样落（留给 repair_tks 修）。
+        let (renamed, semantic) = if overall_success {
+            reflect::finalize_names(&opts.ai, &self.prompts, &mut self.tx, &self.element_path, &self.result_lines, &feat_names).await
         } else {
-            let _ = std::fs::remove_file(&self.script_path);
-            (feat_names, 0)
+            (self.result_lines.clone(), feat_names.clone())
         };
+        self.result_lines = renamed;
+        let _ = write_script(&self.script_path, &self.case, &self.result_lines);
+        let committed = crate::tools::element::commit_elements(&self.element_path, &self.real_element_path, &semantic).unwrap_or(0);
+        let display_created = semantic;
         // 非设备动作留痕：把 notes 作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过；脚本已写完才追加，不被覆盖）。
-        if overall_success && !self.notes.is_empty() {
+        if !self.notes.is_empty() {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&self.script_path) {
                 for note in &self.notes {

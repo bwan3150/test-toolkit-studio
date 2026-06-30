@@ -23,7 +23,6 @@ use super::interrupt;
 /// 编排官工具集（手写 schema；description 走 PromptSet 角色化，可外部覆盖）。
 fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
     let desc = |name: &str| prompts.role_tool_description("orchestrator", name);
-    let empty = || json!({ "type": "object", "properties": {}, "required": [] });
     vec![
         LlmTool::new(
             "explore",
@@ -33,14 +32,13 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                 "properties": {
                     "goal": { "type": "string", "description": "要在设备上完成的任务目标——测试用例 或 一般任务（如『进入隐私政策页』『找到并截取用户头像』）" },
                     "note": { "type": "string", "description": "可选：额外约束/提示（用户纠偏、已否定路径、需留意的细节）" },
-                    "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 verify）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
+                    "script_name": { "type": "string", "description": "可选：给产出的 .tks 起的文件名（落到当前工作目录、目录内自动去重）。不给则按 goal 取名。一次对话可产多个不同脚本。" },
+                    "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 replay_tks/repair_tks）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
                     "read_full": { "type": "boolean", "description": "任务是读**长内容**（整页 policy 等）时设 true：到达目标后滚动逐屏收集全文。截图/找元素留 false（默认，不乱滚）" }
                 },
                 "required": ["goal"]
             }),
         ),
-        LlmTool::new("verify", desc("verify"), empty()),
-        LlmTool::new("finalize", desc("finalize"), empty()),
         LlmTool::new(
             "replay_tks",
             desc("replay_tks"),
@@ -200,8 +198,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
         ));
     }
 
-    // 当前进行中的运行（一条用例的 TestRun，跨工具调用存活）；最近一次 finalize 的结果。
-    let mut current: Option<TestRun> = None;
+    // 最近一次 explore 收尾的结果（供会话结束时的 Done 事件用）。脚本都是工作区文件，无常驻运行态。
     let mut last_result: Option<AgentResult> = None;
     let mut ran_any = false;
     // 非交互模式下「还没探索过就只用文字回复」的催促次数（防空转结束、一条没跑）
@@ -266,61 +263,43 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 }
                 for call in calls {
                     match call.name.as_str() {
-                        // —— 探索：开一条新用例的 TestRun（若上条还没收尾，先收尾、不丢产物）——
+                        // —— 探索：驱动设备 + 把 .tks 写进工作区(AI 命名、可多个) + 元素提交到 sidecar ——
                         "explore" => {
                             let goal = arg_str(&call.arguments, "goal");
                             let note = call.arguments.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
                             let make_test = call.arguments.get("make_test").and_then(|v| v.as_bool()).unwrap_or(false);
                             let read_full = call.arguments.get("read_full").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let script_name = arg_str(&call.arguments, "script_name");
                             if goal.trim().is_empty() {
                                 sess.tool_result(call.call_id, "未提供 goal，无法开始。");
                                 continue;
                             }
-                            if let Some(prev) = current.take() {
-                                if let Ok(r) = prev.finalize(opts, ui).await {
-                                    last_result = Some(r);
-                                }
-                            }
                             emit_orch(ui, &sess, &format!("开始：{}", first_line(&goal)));
                             let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full).await?;
+                            // 命名 + 落工作区（当前目录、目录内去重）+ sidecar 元素库
+                            let base = {
+                                let n = script_name.trim();
+                                if n.is_empty() { super::slug(&goal, 40) } else { super::slug(n, 50) }
+                            };
+                            let workspace = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                            let tks_path = super::unique_script_path(&workspace, &base);
+                            let sidecar = tksops::sidecar_path(&tks_path);
+                            // 收尾前先取交付内容（finalize 会消费 run）
+                            let brief = run.explore_brief();
+                            let text = run.final_text().trim().to_string();
+                            let shot = run.final_shot().to_path_buf();
+                            let result = run.finalize(opts, ui, &tks_path, &sidecar).await?;
                             ran_any = true;
-                            // 工具结果 = 摘要 + 末页可读文字(截断) + 截图路径——通用任务靠它答问/存文件
-                            let mut brief = run.explore_brief();
-                            let text = run.final_text().trim();
+                            last_result = Some(result);
+                            let abs = std::fs::canonicalize(&tks_path).unwrap_or_else(|_| tks_path.clone());
+                            let mut msg = format!("{}\n- 脚本已写到：{}", brief, abs.display());
                             if !text.is_empty() {
                                 let snippet: String = text.chars().take(4000).collect();
-                                brief.push_str(&format!("\n- 末页可读文字（截断 4000 字）：\n{}", snippet));
+                                msg.push_str(&format!("\n- 末页可读文字（截断 4000 字）：\n{}", snippet));
                             }
-                            brief.push_str(&format!("\n- 末页截图：{}", run.final_shot().display()));
-                            current = Some(run);
-                            sess.tool_result(call.call_id, brief);
+                            msg.push_str(&format!("\n- 末页截图：{}", shot.display()));
+                            sess.tool_result(call.call_id, msg);
                         }
-                        // —— 验证：回放→医生修复→稳定性（是否验证由主 AI 决定，不再被 --verify 门控）——
-                        "verify" => match current.as_mut() {
-                            Some(run) if run.explore_succeeded() => {
-                                run.verify(opts, ui).await;
-                                let brief = run.verify_brief();
-                                sess.tool_result(call.call_id, brief);
-                            }
-                            Some(_) => {
-                                sess.tool_result(call.call_id, "当前探索未达成/被中断，无脚本可验证。可重新 explore，或直接 finalize。");
-                            }
-                            None => {
-                                sess.tool_result(call.call_id, "还没有进行中的探索。请先 explore，再 verify。");
-                            }
-                        },
-                        // —— 收尾：定稿命名 + 提交元素库 + 落日志 + 结果框；消费当前运行 ——
-                        "finalize" => match current.take() {
-                            Some(run) => {
-                                let r = run.finalize(opts, ui).await?;
-                                let summary = summarize(&r);
-                                last_result = Some(r);
-                                sess.tool_result(call.call_id, summary);
-                            }
-                            None => {
-                                sess.tool_result(call.call_id, "没有进行中的运行可收尾（请先 explore）。");
-                            }
-                        },
                         // —— 对工作区里已有的 .tks 做独立操作：回放 / 修复 / 优化（路径化，主 AI 自由调度）——
                         "replay_tks" | "repair_tks" | "optimize_tks" => {
                             let p = arg_str(&call.arguments, "path");
@@ -367,11 +346,6 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             match std::fs::write(&path, content.as_bytes()) {
                                 Ok(()) => {
                                     let abs = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                                    // 非设备动作→给当前 .tks 追加注释留痕（如果有进行中的运行）
-                                    if let Some(run) = current.as_mut() {
-                                        let rel = filename.trim();
-                                        run.note(&format!("保存文件 {}", rel));
-                                    }
                                     emit_orch(ui, &sess, &format!("已保存文件：{}", abs.display()));
                                     // 明确叮嘱主 AI：把这个完整路径**原样告诉用户**（别只说"已保存"）
                                     sess.tool_result(
@@ -513,12 +487,6 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             );
                         }
                         "finish" => {
-                            // 收尾任何未结的运行，避免丢产物
-                            if let Some(run) = current.take() {
-                                if let Ok(r) = run.finalize(opts, ui).await {
-                                    last_result = Some(r);
-                                }
-                            }
                             let reason = arg_str(&call.arguments, "reason");
                             let reason = if reason.trim().is_empty() { "会话结束".to_string() } else { reason };
                             emit_orch(ui, &sess, &reason);
@@ -533,12 +501,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
         }
     }
 
-    // 退出前：收尾任何未结的运行（用户中断/关会话时也别丢产物）
-    if let Some(run) = current.take() {
-        if let Ok(r) = run.finalize(opts, ui).await {
-            last_result = Some(r);
-        }
-    }
+    // 脚本都是工作区文件、explore 即时落盘，退出前无需再收尾。
     Ok(finalize(last_result, ran_any, "会话结束"))
 }
 
@@ -632,24 +595,6 @@ fn parse_todos(args: &serde_json::Value) -> Vec<TodoItem> {
 fn emit_orch(ui: &dyn Frontend, sess: &LlmSession, text: &str) {
     let (pt, ct) = sess.last_usage();
     ui.emit(UiEvent::Assistant { text: text.to_string(), tokens: Tokens::new(pt, ct) });
-}
-
-/// 把一次 finalize 的结果摘成给编排官看的工具结果文本
-fn summarize(r: &AgentResult) -> String {
-    let head = if r.aborted {
-        "被中断（用户终止）"
-    } else if r.success {
-        "目标达成、脚本已定稿并提交"
-    } else {
-        "未达成（脚本未稳定，已不保留）"
-    };
-    format!(
-        "收尾完成：{}。\n- 探索轮数：{}\n- 脚本：{}\n- 结束依据：{}",
-        head,
-        r.rounds,
-        if r.script.as_os_str().is_empty() { "（未生成）".to_string() } else { r.script.display().to_string() },
-        r.finish_reason
-    )
 }
 
 /// 收束整场会话的返回值：有跑过就返回最近一次结果；一条都没跑给兜底结果。
