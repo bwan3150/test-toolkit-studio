@@ -1,12 +1,12 @@
-// 【编排官 orchestrator】= 测试领域专精的「主 AI」，最顶层长寿会话，用户与它对话。
+// 【编排官 orchestrator】= 操作设备的「主 AI」，最顶层长寿会话，用户与它对话（形态类 claude code）。
 //
-// 形态（类 claude code）：它能对话、讨论、定方案；通过**细粒度工具**调度被它当 worker 的
-// explorer/doctor/verify——不再把整条流水线当黑盒，而是把"探索 / 验证 / 收尾"当**独立步骤**
-// 由主 AI 决定顺序（验证三段是 todo、非线性）。用户随时插话当硬约束（Guidance）。
-//
-// slice 2b：工具 explore / verify / finalize / ask_user / finish，主 AI 持一个「当前运行」TestRun，
-// 在它上面推进各阶段。常规节奏 explore → verify → finalize，但主 AI 可停下讨论、跳过验证、
-// 或针对问题重新 explore。
+// 它能对话、讨论、定方案；通过**颗粒化工具**自由调度，**没有固定流水线、没有常驻运行态**：
+//   explore                     驱动设备把过程录成 .tks 写进工作区（AI 命名、可多个）+ sidecar 元素库
+//   replay_tks/repair_tks/optimize_tks  对工作区已有 .tks 回放/修复/优化（路径化，见 tksops）
+//   save_file/read_file/list_dir/edit_file/delete_file  工作区文件增删改查（写改删需授权，仿 opencode）
+//   update_todos / ask_user / finish
+// .tks 都是工作区里独立的文件；一次对话可产多个脚本、反复打磨、混着读写文件。用户随时插话当硬约束（Guidance）。
+// 想要高质量可回放脚本时的"建议流程"(explore→replay→optimize→repair→replay×2)写在 orchestrator.md，非强制。
 
 use serde_json::json;
 

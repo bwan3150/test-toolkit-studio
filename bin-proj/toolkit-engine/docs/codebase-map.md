@@ -135,7 +135,8 @@ tke = **所有自动化测试工具的统一入口/协调器**。一个 Rust CLI
 | `runner/interpreter/command_executor.rs` | `CommandExecutor`：每个 `TksCommand` → 直接调 `Controller` 方法（execute_launch/click/press/swipe/input/wait/assert…） |
 | `runner/interpreter/target_resolver.rs` | `TargetResolver`：`TksParam` → `Point`（元素→先 capture_ui_state 再 `recognizer.find_element_detailed`，记 bounds 到 trace） |
 | `runner/interpreter/param_extractor.rs` | `ParamExtractor`：从 `TksParam` 提取 text/number/duration/direction |
-| `agent/` | ③ AI 探索（`tke harness`）。多层子模块：provider(genai 对接)/prompt(可自定义提示词)/tools/perception/execution/knowledge/transcript/interaction/runner。详见 agent 模块自身的 mod.rs 注释 |
+| `agent/` | ③ 对话式设备 AI agent（`tke harness`，像 coding agent）。子模块：provider(genai 对接)/prompt(可自定义提示词)/tools/perception/execution/knowledge/transcript/interaction/**runner**。详见 agent/mod.rs 注释 + `docs/tke-flow.md` |
+| `agent/runner/` | 主 AI 调度层。`orchestrator`(主 AI 会话循环+工具调度+文件操作+授权) · `testrun`(explore：驱动→.tks 写工作区+sidecar，自收尾) · `tksops`(路径化 replay_tks/repair_tks/optimize_tks) · `flow`(驱动循环) · `doctor`/`reflect`/`verify`/`supervisor`/`asserter`(测试专长子 agent) · `options`/`interrupt`。**无固定流水线、无常驻运行态**——.tks 都是工作区文件，主 AI 按需调度 |
 
 ### tools/（④ 自有工具）
 | 文件 | 职责 |

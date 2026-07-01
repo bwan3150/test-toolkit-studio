@@ -1,5 +1,5 @@
-// 【编排】AgentRunner：装配各子模块（提示词/会话/感知/执行/记忆/日志）并驱动循环
-// 本文件只做"装配 + 收尾"，循环逻辑在 flow.rs。
+// 【编排】AgentRunner：装配 + 开一场主 AI(orchestrator) 会话。
+// 本文件只做"装配 + 收尾渲染辅助"；主 AI 会话循环在 orchestrator.rs，驱动循环在 flow.rs。
 
 pub mod asserter;
 pub mod doctor;
@@ -15,8 +15,8 @@ pub mod verify;
 
 pub use options::{AgentResult, AgentRunOptions};
 
-// 一条用例的探索→验证→收尾已抽进 runner::testrun（TestRun 三阶段）；本文件只剩
-// run() 装配 + run_one_testcase 串接 + 收尾渲染辅助（render_summary 等）。
+// explore 驱动+收尾在 runner::testrun；replay/repair/optimize 在 runner::tksops；主 AI 调度在
+// orchestrator。本文件只剩 run() 装配 + 收尾渲染辅助（render_summary / slug / unique_script_path 等）。
 use std::path::{Path, PathBuf};
 
 use crate::Result;

@@ -10,7 +10,16 @@
 //   knowledge    【记忆/知识库】mem0 + RAG（本期留口子）
 //   transcript   【对话日志】conversation.jsonl
 //   interaction  【用户交互】ask_user 通道
-//   runner       【编排】options / flow(主循环) / mod(装配)
+//   runner       【编排】主 AI(orchestrator) 与用户对话、自由调度颗粒化工具（无固定流水线）：
+//                  orchestrator 主 AI 会话循环 + 工具调度 + 文件操作 + 授权
+//                  testrun      explore：驱动设备 → .tks 写工作区 + sidecar 元素库（自收尾，无常驻态）
+//                  tksops       路径化 replay_tks / repair_tks / optimize_tks（对工作区已有 .tks 操作）
+//                  flow         驱动循环（看页面→动作→再看），explore 与 tksops 复用
+//                  doctor       脚本医生（回放→修复），供 repair_tks
+//                  reflect      反思官（失败重探计划 / 定稿命名）+ optimize（删冗余），供 optimize_tks
+//                  verify       回放/目标校验基础设施（do_replay / marker）
+//                  supervisor · asserter  make_test 时的 finish 把关 / 每步自动断言
+//                  options / interrupt / mod(装配)
 
 pub mod execution;
 pub mod interaction;
