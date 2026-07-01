@@ -124,12 +124,13 @@ tke run <path.tks>      # 单脚本（按扩展名识别）
 tke run <path.toml>     # flow 多脚本顺序执行（同上）
 tke steps "启动 [...]" "点击 [{登录按钮}]" "断言 [{首页}, 存在]"
                         # 不落文件执行一串指令（编辑器逐行调试 / AI 循环用）
-tke harness <用例.md|"用例文字"> --scripts <输出目录> [--verify]
-                        # AI 探索测试并生成脚本（内置 AI 闭环）
-                        # --scripts 只给目录(也可写进 config)，.tks 文件名由 AI 据用例自动起、
-                        #           在目录内去重不覆盖旧脚本
-                        # --verify：生成后重启净化→从头 tke run 回放→失败让 AI 从失败步
-                        #           续接修复，直到连续通过 2 次（自检 + 自修复）
+tke harness [用例.md|"用例文字"]
+                        # 对话式设备 agent（像 coding agent）：主 AI 驱动 安卓/iOS/web + 操作工作区文件
+                        # 无参在终端直接进对话（向导选设备/平台）；--testcase 只是可选开场白
+                        # 主 AI 自由调度：explore(驱动录 .tks) / replay_tks / repair_tks / optimize_tks
+                        #                + save_file/read_file/edit_file/... 文件工具（写改删需授权）
+                        # .tks 脚本 + 交付文件落**工作区**（--current-dir 或当前目录，AI 命名、可多个）
+                        # 中间文件落 --cache（或系统临时目录）；详见 docs/tke-flow.md
 ```
 
 flow 为 TOML：
