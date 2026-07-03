@@ -56,8 +56,56 @@ fn parse_reasoning_effort(spec: Option<&str>) -> Option<ReasoningEffort> {
 ///     }
 /// }
 /// ```
+/// 会话后端：真实 genai 客户端 / 脚本化假后端（测试专用，无网络）。
+/// Fake 走与 Real 完全相同的历史簿记路径（页面省略/压缩/工具配对），
+/// 让 compaction、驱动循环等核心逻辑可以在 CI 里无设备、无 API Key 地测——仿 Maestro 的 FakeDriver 思路。
+enum Backend {
+    Real(Client),
+    Fake(std::sync::Mutex<std::collections::VecDeque<FakeTurn>>),
+}
+
+/// FakeLlm 的一轮脚本化回复（测试装配用）
+pub struct FakeTurn {
+    pub reply: LlmReply,
+    pub prompt_tokens: i64,
+    pub completion_tokens: i64,
+}
+
+impl FakeTurn {
+    /// 便捷构造：一轮工具调用（call_id 自动生成）
+    pub fn tool(name: &str, arguments: serde_json::Value) -> Self {
+        Self {
+            reply: LlmReply::ToolCalls {
+                text: None,
+                calls: vec![super::types::LlmToolCall {
+                    call_id: format!("fake-{}", name),
+                    name: name.to_string(),
+                    arguments,
+                }],
+            },
+            prompt_tokens: 10,
+            completion_tokens: 5,
+        }
+    }
+
+    /// 便捷构造：一轮纯文本回复
+    pub fn text(t: &str) -> Self {
+        Self { reply: LlmReply::Text(t.to_string()), prompt_tokens: 10, completion_tokens: 5 }
+    }
+}
+
+/// LLM 调用错误是否**可重试**（供应商侧瞬时故障）：限流/过载/超时/连接/5xx。
+/// 配置错误(401/403/404/400)是终止性的——重试只会浪费时间。分类依据是错误文本
+/// （genai 把 HTTP 层错误串进 message），宁可漏判(不重试)不可误判(重试配置错误)。
+fn is_retryable_llm_err(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    ["429", "rate limit", "ratelimit", "overloaded", "529", "500", "502", "503", "504", "timeout", "timed out", "connection", "connect error", "reset by peer", "temporarily"]
+        .iter()
+        .any(|k| m.contains(k))
+}
+
 pub struct LlmSession {
-    client: Client,
+    backend: Backend,
     model: String,
     /// 每轮请求选项（含供应商无关的 reasoning effort）。一次会话固定，每次 exec_chat 复用。
     options: ChatOptions,
@@ -97,6 +145,30 @@ impl LlmSession {
     pub fn new(cfg: &AiConfig, system: impl Into<String>, tools: Vec<LlmTool>) -> Result<Self> {
         let (client, model) = build_client(cfg)?;
 
+        // 推理强度（供应商无关）：缺省 medium；显式 none 则不开。
+        // normalize_reasoning_content：把 deepseek/qwen 等 <think>…</think> 抽成 reasoning_content。
+        let mut options = ChatOptions::default().with_normalize_reasoning_content(true);
+        if let Some(effort) = parse_reasoning_effort(cfg.reasoning_effort.as_deref()) {
+            options = options.with_reasoning_effort(effort);
+        }
+
+        Ok(Self::assemble(Backend::Real(client), model, options, system.into(), tools))
+    }
+
+    /// 测试专用：脚本化假后端（无网络、无 API Key）。历史簿记（页面省略/压缩/工具配对）
+    /// 与真实后端完全同路径，供会话层与驱动循环的无设备测试使用。
+    pub fn new_fake(system: impl Into<String>, tools: Vec<LlmTool>, turns: Vec<FakeTurn>) -> Self {
+        Self::assemble(
+            Backend::Fake(std::sync::Mutex::new(turns.into())),
+            "fake-llm".to_string(),
+            ChatOptions::default(),
+            system.into(),
+            tools,
+        )
+    }
+
+    /// 共同装配：system + 工具 → 初始 ChatRequest
+    fn assemble(backend: Backend, model: String, options: ChatOptions, system: String, tools: Vec<LlmTool>) -> Self {
         // 工具抽象 → genai Tool
         let genai_tools: Vec<Tool> = tools
             .into_iter()
@@ -107,21 +179,13 @@ impl LlmSession {
             })
             .collect();
 
-        let system: String = system.into();
         let mut req = ChatRequest::new(vec![ChatMessage::system(system)]);
         if !genai_tools.is_empty() {
             req = req.with_tools(genai_tools);
         }
 
-        // 推理强度（供应商无关）：缺省 medium；显式 none 则不开。
-        // normalize_reasoning_content：把 deepseek/qwen 等 <think>…</think> 抽成 reasoning_content。
-        let mut options = ChatOptions::default().with_normalize_reasoning_content(true);
-        if let Some(effort) = parse_reasoning_effort(cfg.reasoning_effort.as_deref()) {
-            options = options.with_reasoning_effort(effort);
-        }
-
-        Ok(Self {
-            client,
+        Self {
+            backend,
             model,
             options,
             req,
@@ -132,7 +196,7 @@ impl LlmSession {
             last_trace_idx: None,
             page_indices: Vec::new(),
             last_bulky_tool: None,
-        })
+        }
     }
 
     /// 当前使用的模型名（日志用）
@@ -267,13 +331,54 @@ impl LlmSession {
         true
     }
 
-    /// 向模型请求下一步决策
+    /// 向模型请求下一步决策。
+    /// **可重试错误自动重试**（限流/过载/超时/连接/5xx，最多加试 2 次、退避递增）——
+    /// 供应商瞬时抖动不再直接杀掉整场会话；配置类错误（401/400 等）立即失败不浪费时间。
     pub async fn next(&mut self) -> Result<LlmReply> {
-        let res = self
-            .client
-            .exec_chat(&self.model, self.req.clone(), Some(&self.options))
-            .await
-            .map_err(|e| TkeError::LlmError(e.to_string()))?;
+        // Fake 后端（测试）：弹出下一轮脚本化回复，历史簿记与真实路径完全一致
+        if let Backend::Fake(turns) = &self.backend {
+            let turn = turns
+                .lock()
+                .map_err(|_| TkeError::LlmError("FakeLlm 锁中毒".into()))?
+                .pop_front()
+                .ok_or_else(|| TkeError::LlmError("FakeLlm 脚本已耗尽（测试给的轮次比实际调用少）".into()))?;
+            self.last_usage = (turn.prompt_tokens, turn.completion_tokens);
+            self.total_usage.0 += turn.prompt_tokens;
+            self.total_usage.1 += turn.completion_tokens;
+            if let LlmReply::ToolCalls { calls, .. } = &turn.reply {
+                // 与真实路径一致：assistant 的工具调用回填进历史（保证 tool_result 配对成立）
+                let genai_calls: Vec<genai::chat::ToolCall> = calls
+                    .iter()
+                    .map(|c| genai::chat::ToolCall {
+                        call_id: c.call_id.clone(),
+                        fn_name: c.name.clone(),
+                        fn_arguments: c.arguments.clone(),
+                        thought_signatures: None,
+                    })
+                    .collect();
+                self.req = self.req.clone().append_message(genai_calls);
+            }
+            return Ok(turn.reply);
+        }
+        let Backend::Real(client) = &self.backend else { unreachable!() };
+
+        const MAX_ATTEMPTS: usize = 3; // 首次 + 最多 2 次重试
+        let mut attempt = 0usize;
+        let res = loop {
+            attempt += 1;
+            match client.exec_chat(&self.model, self.req.clone(), Some(&self.options)).await {
+                Ok(r) => break r,
+                Err(e) => {
+                    let msg = e.to_string();
+                    if attempt >= MAX_ATTEMPTS || !is_retryable_llm_err(&msg) {
+                        let suffix = if attempt > 1 { format!("（已自动重试 {} 次）", attempt - 1) } else { String::new() };
+                        return Err(TkeError::LlmError(format!("{}{}", msg, suffix)));
+                    }
+                    // 退避：1.5s、3s
+                    tokio::time::sleep(std::time::Duration::from_millis(1500 * attempt as u64)).await;
+                }
+            }
+        };
 
         // token 用量：累计 + 记录本次（部分 provider 可能不返回，按 0 处理）
         let pt = res.usage.prompt_tokens.unwrap_or(0) as i64;
@@ -303,5 +408,112 @@ impl LlmSession {
             .collect();
         // text：模型调工具时同时给的思考文字（可空），供 CLI 展示
         Ok(LlmReply::ToolCalls { text, calls: mapped })
+    }
+}
+
+// ============================ 单元测试（FakeLlm 后端，无网络） ============================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fake(turns: Vec<FakeTurn>) -> LlmSession {
+        LlmSession::new_fake("测试系统提示词", Vec::new(), turns)
+    }
+
+    /// 历史消息的 Debug 文本（断言内容用；genai 类型全derive Debug）
+    fn dump(s: &LlmSession) -> Vec<String> {
+        s.req.messages.iter().map(|m| format!("{:?}", m)).collect()
+    }
+
+    #[test]
+    fn page_elision_keeps_only_latest_page() {
+        let mut s = fake(vec![]);
+        s.user("用例开场");
+        s.user_page("第1轮页面内容");
+        s.user_page("第2轮页面内容");
+        let d = dump(&s);
+        assert!(d.iter().any(|m| m.contains("已省略")), "旧页面应被压成占位：{:?}", d);
+        assert!(d.iter().any(|m| m.contains("第2轮页面内容")), "最新页面应完整保留");
+        assert!(!d.iter().any(|m| m.contains("第1轮页面内容")), "旧页面内容应消失");
+    }
+
+    #[tokio::test]
+    async fn fake_toolcall_pairs_with_tool_result() {
+        let mut s = fake(vec![FakeTurn::tool("click", serde_json::json!({ "element_id": 0 }))]);
+        s.user("开始");
+        let reply = s.next().await.unwrap();
+        let LlmReply::ToolCalls { calls, .. } = reply else { panic!("应为 ToolCalls") };
+        s.tool_result(calls[0].call_id.as_str(), "已执行");
+        let d = dump(&s);
+        // assistant 工具调用与 tool 响应都进了历史（配对成立，与真实路径一致）
+        assert!(d.iter().any(|m| m.contains("click")));
+        assert!(d.iter().any(|m| m.contains("已执行")));
+        assert_eq!(s.total_usage(), (10, 5));
+    }
+
+    #[tokio::test]
+    async fn fake_exhausted_returns_err() {
+        let mut s = fake(vec![]);
+        s.user("开始");
+        let e = s.next().await.unwrap_err();
+        assert!(e.to_string().contains("脚本已耗尽"), "实际：{}", e);
+    }
+
+    #[tokio::test]
+    async fn compact_history_cuts_at_page_boundary_and_keeps_preamble() {
+        let turns = (0..8).map(|_| FakeTurn::tool("click", serde_json::json!({ "element_id": 0 }))).collect();
+        let mut s = fake(turns);
+        s.user("用例开场白");
+        for i in 1..=8 {
+            s.user_page(format!("第{}轮页面", i));
+            let LlmReply::ToolCalls { calls, .. } = s.next().await.unwrap() else { panic!() };
+            s.tool_result(calls[0].call_id.as_str(), format!("已执行第{}步", i));
+        }
+        let before = s.req.messages.len();
+        assert!(s.compact_history(2, "【历史已压缩】步骤回顾"), "8 轮 > keep 2，应发生压缩");
+        let d = dump(&s);
+        assert!(d.len() < before, "压缩后消息数应减少");
+        assert!(d.iter().any(|m| m.contains("用例开场白")), "前导（用例开场）必须保留");
+        assert!(d.iter().any(|m| m.contains("历史已压缩")), "摘要必须在场");
+        assert!(d.iter().any(|m| m.contains("已执行第7步")), "最近 2 轮的 tool_result 保留");
+        assert!(d.iter().any(|m| m.contains("已执行第8步")));
+        assert!(!d.iter().any(|m| m.contains("已执行第5步")), "更早轮次应被压掉");
+        // 不足 keep 时返回 false（不重复压缩）
+        assert!(!s.compact_history(2, "再压一次"));
+        // 压缩后 page_indices 已重定位：继续追加页面/再压缩照常工作
+        s.user_page("第9轮页面");
+        assert!(dump(&s).iter().any(|m| m.contains("第9轮页面")));
+        assert!(s.compact_history(2, "第二次压缩"), "新增页面后超过 keep，应可再压");
+        assert!(dump(&s).iter().any(|m| m.contains("第二次压缩")));
+    }
+
+    #[tokio::test]
+    async fn bulky_tool_result_rolls_over() {
+        let mut s = fake(vec![
+            FakeTurn::tool("read_file", serde_json::json!({ "path": "a.md" })),
+            FakeTurn::tool("read_file", serde_json::json!({ "path": "b.md" })),
+        ]);
+        s.user("开始");
+        let LlmReply::ToolCalls { calls, .. } = s.next().await.unwrap() else { panic!() };
+        s.tool_result_bulky(calls[0].call_id.as_str(), "AAAA大内容", "【a.md 内容已省略】");
+        let LlmReply::ToolCalls { calls, .. } = s.next().await.unwrap() else { panic!() };
+        s.tool_result_bulky(calls[0].call_id.as_str(), "BBBB大内容", "【b.md 内容已省略】");
+        let d = dump(&s);
+        assert!(!d.iter().any(|m| m.contains("AAAA大内容")), "上一份大结果应被压成占位");
+        assert!(d.iter().any(|m| m.contains("a.md 内容已省略")));
+        assert!(d.iter().any(|m| m.contains("BBBB大内容")), "最新大结果完整保留");
+    }
+
+    #[test]
+    fn retryable_classification() {
+        assert!(is_retryable_llm_err("HTTP 429 Too Many Requests"));
+        assert!(is_retryable_llm_err("server overloaded (529)"));
+        assert!(is_retryable_llm_err("connection reset by peer"));
+        assert!(is_retryable_llm_err("request timed out"));
+        assert!(is_retryable_llm_err("502 Bad Gateway"));
+        assert!(!is_retryable_llm_err("401 Unauthorized: invalid api key"));
+        assert!(!is_retryable_llm_err("400 bad request: unknown model"));
+        assert!(!is_retryable_llm_err("404 model not found"));
     }
 }

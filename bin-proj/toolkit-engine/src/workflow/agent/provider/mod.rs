@@ -13,5 +13,5 @@ pub mod client;
 pub mod session;
 pub mod types;
 
-pub use session::LlmSession;
+pub use session::{FakeTurn, LlmSession};
 pub use types::{LlmReply, LlmTool, LlmToolCall};
