@@ -29,7 +29,7 @@ pub async fn handle(
     // --ocr：CLI > config.ocr；设置进程级 OCR 来源，供回放时 recognizer 解析 ocr 通道元素 / 断言
     if let Some(spec) = run_args.ocr.clone().or_else(|| params.ocr.clone()).as_deref() {
         match tke::engines::ocr::resolve_ocr(spec, &params.ocr_url) {
-            Some(src) => tke::utils::params::set_ocr_source(src),
+            Some(src) => tke::engines::ocr::set_ocr_source(src),
             None => JsonOutput::error(format!("无法解析 --ocr 值「{}」（用 online/offline/http(s):// 或确认 ocr_url 已配置）", spec)),
         }
     }

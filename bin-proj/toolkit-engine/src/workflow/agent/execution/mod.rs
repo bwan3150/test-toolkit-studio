@@ -212,7 +212,7 @@ pub async fn apply(
             let dist = (dim * 4 / 5).max(200); // 近全屏，少重复检查同一批元素/OCR
             let workarea = Workarea::for_device(Some(device))?;
             let fetcher = Fetcher::new();
-            let ocr_src = crate::utils::params::ocr_source();
+            let ocr_src = crate::engines::ocr::ocr_source();
             // 多候选关键词（target 可用 `|` 分隔）：应对不确定确切文字（空格/措辞/OCR 大小写）。
             let cands = crate::utils::scroll::targets(target);
             if cands.is_empty() {

@@ -188,7 +188,7 @@ impl<'a> CommandExecutor<'a> {
         let alt = if vertical { Point::new(sw as i32 / 2, sh as i32 * 3 / 4) } else { Point::new(sw as i32 * 3 / 4, sh as i32 / 2) };
         let dim = if vertical { sh as i32 } else { sw as i32 };
         let step = (dim * 4 / 5).max(200);
-        let ocr_src = crate::utils::params::ocr_source();
+        let ocr_src = crate::engines::ocr::ocr_source();
         let mut prev_texts: Option<Vec<String>> = None;
         let mut stuck = 0u32; // 连续"页面没变"的次数
         for i in 0..SAFETY_MAX {

@@ -46,12 +46,9 @@ impl HarnessLimits {
 
 /// 进程级在线 OCR 地址表：main 启动时由 Params 设置一次，识别引擎深处查询，
 /// 避免为单个 URL 穿透多层构造器（统一参数表"按需查询"的体现）。
+/// 注意：这里只存纯 String；带类型的 OCR 来源注册表在 engines::ocr（set_ocr_source/ocr_source），
+/// utils 不 import 上层 engines 的类型（分层：utils 在 engines 之下）。
 static OCR_URL: OnceLock<String> = OnceLock::new();
-
-/// 进程级 OCR 来源（在线 URL / 离线语言）：由 `tke run --ocr` / `tke harness --ocr` 设置一次，
-/// 识别引擎（recognizer::ocr）查询以决定回放时元素/断言走 online 还是 offline。
-/// 未设置则回退「在线 + OCR_URL」（保持旧行为）。
-static OCR_SOURCE: OnceLock<crate::engines::ocr::OcrSource> = OnceLock::new();
 
 /// 设置在线 OCR 地址（仅 main 启动时调用一次）
 pub fn set_ocr_url(url: String) {
@@ -64,16 +61,6 @@ pub fn ocr_url() -> String {
         .get()
         .cloned()
         .unwrap_or_else(|| DEFAULT_OCR_URL.to_string())
-}
-
-/// 设置进程级 OCR 来源（run/harness 处理器在跑脚本前调用一次）
-pub fn set_ocr_source(src: crate::engines::ocr::OcrSource) {
-    let _ = OCR_SOURCE.set(src);
-}
-
-/// 查询进程级 OCR 来源；未显式设置返回 None（调用方回退「在线 + ocr_url」）
-pub fn ocr_source() -> Option<crate::engines::ocr::OcrSource> {
-    OCR_SOURCE.get().cloned()
 }
 
 /// 元素库默认查找路径（相对当前目录）——全项目唯一一份

@@ -31,7 +31,7 @@ pub async fn find_by_ocr(
 
     // OCR 来源：优先用进程级设置（tke run/harness --ocr，可选 online/offline/URL）；
     // 未设置则回退「在线 + 配置的 ocr_url」（保持旧行为）。
-    let (online, param) = match crate::utils::params::ocr_source() {
+    let (online, param) = match crate::engines::ocr::ocr_source() {
         Some(src) => (src.online, src.param),
         None => (true, crate::utils::params::ocr_url()),
     };

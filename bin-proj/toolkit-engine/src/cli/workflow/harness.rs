@@ -178,7 +178,7 @@ pub async fn handle(
         .and_then(|spec| tke::engines::ocr::resolve_ocr(spec, &tke::utils::params::ocr_url()));
     // 同时设进程级 OCR 来源：让验证/医生阶段的回放（recognizer 解析 ocr 元素/断言）与探索用同一模式
     if let Some(src) = &ocr {
-        tke::utils::params::set_ocr_source(src.clone());
+        tke::engines::ocr::set_ocr_source(src.clone());
     }
 
     // verify：CLI --verify 出现 或 config.verify=true 即开启
