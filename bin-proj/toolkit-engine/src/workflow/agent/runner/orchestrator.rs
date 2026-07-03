@@ -489,6 +489,12 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("请提供更多信息")
                                 .to_string();
+                            // Plain（管道/CI）没人可问：绝不阻塞等 stdin（CI 下会永久挂起），
+                            // 回一句兜底让 AI 自行决定。TUI/JSON 才真问。
+                            if !ui.supports_prompts() {
+                                sess.tool_result(call.call_id, "（当前为非交互运行，无法向用户提问——请基于已有信息自行决定并继续）");
+                                continue;
+                            }
                             let ans = ui.await_answer(0, q).await.unwrap_or_default();
                             sess.tool_result(
                                 call.call_id,
@@ -522,8 +528,9 @@ fn arg_str(args: &serde_json::Value, key: &str) -> String {
 /// 文件操作授权（仿 opencode）：读操作免授权；写/改/删要问。
 /// 三选项：允许一次 / 本次会话都允许 / 拒绝。"本次都允许"按类别（write/edit/delete）记进 granted，
 /// 后续同类不再问。返回 true=放行、false=拒绝（调用方把拒绝回灌给 AI，让它换做法）。
-/// 非交互前端（app spawn / CI，is_interactive()=false）无法弹窗 → 自动放行
-/// （用户在自己工作区主动发起的运行；app 可在协议层另做授权）。
+/// 判据是 supports_prompts（能否把授权请求送达用户）：TUI 弹窗、JSON 经 NDJSON 事件由 app
+/// 弹窗代答——app spawn 下不再静默放行写/改/删。只有 Plain（管道/CI，无人可问）才自动放行
+/// （用户在自己工作区主动发起的运行）。
 async fn ask_permission(
     ui: &dyn Frontend,
     granted: &mut std::collections::HashSet<String>,
@@ -533,7 +540,7 @@ async fn ask_permission(
     if granted.contains(kind) {
         return true;
     }
-    if !ui.is_interactive() {
+    if !ui.supports_prompts() {
         return true;
     }
     let opts = vec!["允许一次".to_string(), "本次会话都允许".to_string(), "拒绝".to_string()];

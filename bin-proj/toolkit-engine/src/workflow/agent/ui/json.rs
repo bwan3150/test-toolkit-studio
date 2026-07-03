@@ -54,6 +54,12 @@ impl JsonFrontend {
 
 #[async_trait::async_trait]
 impl Frontend for JsonFrontend {
+    /// app 可代问代答（AwaitingInput 事件 ↔ Answer 命令）：ask_user / 文件授权都经此送达用户。
+    /// 注意 is_interactive 仍为 false——跑完即结束、不开 REPL；这两个维度是独立的。
+    fn supports_prompts(&self) -> bool {
+        true
+    }
+
     fn emit(&self, ev: UiEvent) {
         // 序列化失败则丢弃该事件（不应发生；UiEvent 全字段可序列化）
         if let Ok(s) = serde_json::to_string(&ev) {
@@ -93,6 +99,35 @@ impl Frontend for JsonFrontend {
                     }
                 }
             } // 锁在此处释放，再 await
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    /// 从候选里选一个（文件授权三选、设备选择等）：emit AwaitingInput{options 非空}，
+    /// app 弹窗后回 `{"type":"answer","text":"…"}`——text 为 **0-based 下标**（与 TUI 内部一致），
+    /// 也接受选项原文精确匹配。Abort → None（调用方按"拒绝/放弃"处理）。
+    async fn await_choice(&self, prompt: String, options: Vec<String>) -> Option<usize> {
+        self.emit(UiEvent::AwaitingInput { round: 0, question: prompt, options: options.clone() });
+        loop {
+            {
+                let mut rx = match self.cmd_rx.lock() {
+                    Ok(rx) => rx,
+                    Err(_) => return None,
+                };
+                while let Ok(c) = rx.try_recv() {
+                    match c {
+                        UiCommand::Answer { text } => {
+                            let t = text.trim();
+                            if let Some(i) = options.iter().position(|o| o == t) {
+                                return Some(i);
+                            }
+                            return t.parse::<usize>().ok().filter(|n| *n < options.len());
+                        }
+                        UiCommand::Abort => return None,
+                        _ => {}
+                    }
+                }
+            } // 锁在此释放，再 await
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }

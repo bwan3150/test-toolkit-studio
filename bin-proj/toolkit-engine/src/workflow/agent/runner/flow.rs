@@ -825,6 +825,11 @@ pub async fn drive(
                 }
                 AgentAction::AskUser { question } => {
                     tx.log("ask_user", serde_json::json!({ "round": round, "question": question.clone() }));
+                    // Plain（管道/CI）没人可问：绝不阻塞等 stdin，回兜底让 AI 自行决定
+                    if !ctx.ui.supports_prompts() {
+                        sess.tool_result(primary.call_id.as_str(), "（当前为非交互运行，无法向用户提问——请基于已有信息自行决定并继续）");
+                        continue;
+                    }
                     let answer = match ctx.ui.await_answer(round, question.clone()).await {
                         Some(a) => a,
                         None => { aborted = true; finish = Some((false, "已终止（用户中断）".to_string())); break 'outer; }

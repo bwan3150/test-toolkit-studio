@@ -37,6 +37,13 @@ pub trait Frontend: Send + Sync {
         false
     }
 
+    /// 是否能把问题/授权请求送达用户并等到回复：TUI（弹窗）与 JSON（NDJSON 事件由 app 代问代答）
+    /// 为 true；Plain（管道/CI，stdin 不可等）为 false。ask_user / ask_permission 据此决定
+    /// 「真问」还是「不阻塞地走兜底」——与 is_interactive（是否开 REPL）是两个独立维度。
+    fn supports_prompts(&self) -> bool {
+        false
+    }
+
     /// 安全点非阻塞取命令（每轮开始/LLM 调用前/步骤后调），返回本次累积的所有命令。
     fn drain_commands(&self) -> Vec<UiCommand>;
 

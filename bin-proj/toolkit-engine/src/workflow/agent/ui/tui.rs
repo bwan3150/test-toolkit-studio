@@ -67,6 +67,11 @@ impl Frontend for TuiFrontend {
         true
     }
 
+    /// 提问/授权直接弹给终端前的用户。
+    fn supports_prompts(&self) -> bool {
+        true
+    }
+
     fn drain_commands(&self) -> Vec<UiCommand> {
         let mut cmds = Vec::new();
         if let Ok(mut rx) = self.commands_rx.lock() {
