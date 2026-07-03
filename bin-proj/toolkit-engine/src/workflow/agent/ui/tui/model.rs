@@ -1,274 +1,53 @@
-// 【TUI 前端】ratatui 全屏交互（真 TTY 时用）。
-//
-// 引擎跑在 tokio 侧、TUI 跑在独立 std::thread 独占终端，两条 unbounded channel 桥接：
-//   events_tx (引擎 emit → TUI 渲染)、commands_tx (TUI 键盘 → 引擎 drain)。
-// emit 永不阻塞引擎（unbounded send）；drain/await_answer 同步块内 try_recv，绝不跨 await 持 std Mutex。
-// 退出靠用户在 TUI 里按 q（结束后）/ Ctrl+C（中断→再按强制退出）；run_tui 所有返回路径都恢复终端。
+// 【TUI 渲染状态】TuiModel：apply 把 UiEvent 转成彩色 Line 累积；handle_key/handle_paste
+// 处理输入（含 /指令、choosing 列表、中途指导）。画屏在 view.rs。
 
-use std::io::Stdout;
-use std::sync::Mutex;
-use std::time::Duration;
-
-use crossterm::{
-    cursor::{Hide, Show},
-    event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
-    backend::CrosstermBackend,
-    layout::{Constraint, Layout, Position},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Wrap},
-    Frame, Terminal,
+    text::{Line, Span},
 };
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
 
-use super::super::runner::fmt::{brief, fmt_duration};
-use super::command::UiCommand;
-use super::event::*;
-use super::Frontend;
-
-type Backend = CrosstermBackend<Stdout>;
-
-/// 引擎在 tokio 侧持有的 TUI 句柄；TUI 跑在独立 std::thread。
-pub struct TuiFrontend {
-    events_tx: UnboundedSender<UiEvent>,
-    commands_rx: Mutex<UnboundedReceiver<UiCommand>>,
-    handle: Mutex<Option<std::thread::JoinHandle<()>>>,
-}
-
-impl TuiFrontend {
-    /// 建两条 channel，起独立线程跑 run_tui，返回句柄。
-    pub fn spawn() -> anyhow::Result<Self> {
-        let (events_tx, events_rx) = tokio::sync::mpsc::unbounded_channel::<UiEvent>();
-        let (commands_tx, commands_rx) = tokio::sync::mpsc::unbounded_channel::<UiCommand>();
-        let handle = std::thread::spawn(move || {
-            let _ = run_tui(events_rx, commands_tx);
-        });
-        Ok(Self {
-            events_tx,
-            commands_rx: Mutex::new(commands_rx),
-            handle: Mutex::new(Some(handle)),
-        })
-    }
-}
-
-#[async_trait::async_trait]
-impl Frontend for TuiFrontend {
-    fn emit(&self, ev: UiEvent) {
-        // unbounded：永不阻塞引擎；线程已退则丢弃
-        let _ = self.events_tx.send(ev);
-    }
-
-    /// TUI 是唯一可与用户多轮对话的前端：编排官跑完一条用例后可在此等下一句（REPL）。
-    fn is_interactive(&self) -> bool {
-        true
-    }
-
-    /// 提问/授权直接弹给终端前的用户。
-    fn supports_prompts(&self) -> bool {
-        true
-    }
-
-    fn drain_commands(&self) -> Vec<UiCommand> {
-        let mut cmds = Vec::new();
-        if let Ok(mut rx) = self.commands_rx.lock() {
-            while let Ok(c) = rx.try_recv() {
-                cmds.push(c);
-            }
-        }
-        cmds
-    }
-
-    async fn await_answer(&self, round: usize, question: String) -> Option<String> {
-        // 先告知 TUI「正在等回答」（高亮输入框、回显提问）
-        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new() });
-        // 轮询：每 50ms 取一次命令。不可跨 await 持 std Mutex——锁只在同步块内用。
-        loop {
-            {
-                let mut rx = match self.commands_rx.lock() {
-                    Ok(rx) => rx,
-                    Err(_) => return None,
-                };
-                while let Ok(c) = rx.try_recv() {
-                    match c {
-                        UiCommand::Answer { text } => return Some(text),
-                        UiCommand::Abort => return None,
-                        // Guidance/Pause/Resume：等回答期间忽略
-                        _ => {}
-                    }
-                }
-            } // 锁在此释放，再 await
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    }
-
-    /// 从候选里选一个（设备选择等）：TUI 渲染成方向键可选列表。
-    /// emit AwaitingInput{options 非空} → model 进 choosing 模式；
-    /// 用户用 ↑↓ 选、Enter 提交 → handle_key 发 Answer{text=选中下标字符串}。
-    /// 这里轮询 commands_rx：Answer 里是下标 → parse 成 usize 返回；Abort → None。
-    async fn await_choice(&self, prompt: String, options: Vec<String>) -> Option<usize> {
-        self.emit(UiEvent::AwaitingInput {
-            round: 0,
-            question: prompt,
-            options: options.clone(),
-        });
-        // 与 await_answer 同模式：同步块取锁 try_recv，绝不跨 await 持 std Mutex。
-        loop {
-            {
-                let mut rx = match self.commands_rx.lock() {
-                    Ok(rx) => rx,
-                    Err(_) => return None,
-                };
-                while let Ok(c) = rx.try_recv() {
-                    match c {
-                        UiCommand::Answer { text } => return text.trim().parse::<usize>().ok(),
-                        UiCommand::Abort => return None,
-                        // Guidance/Pause/Resume：选择期间忽略
-                        _ => {}
-                    }
-                }
-            } // 锁在此释放，再 await
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    }
-
-    async fn shutdown(self: Box<Self>) {
-        // 取出线程句柄，spawn_blocking 等用户在 TUI 里按 q 退出后线程结束
-        let handle = self.handle.lock().ok().and_then(|mut h| h.take());
-        if let Some(h) = handle {
-            let _ = tokio::task::spawn_blocking(move || {
-                let _ = h.join();
-            })
-            .await;
-        }
-    }
-}
-
-// ============================ 终端生命周期 ============================
-
-/// 独立线程入口：装 panic hook、进终端、跑主循环、无论结果都恢复终端。
-fn run_tui(
-    mut events_rx: UnboundedReceiver<UiEvent>,
-    commands_tx: UnboundedSender<UiCommand>,
-) -> std::io::Result<()> {
-    install_panic_hook();
-    let mut terminal = enter_terminal()?;
-    let mut model = TuiModel::new();
-    let res = run_loop(&mut terminal, &mut events_rx, &commands_tx, &mut model);
-    // 无论 res 如何都要恢复终端
-    let _ = leave_terminal(&mut terminal);
-    res
-}
-
-/// raw mode + 备用屏幕 + 隐藏光标 + bracketed paste（粘贴走 Event::Paste，不再逐字当按键）
-fn enter_terminal() -> std::io::Result<Terminal<Backend>> {
-    enable_raw_mode()?;
-    let mut out = std::io::stdout();
-    execute!(out, EnterAlternateScreen, EnableBracketedPaste, Hide)?;
-    Terminal::new(CrosstermBackend::new(out))
-}
-
-/// 退出备用屏幕 + 显示光标 + 关 raw mode（CrosstermBackend 实现了 Write）
-fn leave_terminal(terminal: &mut Terminal<Backend>) -> std::io::Result<()> {
-    execute!(terminal.backend_mut(), DisableBracketedPaste, LeaveAlternateScreen, Show)?;
-    disable_raw_mode()?;
-    let _ = terminal.show_cursor();
-    Ok(())
-}
-
-/// panic 时也恢复终端（否则用户终端卡在 raw/alt-screen）
-fn install_panic_hook() {
-    let prev = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = disable_raw_mode();
-        let _ = execute!(std::io::stdout(), DisableBracketedPaste, LeaveAlternateScreen, Show);
-        prev(info);
-    }));
-}
-
-/// 主循环：抽干引擎事件 → 处理键盘 → 重绘。靠用户按 q 退出。
-/// **脏标记**：只有真的有事件/输入/resize 时才重绘——TUI 无动画元素，空闲时每 16ms
-/// 无条件 draw 纯属烧 CPU（配合 view 的窗口化渲染，把"每帧 O(历史)"的老债一起清掉）。
-fn run_loop(
-    terminal: &mut Terminal<Backend>,
-    events_rx: &mut UnboundedReceiver<UiEvent>,
-    commands_tx: &UnboundedSender<UiCommand>,
-    model: &mut TuiModel,
-) -> std::io::Result<()> {
-    let mut dirty = true; // 首帧必画
-    loop {
-        // 抽干引擎事件（断开返回 Disconnected，正常忽略——靠用户按 q 退出）
-        while let Ok(ev) = events_rx.try_recv() {
-            model.apply(ev);
-            dirty = true;
-        }
-        if event::poll(Duration::from_millis(16))? {
-            match event::read()? {
-                Event::Key(k) if k.kind == KeyEventKind::Press => {
-                    model.handle_key(k, commands_tx);
-                    dirty = true;
-                }
-                // bracketed paste：整段进输入框，粘贴内容里的换行不会触发 Enter 误提交
-                Event::Paste(s) => {
-                    model.handle_paste(&s);
-                    dirty = true;
-                }
-                Event::Resize(_, _) => dirty = true,
-                _ => {}
-            }
-        }
-        if dirty {
-            terminal.draw(|f| view(f, model))?;
-            dirty = false;
-        }
-        if model.should_quit {
-            break;
-        }
-    }
-    Ok(())
-}
-
-// ============================ 渲染状态 ============================
+use crate::workflow::agent::runner::fmt::{brief, fmt_duration};
+use crate::workflow::agent::ui::command::UiCommand;
+use crate::workflow::agent::ui::event::*;
 
 /// 方向键列表选择状态（设备选择等）：options 非空时进入。
-struct ChoiceState {
-    prompt: String,
-    options: Vec<String>,
-    selected: usize,
+pub(super) struct ChoiceState {
+    pub(super) prompt: String,
+    pub(super) options: Vec<String>,
+    pub(super) selected: usize,
 }
 
 /// TUI 渲染状态：apply 把 UiEvent 转成若干彩色 Line 累积；view 据此画屏。
-struct TuiModel {
+pub(super) struct TuiModel {
     /// 滚动消息流（owned String 保证 'static）
-    lines: Vec<Line<'static>>,
-    phase: Option<(Phase, Option<u32>)>,
-    round: usize,
-    tok_up: i64,
-    tok_down: i64,
+    pub(super) lines: Vec<Line<'static>>,
+    pub(super) phase: Option<(Phase, Option<u32>)>,
+    pub(super) round: usize,
+    pub(super) tok_up: i64,
+    pub(super) tok_down: i64,
     /// 等用户回答的提问（Some=AI 在等纯文本输入）
-    awaiting: Option<String>,
+    pub(super) awaiting: Option<String>,
     /// 方向键列表选择（Some=正在从候选里选，如设备选择）
-    choosing: Option<ChoiceState>,
-    input: String,
+    pub(super) choosing: Option<ChoiceState>,
+    pub(super) input: String,
     /// 从底向上的滚动偏移（仅 follow=false 时生效）
-    scroll: u16,
+    pub(super) scroll: u16,
     /// true=自动贴底显示最新
-    follow: bool,
-    finished: bool,
-    should_quit: bool,
+    pub(super) follow: bool,
+    pub(super) finished: bool,
+    pub(super) should_quit: bool,
     /// 最近一条「步骤进行中」行的下标；done 时原地替换成 ✓/✗（步骤保持单行，不另起一行）
     last_step_idx: Option<usize>,
     /// 输入框光标位置（字符索引，0..=input.chars().count()）
-    cursor: usize,
+    pub(super) cursor: usize,
     /// 当前平台（从 SessionInfo 取，用于 Page 行的平台图标）
     platform: Option<String>,
 }
 
 impl TuiModel {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             lines: Vec::new(),
             phase: None,
@@ -354,7 +133,7 @@ impl TuiModel {
     }
 
     /// 把一个 UiEvent 转成 1~N 行彩色 Line 累积进 lines
-    fn apply(&mut self, ev: UiEvent) {
+    pub(super) fn apply(&mut self, ev: UiEvent) {
         // Step（进行中/完成/失败）紧贴在触发它的「● AI 回复」下面、缩进显示，不另加块间空行；
         // 其余块级事件（● 回复 / 观察 / 阶段 …）之间统一留一个空行。
         let is_step = matches!(&ev, UiEvent::Step { .. });
@@ -669,7 +448,7 @@ impl TuiModel {
     }
 
     /// 粘贴（bracketed paste）：整段插到光标处——换行转空格，绝不当 Enter 误提交半截内容
-    fn handle_paste(&mut self, s: &str) {
+    pub(super) fn handle_paste(&mut self, s: &str) {
         if self.choosing.is_some() {
             return; // 列表选择时粘贴无意义
         }
@@ -690,7 +469,7 @@ impl TuiModel {
     }
 
     /// 键盘动作 → UiCommand / 滚动 / 退出
-    fn handle_key(&mut self, k: KeyEvent, tx: &UnboundedSender<UiCommand>) {
+    pub(super) fn handle_key(&mut self, k: KeyEvent, tx: &UnboundedSender<UiCommand>) {
         // Ctrl+C：强制退出兜底（任何状态都能跳出，防卡死）
         if k.modifiers.contains(KeyModifiers::CONTROL) && k.code == KeyCode::Char('c') {
             if !self.finished {
@@ -860,14 +639,14 @@ impl TuiModel {
 }
 
 /// 可用的 / 指令（输入 / 弹提示，Tab 补全）
-const SLASH_COMMANDS: &[(&str, &str)] = &[
+pub(super) const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/exit", "退出 TUI"),
     ("/stop", "停止当前探索（可继续输入指导）"),
     ("/help", "显示可用指令"),
 ];
 
 /// 按 input 前缀过滤匹配的 / 指令
-fn slash_matches(input: &str) -> Vec<&'static (&'static str, &'static str)> {
+pub(super) fn slash_matches(input: &str) -> Vec<&'static (&'static str, &'static str)> {
     let q = input.trim();
     SLASH_COMMANDS.iter().filter(|(n, _)| n.starts_with(q)).collect()
 }
@@ -902,240 +681,4 @@ fn level_color(l: Level) -> Color {
         Level::Err => Color::Red,
         Level::Dim => Color::DarkGray,
     }
-}
-
-// ============================ 视图 ============================
-
-/// 四段布局：顶栏(1) / 消息区(min) / 输入框(动态) / 底栏(1)
-fn view(frame: &mut Frame, model: &TuiModel) {
-    // choosing 模式时输入区要容纳 prompt + 选项列表，按需放大；否则固定 3 行单行输入框。
-    let input_h: u16 = if let Some(ch) = model.choosing.as_ref() {
-        // 边框 2 + prompt 1 + 每项 1 + 每个分组小标题 1（「组\t标签」渲染时组变插一行标题）
-        let mut groups: u16 = 0;
-        let mut last: Option<&str> = None;
-        for o in &ch.options {
-            if let Some((g, _)) = o.split_once('\t') {
-                if last != Some(g) {
-                    groups += 1;
-                    last = Some(g);
-                }
-            }
-        }
-        (ch.options.len() as u16 + groups + 3).clamp(4, 16)
-    } else if model.input.starts_with('/') {
-        // slash 指令菜单：匹配项 + 输入行 + 边框
-        (slash_matches(&model.input).len() as u16 + 3).clamp(3, 10)
-    } else {
-        3
-    };
-    let chunks = Layout::vertical([
-        Constraint::Length(1),       // 顶栏
-        Constraint::Min(0),          // 消息区
-        Constraint::Length(1),       // 空行，隔开消息区与输入框
-        Constraint::Length(input_h), // 输入框
-        Constraint::Length(1),       // 底栏
-    ])
-    .split(frame.area());
-
-    // ---- 顶栏：随当前进程状态变化（反色粗体）----
-    // 准备中 / 等待回复 / 已暂停 / 探索中 / 诊断修复中 / 稳定性验证中 …
-    let top = if let Some(q) = model.awaiting.as_ref() {
-        if q.starts_with("已暂停") {
-            " ● 已暂停 · 等待指令 ".to_string()
-        } else {
-            " ● 等待回复 ".to_string()
-        }
-    } else if let Some((p, n)) = model.phase {
-        let label = match n {
-            Some(k) => format!("{}#{}", p.label(), k),
-            None => p.label().to_string(),
-        };
-        format!(" ● {}中 · 第{}轮 ", label, model.round)
-    } else {
-        " ● 准备中 ".to_string()
-    };
-    frame.render_widget(
-        Paragraph::new(Line::from(top)).style(
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        chunks[0],
-    );
-
-    // ---- 消息区：自动换行 + 准确贴底 + **窗口化渲染** ----
-    // ratatui 0.29 的 Paragraph::line_count 是 unstable 私有方法，不能用；
-    // 退而按宽度逐行估算 wrap 后行数累加（每条按显示宽度 ceil 折行），比按 lines.len() 估算准。
-    // 只克隆可视窗口覆盖到的那几行（≤ 屏高 + 1 行）交给 Paragraph——此前整段 clone 全部历史，
-    // 每帧 O(历史) 的克隆/布局成本随会话线性上涨。行数统计用 usize（u16 在长会话 6.5 万行处会溢出）。
-    let msg_area = chunks[1];
-    let height = msg_area.height as usize;
-    let width = msg_area.width.max(1) as usize;
-    // 每条 Line 折行后的行数（空行算 1 行；否则 ceil(显示宽度 / 区宽)）
-    let heights: Vec<usize> = model
-        .lines
-        .iter()
-        .map(|l| {
-            let w = l.width();
-            (w / width + usize::from(w % width != 0)).max(1)
-        })
-        .collect();
-    let total_wrapped: usize = heights.iter().sum();
-    let max_top = total_wrapped.saturating_sub(height);
-    let y = if model.follow {
-        max_top
-    } else {
-        max_top.saturating_sub(model.scroll as usize)
-    };
-    // 定位覆盖 [y, y+height) 的行区间：start = 首条进入视口的行，skip = 它折行后要跳过的前几行
-    let mut acc = 0usize;
-    let mut start = model.lines.len();
-    let mut skip = 0usize;
-    for (i, h) in heights.iter().enumerate() {
-        if acc + h > y {
-            start = i;
-            skip = y - acc;
-            break;
-        }
-        acc += h;
-    }
-    let mut visible: Vec<Line<'static>> = Vec::new();
-    let mut covered = 0usize;
-    for (i, l) in model.lines.iter().enumerate().skip(start) {
-        visible.push(l.clone());
-        covered += heights[i];
-        if covered >= skip + height {
-            break;
-        }
-    }
-    frame.render_widget(
-        Paragraph::new(Text::from(visible))
-            .wrap(Wrap { trim: false })
-            .scroll((skip as u16, 0)),
-        msg_area,
-    );
-
-    // ---- 输入区：choosing 列表 / awaiting 文本输入 / 普通指导 ----
-    let input_area = chunks[3];
-    if let Some(ch) = model.choosing.as_ref() {
-        render_choice(frame, input_area, ch);
-    } else {
-        render_input(frame, input_area, model);
-    }
-
-    // ---- 底栏：快捷键提示（暗灰，随状态变化）----
-    let hint = if model.choosing.is_some() {
-        "↑↓ 选择 · Enter 确认 · 1-9 直选 · Esc 放弃"
-    } else if model.awaiting.is_some() {
-        "Enter 提交 · 输入指导让 AI 继续 · /exit 退出"
-    } else if model.finished {
-        "输入 /exit 退出"
-    } else if model.input.starts_with('/') {
-        "Tab 补全 · Enter 执行 · 输入 / 看指令"
-    } else {
-        "Esc 停止 · 打字+Enter 指导 · / 指令 · ↑↓ 滚动 · /exit 退出"
-    };
-    frame.render_widget(
-        Paragraph::new(hint).style(Style::default().fg(Color::DarkGray)),
-        chunks[4],
-    );
-    // 总 token 显示在底栏右侧（与提示同一行，不再内嵌输入框）
-    frame.render_widget(
-        Paragraph::new(format!("↑{} ↓{} ", model.tok_up, model.tok_down))
-            .right_aligned()
-            .style(Style::default().fg(Color::DarkGray)),
-        chunks[4],
-    );
-}
-
-/// choosing 模式：在输入区渲染 prompt + 高亮选项列表（方向键选择）。
-fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceState) {
-    let mut lines: Vec<Line<'static>> = Vec::new();
-    lines.push(Line::from(Span::styled(
-        ch.prompt.clone(),
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-    )));
-    // 选项串可用「组\t标签」编码分组：组变了就先插一行小标题，选项缩进列在其下。
-    let mut last_group: Option<&str> = None;
-    for (i, opt) in ch.options.iter().enumerate() {
-        let (group, label) = match opt.split_once('\t') {
-            Some((g, l)) => (Some(g), l),
-            None => (None, opt.as_str()),
-        };
-        if let Some(g) = group {
-            if last_group != Some(g) {
-                lines.push(Line::from(Span::styled(
-                    g.to_string(),
-                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
-                )));
-                last_group = Some(g);
-            }
-        }
-        let indent = if group.is_some() { "  " } else { "" };
-        if i == ch.selected {
-            // 选中项：反白高亮 + ▶ 前导
-            lines.push(Line::from(Span::styled(
-                format!("{}▶ {}", indent, label),
-                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )));
-        } else {
-            lines.push(Line::from(Span::styled(
-                format!("{}  {}", indent, label),
-                Style::default().fg(Color::Gray),
-            )));
-        }
-    }
-    frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::bordered()
-                .title("↑↓ 选择 · Enter 确认")
-                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ),
-        area,
-    );
-}
-
-/// 普通/awaiting 文本输入框 + 可见光标。
-fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel) {
-    let (title, border_style): (String, Style) = if let Some(q) = model.awaiting.as_ref() {
-        // AI 提问直接显示在输入框标题处（opencode 风格）。不再写死"描述你要测什么"——
-        // 问什么由编排官提示词决定（tke 是通用设备 agent，测试只是其一），UI 只如实显示它问的那句。
-        (format!("? {}", brief(q, 70)), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-    } else {
-        // 普通状态：输入框左上角不显示提示文字（提示统一在底栏）
-        (String::new(), Style::default().fg(Color::DarkGray))
-    };
-    // slash 菜单：input 以 / 开头时，输入行上方列出匹配指令（首个高亮，Tab 补全）
-    let mut body: Vec<Line<'static>> = Vec::new();
-    if model.input.starts_with('/') {
-        for (i, (name, desc)) in slash_matches(&model.input).iter().enumerate() {
-            let name_style = if i == 0 {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::Gray)
-            };
-            body.push(Line::from(vec![
-                Span::styled(format!("{:<8}", name), name_style),
-                Span::styled(desc.to_string(), Style::default().fg(Color::DarkGray)),
-            ]));
-        }
-    }
-    body.push(Line::from(format!("> {}", model.input)));
-    frame.render_widget(
-        Paragraph::new(body).block(
-            Block::bordered()
-                .title(Line::from(title))
-                .border_style(border_style),
-        ),
-        area,
-    );
-    // 光标定位到 model.cursor 处（输入行是块内最后一行）：x = 边框1 + "> "2 + 光标前子串宽度。
-    let prefix: String = model.input.chars().take(model.cursor).collect();
-    let pre_w = Span::raw(prefix).width() as u16;
-    let cursor_x = area.x + 1 + 2 + pre_w;
-    let cursor_y = area.y + area.height.saturating_sub(2);
-    // 夹在区域内，避免越界
-    let cx = cursor_x.min(area.x + area.width.saturating_sub(1));
-    frame.set_cursor_position(Position::new(cx, cursor_y));
 }
