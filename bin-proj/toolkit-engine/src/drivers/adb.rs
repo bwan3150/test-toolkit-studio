@@ -90,9 +90,14 @@ impl AdbDriver {
     // 获取UI树
     async fn capture_ui_tree(&self, output_path: &PathBuf) -> Result<()> {
         let temp_path = "/sdcard/ui_dump.xml";
-        
-        // 在设备上dump UI
-        self.run_adb_command(&["shell", "uiautomator", "dump", temp_path])?;
+
+        // 在设备上dump UI：uiautomator 等 UI idle，动画页面会挂——收紧超时、失败重试一次
+        // （第二次动画往往正好停在间隙）；两次都不行就报错，交上层"未能采集"可见降级。
+        if let Err(first) = self.run_adb_command_with_timeout(&["shell", "uiautomator", "dump", temp_path], UI_DUMP_TIMEOUT_SECS) {
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+            self.run_adb_command_with_timeout(&["shell", "uiautomator", "dump", temp_path], UI_DUMP_TIMEOUT_SECS)
+                .map_err(|_| first)?;
+        }
         
         // 拉取XML到本地
         self.run_adb_command(&[
@@ -361,45 +366,65 @@ impl AdbDriver {
     
     // 执行ADB命令
     fn run_adb_command(&self, args: &[&str]) -> Result<()> {
+        self.run_adb_command_with_timeout(args, DEFAULT_ADB_TIMEOUT_SECS)?;
+        Ok(())
+    }
+
+    /// 带超时执行 adb 命令（超时即杀进程）。
+    /// adb 没有任何自带超时——`uiautomator dump` 会等 UI idle，在持续动画的页面上能**无限挂**
+    /// （真机实测：设备列表页轮播动画直接把首屏采集挂死），同步调用还会把 tokio 工作线程一起
+    /// 堵住（TUI 卡死、Esc 无响应）。所有 adb 调用一律经此兜底。
+    fn run_adb_command_with_timeout(&self, args: &[&str], timeout_secs: u64) -> Result<String> {
+        use std::process::Stdio;
         let mut cmd = Command::new(&self.adb_path);
-        
-        // 如果指定了设备ID，添加-s参数
         if let Some(ref device_id) = self.device_id {
             cmd.arg("-s").arg(device_id);
         }
-        
         cmd.args(args);
-        
-        let output = cmd.output()
+        let what = format!("adb {}", args.join(" "));
+
+        let mut child = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|e| TkeError::AdbError(format!("执行ADB命令失败: {}", e)))?;
-        
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    let output = child
+                        .wait_with_output()
+                        .map_err(|e| TkeError::AdbError(format!("读取ADB输出失败: {}", e)))?;
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
+                    }
+                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                }
+                Ok(None) => {
+                    if std::time::Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(TkeError::AdbError(format!(
+                            "「{}」超过 {}s 无响应，已强制终止（uiautomator dump 常因页面持续动画等不到 idle）",
+                            what, timeout_secs
+                        )));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(e) => return Err(TkeError::AdbError(format!("等待ADB命令失败: {}", e))),
+            }
         }
-        
-        Ok(())
     }
     
     // 执行ADB命令并获取输出
     fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
-        let mut cmd = Command::new(&self.adb_path);
-        
-        // 如果指定了设备ID，添加-s参数
-        if let Some(ref device_id) = self.device_id {
-            cmd.arg("-s").arg(device_id);
-        }
-        
-        cmd.args(args);
-        
-        let output = cmd.output()
-            .map_err(|e| TkeError::AdbError(format!("执行ADB命令失败: {}", e)))?;
-        
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
-        }
-        
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        self.run_adb_command_with_timeout(args, DEFAULT_ADB_TIMEOUT_SECS)
     }
 }
+
+/// adb 命令默认超时（秒）：正常命令毫秒级返回，20s 只作"永不挂死"的兜底
+const DEFAULT_ADB_TIMEOUT_SECS: u64 = 20;
+
+/// uiautomator dump 专用超时（秒）：它等 UI idle、是最常见的挂死点，收得更紧（超时后上层重试一次）
+const UI_DUMP_TIMEOUT_SECS: u64 = 12;

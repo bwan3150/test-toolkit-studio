@@ -115,6 +115,11 @@ pub async fn drive(
         }
         round += 1;
 
+        // 首轮给一句可见反馈：`━━ 探索 ━━` 之后如果直接进采集，adb 慢时 TUI 会静默十几秒像卡死
+        if round == 1 {
+            ctx.ui.emit(UiEvent::Notice { level: Level::Dim, text: "▶ 采集首屏页面…".to_string() });
+        }
+
         // 1) 采集页面
         //    web/iOS 冷启动时尚无会话，采集会失败——此时降级为"空页面 + 提示先 launch"，
         //    不中断循环；AI 调 launch 建会话后，下一轮采集即正常。
