@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use crossterm::{
     cursor::{Hide, Show},
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -163,17 +163,17 @@ fn run_tui(
     res
 }
 
-/// raw mode + 备用屏幕 + 隐藏光标
+/// raw mode + 备用屏幕 + 隐藏光标 + bracketed paste（粘贴走 Event::Paste，不再逐字当按键）
 fn enter_terminal() -> std::io::Result<Terminal<Backend>> {
     enable_raw_mode()?;
     let mut out = std::io::stdout();
-    execute!(out, EnterAlternateScreen, Hide)?;
+    execute!(out, EnterAlternateScreen, EnableBracketedPaste, Hide)?;
     Terminal::new(CrosstermBackend::new(out))
 }
 
 /// 退出备用屏幕 + 显示光标 + 关 raw mode（CrosstermBackend 实现了 Write）
 fn leave_terminal(terminal: &mut Terminal<Backend>) -> std::io::Result<()> {
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, Show)?;
+    execute!(terminal.backend_mut(), DisableBracketedPaste, LeaveAlternateScreen, Show)?;
     disable_raw_mode()?;
     let _ = terminal.show_cursor();
     Ok(())
@@ -184,7 +184,7 @@ fn install_panic_hook() {
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
-        let _ = execute!(std::io::stdout(), LeaveAlternateScreen, Show);
+        let _ = execute!(std::io::stdout(), DisableBracketedPaste, LeaveAlternateScreen, Show);
         prev(info);
     }));
 }
@@ -202,10 +202,11 @@ fn run_loop(
             model.apply(ev);
         }
         if event::poll(Duration::from_millis(16))? {
-            if let Event::Key(k) = event::read()? {
-                if k.kind == KeyEventKind::Press {
-                    model.handle_key(k, commands_tx);
-                }
+            match event::read()? {
+                Event::Key(k) if k.kind == KeyEventKind::Press => model.handle_key(k, commands_tx),
+                // bracketed paste：整段进输入框，粘贴内容里的换行不会触发 Enter 误提交
+                Event::Paste(s) => model.handle_paste(&s),
+                _ => {}
             }
         }
         terminal.draw(|f| view(f, model))?;
@@ -433,12 +434,21 @@ impl TuiModel {
                 ]));
             }
             // 主 AI（编排官）：助手本体，纯文本渲染——无 ● 无名字无专属色，与子 agent 区分开。
+            // 它是对话主体：多行回复**完整**渲染（不截成首行），token 角标跟在末行。
             UiEvent::Assistant { text, tokens } => {
                 self.add_tokens(tokens);
-                self.push(Line::from(vec![
-                    Span::raw(brief(&text, 400)),
-                    Self::tok_span(tokens),
-                ]));
+                let mut body: Vec<&str> = text.lines().collect();
+                while body.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+                    body.pop();
+                }
+                let n = body.len();
+                for (i, l) in body.iter().enumerate() {
+                    if i + 1 == n {
+                        self.push(Line::from(vec![Span::raw(l.to_string()), Self::tok_span(tokens)]));
+                    } else {
+                        self.push(Line::from(Span::raw(l.to_string())));
+                    }
+                }
             }
             // 主 AI 的计划清单：每项一行，状态用符号+色（☐待办 ▶进行中 ☑完成，完成项划掉）。
             UiEvent::Todo { items } => {
@@ -642,6 +652,27 @@ impl TuiModel {
             Span::styled(format!("{}  ", label), Style::default().fg(Color::DarkGray)),
             Span::styled(st.text.clone(), Style::default().fg(level_color(st.level))),
         ]));
+    }
+
+    /// 粘贴（bracketed paste）：整段插到光标处——换行转空格，绝不当 Enter 误提交半截内容
+    fn handle_paste(&mut self, s: &str) {
+        if self.choosing.is_some() {
+            return; // 列表选择时粘贴无意义
+        }
+        let cleaned: String = s
+            .chars()
+            .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
+            .collect();
+        if cleaned.is_empty() {
+            return;
+        }
+        let mut chars: Vec<char> = self.input.chars().collect();
+        let at = self.cursor.min(chars.len());
+        for (k, c) in cleaned.chars().enumerate() {
+            chars.insert(at + k, c);
+        }
+        self.input = chars.into_iter().collect();
+        self.cursor = at + cleaned.chars().count();
     }
 
     /// 键盘动作 → UiCommand / 滚动 / 退出

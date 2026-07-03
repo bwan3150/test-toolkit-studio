@@ -86,9 +86,21 @@ impl Frontend for PlainFrontend {
             UiEvent::AgentThought { text, tokens, .. } => {
                 eprintln!("  {} {}  {}", paint(tty, "2", "└ Explorer"), brief(&text, 200), self.toks(tokens));
             }
-            // 主 AI（编排官）：助手本体，纯文本一行，无名字前缀。
+            // 主 AI（编排官）：助手本体、对话主体——多行回复**完整**展示（不截成首行，
+            // 否则 REPL 里它的方案/解释全被砍掉），token 角标跟在末行。
             UiEvent::Assistant { text, tokens } => {
-                eprintln!("  {}  {}", brief(&text, 400), self.toks(tokens));
+                let mut body: Vec<&str> = text.lines().collect();
+                while body.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+                    body.pop();
+                }
+                let n = body.len();
+                for (i, l) in body.iter().enumerate() {
+                    if i + 1 == n {
+                        eprintln!("  {}  {}", l, self.toks(tokens));
+                    } else {
+                        eprintln!("  {}", l);
+                    }
+                }
             }
             // 主 AI 的计划清单：每项一行（[ ]待办 [~]进行中 [x]完成）。
             UiEvent::Todo { items } => {
