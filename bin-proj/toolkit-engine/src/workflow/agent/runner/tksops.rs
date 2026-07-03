@@ -11,7 +11,7 @@ use crate::{Fetcher, Result, RunArtifacts, TkeError, Workarea};
 
 use super::super::prompt::PromptSet;
 use super::super::transcript::Transcript;
-use super::super::ui::{Frontend, Phase, UiEvent};
+use super::super::ui::{Frontend, Level, Phase, UiEvent};
 use super::flow::DriveCtx;
 use super::options::{AgentRunOptions, VerifyReport};
 use super::slug;
@@ -38,9 +38,110 @@ fn read_tks_lines(path: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// 把步骤行写回 .tks（保持 `步骤:` 头）。
+/// 把步骤行写回 .tks（保持 `步骤:` 头）。**保留注释**：头部注释（`# 用例:`/`# 目标标志:` 等）
+/// 与步骤后的尾注（`# 注：…`）原样带回——此前整体丢弃，第一次 repair 就会抹掉用例头和留痕。
 fn write_tks_lines(path: &Path, lines: &[String]) -> Result<()> {
-    std::fs::write(path, format!("步骤:\n{}", lines.join("\n"))).map_err(TkeError::IoError)
+    let old = std::fs::read_to_string(path).unwrap_or_default();
+    let mut header: Vec<&str> = Vec::new();
+    let mut trailer: Vec<&str> = Vec::new();
+    let mut in_steps = false;
+    for l in old.lines() {
+        let t = l.trim();
+        if !in_steps {
+            if t == "步骤:" {
+                in_steps = true;
+            } else if t.starts_with('#') {
+                header.push(l);
+            }
+        } else if t.starts_with('#') {
+            trailer.push(l);
+        }
+    }
+    let mut out = String::new();
+    for h in &header {
+        out.push_str(h);
+        out.push('\n');
+    }
+    out.push_str("步骤:\n");
+    for l in lines {
+        out.push_str(l);
+        out.push('\n');
+    }
+    for tl in &trailer {
+        out.push_str(tl);
+        out.push('\n');
+    }
+    std::fs::write(path, out).map_err(TkeError::IoError)
+}
+
+/// 目标标志(marker)在 .tks 头注释里的持久化前缀。
+const MARKER_PREFIX: &str = "# 目标标志: ";
+
+/// 从 .tks 头注释读已持久化的目标标志。
+fn read_marker(path: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    content
+        .lines()
+        .find_map(|l| l.trim().strip_prefix(MARKER_PREFIX))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// 把目标标志写进 .tks 头注释（已有则更新，没有则插在 `步骤:` 之前）。
+fn write_marker(path: &Path, marker: &str) -> Result<()> {
+    let content = std::fs::read_to_string(path).map_err(TkeError::IoError)?;
+    let line = format!("{}{}", MARKER_PREFIX, marker);
+    let mut out: Vec<String> = Vec::new();
+    let mut placed = false;
+    for l in content.lines() {
+        if l.trim().starts_with(MARKER_PREFIX) {
+            if !placed {
+                out.push(line.clone());
+                placed = true;
+            }
+            continue; // 旧 marker 行丢弃（含重复行）
+        }
+        if !placed && l.trim() == "步骤:" {
+            out.push(line.clone());
+            placed = true;
+        }
+        out.push(l.to_string());
+    }
+    if !placed {
+        out.insert(0, line);
+    }
+    std::fs::write(path, out.join("\n") + "\n").map_err(TkeError::IoError)
+}
+
+/// 目标标志一次推导 + 持久化：优先用 .tks 头里已存的 marker（同一脚本 replay/repair/optimize
+/// **共用同一判定基线**）；没有才推导一次并写回脚本头。此前三个工具各自独立推一次，同一脚本
+/// 连续操作会推出三个可能不同的 marker——验收基线在流水线中途漂移。
+/// 推导失败（空 marker）emit Warn：此时 doctor 的目标校验退化为"跑通即到达"，绝不静默。
+async fn ensure_marker(
+    opts: &AgentRunOptions,
+    ui: &dyn Frontend,
+    tx: &mut Transcript,
+    prompts: &PromptSet,
+    tks: &Path,
+    goal: &str,
+    lines: &[String],
+) -> String {
+    if let Some(m) = read_marker(tks) {
+        return m;
+    }
+    let m = super::verify::derive_marker(&opts.ai, prompts, tx, lines, goal).await;
+    if m.trim().is_empty() {
+        ui.emit(UiEvent::Notice {
+            level: Level::Warn,
+            text: "未能推出目标标志——本次只验证脚本能跑通，不校验是否真到达目标".to_string(),
+        });
+    } else if write_marker(tks, &m).is_ok() {
+        ui.emit(UiEvent::Notice {
+            level: Level::Dim,
+            text: format!("目标标志已写入脚本头（回放/修复/优化共用）：{}", super::flow::brief(&m, 40)),
+        });
+    }
+    m
 }
 
 /// 一次操作所需的环境（拥有所有权，ctx 借用其字段）。
@@ -112,7 +213,7 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         return Ok("脚本为空，没有可回放的步骤。".into());
     }
     ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
-    let marker = super::verify::derive_marker(&opts.ai, &env.prompts, &mut tx, &env.lines, goal).await;
+    let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let ctx = op_ctx!(env, opts, ui);
     let diag = super::doctor::diagnose(&mut tx, &ctx, &env.params, tks, goal, &env.lines, &marker, "replay_tks", 0, false).await;
     let n = env.lines.len();
@@ -132,7 +233,7 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         return Ok("脚本为空，无可修复。".into());
     }
     ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
-    let marker = super::verify::derive_marker(&opts.ai, &env.prompts, &mut tx, &env.lines, goal).await;
+    let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let ctx = op_ctx!(env, opts, ui);
     let fixed =
@@ -153,7 +254,7 @@ pub(crate) async fn optimize_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks:
         return Ok("脚本为空，无可优化。".into());
     }
     ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
-    let marker = super::verify::derive_marker(&opts.ai, &env.prompts, &mut tx, &env.lines, goal).await;
+    let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let ctx = op_ctx!(env, opts, ui);
     let opt = super::reflect::optimize(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, tks, goal, &marker, &env.lines, &mut report).await;
