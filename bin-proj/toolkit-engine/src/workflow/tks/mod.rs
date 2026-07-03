@@ -1,5 +1,6 @@
-// Runner模块 - 脚本解析与单步执行
-// 完整脚本/flow 的执行在 workflow 模块（带实时事件和产物）
+// tks 模块 - .tks 脚本引擎：解析器 + 解释器 + 单步执行器（编辑器调试用）
+// 完整脚本/flow 的执行在 workflow 模块（带实时事件和产物）。
+// 命名注意：本模块与 workflow/agent/runner(AI 编排层)是两回事——曾同名 "runner" 极易混淆，故改名 tks。
 
 // 子模块
 mod parser;
@@ -15,12 +16,12 @@ use std::path::Path;
 use std::time::Instant;
 
 /// 单步执行器（编辑器调试用）
-pub struct Runner {
+pub struct TksRunner {
     device_id: Option<String>,
     pub parser: ScriptParser,
 }
 
-impl Runner {
+impl TksRunner {
     pub fn new(device_id: Option<String>) -> Self {
         Self {
             device_id,

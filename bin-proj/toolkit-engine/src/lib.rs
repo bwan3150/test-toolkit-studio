@@ -55,7 +55,7 @@ pub use atomic::{
 // ③ 工作流
 pub use workflow::{
     RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult,
-    Runner, ScriptParser, ScriptInterpreter, ActionTrace,
+    TksRunner, ScriptParser, ScriptInterpreter, ActionTrace,
 };
 // ③ 工作流 - AI 探索（tke harness）
 pub use workflow::agent::{

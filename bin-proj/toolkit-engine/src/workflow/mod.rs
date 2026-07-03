@@ -8,14 +8,14 @@ pub mod artifacts;
 pub mod script_runner;
 pub mod flow;
 
-// 脚本执行引擎（.tks 解析器 + 解释器）
-pub mod runner;
+// .tks 脚本引擎（解析器 + 解释器 + 单步执行器）——与 agent/runner(AI 编排)是两回事，故不叫 runner
+pub mod tks;
 
 // AI 探索测试（tke harness）：内置 AI 闭环，逐轮决策生成 .tks
 pub mod agent;
 
 pub use events::RunEvent;
-pub use runner::{Runner, ScriptParser, ScriptInterpreter, ActionTrace, script_to_source, step_to_source};
+pub use tks::{TksRunner, ScriptParser, ScriptInterpreter, ActionTrace, script_to_source, step_to_source};
 pub use artifacts::RunArtifacts;
 pub use script_runner::ScriptRunner;
 pub use flow::{FlowDef, FlowRunner, FlowResult};
