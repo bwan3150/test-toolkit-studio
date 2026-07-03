@@ -82,20 +82,35 @@ impl PromptSet {
     /// 取某角色某工具的 description：目录覆盖优先（explorer→tools/<name>.md，其它→tools/<role>/<name>.md），
     /// 否则内置默认。
     pub fn role_tool_description(&self, role: &str, name: &str) -> String {
-        self.prompts_dir
+        let s = self
+            .prompts_dir
             .as_ref()
             .and_then(|d| source::tool_override_role(d, role, name))
-            .unwrap_or_else(|| defaults::default_tool_description_role(role, name).trim().to_string())
+            .unwrap_or_else(|| defaults::default_tool_description_role(role, name).trim().to_string());
+        guard_nonempty(s, &format!("tools/{}/{}.md", role, name))
     }
 
     /// 取某角色某**运行时消息模板**（含 {占位符}）：目录覆盖优先（<dir>/messages/<role>/<name>.md），
     /// 否则内置默认。返回的模板已 trim（结构性空白由调用点用 `render` 填充时控制）。
     pub fn message(&self, role: &str, name: &str) -> String {
-        self.prompts_dir
+        let s = self
+            .prompts_dir
             .as_ref()
             .and_then(|d| source::message_override(d, role, name))
-            .unwrap_or_else(|| defaults::default_message(role, name).trim().to_string())
+            .unwrap_or_else(|| defaults::default_message(role, name).trim().to_string());
+        guard_nonempty(s, &format!("messages/{}/{}.md", role, name))
     }
+}
+
+/// 空提示词守卫：解析结果为空说明「.md 没在 defaults.rs 登记 / 文件被清空」——这类坑此前
+/// 表现为**静默给 LLM 发空消息**，极难排查。这里改成：调试构建直接断言炸出；发布构建返回
+/// 一句无害的占位文本（会出现在 conversation 日志里，一眼可见），绝不再静默空串。
+fn guard_nonempty(s: String, what: &str) -> String {
+    if !s.trim().is_empty() {
+        return s;
+    }
+    debug_assert!(false, "内置提示词缺失或为空：{}（检查 defaults.rs 登记与文件内容）", what);
+    format!("【内置提示词缺失：{}——请检查 defaults.rs 登记与文件内容】", what)
 }
 
 /// 渲染消息模板：把 `{key}` 依次替换为给定值（沿用 {device}/{platform} 那套，无外部模板引擎）。

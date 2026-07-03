@@ -731,9 +731,20 @@ pub async fn drive(
                             })
                             .collect::<Vec<_>>()
                             .join("\n");
-                        if let Some(v) =
-                            supervisor::supervise(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &steps_listing, &list_text, success, &reason).await
-                        {
+                        let verdict =
+                            supervisor::supervise(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &steps_listing, &list_text, success, &reason).await;
+                        // 把关失败（会话/解析出错）绝不静默：兜底虽按"放行"处理（不卡死探索），
+                        // 但必须让用户看见"这次 finish 没经过监督"——否则供应商抖动时整套把关悄悄下线。
+                        if verdict.is_none() {
+                            tx.log("supervisor_error", serde_json::json!({ "round": round, "note": "会话或解析失败，按放行兜底" }));
+                            ctx.ui.emit(UiEvent::SubAgent {
+                                kind: SubAgent::Supervisor,
+                                level: Level::Warn,
+                                text: "监督官调用失败——本次 finish 未经把关，按放行处理".to_string(),
+                                tokens: Tokens::new(0, 0),
+                            });
+                        }
+                        if let Some(v) = verdict {
                             subagent_pt += v.pt;
                             subagent_ct += v.ct;
                             if !v.approved {
@@ -962,17 +973,31 @@ pub async fn drive(
         let desc_msg = render(&ctx.prompts.message("explorer", "desc_pass"), &[("elements", &created.join("、"))]);
         tx.log("llm_message", serde_json::json!({ "content": desc_msg.clone() }));
         sess.user(desc_msg);
-        if let Ok(LlmReply::Text(t)) = sess.next().await {
-            tx.log("desc_pass", serde_json::json!({ "content": t.clone() }));
-            if let Some(obj) = parse_desc_json(&t) {
-                for name in &created {
-                    if let Some(d) = obj.get(name).and_then(|v| v.as_str()).map(str::trim) {
-                        if !d.is_empty() {
-                            let _ = crate::tools::element::set_element_desc(ctx.element_path, name, d);
+        // 失败不静默：desc 丢了元素仍可用（保留特征名），但要让用户知道这批元素没有描述
+        let desc_warn = |why: &str| {
+            ctx.ui.emit(UiEvent::Notice {
+                level: Level::Warn,
+                text: format!("元素描述生成失败（{}），本次新建元素暂无 desc", why),
+            });
+        };
+        match sess.next().await {
+            Ok(LlmReply::Text(t)) => {
+                tx.log("desc_pass", serde_json::json!({ "content": t.clone() }));
+                match parse_desc_json(&t) {
+                    Some(obj) => {
+                        for name in &created {
+                            if let Some(d) = obj.get(name).and_then(|v| v.as_str()).map(str::trim) {
+                                if !d.is_empty() {
+                                    let _ = crate::tools::element::set_element_desc(ctx.element_path, name, d);
+                                }
+                            }
                         }
                     }
+                    None => desc_warn("回复不是 JSON"),
                 }
             }
+            Ok(_) => desc_warn("模型没给文本回复"),
+            Err(e) => desc_warn(&brief(&e.to_string(), 60)),
         }
     }
 

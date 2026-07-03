@@ -11,7 +11,7 @@ use crate::{AiConfig, Fetcher, LlmReply, LlmSession, LlmTool, Params, Platform};
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::super::ui::{Level, SubAgent, Tokens, UiEvent};
+use super::super::ui::{Frontend, Level, SubAgent, Tokens, UiEvent};
 use super::flow::{brief, friendly, is_assert_line, parse_desc_json, DriveCtx, DriveOutcome};
 use super::options::VerifyReport;
 
@@ -332,6 +332,7 @@ pub(super) async fn finalize_names(
     ai: &AiConfig,
     prompts: &PromptSet,
     tx: &mut Transcript,
+    ui: &dyn Frontend,
     tmp_lib: &Path,
     lines: &[String],
     feat_names: &[String],
@@ -341,6 +342,13 @@ pub(super) async fn finalize_names(
     if feat_names.is_empty() {
         return (lines.to_vec(), Vec::new());
     }
+    // 失败不静默：保留特征名不影响回放，但要让用户知道这批元素没拿到语义名
+    let name_warn = |why: &str| {
+        ui.emit(UiEvent::Notice {
+            level: Level::Warn,
+            text: format!("语义命名失败（{}），元素保留特征名", why),
+        });
+    };
     let lib: serde_json::Value = std::fs::read_to_string(tmp_lib)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
@@ -358,18 +366,31 @@ pub(super) async fn finalize_names(
     tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
     let mut sess = match LlmSession::new(ai, prompts.role_system("reflector", "", ""), Vec::new()) {
         Ok(s) => s,
-        Err(_) => return keep(),
+        Err(e) => {
+            name_warn(&brief(&e.to_string(), 60));
+            return keep();
+        }
     };
     sess.user(prompt);
     let reply = match sess.next().await {
         Ok(LlmReply::Text(t)) => t,
-        _ => return keep(),
+        Ok(_) => {
+            name_warn("模型没给文本回复");
+            return keep();
+        }
+        Err(e) => {
+            name_warn(&brief(&e.to_string(), 60));
+            return keep();
+        }
     };
     let (pt, ct) = sess.total_usage();
     tx.log("reflector_finalize", serde_json::json!({ "content": reply.clone(), "prompt_tokens": pt, "completion_tokens": ct }));
     let obj = match parse_desc_json(&reply) {
         Some(o) => o,
-        None => return keep(),
+        None => {
+            name_warn("回复不是 JSON");
+            return keep();
+        }
     };
     // 建 特征名→语义名 映射：去掉 .tks 特殊字符 + 去重(冲突加后缀)；AI 漏给的保留特征名
     let mut map: Vec<(String, String)> = Vec::new();

@@ -456,7 +456,7 @@ impl TestRun {
         let feat_names: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
         // **总是落盘 + 提交引用元素**到 sidecar：成功才做语义命名，未达成就用特征名原样落（留给 repair_tks 修）。
         let (renamed, semantic) = if overall_success {
-            reflect::finalize_names(&opts.ai, &self.prompts, &mut self.tx, &self.element_path, &self.result_lines, &feat_names).await
+            reflect::finalize_names(&opts.ai, &self.prompts, &mut self.tx, ui, &self.element_path, &self.result_lines, &feat_names).await
         } else {
             (self.result_lines.clone(), feat_names.clone())
         };
