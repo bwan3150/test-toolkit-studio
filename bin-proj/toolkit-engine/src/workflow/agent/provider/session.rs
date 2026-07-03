@@ -74,6 +74,12 @@ pub struct LlmSession {
     /// 上一条"诊断 trace"消息在 messages 中的下标（脚本医生用：进入新一轮诊断时压缩旧 trace，
     /// 只保留最新一份完整 trace，历史只剩"改了什么/为什么"的工具结果，防上下文随轮数暴涨）
     last_trace_idx: Option<usize>,
+    /// 所有"页面消息"(user_page)在 messages 中的下标（升序）——compact_history 的安全切点：
+    /// 页面消息之前必然是上一轮收尾的 tool_result，切在这里不会拆散 tool_call/tool_result 配对
+    page_indices: Vec<usize>,
+    /// 最近一条「大体积工具结果」(下标, call_id, 占位文本)：追加新的大结果时把上一条原地
+    /// 替换成占位摘要，上下文只保留最近一份大 payload（编排官 explore/read_file 返回用）
+    last_bulky_tool: Option<(usize, String, String)>,
 }
 
 /// 历史页面元素被压缩后的占位文本（塞进 LLM 上下文，故只写对 AI 有用的话；
@@ -124,6 +130,8 @@ impl LlmSession {
             last_page_idx: None,
             last_image_idx: None,
             last_trace_idx: None,
+            page_indices: Vec::new(),
+            last_bulky_tool: None,
         })
     }
 
@@ -165,6 +173,7 @@ impl LlmSession {
         }
         self.req = self.req.clone().append_message(ChatMessage::user(text.into()));
         self.last_page_idx = Some(self.req.messages.len() - 1);
+        self.page_indices.push(self.req.messages.len() - 1);
     }
 
     /// 追加一条"诊断 trace"消息，并把上一轮的同类消息压缩为占位（脚本医生专用）。
@@ -203,6 +212,59 @@ impl LlmSession {
         let content: String = content.into();
         let resp = ToolResponse::new(call_id, content);
         self.req = self.req.clone().append_message(resp);
+    }
+
+    /// 回填一次**大体积**工具结果（explore 的末页全文、read_file 的文件内容等）：
+    /// 追加新的一条时，把上一条大结果原地替换成占位摘要（call_id 不变、配对不破）——
+    /// 上下文只保留最近一份大 payload，长 REPL 会话不再随大结果线性膨胀。
+    pub fn tool_result_bulky(&mut self, call_id: impl Into<String>, content: impl Into<String>, placeholder: impl Into<String>) {
+        if let Some((i, cid, ph)) = self.last_bulky_tool.take() {
+            if let Some(msg) = self.req.messages.get_mut(i) {
+                *msg = ToolResponse::new(cid, ph).into();
+            }
+        }
+        let call_id: String = call_id.into();
+        self.req = self.req.clone().append_message(ToolResponse::new(call_id.clone(), content.into()));
+        self.last_bulky_tool = Some((self.req.messages.len() - 1, call_id, placeholder.into()));
+    }
+
+    /// 压缩久远历史（探索会话用）：只保留最近 `keep_pages` 轮页面消息以来的完整对话，更早的
+    /// （已被 elide 的页面占位、AI 思考、tool_result 等）整体替换成一条确定性 `summary` 消息。
+    /// 前导消息（system + 用例开场 + 约束）永远保留。切点永远取某条"页面消息"的位置——它之前
+    /// 必然是上一轮收尾的 tool_result，不会拆散 assistant tool_call 与 tool_result 的配对。
+    /// 返回是否发生了压缩。防 prompt 随轮数平方级膨胀（每次 next 全量重发历史）。
+    pub fn compact_history(&mut self, keep_pages: usize, summary: impl Into<String>) -> bool {
+        if self.page_indices.len() <= keep_pages {
+            return false;
+        }
+        let cut = self.page_indices[self.page_indices.len() - keep_pages];
+        let preamble_end = self.page_indices[0]; // 第一条页面消息之前 = 前导（system/用例/约束）
+        if cut <= preamble_end {
+            return false;
+        }
+        let mut msgs = std::mem::take(&mut self.req.messages);
+        let tail = msgs.split_off(cut);
+        msgs.truncate(preamble_end);
+        msgs.push(ChatMessage::user(summary.into()));
+        let new_cut = msgs.len(); // tail 从这里重新开始
+        msgs.extend(tail);
+        self.req.messages = msgs;
+        let shift = cut - new_cut;
+        self.page_indices = self.page_indices.iter().filter(|&&i| i >= cut).map(|&i| i - shift).collect();
+        let adjust = |v: &mut Option<usize>| {
+            *v = match *v {
+                Some(i) if i >= cut => Some(i - shift),
+                _ => None, // 已被压掉的下标作废
+            };
+        };
+        adjust(&mut self.last_page_idx);
+        adjust(&mut self.last_image_idx);
+        adjust(&mut self.last_trace_idx);
+        match &mut self.last_bulky_tool {
+            Some((i, _, _)) if *i >= cut => *i -= shift,
+            other => *other = None,
+        }
+        true
     }
 
     /// 向模型请求下一步决策

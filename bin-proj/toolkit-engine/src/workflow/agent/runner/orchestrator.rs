@@ -294,12 +294,18 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             last_result = Some(result);
                             let abs = std::fs::canonicalize(&tks_path).unwrap_or_else(|_| tks_path.clone());
                             let mut msg = format!("{}\n- 脚本已写到：{}", brief, abs.display());
+                            // 后续再有大结果时，这条会被压成占位摘要（脚本路径/结论保留，末页全文省略）
+                            let placeholder = format!(
+                                "{}\n- 脚本已写到：{}\n（末页文字/截图详情已从上下文省略——需要内容时用 read_file 或重新 explore）",
+                                brief,
+                                abs.display()
+                            );
                             if !text.is_empty() {
                                 let snippet: String = text.chars().take(4000).collect();
                                 msg.push_str(&format!("\n- 末页可读文字（截断 4000 字）：\n{}", snippet));
                             }
                             msg.push_str(&format!("\n- 末页截图：{}", shot.display()));
-                            sess.tool_result(call.call_id, msg);
+                            sess.tool_result_bulky(call.call_id, msg, placeholder);
                         }
                         // —— 对工作区里已有的 .tks 做独立操作：回放 / 修复 / 优化（路径化，主 AI 自由调度）——
                         "replay_tks" | "repair_tks" | "optimize_tks" => {
@@ -376,7 +382,9 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                     } else {
                                         body
                                     };
-                                    sess.tool_result(call.call_id, msg);
+                                    // 大结果滚动省略：后续再读别的文件时，这份内容被压成占位（可随时重读）
+                                    let placeholder = format!("【{} 的内容已从上下文省略——如仍需请重新 read_file】", p.trim());
+                                    sess.tool_result_bulky(call.call_id, msg, placeholder);
                                 }
                                 Err(e) => sess.tool_result(call.call_id, format!("读取失败：{}", e)),
                             }

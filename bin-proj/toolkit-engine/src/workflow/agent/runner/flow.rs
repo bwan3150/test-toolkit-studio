@@ -241,6 +241,8 @@ pub async fn drive(
     let mut updated: Vec<String> = Vec::new(); // 格式化的差异行
     let mut updated_names: Vec<String> = Vec::new(); // 去重用
     let mut pending_guidance: Vec<String> = Vec::new(); // 安全点收到的用户中途指导，下一轮注入会话
+    let mut guidance_log: Vec<String> = Vec::new(); // 全程用户指导——历史压缩时保留在 summary 里持续生效
+    const COMPACT_KEEP_PAGES: usize = 6; // 历史压缩：保留最近几轮页面消息以来的完整对话
 
     'outer: while round < ctx.max_rounds {
         // 安全点：取前端命令（本阶段只处理 Abort，优雅停在此处）
@@ -453,6 +455,7 @@ pub async fn drive(
                 let m = format!("【用户中途指导】{}\n请据此调整接下来的操作方向。", g);
                 tx.log("user_guidance", serde_json::json!({ "round": round, "content": m.clone() }));
                 sess.user(m);
+                guidance_log.push(g.clone());
                 ctx.ui.emit(UiEvent::GuidanceAccepted { text: g });
             }
         }
@@ -479,6 +482,26 @@ pub async fn drive(
         } else {
             tx.log("llm_message", serde_json::json!({ "round": round, "content": page_msg }));
             sess.user_page(page_msg);
+        }
+        // 历史压缩：只保留最近 COMPACT_KEEP_PAGES 轮页面以来的完整对话，更早轮次折叠成一条
+        // 确定性回顾（已执行步骤 + 用户全程指导）。页面虽逐轮 elide，tool_result/AI 思考仍随
+        // 轮数线性累积、且每次 next 全量重发——不压缩则 prompt token 平方级膨胀（40 轮 58 万的根因）。
+        {
+            let steps_recap = if lines.is_empty() {
+                "（尚无）".to_string()
+            } else {
+                lines.iter().enumerate().map(|(i, l)| format!("{}. {}", i + 1, friendly(l))).collect::<Vec<_>>().join("\n")
+            };
+            let mut summary = format!(
+                "【历史已压缩】更早轮次的对话细节已省略。到目前为止你已执行并写入脚本的步骤：\n{}\n请基于当前页面继续推进任务。",
+                steps_recap
+            );
+            if !guidance_log.is_empty() {
+                summary.push_str(&format!("\n\n【用户此前的指导，务必持续遵守】\n- {}", guidance_log.join("\n- ")));
+            }
+            if sess.compact_history(COMPACT_KEEP_PAGES, summary) {
+                tx.log("history_compacted", serde_json::json!({ "round": round, "keep_pages": COMPACT_KEEP_PAGES }));
+            }
         }
         // 页面观察头：emit 一个 Page 事件，前端各自渲染（结构元素 / OCR 新增 / 标签页 / 未就绪原因）。
         // 不再显示"第 N 轮"——下面每个执行步前的 `[N]` tks 行号才是锚点；不显示"已知/未知"对 AI 判断无意义。
@@ -616,6 +639,7 @@ pub async fn drive(
                         let m = format!("【用户中途指导】{}\n请据此调整接下来的操作方向。", text);
                         tx.log("user_guidance", serde_json::json!({ "round": round, "content": m.clone() }));
                         sess.user(m);
+                        guidance_log.push(text.clone());
                         ctx.ui.emit(UiEvent::GuidanceAccepted { text });
                     }
                     UiCommand::Pause => {
@@ -629,6 +653,7 @@ pub async fn drive(
                                 let m = format!("【用户中途指导】{}\n请据此调整接下来的操作方向。", g);
                                 tx.log("user_guidance", serde_json::json!({ "round": round, "content": m.clone() }));
                                 sess.user(m);
+                                guidance_log.push(g.clone());
                                 ctx.ui.emit(UiEvent::GuidanceAccepted { text: g });
                             }
                             Some(_) => {}
