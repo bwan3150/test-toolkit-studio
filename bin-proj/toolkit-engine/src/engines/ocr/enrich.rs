@@ -67,15 +67,38 @@ pub fn resolve_ocr(spec: &str, default_url: &str) -> Option<OcrSource> {
 /// 返回 (回填数, 新增伪元素数)。出错向上抛，调用方决定降级。
 /// 返回 (回填数 filled, 新增伪元素数 added, OCR 识别到的文字总数 recognized)。
 /// recognized 用于如实展示 OCR 状态：即使 filled/added 都为 0，只要 recognized>0 就说明 OCR 在工作（文字都已并入已有元素）。
+/// OCR 熔断：连续失败达到阈值后，本进程剩余时间不再真调 OCR（立即返回错误，不再等超时）——
+/// 服务挂掉时每轮采集各陪一次超时太伤（40 轮探索 = 白等几分钟）。失败/熔断都如实报错、
+/// 不静默（沿用"OCR 透明化"原则）；中途成功一次即清零计数；服务恢复后重启 tke 生效。
+static OCR_CONSECUTIVE_FAILS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+const OCR_TRIP_THRESHOLD: u32 = 3;
+
 pub async fn enrich_with_ocr(
     elements: &mut Vec<UIElement>,
     image_data: &[u8],
     src: &OcrSource,
 ) -> Result<(usize, usize, usize), OcrErr> {
-    let result = ocr(image_data, src.online, &src.param).await?;
-    let recognized = result.texts.len();
-    let (filled, added) = merge(elements, &result.texts);
-    Ok((filled, added, recognized))
+    use std::sync::atomic::Ordering;
+    let fails = OCR_CONSECUTIVE_FAILS.load(Ordering::Relaxed);
+    if fails >= OCR_TRIP_THRESHOLD {
+        return Err(format!("OCR 已熔断（此前连续失败 {} 次），本次运行不再调用；服务恢复后重启生效", fails).into());
+    }
+    match ocr(image_data, src.online, &src.param).await {
+        Ok(result) => {
+            OCR_CONSECUTIVE_FAILS.store(0, Ordering::Relaxed);
+            let recognized = result.texts.len();
+            let (filled, added) = merge(elements, &result.texts);
+            Ok((filled, added, recognized))
+        }
+        Err(e) => {
+            let n = OCR_CONSECUTIVE_FAILS.fetch_add(1, Ordering::Relaxed) + 1;
+            if n >= OCR_TRIP_THRESHOLD {
+                Err(format!("{}（连续失败已达 {} 次，本次运行剩余轮次熔断停用 OCR）", e, n).into())
+            } else {
+                Err(e)
+            }
+        }
+    }
 }
 
 /// 纯合并逻辑（无 IO，便于测试）

@@ -13,7 +13,16 @@ pub async fn recognize_online(
     let base64_image = general_purpose::STANDARD.encode(image_data);
     let request_body = OnlineOcrRequest { image: base64_image };
 
-    let client = reqwest::Client::new();
+    // 短超时 + 复用客户端：此前 Client::new() 无任何超时——OCR 服务挂掉(尤其 TCP 黑洞)时
+    // 每轮采集都要陪 OS 级超时等一两分钟。一张截图的 OCR 几秒内该回，10s 封顶。
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    let client = CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(3))
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap_or_default()
+    });
     let response = client
         .post(ocr_url)
         .header("Content-Type", "application/json")
