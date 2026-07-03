@@ -190,26 +190,40 @@ fn install_panic_hook() {
 }
 
 /// 主循环：抽干引擎事件 → 处理键盘 → 重绘。靠用户按 q 退出。
+/// **脏标记**：只有真的有事件/输入/resize 时才重绘——TUI 无动画元素，空闲时每 16ms
+/// 无条件 draw 纯属烧 CPU（配合 view 的窗口化渲染，把"每帧 O(历史)"的老债一起清掉）。
 fn run_loop(
     terminal: &mut Terminal<Backend>,
     events_rx: &mut UnboundedReceiver<UiEvent>,
     commands_tx: &UnboundedSender<UiCommand>,
     model: &mut TuiModel,
 ) -> std::io::Result<()> {
+    let mut dirty = true; // 首帧必画
     loop {
         // 抽干引擎事件（断开返回 Disconnected，正常忽略——靠用户按 q 退出）
         while let Ok(ev) = events_rx.try_recv() {
             model.apply(ev);
+            dirty = true;
         }
         if event::poll(Duration::from_millis(16))? {
             match event::read()? {
-                Event::Key(k) if k.kind == KeyEventKind::Press => model.handle_key(k, commands_tx),
+                Event::Key(k) if k.kind == KeyEventKind::Press => {
+                    model.handle_key(k, commands_tx);
+                    dirty = true;
+                }
                 // bracketed paste：整段进输入框，粘贴内容里的换行不会触发 Enter 误提交
-                Event::Paste(s) => model.handle_paste(&s),
+                Event::Paste(s) => {
+                    model.handle_paste(&s);
+                    dirty = true;
+                }
+                Event::Resize(_, _) => dirty = true,
                 _ => {}
             }
         }
-        terminal.draw(|f| view(f, model))?;
+        if dirty {
+            terminal.draw(|f| view(f, model))?;
+            dirty = false;
+        }
         if model.should_quit {
             break;
         }
@@ -950,32 +964,55 @@ fn view(frame: &mut Frame, model: &TuiModel) {
         chunks[0],
     );
 
-    // ---- 消息区：自动换行 + 准确贴底 ----
+    // ---- 消息区：自动换行 + 准确贴底 + **窗口化渲染** ----
     // ratatui 0.29 的 Paragraph::line_count 是 unstable 私有方法，不能用；
-    // 退而按宽度逐行估算 wrap 后行数累加（每条按显示宽度 ceil 折行），比按 lines.len() 估算准，
-    // 长文本折多行也能正确贴底，最新内容始终可见。
+    // 退而按宽度逐行估算 wrap 后行数累加（每条按显示宽度 ceil 折行），比按 lines.len() 估算准。
+    // 只克隆可视窗口覆盖到的那几行（≤ 屏高 + 1 行）交给 Paragraph——此前整段 clone 全部历史，
+    // 每帧 O(历史) 的克隆/布局成本随会话线性上涨。行数统计用 usize（u16 在长会话 6.5 万行处会溢出）。
     let msg_area = chunks[1];
-    let height = msg_area.height;
-    let width = msg_area.width.max(1);
-    let total_wrapped: u16 = model
+    let height = msg_area.height as usize;
+    let width = msg_area.width.max(1) as usize;
+    // 每条 Line 折行后的行数（空行算 1 行；否则 ceil(显示宽度 / 区宽)）
+    let heights: Vec<usize> = model
         .lines
         .iter()
         .map(|l| {
-            let w = l.width() as u16;
-            // 空行算 1 行；否则 ceil(w / width)
-            (w / width + if w % width != 0 { 1 } else { 0 }).max(1)
+            let w = l.width();
+            (w / width + usize::from(w % width != 0)).max(1)
         })
-        .sum();
+        .collect();
+    let total_wrapped: usize = heights.iter().sum();
     let max_top = total_wrapped.saturating_sub(height);
     let y = if model.follow {
         max_top
     } else {
-        max_top.saturating_sub(model.scroll)
+        max_top.saturating_sub(model.scroll as usize)
     };
+    // 定位覆盖 [y, y+height) 的行区间：start = 首条进入视口的行，skip = 它折行后要跳过的前几行
+    let mut acc = 0usize;
+    let mut start = model.lines.len();
+    let mut skip = 0usize;
+    for (i, h) in heights.iter().enumerate() {
+        if acc + h > y {
+            start = i;
+            skip = y - acc;
+            break;
+        }
+        acc += h;
+    }
+    let mut visible: Vec<Line<'static>> = Vec::new();
+    let mut covered = 0usize;
+    for (i, l) in model.lines.iter().enumerate().skip(start) {
+        visible.push(l.clone());
+        covered += heights[i];
+        if covered >= skip + height {
+            break;
+        }
+    }
     frame.render_widget(
-        Paragraph::new(Text::from(model.lines.clone()))
+        Paragraph::new(Text::from(visible))
             .wrap(Wrap { trim: false })
-            .scroll((y, 0)),
+            .scroll((skip as u16, 0)),
         msg_area,
     );
 

@@ -541,27 +541,27 @@ pub async fn drive(
         }
 
         // 1b) 自动断言（断言官子 agent）：上一步导航让页面变了 → 由断言官挑一个标志元素，系统自动插一条
-        //     断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。给断言官**两页的完整元素**
-        //     （点击前 + 点击后），并在点击后那页**标★出本次新出现的元素**——既有完整上下文、又一眼看出本步
-        //     前后变化。挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
-        if changed_after_nav && !ctx.task_mode && !super::interrupt::aborted() {
+        //     断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。只给断言官**本次新出现的元素**
+        //     （带它们在当前页的真实序号）——断言官本就该从新增里挑标志，此前喂两页全量元素纯属烧 token
+        //     （每次导航一个独立会话，是 token 的次大头）。没有新增元素=无从踩实，整次 LLM 调用直接省掉。
+        //     挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
+        if changed_after_nav && delta_indices.is_empty() && !ctx.task_mode {
+            tx.log("checkpoint_skip", serde_json::json!({ "round": round, "reason": "页面变了但没有新出现的元素，无从踩实" }));
+        }
+        if changed_after_nav && !delta_indices.is_empty() && !ctx.task_mode && !super::interrupt::aborted() {
             let action_desc = lines.last().map(|l| friendly(l)).unwrap_or_default();
-            // 点击前那页（完整）
-            let prev_listing = prev_action_elements
+            // 只列新出现的元素（序号 = 它在当前页元素列表里的真实下标）；上限防"整页全新"时刷爆
+            const MAX_DELTA_LIST: usize = 80;
+            let mut new_listing = delta_indices
                 .iter()
-                .map(|e| format!("- {}", brief(&e.to_ai_text(), 100)))
+                .take(MAX_DELTA_LIST)
+                .map(|&i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 100)))
                 .collect::<Vec<_>>()
                 .join("\n");
-            // 点击后那页（完整）：★ = 本次新出现的元素；断言官从这里挑 index
-            let new_set: std::collections::HashSet<usize> = delta_indices.iter().copied().collect();
-            let current_listing = p
-                .elements
-                .iter()
-                .enumerate()
-                .map(|(i, e)| format!("[{}]{} {}", i, if new_set.contains(&i) { " ★新" } else { "" }, brief(&e.to_ai_text(), 100)))
-                .collect::<Vec<_>>()
-                .join("\n");
-            let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, &prev_listing, &current_listing).await;
+            if delta_indices.len() > MAX_DELTA_LIST {
+                new_listing.push_str(&format!("\n（其余 {} 个新元素略）", delta_indices.len() - MAX_DELTA_LIST));
+            }
+            let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, p.elements.len(), delta_indices.len(), &new_listing).await;
             subagent_pt += pick.pt;
             subagent_ct += pick.ct;
             // 先 emit 一句「断言官的判断 + 它本次的 token 用量」
