@@ -6,10 +6,12 @@
 //   -d <iOS UDID>/wda:xxx  → wda::WdaDriver  (iOS, WebDriverAgent)
 
 mod adb;
+pub mod fake;
 mod wda;
 mod web;
 
 pub use adb::AdbDriver;
+pub use fake::FakeDriver;
 pub use wda::WdaDriver;
 pub use web::WebDriver;
 
@@ -55,10 +57,18 @@ enum Driver {
     Adb(AdbDriver),
     Web(WebDriver),
     Wda(WdaDriver),
+    /// 测试专用：`fake:` 前缀设备（脚本化页面 + 事件记录，见 drivers/fake.rs）
+    Fake(FakeDriver),
 }
 
 impl Controller {
     pub fn new(device_id: Option<String>) -> Result<Self> {
+        // 测试专用 fake 设备：优先于平台推断（fake: 前缀不属于任何真实平台）
+        if let Some(id) = device_id.as_deref() {
+            if id.starts_with("fake:") {
+                return Ok(Self { driver: Driver::Fake(FakeDriver::new(id.to_string())) });
+            }
+        }
         let driver = match crate::Platform::from_device(device_id.as_deref()) {
             crate::Platform::Web => Driver::Web(WebDriver::new(device_id.unwrap())?),
             crate::Platform::Ios => Driver::Wda(WdaDriver::new(device_id.unwrap())?),
@@ -74,6 +84,7 @@ impl Controller {
             Driver::Adb(d) => d.capture_ui_state(workarea).await,
             Driver::Web(d) => d.capture_ui_state(workarea),
             Driver::Wda(d) => d.capture_ui_state(workarea),
+            Driver::Fake(d) => d.capture_ui_state(workarea),
         }
     }
 
@@ -82,6 +93,7 @@ impl Controller {
             Driver::Adb(d) => d.capture_xml_only(workarea).await,
             Driver::Web(d) => d.capture_xml_only(workarea),
             Driver::Wda(d) => d.capture_xml_only(workarea),
+            Driver::Fake(d) => d.capture_xml_only(workarea),
         }
     }
 
@@ -92,6 +104,7 @@ impl Controller {
             Driver::Adb(d) => d.tap(x, y),
             Driver::Web(d) => d.tap(x, y),
             Driver::Wda(d) => d.tap(x, y),
+            Driver::Fake(d) => d.tap(x, y),
         }
     }
 
@@ -101,6 +114,7 @@ impl Controller {
             Driver::Adb(d) => d.hover(x, y),
             Driver::Web(d) => d.hover(x, y),
             Driver::Wda(d) => d.hover(x, y),
+            Driver::Fake(d) => d.hover(x, y),
         }
     }
 
@@ -109,6 +123,7 @@ impl Controller {
             Driver::Adb(d) => d.swipe(x1, y1, x2, y2, duration_ms),
             Driver::Web(d) => d.swipe(x1, y1, x2, y2, duration_ms),
             Driver::Wda(d) => d.swipe(x1, y1, x2, y2, duration_ms),
+            Driver::Fake(d) => d.swipe(x1, y1, x2, y2, duration_ms),
         }
     }
 
@@ -117,6 +132,7 @@ impl Controller {
             Driver::Adb(d) => d.press(x, y, duration_ms),
             Driver::Web(d) => d.press(x, y, duration_ms),
             Driver::Wda(d) => d.press(x, y, duration_ms),
+            Driver::Fake(d) => d.press(x, y, duration_ms),
         }
     }
 
@@ -125,6 +141,7 @@ impl Controller {
             Driver::Adb(d) => d.input_text(text),
             Driver::Web(d) => d.input_text(text),
             Driver::Wda(d) => d.input_text(text),
+            Driver::Fake(d) => d.input_text(text),
         }
     }
 
@@ -133,6 +150,7 @@ impl Controller {
             Driver::Adb(d) => d.key_event(key_code),
             Driver::Web(d) => d.key_event(key_code),
             Driver::Wda(d) => d.key_event(key_code),
+            Driver::Fake(d) => d.key_event(key_code),
         }
     }
 
@@ -141,6 +159,7 @@ impl Controller {
             Driver::Adb(d) => d.back(),
             Driver::Web(d) => d.back(),
             Driver::Wda(d) => d.back(),
+            Driver::Fake(d) => d.back(),
         }
     }
 
@@ -149,6 +168,7 @@ impl Controller {
             Driver::Adb(d) => d.home(),
             Driver::Web(d) => d.home(),
             Driver::Wda(d) => d.home(),
+            Driver::Fake(d) => d.home(),
         }
     }
 
@@ -181,6 +201,7 @@ impl Controller {
             // 移动端：切到目标 App = 启动其包名（当前 App 自动退到后台）
             Driver::Adb(d) => d.launch_app(t, ""),
             Driver::Wda(d) => d.launch_app(t),
+            Driver::Fake(d) => d.switch(t),
         }
     }
 
@@ -190,6 +211,7 @@ impl Controller {
             Driver::Adb(d) => d.launch_app(package, activity),
             Driver::Web(d) => d.navigate(package),
             Driver::Wda(d) => d.launch_app(package),
+            Driver::Fake(d) => d.launch_app(package, activity),
         }
     }
 
@@ -199,6 +221,7 @@ impl Controller {
             Driver::Adb(d) => d.stop_app(package),
             Driver::Web(d) => d.close_session(),
             Driver::Wda(d) => d.stop_app(package),
+            Driver::Fake(d) => d.stop_app(package),
         }
     }
 
@@ -207,6 +230,7 @@ impl Controller {
             Driver::Adb(d) => d.clear_input(),
             Driver::Web(d) => d.clear_input(),
             Driver::Wda(d) => d.clear_input(),
+            Driver::Fake(d) => d.clear_input(),
         }
     }
 
@@ -215,6 +239,7 @@ impl Controller {
             Driver::Adb(d) => d.hide_keyboard(),
             Driver::Web(_) => Ok(()), // 网页无软键盘
             Driver::Wda(d) => d.hide_keyboard(),
+            Driver::Fake(d) => d.hide_keyboard(),
         }
     }
 
@@ -225,6 +250,7 @@ impl Controller {
             Driver::Adb(d) => d.get_device_info(),
             Driver::Web(d) => d.get_device_info(),
             Driver::Wda(d) => d.get_device_info(),
+            Driver::Fake(d) => d.get_device_info(),
         }
     }
 }

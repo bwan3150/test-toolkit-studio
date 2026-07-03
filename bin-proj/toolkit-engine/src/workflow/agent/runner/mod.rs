@@ -4,6 +4,8 @@
 pub mod asserter;
 pub mod ctx;
 pub mod doctor;
+#[cfg(test)]
+mod drive_tests;
 pub mod flow;
 pub mod fmt;
 pub mod interrupt;
