@@ -12,7 +12,8 @@ use crate::{AiConfig, Fetcher, LlmReply, LlmSession, LlmTool, Params, Platform};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
 use super::super::ui::{Frontend, Level, SubAgent, Tokens, UiEvent};
-use super::flow::{brief, friendly, is_assert_line, parse_desc_json, DriveCtx, DriveOutcome};
+use super::ctx::{DriveCtx, DriveOutcome};
+use super::fmt::{brief, friendly, is_assert_line, parse_desc_json};
 use super::options::VerifyReport;
 
 /// 反思产物

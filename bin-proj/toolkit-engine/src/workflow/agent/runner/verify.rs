@@ -22,7 +22,7 @@ use super::super::perception::Perceived;
 use super::super::transcript::Transcript;
 use super::super::prompt::{render, PromptSet};
 use super::super::ui::{Frontend, StepState, UiEvent};
-use super::flow::{brief, friendly, parse_desc_json};
+use super::fmt::{brief, friendly, parse_desc_json};
 
 // 稳定性通过次数 / 修复(活体重探)上限均来自 config [harness]（params.harness），不再写死。
 

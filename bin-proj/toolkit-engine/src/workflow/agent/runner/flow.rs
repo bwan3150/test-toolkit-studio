@@ -2,19 +2,8 @@
 // 产物经 RunArtifacts 统一保存：每个执行步存 screenshots/step_NNN + page/step_NNN，
 // 与 tke run 同构；conversation.jsonl（AI 原始对话）由 transcript 写在同一运行目录。
 
-use std::path::Path;
-
-use crate::engines::ocr::OcrSource;
-use crate::{Fetcher, LlmReply, LlmSession, Result, RunArtifacts, StepResult, Workarea};
-
-/// 终端着色：仅当 stderr 是 TTY 时输出 ANSI，管道/重定向为纯文本（与 tke run 一致）
-pub(crate) fn paint(tty: bool, code: &str, s: &str) -> String {
-    if tty {
-        format!("\x1b[{}m{}\x1b[0m", code, s)
-    } else {
-        s.to_string()
-    }
-}
+use crate::Platform;
+use crate::{LlmReply, LlmSession, Result, StepResult};
 
 /// 页面签名哈希（用元素列表文本），检测"原地打转"用
 fn hash_str(s: &str) -> u64 {
@@ -24,171 +13,16 @@ fn hash_str(s: &str) -> u64 {
     h.finish()
 }
 
-/// 从模型回复里抽出 JSON 对象（容忍前后多余文字 / ```json 围栏）
-pub(crate) fn parse_desc_json(s: &str) -> Option<serde_json::Value> {
-    let start = s.find('{')?;
-    let end = s.rfind('}')?;
-    serde_json::from_str(s.get(start..=end)?).ok()
-}
-
-/// 动作行的友好显示：去掉 .tks 的 `[{ }]` 括号噪声，纯文本不上色（仅前面的 ✓/✗ 带色）。
-/// 如 `点击 [{登录按钮}]` → `点击 登录按钮`、`定向滑动 [{640, 406}, 上, 406]` → `定向滑动 640, 406, 上, 406`
-pub(crate) fn friendly(line: &str) -> String {
-    line.replace("[{", "").replace("}]", "").replace(['[', ']', '{', '}'], "")
-        .split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// 是否「启动」步(打开浏览器/拉起 App)：脚本的结构性入口。不可被 reexplore/pick 覆盖成点击、
-/// 也不可删除——否则后续「重启净化」(reset_state)因解析不到启动目标而空转、整条脚本再也起不来。
-pub(crate) fn is_launch_line(line: &str) -> bool {
-    line.trim_start().starts_with("启动")
-}
-
-/// 是否「断言」步(踩实校验)：它不改变页面(必然被判为空操作)，但它是脚本自检的承重点——
-/// 优化阶段绝不能当冗余删掉，否则回放时「走错页」不会在断言处暴露、问题定位变难。
-pub(crate) fn is_assert_line(line: &str) -> bool {
-    line.trim_start().starts_with("断言")
-}
-
-/// 紧凑 token 显示：4443→4.4k、148693→149k、<1000 原样，避免大数字刷屏
-pub(crate) fn fmt_tokens(n: i64) -> String {
-    if n < 1000 {
-        n.to_string()
-    } else if n < 100_000 {
-        format!("{:.1}k", n as f64 / 1000.0)
-    } else {
-        format!("{}k", (n + 500) / 1000)
-    }
-}
-
-/// 时长格式化（与 tke run 的 EventPrinter 对齐）：320ms / 3.7s / 1m12s
-pub(crate) fn fmt_duration(ms: u64) -> String {
-    if ms < 1000 {
-        format!("{}ms", ms)
-    } else if ms < 60_000 {
-        format!("{:.1}s", ms as f64 / 1000.0)
-    } else {
-        format!("{}m{:02}s", ms / 60_000, (ms % 60_000) / 1000)
-    }
-}
-
-/// 取首个非空行并按字符数截断，避免模型长篇刷屏
-pub(crate) fn brief(s: &str, max: usize) -> String {
-    let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
-    if line.chars().count() > max {
-        let head: String = line.chars().take(max).collect();
-        format!("{}…", head)
-    } else {
-        line.to_string()
-    }
-}
-
-use crate::Platform;
-
-/// 「即将执行」的人类可读预览：用 AI 选中元素的文字（执行前即有），让 CLI 先于设备显示，
-/// 用户能对上 agent 这步要点啥。返回 None = 非设备动作、不预览。
-fn preview_action(action: &AgentAction, elements: &[crate::UIElement]) -> Option<String> {
-    // 用 auto_name（与 apply 落库同源）拼出和最终 .tks 行一致的展示，如「点击 Products@410_57」
-    let name = |id: usize| -> String {
-        elements.get(id).map(execution::auto_name).unwrap_or_else(|| format!("元素#{}", id))
-    };
-    Some(match action {
-        AgentAction::Launch { target, .. } => format!("启动 {}", brief(target, 60)),
-        AgentAction::Close { target } => format!("关闭 {}", brief(target, 60)),
-        AgentAction::Click { element_id, .. } => format!("点击 {}", name(*element_id)),
-        AgentAction::Hover { element_id, .. } => format!("悬停 {}", name(*element_id)),
-        AgentAction::Input { element_id, text, .. } => format!("输入 {} \"{}\"", name(*element_id), brief(text, 30)),
-        AgentAction::LongPress { element_id, duration_ms, .. } => format!("按压 {} {}ms", name(*element_id), duration_ms),
-        AgentAction::Clear { element_id, .. } => format!("清空 {}", name(*element_id)),
-        AgentAction::Assert { element_id, exist, .. } => {
-            format!("断言 {} {}", name(*element_id), if *exist { "存在" } else { "不存在" })
-        }
-        AgentAction::ClickVisual { .. } => "视觉点击（看图框选）".to_string(),
-        AgentAction::AssertVisual { exist, .. } => format!("视觉断言（看图框选）{}", if *exist { "存在" } else { "不存在" }),
-        AgentAction::SwipeDir { direction, .. } => format!("定向滑动 {}", dir_cn(direction)),
-        AgentAction::SwipeToFind { target, direction } => format!("滚动查找 \"{}\", {}", brief(target, 30), dir_cn(direction)),
-        AgentAction::SwipeElement { element_id, direction, .. } => format!("在 {} 上滑 {}", name(*element_id), dir_cn(direction)),
-        AgentAction::Drag { from_id, to_id } => format!("拖 {} → {}", name(*from_id), name(*to_id)),
-        AgentAction::PressKey { key } => format!("按键 {}", key.trim().to_uppercase()),
-        AgentAction::Switch { target } => format!("切换 {}", brief(target, 40)),
-        AgentAction::Back => "返回".to_string(),
-        AgentAction::HideKeyboard => "隐藏键盘".to_string(),
-        AgentAction::Wait { ms: Some(ms), .. } => format!("等待 {}ms", ms),
-        AgentAction::Wait { element: Some(e), .. } => format!("等待元素 {}", brief(e, 30)),
-        AgentAction::Wait { .. } => "等待".to_string(),
-        _ => return None, // Finish/RequestScreenshot/AskUser/Rename 非设备动作，不在此预览
-    })
-}
-
-/// 方向英文 → 中文（预览用）
-fn dir_cn(d: &str) -> &str {
-    match d {
-        "up" => "上",
-        "down" => "下",
-        "left" => "左",
-        "right" => "右",
-        other => other,
-    }
-}
-
 use super::super::execution;
-use super::super::perception::{capture, match_known, render_element_list, Perceived};
-use super::super::ui::{
-    Frontend, Level, NotReady, StepState, SubAgent, Tokens, UiCommand, UiEvent,
-};
-use super::super::prompt::{render, PromptSet};
-use super::super::tools::{parse_tool_call, AgentAction};
 use super::super::transcript::Transcript;
+use super::ctx::{DriveCtx, DriveOutcome};
+use super::fmt::{brief, friendly, parse_desc_json, preview_action};
+use super::super::perception::{capture, match_known, render_element_list, Perceived};
+use super::super::ui::{Level, NotReady, StepState, SubAgent, Tokens, UiCommand, UiEvent};
+use super::super::prompt::render;
+use super::super::tools::{parse_tool_call, AgentAction};
 use super::asserter;
 use super::supervisor;
-
-/// 循环所需的只读上下文
-pub struct DriveCtx<'a> {
-    pub device: &'a str,
-    pub element_path: &'a Path,
-    pub workarea: &'a Workarea,
-    pub fetcher: &'a Fetcher,
-    pub artifacts: &'a RunArtifacts,
-    /// OCR 增强来源（None=不跑 OCR，行为同此前）
-    pub ocr: Option<&'a OcrSource>,
-    pub max_rounds: usize,
-    /// 提示词集合：运行时消息模板（每轮页面/各类提示/截图等）从这里取，可外部覆盖
-    pub prompts: &'a PromptSet,
-    /// 用户原始测试用例（finish 终点校验：对照原话需求判断是否真到对的地方）
-    pub case: &'a str,
-    /// AI 配置：供 finish 时新建独立的「监督官」会话审查（与探索会话分开）
-    pub ai: &'a crate::AiConfig,
-    /// UI 前端：引擎的所有渲染事件经 emit 发出，安全点 drain_commands 取命令
-    pub ui: &'a dyn Frontend,
-    /// 通用任务模式（operate）：朝任意目标驱动设备、不产可回放脚本——跳过测试专属的
-    /// 踩实官(自动断言)与监督官(finish 把关)。false=测试探索（行为不变）。
-    pub task_mode: bool,
-}
-
-/// 循环结果
-#[derive(Default)]
-pub struct DriveOutcome {
-    pub success: bool,
-    pub reason: String,
-    pub lines: Vec<String>,
-    pub steps: Vec<StepResult>,
-    pub rounds: usize,
-    /// 本轮新增的元素名（人工审核用）
-    pub created: Vec<String>,
-    /// 本轮更新了描述的元素名（人工审核用）
-    pub updated: Vec<String>,
-    /// 是否被用户中断（Ctrl+C）
-    pub aborted: bool,
-    /// AI 在 finish 时给生成脚本起的简短文件名（不含扩展名）；None 则由上层兜底
-    pub script_name: Option<String>,
-    /// 本次发生的元素改名 (旧名, 新名)，供上层把前缀脚本里的引用同步改掉
-    pub renames: Vec<(String, String)>,
-    /// 每个落库步骤当时 AI 给的 comment（理由），与 lines 一一对应；供反思 agent 复盘"怎么走成这样"
-    pub step_comments: Vec<String>,
-    /// 子 agent(踩实官 + finish 监督官)独立会话消耗的 token 合计，供上层并入总量
-    pub subagent_pt: i64,
-    pub subagent_ct: i64,
-}
 
 /// 驱动探索循环
 ///
@@ -540,89 +374,27 @@ pub async fn drive(
             ctx.ui.emit(UiEvent::Stuck { round, message: msg.to_string() });
         }
 
-        // 1b) 自动断言（断言官子 agent）：上一步导航让页面变了 → 由断言官挑一个标志元素，系统自动插一条
-        //     断言把这步踩实。**不依赖主探索 agent 记得断言**（它总漏）。只给断言官**本次新出现的元素**
-        //     （带它们在当前页的真实序号）——断言官本就该从新增里挑标志，此前喂两页全量元素纯属烧 token
-        //     （每次导航一个独立会话，是 token 的次大头）。没有新增元素=无从踩实，整次 LLM 调用直接省掉。
-        //     挑不出标志=疑似点错，只记日志不插断言（交监督官在 finish 处兜底）。
-        if changed_after_nav && delta_indices.is_empty() && !ctx.task_mode {
-            tx.log("checkpoint_skip", serde_json::json!({ "round": round, "reason": "页面变了但没有新出现的元素，无从踩实" }));
-        }
-        if changed_after_nav && !delta_indices.is_empty() && !ctx.task_mode && !super::interrupt::aborted() {
-            let action_desc = lines.last().map(|l| friendly(l)).unwrap_or_default();
-            // 只列新出现的元素（序号 = 它在当前页元素列表里的真实下标）；上限防"整页全新"时刷爆
-            const MAX_DELTA_LIST: usize = 80;
-            let mut new_listing = delta_indices
-                .iter()
-                .take(MAX_DELTA_LIST)
-                .map(|&i| format!("[{}] {}", i, brief(&p.elements[i].to_ai_text(), 100)))
-                .collect::<Vec<_>>()
-                .join("\n");
-            if delta_indices.len() > MAX_DELTA_LIST {
-                new_listing.push_str(&format!("\n（其余 {} 个新元素略）", delta_indices.len() - MAX_DELTA_LIST));
-            }
-            let pick = asserter::pick_checkpoint(ctx.ai, ctx.prompts, tx, ctx.device, ctx.case, &action_desc, p.elements.len(), delta_indices.len(), &new_listing).await;
-            subagent_pt += pick.pt;
-            subagent_ct += pick.ct;
-            // 先 emit 一句「断言官的判断 + 它本次的 token 用量」
-            ctx.ui.emit(UiEvent::SubAgent {
-                kind: SubAgent::Asserter,
-                level: if pick.index.is_some() { Level::Info } else { Level::Warn },
-                text: if pick.reason.is_empty() { "（断言官未说明理由）".to_string() } else { pick.reason.clone() },
-                tokens: Tokens::new(pick.pt, pick.ct),
-            });
-            match pick.index {
-                Some(idx) if idx < p.elements.len() => {
-                    let act = AgentAction::Assert { element_id: idx, name: String::new(), desc: None, exist: true };
-                    let step_no = steps.len() + 1;
-                    ctx.ui.emit(UiEvent::Step {
-                        step: step_no,
-                        state: StepState::Running,
-                        preview: preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()),
-                        line: None,
-                        duration_ms: None,
-                        error: None,
-                    });
-                    let t0 = std::time::Instant::now();
-                    match execution::apply(ctx.device, ctx.element_path, &act, &p.elements, &known_names, &p.shot_path, tx, round).await {
-                        Ok((line, detail, trace, saved)) => {
-                            ctx.ui.emit(UiEvent::Step {
-                                step: step_no,
-                                state: StepState::Ok,
-                                preview: preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()),
-                                line: Some(line.clone()),
-                                duration_ms: Some(t0.elapsed().as_millis() as u64),
-                                error: None,
-                            });
-                            if let Some(s) = saved {
-                                if s.created && !created.contains(&s.name) {
-                                    created.push(s.name.clone());
-                                }
-                            }
-                            let step_index = steps.len();
-                            let (screenshot, xml) = ctx.artifacts.save_step(ctx.workarea, step_index, &trace, &line, true);
-                            tx.log("tks_step", serde_json::json!({ "round": round, "step": step_index + 1, "line": line.clone(), "exec": detail.clone(), "screenshot": screenshot.clone(), "xml": xml.clone(), "auto_checkpoint": true, "reason": pick.reason.clone() }));
-                            steps.push(StepResult { index: step_index, command: line.clone(), success: true, error: None, duration_ms: 0, line: None, screenshot, xml });
-                            lines.push(line.clone());
-                            step_comments.push(format!("断言：{}", pick.reason));
-                        }
-                        Err(e) => {
-                            ctx.ui.emit(UiEvent::Step {
-                                step: step_no,
-                                state: StepState::Fail,
-                                preview: preview_action(&act, &p.elements).unwrap_or_else(|| "断言".into()),
-                                line: None,
-                                duration_ms: Some(t0.elapsed().as_millis() as u64),
-                                error: Some(format!("断言跳过：{}", e)),
-                            });
-                        }
-                    }
-                }
-                _ => {
-                    // index=null：断言官判定没到预期页/无可断言标志（理由已在上面那行输出），只记日志
-                    tx.log("checkpoint_skip", serde_json::json!({ "round": round, "reason": pick.reason }));
-                }
-            }
+        // 1b) 自动断言（踩实）：上一步导航让页面变了 → 断言官从**本次新出现的元素**里挑标志、
+        //     系统自动插断言（不依赖主探索 agent 记得断言，它总漏）。全流程在 asserter::auto_checkpoint：
+        //     无新增元素直接跳过、挑不出=疑似点错只记日志（交监督官在 finish 处兜底）。
+        if changed_after_nav && !ctx.task_mode {
+            let (apt, act) = asserter::auto_checkpoint(
+                ctx,
+                tx,
+                &p,
+                &delta_indices,
+                &known_names,
+                round,
+                asserter::CheckpointScript {
+                    lines: &mut lines,
+                    step_comments: &mut step_comments,
+                    steps: &mut steps,
+                    created: &mut created,
+                },
+            )
+            .await;
+            subagent_pt += apt;
+            subagent_ct += act;
         }
 
         // 2) 内层：持续问 AI，直到产生一个"改变页面的动作"或结束

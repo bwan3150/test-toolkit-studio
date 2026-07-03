@@ -12,7 +12,7 @@ use crate::{Fetcher, Result, RunArtifacts, TkeError, Workarea};
 use super::super::prompt::PromptSet;
 use super::super::transcript::Transcript;
 use super::super::ui::{Frontend, Level, Phase, UiEvent};
-use super::flow::DriveCtx;
+use super::ctx::DriveCtx;
 use super::options::{AgentRunOptions, VerifyReport};
 use super::slug;
 
@@ -138,7 +138,7 @@ async fn ensure_marker(
     } else if write_marker(tks, &m).is_ok() {
         ui.emit(UiEvent::Notice {
             level: Level::Dim,
-            text: format!("目标标志已写入脚本头（回放/修复/优化共用）：{}", super::flow::brief(&m, 40)),
+            text: format!("目标标志已写入脚本头（回放/修复/优化共用）：{}", super::fmt::brief(&m, 40)),
         });
     }
     m

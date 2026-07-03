@@ -7,7 +7,7 @@
 use std::io::IsTerminal;
 
 use super::super::interaction::read_user_line;
-use super::super::runner::flow::{brief, fmt_duration, fmt_tokens, paint};
+use super::super::runner::fmt::{brief, fmt_duration, fmt_tokens, paint};
 use super::command::UiCommand;
 use super::event::*;
 use super::Frontend;

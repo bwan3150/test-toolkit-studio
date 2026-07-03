@@ -2,8 +2,10 @@
 // 本文件只做"装配 + 收尾渲染辅助"；主 AI 会话循环在 orchestrator.rs，驱动循环在 flow.rs。
 
 pub mod asserter;
+pub mod ctx;
 pub mod doctor;
 pub mod flow;
+pub mod fmt;
 pub mod interrupt;
 pub mod options;
 pub mod orchestrator;

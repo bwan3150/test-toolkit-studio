@@ -33,7 +33,8 @@ use super::super::perception::{capture, render_element_list};
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
 use super::super::ui::{Level, Phase, StepState, SubAgent, Tokens, UiCommand, UiEvent};
-use super::flow::{brief, friendly, is_launch_line, parse_desc_json, DriveCtx};
+use super::ctx::DriveCtx;
+use super::fmt::{brief, friendly, is_launch_line, parse_desc_json};
 use super::options::VerifyReport;
 use super::verify::{do_replay, page_contains, reset_state, strip_trailing_close};
 

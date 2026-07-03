@@ -25,7 +25,7 @@ use ratatui::{
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use super::super::runner::flow::{brief, fmt_duration};
+use super::super::runner::fmt::{brief, fmt_duration};
 use super::command::UiCommand;
 use super::event::*;
 use super::Frontend;

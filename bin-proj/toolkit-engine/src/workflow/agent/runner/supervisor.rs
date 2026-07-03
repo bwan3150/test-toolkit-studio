@@ -5,7 +5,7 @@ use crate::{AiConfig, LlmReply, LlmSession, Platform};
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::flow::parse_desc_json;
+use super::fmt::parse_desc_json;
 
 /// 监督官裁决
 pub(super) struct Verdict {
