@@ -5,6 +5,8 @@ pub mod asserter;
 pub mod ctx;
 pub mod doctor;
 #[cfg(test)]
+mod doctor_tests;
+#[cfg(test)]
 mod drive_tests;
 pub mod flow;
 pub mod fmt;
