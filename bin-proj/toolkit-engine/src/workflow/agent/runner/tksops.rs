@@ -1,13 +1,16 @@
 // 【tksops】对工作区里已有的 .tks 脚本做**独立**操作：回放(replay)/修复(repair)/优化(optimize)。
 // 拆自原来 verify/finalize 的捆绑流水线——主 AI 按需各自调用（去常驻 TestRun）。
-// 每个脚本的元素库是它的 sidecar：`foo.tks` ↔ `foo.elements.json`（自包含、可单独搬走）。
+// 每个脚本的元素库是它的 `.tklib` 元素包（`foo.tks ↔ foo.tklib`，zip 容器，见 utils::tklib）：
+// setup 时**解包**到 cache 临时目录、element_path 指过去（下游零改动）；repair 落了新元素则
+// 结束时**回包**写回。没有共享元素库——脚本的定位宇宙就是它自己的 tklib。
 // 内部复用现成的路径化函数：doctor::diagnose / doctor::doctor_repair / reflect::optimize，
 // 目标标志(marker)经 verify::derive_marker 用一次性会话从 goal+步骤推出（脱离探索会话）。
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::{Fetcher, Result, RunArtifacts, TkeError, Workarea};
+use crate::utils::tklib::{self, TklibMeta};
+use crate::{Fetcher, Platform, Result, RunArtifacts, TkeError, Workarea};
 
 use super::super::prompt::PromptSet;
 use super::super::transcript::Transcript;
@@ -15,15 +18,6 @@ use super::super::ui::{Frontend, Level, Phase, UiEvent};
 use super::ctx::DriveCtx;
 use super::options::{AgentRunOptions, VerifyReport};
 use super::slug;
-
-/// `foo.tks` → `foo.elements.json`（sidecar 元素库）。
-pub(crate) fn sidecar_path(tks: &Path) -> PathBuf {
-    let stem = tks
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "script".to_string());
-    tks.with_file_name(format!("{}.elements.json", stem))
-}
 
 /// 从 .tks 读出步骤源行（跳过 `步骤:` 头、空行、`#` 注释）。
 fn read_tks_lines(path: &Path) -> Result<Vec<String>> {
@@ -147,7 +141,8 @@ async fn ensure_marker(
 /// 一次操作所需的环境（拥有所有权，ctx 借用其字段）。
 struct OpEnv {
     device: String,
-    elem_lib: PathBuf, // 该脚本的元素库（sidecar 优先，缺则回退默认共享库）
+    elem_lib: PathBuf, // 该脚本 .tklib 解包后的 element.json（无包则空临时库）
+    tklib: PathBuf,    // 该脚本的 .tklib 元素包路径（repair 落新元素后回包写回这里）
     case: String,      // = goal
     params: Arc<crate::Params>,
     prompts: PromptSet,
@@ -156,6 +151,21 @@ struct OpEnv {
     artifacts: RunArtifacts,
     max_rounds: usize,
     lines: Vec<String>,
+}
+
+impl OpEnv {
+    /// 回包：把（可能已被 repair 写入新元素的）解包库重新打成 .tklib 写回脚本旁。
+    fn repack(&self, ui: &dyn Frontend) {
+        let platform = Platform::from_device(Some(&self.device));
+        let meta = TklibMeta::new(platform.name(), &self.device);
+        if let Err(e) = tklib::pack(&self.elem_lib, &self.tklib, &meta) {
+            // 回包失败必须可见：脚本已修好但元素包没更新，拷走会缺新元素
+            ui.emit(UiEvent::Notice {
+                level: Level::Warn,
+                text: format!("元素包回写失败（{}）：脚本已更新，但 {} 未更新", e, self.tklib.display()),
+            });
+        }
+    }
 }
 
 /// 从 DriveCtx 各字段构造（借用 env 的字段，互不冲突；tx 单独传）。
@@ -179,11 +189,25 @@ macro_rules! op_ctx {
 }
 
 /// 装配环境 + transcript（中间产物落 cache）。
+/// 元素库 = 脚本自持的 `.tklib` 元素包：解包到本次运行目录下使用；没有包就给一个空临时库
+/// （仅坐标步可回放；repair 落的新元素会随回包生成/更新 .tklib）。**没有共享库回退**。
 async fn setup(opts: &AgentRunOptions, tks: &Path, goal: &str) -> Result<(OpEnv, Transcript)> {
     let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
-    // 元素库：sidecar 存在就用它（自包含）；否则回退默认共享库（兼容老脚本/手写脚本）
-    let sidecar = sidecar_path(tks);
-    let elem_lib = if sidecar.exists() { sidecar } else { opts.params.element_lib_for_write() };
+    let stem = slug(
+        tks.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default().as_str(),
+        30,
+    );
+    let artifacts = RunArtifacts::create(&opts.params.cache_root(), &stem)?;
+    let tklib_file = tklib::tklib_path(tks);
+    let unpack_dir = artifacts.run_dir.join("tklib");
+    let elem_lib = if tklib_file.is_file() {
+        tklib::unpack(&tklib_file, &unpack_dir)?
+    } else {
+        std::fs::create_dir_all(&unpack_dir).map_err(TkeError::IoError)?;
+        let p = unpack_dir.join("element.json");
+        std::fs::write(&p, "{\"elements\":{}}").map_err(TkeError::IoError)?;
+        p
+    };
     let params = Arc::new(
         opts.params
             .with_element_lib(elem_lib.clone())
@@ -192,16 +216,11 @@ async fn setup(opts: &AgentRunOptions, tks: &Path, goal: &str) -> Result<(OpEnv,
     let prompts = PromptSet::resolve(&opts.prompt)?;
     let workarea = Workarea::for_device(Some(&device))?;
     let fetcher = Fetcher::new();
-    let stem = slug(
-        tks.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default().as_str(),
-        30,
-    );
-    let artifacts = RunArtifacts::create(&opts.params.cache_root(), &stem)?;
     let max_rounds = opts.ai.max_rounds.unwrap_or(40) as usize;
     let lines = read_tks_lines(tks)?;
     let tx = Transcript::create(artifacts.run_dir.join("conversation.jsonl"))?;
     Ok((
-        OpEnv { device, elem_lib, case: goal.to_string(), params, prompts, workarea, fetcher, artifacts, max_rounds, lines },
+        OpEnv { device, elem_lib, tklib: tklib_file, case: goal.to_string(), params, prompts, workarea, fetcher, artifacts, max_rounds, lines },
         tx,
     ))
 }
@@ -215,7 +234,7 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
     let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let ctx = op_ctx!(env, opts, ui);
-    let diag = super::doctor::diagnose(&mut tx, &ctx, &env.params, tks, goal, &env.lines, &marker, "replay_tks", 0, false).await;
+    let diag = super::doctor::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, "replay_tks", 0, false).await;
     let n = env.lines.len();
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)
@@ -237,10 +256,12 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let ctx = op_ctx!(env, opts, ui);
     let fixed =
-        super::doctor::doctor_repair(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, tks, goal, &marker, env.lines.clone(), &mut report).await;
+        super::doctor::doctor_repair(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, goal, &marker, env.lines.clone(), &mut report).await;
     match fixed {
         Some(lines) => {
             write_tks_lines(tks, &lines)?;
+            // 医生可能落了新元素（pick/pick_visual）——回包写回 .tklib，保持两件套自包含
+            env.repack(ui);
             Ok(format!("已修复：脚本现在能跑通并到达目标（修复 {} 次 · {} 步）。", report.repairs, lines.len()))
         }
         None => Ok("修复失败：未能把脚本修到可跑通并到达目标。".into()),
@@ -257,7 +278,7 @@ pub(crate) async fn optimize_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks:
     let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let ctx = op_ctx!(env, opts, ui);
-    let opt = super::reflect::optimize(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, tks, goal, &marker, &env.lines, &mut report).await;
+    let opt = super::reflect::optimize(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, goal, &marker, &env.lines, &mut report).await;
     match opt {
         Some(lines) if lines != env.lines => {
             let n0 = env.lines.len();

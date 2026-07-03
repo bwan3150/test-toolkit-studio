@@ -23,7 +23,6 @@ mod edits;
 
 pub(super) use diagnosis::diagnose;
 
-use std::path::Path;
 use std::sync::Arc;
 
 use crate::tools::element::{add_element_target, OcrChannel};
@@ -53,7 +52,6 @@ pub(super) async fn doctor_repair(
     txp: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
-    script_path: &Path,
     case: &str,
     marker: &str,
     mut lines: Vec<String>,
@@ -95,7 +93,7 @@ pub(super) async fn doctor_repair(
         }
         ctx.ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
         ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（第 {} 轮，重启净化中…）", iter) });
-        let diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
+        let diag = diagnose(tx, ctx, params, case, &lines, marker, "doctor_diagnose", iter, true).await;
 
         // 医生只管**正确性**：一旦能跑通且到达目标，立即把正确脚本交回上层（路径优化是反思官的事）
         if diag.reached {
@@ -298,7 +296,7 @@ pub(super) async fn doctor_repair(
                     let cut = step - 1; // 回放到目标步的前一步
                     tx.log("doctor_reexplore", serde_json::json!({ "iter": iter, "step": step, "kept_prefix": cut, "reason": reason }));
                     ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("◆ 重新定位到第 {} 步（重启+回放前 {} 步）：{}", step, cut, brief(&reason, 50)) });
-                    reposition(ctx, params, script_path, case, &lines, cut).await;
+                    reposition(ctx, params, case, &lines, cut).await;
                     // fetch 实时页面，交给医生重选
                     match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
                         Ok(p) => {
@@ -438,7 +436,7 @@ pub(super) async fn doctor_repair(
         // 收尾：finish 后再诊断一次确认是否真达标；达标即返回正确脚本，否则打回继续修
         if go_finish {
             ctx.ui.emit(UiEvent::Notice { level: Level::Info, text: "▶ 收尾兜底诊断（重启净化中…）".into() });
-            let final_diag = diagnose(tx, ctx, params, script_path, case, &lines, marker, "doctor_diagnose", iter, true).await;
+            let final_diag = diagnose(tx, ctx, params, case, &lines, marker, "doctor_diagnose", iter, true).await;
             if final_diag.reached {
                 // 终点校验：把最终页面 + 用户原话需求发给医生判断是否真到对的地方（marker 命中只是文本，
                 // 这里再做一层语义判断，防"标志在但页面不对"）。被打回有上限，避免无限。

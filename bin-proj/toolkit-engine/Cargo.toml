@@ -40,6 +40,8 @@ regex = "1.10"
 which = "6.0"
 # 时间处理
 chrono = { version = "0.4", features = ["serde"] }
+# .tklib 脚本元素包(zip 容器,stored 不压缩——png 已压缩)
+zip = { version = "2", default-features = false }
 # SQLite数据库
 rusqlite = { version = "0.31", features = ["bundled"] }
 # OCR相关

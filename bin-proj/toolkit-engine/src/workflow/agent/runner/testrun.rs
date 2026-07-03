@@ -40,8 +40,7 @@ pub(crate) struct TestRun {
     // —— 产物目录 / 元素库 ——
     artifacts: RunArtifacts,
     run_dir: PathBuf,
-    element_path: PathBuf,      // 临时库（run_dir 下，探索/修复/验证全程读写）
-    real_element_path: PathBuf, // 正式库（仅定稿后提交）
+    element_path: PathBuf, // 临时库（run_dir 下，探索/修复/验证全程读写）
     stem: String,
     tx: Transcript,
     // —— 探索会话（verify 的活体重探复用同一会话）——
@@ -123,11 +122,6 @@ impl TestRun {
         // —— 运行中间文件目录：落到 cache（--cache 或系统临时目录）；与脚本/交付文件分开、不展示给用户 ——
         let stem = slug(case, 30);
         let cache_root = opts.params.cache_root();
-        // 正式元素库的初值（探索期不直接写；finalize 会用调用方给的 sidecar 覆盖它）。缺省落 cache。
-        let real_element_path: PathBuf = opts
-            .params
-            .element_lib()
-            .unwrap_or_else(|| cache_root.join("element.json"));
         let artifacts = RunArtifacts::create(&cache_root, &stem)?;
         let run_dir = artifacts.run_dir.clone();
         // 临时元素库：本次运行隔离（run_dir 下）。
@@ -207,7 +201,6 @@ impl TestRun {
             artifacts,
             run_dir,
             element_path,
-            real_element_path,
             stem,
             tx,
             sess,
@@ -377,19 +370,18 @@ impl TestRun {
         )
     }
 
-    /// 收尾：把 .tks 落到 `out_tks`（工作区）、引用元素提交到 `out_sidecar`（该脚本的 sidecar 库），
-    /// 写 run_end / log / conversation，渲染结果框，返回结果。**总是落盘**——哪怕没完全达成，
-    /// 也留下可被 repair_tks 修的脚本（去掉了原来"失败就删脚本"）。
+    /// 收尾：把 .tks 落到 `out_tks`（工作区）、引用元素+模板图打包成 `out_tklib`（.tklib 元素包，
+    /// 两件套复制即跑），写 run_end / log / conversation，渲染结果框，返回结果。
+    /// **总是落盘**——哪怕没完全达成，也留下可被 repair_tks 修的脚本（去掉了原来"失败就删脚本"）。
     pub(crate) async fn finalize(
         mut self,
         opts: &AgentRunOptions,
         ui: &dyn Frontend,
         out_tks: &std::path::Path,
-        out_sidecar: &std::path::Path,
+        out_tklib: &std::path::Path,
     ) -> Result<AgentResult> {
-        // 输出目标改成调用方给的工作区路径 + sidecar 元素库
+        // 输出目标改成调用方给的工作区路径 + .tklib 元素包
         self.script_path = out_tks.to_path_buf();
-        self.real_element_path = out_sidecar.to_path_buf();
         // 最终成败：探索达成 且（未自检 或 自检稳定通过）
         let stable = self.verified.as_ref().map(|r| r.passed);
         let overall_success = self.outcome.success && stable.unwrap_or(true);
@@ -452,10 +444,10 @@ impl TestRun {
                 }
             }
         }
-        // 防污染（临时库架构）：成功→把终稿引用到的元素从临时库提交正式库；失败→删脚本、丢临时库即可。
+        // 防污染（临时库架构）：只把**终稿引用到的元素**从临时库提交出去，孤儿元素随临时库丢弃。
         let referenced = referenced_element_names(&self.result_lines);
         let feat_names: Vec<String> = all_created.iter().filter(|n| referenced.contains(n.as_str())).cloned().collect();
-        // **总是落盘 + 提交引用元素**到 sidecar：成功才做语义命名，未达成就用特征名原样落（留给 repair_tks 修）。
+        // 成功才做语义命名，未达成就用特征名原样落（留给 repair_tks 修）。
         let (renamed, semantic) = if overall_success {
             reflect::finalize_names(&opts.ai, &self.prompts, &mut self.tx, ui, &self.element_path, &self.result_lines, &feat_names).await
         } else {
@@ -463,7 +455,21 @@ impl TestRun {
         };
         self.result_lines = renamed;
         let _ = write_script(&self.script_path, &self.case, &self.result_lines);
-        let committed = crate::tools::element::commit_elements(&self.element_path, &self.real_element_path, &semantic).unwrap_or(0);
+        // 引用元素 → staging 库 → 打包 .tklib（两件套：foo.tks + foo.tklib，复制即跑；无共享库）
+        let stage_json = self.run_dir.join("tklib-stage").join("element.json");
+        let committed = crate::tools::element::commit_elements(&self.element_path, &stage_json, &semantic).unwrap_or(0);
+        let meta = crate::utils::tklib::TklibMeta::new(self.platform.name(), &self.device);
+        if !stage_json.is_file() {
+            // 一个元素都没有（如纯坐标/等待脚本）也要产出合法的空包，保证两件套完整
+            let _ = std::fs::create_dir_all(stage_json.parent().unwrap_or(&self.run_dir));
+            let _ = std::fs::write(&stage_json, "{\"elements\":{}}");
+        }
+        if let Err(e) = crate::utils::tklib::pack(&stage_json, out_tklib, &meta) {
+            ui.emit(UiEvent::Notice {
+                level: Level::Warn,
+                text: format!("元素包打包失败（{}）：脚本已保存，但 {} 缺失——回放将只剩坐标步可用", e, out_tklib.display()),
+            });
+        }
         let display_created = semantic;
         // 非设备动作留痕：把 notes 作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过；脚本已写完才追加，不被覆盖）。
         if !self.notes.is_empty() {
@@ -486,7 +492,7 @@ impl TestRun {
             total_completion,
             &display_created,
             committed,
-            &self.real_element_path,
+            &stage_json,
             ui,
         );
 

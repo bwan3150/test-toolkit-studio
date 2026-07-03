@@ -9,7 +9,7 @@
 | 模块                  | 职责 |
 |-----------------------|------|
 | `models/`             | 纯数据结构（Point/UIElement/Locator/tks 类型/DeviceInfo），不含逻辑。 |
-| `utils/`              | 基础设施（config、params 统一参数表、interrupt 统一中断、workarea）。**最底层，禁止 import 上层模块**。 |
+| `utils/`              | 基础设施（config、params 统一参数表、interrupt 统一中断、workarea、tklib 元素包打包/解包）。**最底层，禁止 import 上层模块**。 |
 | `drivers/`            | 设备协议对接：`adb`(Android) / `web`(chromedriver) / `wda`(iOS)，`Controller` 按设备 id 分发。`fake:` 前缀 = 测试假驱动（`fake.rs`，脚本化页面+事件记录）。 |
 | `engines/`            | 纯逻辑引擎：`fetcher`(XML→元素树) / `recognizer`(元素定位) / `ocr`（含进程级 OCR 来源注册表）。 |
 | `atomic/`             | 原子方法（refresh/fetch/recognize/control）：把 drivers+engines 组合成单步能力。 |
@@ -39,6 +39,16 @@
   `replay_tks`/`repair_tks`(doctor)/`optimize_tks`(optimizer)、文件增删改查（写/改/删需授权）。
 - 多轮带工具 = explorer / doctor / optimizer / orchestrator；单次 JSON 无工具 = asserter / supervisor / reflector / verify(marker)。
 - 目标标志(marker)首次推导后持久化在 .tks 头注释 `# 目标标志: `，replay/repair/optimize 共用同一判定基线。
+
+## 元素包（.tklib）——没有共享元素库
+
+一个测试 = 两个文件，拷到别的机器直接能跑：`foo.tks`（人读脚本）+ `foo.tklib`（元素包，
+zip 容器：meta.json + element.json + img/ 模板图）。**共享元素库已彻底删除**（2026-07-03 定稿）——
+每个脚本的定位宇宙就是自己的 tklib，新脚本永远污染不了旧脚本。
+运行期是「解包→操作→回包」（像 docx）：装配层（tksops/`tke run`/finalize）把 tklib 解包到
+cache、element_path 指过去，recognizer/元素工具/回放器对 tklib 无感知；repair 落了新元素再回包。
+诊断/定位回放一律写 cache 临时 .tks，**绝不覆盖用户脚本**（会抹掉 marker 头/尾注）。
+`-e/--element` 仍可显式指定裸 element.json（调试用）；`tke element` 命令必须显式 `-e`。
 
 ## 修复归层（重要）
 

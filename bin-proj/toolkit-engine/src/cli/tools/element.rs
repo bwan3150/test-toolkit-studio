@@ -37,14 +37,16 @@ fn parse_at(s: &str) -> Result<(i32, i32)> {
     )))
 }
 
-/// 处理 Element 相关命令（必须指定 -d/--device）
-/// element_lib 为参数层解析好的元素库路径（写入语义：含默认创建路径）
+/// 处理 Element 相关命令（必须指定 -d/--device 和 -e/--element）
+/// 共享库默认查找已删除：每个脚本自持 .tklib 元素包，手工加元素必须显式指定目标库文件。
 pub async fn handle(
     action: ElementCommands,
     params: std::sync::Arc<tke::Params>,
 ) -> Result<()> {
     let device_id = params.device();
-    let element_lib = params.element_lib_for_write();
+    let element_lib = params
+        .element_lib()
+        .unwrap_or_else(|| JsonOutput::error("element 命令必须指定元素库: -e/--element <element.json>（共享库默认查找已移除，每个脚本自持 .tklib）"));
     match action {
         ElementCommands::Add { name, at, desc, cached, force } => {
             let device = device_id

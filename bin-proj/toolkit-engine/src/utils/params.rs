@@ -7,7 +7,7 @@
 // 元素库默认查找（决策 4A）与在线 OCR 默认地址（决策 5）的"单一来源"也在此——
 // recognizer / tools::element 不再各自硬编码。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use super::config::{AiConfig, HarnessConfig, KnowledgeConfig, TkeConfig};
@@ -62,9 +62,6 @@ pub fn ocr_url() -> String {
         .cloned()
         .unwrap_or_else(|| DEFAULT_OCR_URL.to_string())
 }
-
-/// 元素库默认查找路径（相对当前目录）——全项目唯一一份
-const DEFAULT_ELEMENT_PATHS: &[&str] = &["element.json", "locator/element.json"];
 
 /// 在线 OCR 服务默认地址
 const DEFAULT_OCR_URL: &str = "https://ocr.test-toolkit.app/ocr";
@@ -136,23 +133,12 @@ impl Params {
         self.device.clone()
     }
 
-    /// 元素库路径（**读取语义**）：显式 > 默认查找已存在的 > None
-    /// 用于 recognize / run / harness 等"读元素库"的场景；None 表示无元素库（仅坐标可用）
+    /// 元素库路径：**只认显式指定**（-e / config / 装配层解包 .tklib 后 with_element_lib 注入）。
+    /// None = 无元素库（仅坐标步可用）。
+    /// 「共享库默认查找」已彻底删除（方案定稿 2026-07-03）：每个脚本自持 `foo.tklib` 元素包，
+    /// 不存在跨脚本共享的可变元素库——旧脚本的定位依据永远不会被新脚本的写入污染。
     pub fn element_lib(&self) -> Option<PathBuf> {
-        if let Some(p) = &self.element {
-            return Some(p.clone());
-        }
-        DEFAULT_ELEMENT_PATHS
-            .iter()
-            .map(PathBuf::from)
-            .find(|p| p.exists())
-    }
-
-    /// 元素库路径（**写入语义**）：同上，但没有任何已存在文件时回退第一个默认路径以便创建
-    /// 用于 element add 落库
-    pub fn element_lib_for_write(&self) -> PathBuf {
-        self.element_lib()
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_ELEMENT_PATHS[0]))
+        self.element.clone()
     }
 
     /// 返回一个把元素库指向 `path` 的 Params 副本。
@@ -195,12 +181,4 @@ impl Params {
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
     }
-}
-
-/// 供库层在缺省时复用的默认查找（与 Params 同一份常量），用于尚未持有 Params 的入口
-pub fn find_default_element_lib() -> Option<PathBuf> {
-    DEFAULT_ELEMENT_PATHS
-        .iter()
-        .map(PathBuf::from)
-        .find(|p: &PathBuf| Path::new(p).exists())
 }

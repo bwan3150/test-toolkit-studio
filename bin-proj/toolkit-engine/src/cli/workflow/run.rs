@@ -41,6 +41,23 @@ pub async fn handle(
             tke::workflow::script_runner::validate_script_path(&path)
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
+            // 元素库解析：-e 显式 > 同名 .tklib 元素包（解包到 cache 后使用）> 无库（仅坐标步）。
+            // 共享库默认查找已删除——每个脚本自持 foo.tklib，两个文件拷到任何机器即可回放。
+            let params = if params.element_lib().is_none() {
+                let tklib = tke::utils::tklib::tklib_path(&path);
+                if tklib.is_file() {
+                    let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    let dest = params.cache_root().join("tklib-unpack").join(format!("{}-{}", stem, std::process::id()));
+                    let lib_json = tke::utils::tklib::unpack(&tklib, &dest)
+                        .unwrap_or_else(|e| JsonOutput::error(format!("解包元素包失败 {}: {}", tklib.display(), e)));
+                    std::sync::Arc::new(params.with_element_lib(lib_json))
+                } else {
+                    params
+                }
+            } else {
+                params
+            };
+
             let runner = ScriptRunner::new(params.clone());
             let result = runner
                 .run(&path, params.log.as_deref(), &mut emit)

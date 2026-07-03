@@ -8,6 +8,8 @@ pub mod doctor;
 mod doctor_tests;
 #[cfg(test)]
 mod drive_tests;
+#[cfg(test)]
+mod tklib_tests;
 pub mod flow;
 pub mod fmt;
 pub mod interrupt;

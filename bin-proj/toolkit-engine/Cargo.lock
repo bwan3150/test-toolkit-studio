@@ -3665,6 +3665,7 @@ dependencies = [
  "tracing-subscriber",
  "ureq",
  "which",
+ "zip",
 ]
 
 [[package]]

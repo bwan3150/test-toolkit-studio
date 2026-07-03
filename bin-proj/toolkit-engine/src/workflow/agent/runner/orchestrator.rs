@@ -1,7 +1,7 @@
 // 【编排官 orchestrator】= 操作设备的「主 AI」，最顶层长寿会话，用户与它对话（形态类 claude code）。
 //
 // 它能对话、讨论、定方案；通过**颗粒化工具**自由调度，**没有固定流水线、没有常驻运行态**：
-//   explore                     驱动设备把过程录成 .tks 写进工作区（AI 命名、可多个）+ sidecar 元素库
+//   explore                     驱动设备把过程录成 .tks 写进工作区（AI 命名、可多个）+ .tklib 元素包
 //   replay_tks/repair_tks/optimize_tks  对工作区已有 .tks 回放/修复/优化（路径化，见 tksops）
 //   save_file/read_file/list_dir/edit_file/delete_file  工作区文件增删改查（写改删需授权，仿 opencode）
 //   update_todos / ask_user / finish
@@ -263,7 +263,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 }
                 for call in calls {
                     match call.name.as_str() {
-                        // —— 探索：驱动设备 + 把 .tks 写进工作区(AI 命名、可多个) + 元素提交到 sidecar ——
+                        // —— 探索：驱动设备 + 把 .tks 写进工作区(AI 命名、可多个) + 元素打包成 .tklib ——
                         "explore" => {
                             let goal = arg_str(&call.arguments, "goal");
                             let note = call.arguments.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
@@ -276,7 +276,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             }
                             emit_orch(ui, &sess, &format!("开始：{}", first_line(&goal)));
                             let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full).await?;
-                            // 命名 + 落工作区（当前目录、目录内去重）+ sidecar 元素库
+                            // 命名 + 落工作区（当前目录、目录内去重）+ .tklib 元素包（两件套，复制即跑）
                             let base = {
                                 let n = script_name.trim();
                                 if n.is_empty() { super::slug(&goal, 40) } else { super::slug(n, 50) }
@@ -284,12 +284,12 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let workspace = opts.params.workspace_root();
                             std::fs::create_dir_all(&workspace).ok(); // --current-dir 指的目录可能还没建
                             let tks_path = super::unique_script_path(&workspace, &base);
-                            let sidecar = tksops::sidecar_path(&tks_path);
+                            let tklib = crate::utils::tklib::tklib_path(&tks_path);
                             // 收尾前先取交付内容（finalize 会消费 run）
                             let brief = run.explore_brief();
                             let text = run.final_text().trim().to_string();
                             let shot = run.final_shot().to_path_buf();
-                            let result = run.finalize(opts, ui, &tks_path, &sidecar).await?;
+                            let result = run.finalize(opts, ui, &tks_path, &tklib).await?;
                             ran_any = true;
                             last_result = Some(result);
                             let abs = std::fs::canonicalize(&tks_path).unwrap_or_else(|_| tks_path.clone());

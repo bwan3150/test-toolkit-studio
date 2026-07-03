@@ -12,7 +12,7 @@
 //   interaction  【用户交互】ask_user 通道
 //   runner       【编排】主 AI(orchestrator) 与用户对话、自由调度颗粒化工具（无固定流水线）：
 //                  orchestrator 主 AI 会话循环 + 工具调度 + 文件操作 + 授权
-//                  testrun      explore：驱动设备 → .tks 写工作区 + sidecar 元素库（自收尾，无常驻态）
+//                  testrun      explore：驱动设备 → .tks 写工作区 + .tklib 元素包（自收尾，无常驻态）
 //                  tksops       路径化 replay_tks / repair_tks / optimize_tks（对工作区已有 .tks 操作）
 //                  flow         驱动循环（看页面→动作→再看），explore 与 tksops 复用
 //                  doctor       脚本医生（回放→修复），供 repair_tks

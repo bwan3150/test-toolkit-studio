@@ -248,14 +248,16 @@ pub(super) fn parse_edit(call: &LlmToolCall) -> std::result::Result<EditOp, Stri
 }
 
 /// 重启净化 + 回放 lines[0..cut]，把设备定位到第 cut 步后的页面（即第 cut+1 步将操作的页面）。
-pub(super) async fn reposition(ctx: &DriveCtx<'_>, params: &Arc<Params>, script_path: &Path, case: &str, lines: &[String], cut: usize) {
+/// 前缀回放写 cache 临时文件，**不写用户的 .tks**。
+pub(super) async fn reposition(ctx: &DriveCtx<'_>, params: &Arc<Params>, case: &str, lines: &[String], cut: usize) {
     reset_state(ctx.device, lines).await;
     if cut > 0 {
         let prefix = &lines[..cut.min(lines.len())];
-        let _ = write_script(script_path, case, prefix);
+        let replay_path = ctx.artifacts.run_dir.join("reposition-replay.tks");
+        let _ = write_script(&replay_path, case, prefix);
         // verbose=true：reexplore 定位时把「回放前缀」逐步打印出来，让人看清浏览器在重走哪几步、
         // 停到哪个页面，而不是浏览器默默动、CLI 一片空白后突然蹦出结果。
-        let _ = do_replay(params, script_path, true, ctx.ui).await;
+        let _ = do_replay(params, &replay_path, true, ctx.ui).await;
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }

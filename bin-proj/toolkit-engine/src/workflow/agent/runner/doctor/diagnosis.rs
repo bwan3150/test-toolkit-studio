@@ -2,7 +2,7 @@
 // 是否到达目标 / 第几步失败 / 每步页面 / 无效步分析 / 页面重复分析 / 给医生的 trace 提示词。
 // 医生的编辑工具在 edits.rs，主循环在 mod.rs。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::engines::ocr::enrich_with_ocr;
@@ -150,7 +150,6 @@ pub(crate) async fn diagnose(
     tx: &mut Transcript,
     ctx: &DriveCtx<'_>,
     params: &Arc<Params>,
-    script_path: &Path,
     case: &str,
     lines: &[String],
     marker: &str,
@@ -163,7 +162,10 @@ pub(crate) async fn diagnose(
         tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
         return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into(), final_page: String::new() };
     }
-    let _ = write_script(script_path, case, &check);
+    // 回放版本写 cache 临时文件，**绝不写用户的 .tks**——此前直接覆盖 script_path，
+    // 会把脚本头的 `# 目标标志:`、尾部关闭步、`# 注：` 全部抹掉（tklib 可移植性测试抓出的 bug）。
+    let replay_path = ctx.artifacts.run_dir.join(format!("{}-replay.tks", phase));
+    let _ = write_script(&replay_path, case, &check);
     reset_state(ctx.device, &check).await;
 
     // 一次带产物的完整回放：每步落盘 screenshots/step_NNN + page/step_NNN
@@ -202,7 +204,7 @@ pub(crate) async fn diagnose(
             _ => {}
         }
     };
-    let result = ScriptRunner::new(params.clone()).run(script_path, Some(&log_root), &mut sink).await;
+    let result = ScriptRunner::new(params.clone()).run(&replay_path, Some(&log_root), &mut sink).await;
     let result = match result {
         Ok(r) => r,
         Err(e) => {

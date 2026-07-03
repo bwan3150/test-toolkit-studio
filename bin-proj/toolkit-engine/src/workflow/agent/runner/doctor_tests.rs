@@ -107,7 +107,6 @@ async fn doctor_deletes_bad_step_and_reaches_marker() {
             crate::utils::config::TkeConfig::default(),
         ),
     );
-    let script_path = tmp.join("doctor-fix.tks");
     let mut report = VerifyReport { ran: true, ..Default::default() };
 
     let fixed = doctor::doctor_repair(
@@ -116,7 +115,6 @@ async fn doctor_deletes_bad_step_and_reaches_marker() {
         &mut tx,
         &ctx,
         &params,
-        &script_path,
         "打开设置中心",
         "设置中心", // 目标标志：P2 专属文字
         broken,
@@ -195,7 +193,6 @@ async fn doctor_gives_up_after_stagnation() {
             crate::utils::config::TkeConfig::default(),
         ),
     );
-    let script_path = tmp.join("doctor-stall.tks");
     let mut report = VerifyReport { ran: true, ..Default::default() };
 
     // 脚本只有一步「等待」——能跑通但目标标志「乌托邦」永远不出现
@@ -205,7 +202,6 @@ async fn doctor_gives_up_after_stagnation() {
         &mut tx,
         &ctx,
         &params,
-        &script_path,
         "到一个不存在的页面",
         "乌托邦",
         vec!["等待 [500ms]".to_string()],
