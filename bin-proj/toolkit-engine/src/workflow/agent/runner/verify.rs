@@ -38,7 +38,7 @@ pub(super) async fn derive_marker(
     case: &str,
 ) -> String {
     let system = "你帮助从测试脚本步骤和目标描述里，找出一段“只有真正到达目标时最终页面才会出现”的独特文字，用作回放是否到位的判据。".to_string();
-    let mut sess = match LlmSession::new(ai, system, Vec::new()) {
+    let mut sess = match LlmSession::new_for_role(ai, "verify", system, Vec::new()) {
         Ok(s) => s,
         Err(_) => return String::new(),
     };

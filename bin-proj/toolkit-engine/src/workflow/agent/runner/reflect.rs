@@ -81,7 +81,7 @@ pub(super) async fn reflect(
     let tx = &mut *scope;
 
     let system = prompts.role_system("reflector", device, platform.name());
-    let mut sess = LlmSession::new(ai, system.clone(), Vec::new()).ok()?;
+    let mut sess = LlmSession::new_for_role(ai, "reflector", system.clone(), Vec::new()).ok()?;
     tx.log("reflector_session", serde_json::json!({ "system_prompt": system }));
 
     let journey = build_journey(outcome, fetcher, run_dir);
@@ -193,7 +193,7 @@ pub(super) async fn optimize(
     let system = prompts.role_system("optimizer", ctx.device, platform.name());
     // 真正的工具调用（与医生同机制）：工具 schema + tools/optimizer/*.md 描述，LLM 调 tool、我回 tool_result。
     let tools = build_optimizer_tools(prompts);
-    let mut sess = LlmSession::new(ai, system, tools).ok()?;
+    let mut sess = LlmSession::new_for_role(ai, "optimizer", system, tools).ok()?;
     let intro = render(
         &prompts.message("optimizer", "intro"),
         &[("case", case), ("marker", marker), ("trace", &trace), ("pages", &pages), ("noops", &noop_list), ("script", &numbered)],
@@ -365,7 +365,7 @@ pub(super) async fn finalize_names(
     let keep = || (lines.to_vec(), feat_names.to_vec());
     let prompt = render(&prompts.message("reflector", "finalize"), &[("elements", &info)]);
     tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
-    let mut sess = match LlmSession::new(ai, prompts.role_system("reflector", "", ""), Vec::new()) {
+    let mut sess = match LlmSession::new_for_role(ai, "reflector", prompts.role_system("reflector", "", ""), Vec::new()) {
         Ok(s) => s,
         Err(e) => {
             name_warn(&brief(&e.to_string(), 60));

@@ -35,7 +35,7 @@ pub(super) async fn supervise(
     let tx = &mut *scope;
 
     let system = prompts.role_system("supervisor", device, platform.name());
-    let mut sess = LlmSession::new(ai, system.clone(), Vec::new()).ok()?;
+    let mut sess = LlmSession::new_for_role(ai, "supervisor", system.clone(), Vec::new()).ok()?;
     tx.log("supervisor_session", serde_json::json!({ "system_prompt": system }));
 
     let claim = if claimed_success { "已达成" } else { "未达成/放弃" };

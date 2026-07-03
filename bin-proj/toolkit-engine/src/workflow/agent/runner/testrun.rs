@@ -173,7 +173,7 @@ impl TestRun {
                 })).collect::<Vec<_>>(),
             }),
         );
-        let mut sess = LlmSession::new(&opts.ai, system_prompt, tools)?;
+        let mut sess = LlmSession::new_for_role(&opts.ai, "explorer", system_prompt, tools)?;
         tx.log("model", serde_json::json!({ "model": sess.model() }));
         let case_msg = render(&prompts.message("explorer", "case_intro"), &[("case", case)]);
         tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
@@ -280,7 +280,7 @@ impl TestRun {
             run.discarded_pt += dp;
             run.discarded_ct += dc;
             // 全新探索会话 + 用例 + 重探指导，从头带指导重探
-            run.sess = LlmSession::new(&opts.ai, run.prompts.role_system("explorer", &run.device, run.platform.name()), build_tools(&run.prompts, run.platform))?;
+            run.sess = LlmSession::new_for_role(&opts.ai, "explorer", run.prompts.role_system("explorer", &run.device, run.platform.name()), build_tools(&run.prompts, run.platform))?;
             let case_msg = render(&run.prompts.message("explorer", "case_intro"), &[("case", run.case.as_str())]);
             run.tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
             run.sess.user(case_msg);

@@ -68,7 +68,7 @@ pub(super) async fn doctor_repair(
     let platform = Platform::from_device(Some(ctx.device));
     let system = prompts.role_system("doctor", ctx.device, platform.name());
     let tools = build_doctor_tools(prompts);
-    let mut editor = match LlmSession::new(ai, system.clone(), tools.clone()) {
+    let mut editor = match LlmSession::new_for_role(ai, "doctor", system.clone(), tools.clone()) {
         Ok(s) => s,
         Err(e) => {
             ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: format!("脚本医生会话创建失败：{}", e) });

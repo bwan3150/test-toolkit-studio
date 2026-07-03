@@ -94,6 +94,29 @@ impl FakeTurn {
     }
 }
 
+/// 进程级「角色脚本会话」注册表（测试专用）：asserter/supervisor/doctor 等子 agent 在
+/// 深层**自建**会话，测试无法直接注入——fake 模式（[ai].provider="fake"）下，new_for_role
+/// 按 `(scope=[ai].model, role)` 从这里取走预排的脚本会话。scope 用于并行测试隔离。
+static FAKE_ROLE_SESSIONS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, std::collections::VecDeque<Vec<FakeTurn>>>>,
+> = std::sync::OnceLock::new();
+
+fn fake_role_registry(
+) -> &'static std::sync::Mutex<std::collections::HashMap<String, std::collections::VecDeque<Vec<FakeTurn>>>> {
+    FAKE_ROLE_SESSIONS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// 测试装配：为 `(scope, role)` 预排一场脚本会话（同角色可排多场，按次取走）。
+/// scope 对应测试里 AiConfig.model 的值（每个测试用唯一 scope，互不干扰）。
+pub fn enqueue_fake_role_session(scope: &str, role: &str, turns: Vec<FakeTurn>) {
+    fake_role_registry()
+        .lock()
+        .expect("fake role registry 锁中毒")
+        .entry(format!("{}:{}", scope, role))
+        .or_default()
+        .push_back(turns);
+}
+
 /// LLM 调用错误是否**可重试**（供应商侧瞬时故障）：限流/过载/超时/连接/5xx。
 /// 配置错误(401/403/404/400)是终止性的——重试只会浪费时间。分类依据是错误文本
 /// （genai 把 HTTP 层错误串进 message），宁可漏判(不重试)不可误判(重试配置错误)。
@@ -153,6 +176,24 @@ impl LlmSession {
         }
 
         Ok(Self::assemble(Backend::Real(client), model, options, system.into(), tools))
+    }
+
+    /// 按「角色」构建会话——所有 agent（explorer/orchestrator/asserter/supervisor/doctor/
+    /// reflector/optimizer/verify）统一走这里。真实模式 = new()；fake 模式（provider="fake"）
+    /// 从角色脚本注册表取走一场预排会话，让深层自建会话的子 agent 也能被测试注入。
+    pub fn new_for_role(cfg: &AiConfig, role: &str, system: impl Into<String>, tools: Vec<LlmTool>) -> Result<Self> {
+        if cfg.provider.as_deref() == Some("fake") {
+            let scope = cfg.model.clone().unwrap_or_default();
+            let key = format!("{}:{}", scope, role);
+            let turns = fake_role_registry()
+                .lock()
+                .map_err(|_| TkeError::LlmError("fake role registry 锁中毒".into()))?
+                .get_mut(&key)
+                .and_then(|q| q.pop_front())
+                .ok_or_else(|| TkeError::LlmError(format!("fake 模式下角色 {} 没有预排脚本会话（先调 enqueue_fake_role_session）", key)))?;
+            return Ok(Self::new_fake(system, tools, turns));
+        }
+        Self::new(cfg, system, tools)
     }
 
     /// 测试专用：脚本化假后端（无网络、无 API Key）。历史簿记（页面省略/压缩/工具配对）

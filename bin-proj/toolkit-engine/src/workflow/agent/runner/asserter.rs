@@ -150,7 +150,7 @@ pub(super) async fn pick_checkpoint(
     let tx = &mut *scope;
 
     let system = prompts.role_system("asserter", device, platform.name());
-    let mut sess = match LlmSession::new(ai, system.clone(), Vec::new()) {
+    let mut sess = match LlmSession::new_for_role(ai, "asserter", system.clone(), Vec::new()) {
         Ok(s) => s,
         Err(e) => return none(format!("断言官会话创建失败：{}", e)),
     };

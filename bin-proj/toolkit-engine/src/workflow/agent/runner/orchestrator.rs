@@ -185,7 +185,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
     let prompts = PromptSet::resolve(&opts.prompt)?;
     // system() = primary = 编排官；CLI --system-prompt / --system-prompt-file 覆盖的就是这份
     let system = prompts.system(&device, platform.name());
-    let mut sess = LlmSession::new(&opts.ai, system, orch_tools(&prompts))?;
+    let mut sess = LlmSession::new_for_role(&opts.ai, "orchestrator", system, orch_tools(&prompts))?;
 
     // 开场：把用户给的初始用例交给编排官（半自动：有用例就让它直接安排）
     let opening = opts.case.trim();

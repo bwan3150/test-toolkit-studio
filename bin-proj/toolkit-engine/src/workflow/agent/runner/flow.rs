@@ -754,8 +754,11 @@ pub async fn drive(
                             continue; // 同一页面重试
                         }
                     }
-                    // settle：等页面切换动画/加载稳定再重新采集，避免抓到上一页或半截动画
-                    tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                    // settle：等页面切换动画/加载稳定再重新采集，避免抓到上一页或半截动画。
+                    // 断言/等待/隐藏键盘天生不改变页面——跳过等待（此前固定 700ms，每条断言步纯浪费）。
+                    if !last_no_pagecheck {
+                        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+                    }
                     break; // 页面已变 → 重新采集
                 }
             }
