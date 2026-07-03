@@ -6,7 +6,7 @@
 //   ④ 自有工具  tke ocr / file / app / device
 //
 // 全局参数（均可放入 --config 指定的 tke.toml，CLI 显式参数优先）：
-//   -d/--device   目标设备    --element  元素库路径
+//   -d/--device   目标设备
 //   --log         产物输出目录（不传则不保存产物）    --json  强制 NDJSON 输出
 //
 // Main 只负责路由，所有命令翻译逻辑都在 cli 模块中
@@ -30,10 +30,6 @@ struct Cli {
     /// 目标设备 ID（refresh/fetch/recognize/control 必须指定）
     #[arg(short, long, global = true)]
     device: Option<String>,
-
-    /// 元素库 element.json 路径（缺省按 ./element.json → ./locator/element.json 查找）
-    #[arg(long, global = true)]
-    element: Option<PathBuf>,
 
     /// 产物输出目录（不传则 run/steps 不保存 log/截图序列/页面结构序列）
     #[arg(long, global = true)]
@@ -186,7 +182,7 @@ async fn main() -> tke::Result<()> {
     };
 
     // 参数层：CLI + config 解析一次，形成统一参数表（Arc 共享，编排层各模块持有并查表）
-    let params = Arc::new(tke::Params::resolve(cli.device, cli.element, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, config));
+    let params = Arc::new(tke::Params::resolve(cli.device, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
     // 安装进程级 Ctrl+C 中断监听：run/steps/harness 各阶段（含 ScriptRunner 逐步回放）统一查中断、及时停

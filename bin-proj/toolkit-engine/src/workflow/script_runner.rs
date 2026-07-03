@@ -24,6 +24,10 @@ impl ScriptRunner {
     ///
     /// - log_root: 产物根目录；None 时不保存任何产物（纯执行 + 事件流）
     /// - on_event: 实时事件回调（逐行输出）
+    ///
+    /// 元素库解析：内部注入（harness 诊断/回放经 with_element_lib）优先；否则要求脚本旁有
+    /// **同名 `.tklib` 元素包**（`foo.tks + foo.tklib` 两件套），解包到 cache 使用；
+    /// 找不到同名 .tklib 直接报错——没有共享元素库，也没有静默降级。
     pub async fn run(
         &self,
         script_path: &Path,
@@ -41,7 +45,29 @@ impl ScriptRunner {
             .to_string();
         let display_path = script_path.to_string_lossy().to_string();
 
-        self.run_script(script, &display_path, &script_stem, log_root, on_event).await
+        let runner = if self.params.element_lib().is_some() {
+            None // 已内部注入（harness 临时库/解包库），沿用
+        } else {
+            let tklib = crate::utils::tklib::tklib_path(script_path);
+            if !tklib.is_file() {
+                return Err(TkeError::InvalidArgument(format!(
+                    "缺少元素包 {}：脚本与元素包必须同名同目录（{}.tks + {}.tklib 两件套，一起拷贝即可在任何机器回放）",
+                    tklib.display(),
+                    script_stem,
+                    script_stem
+                )));
+            }
+            let dest = self
+                .params
+                .cache_root()
+                .join("tklib-unpack")
+                .join(format!("{}-{}", script_stem, std::process::id()));
+            let lib_json = crate::utils::tklib::unpack(&tklib, &dest)?;
+            Some(Self::new(Arc::new(self.params.with_element_lib(lib_json))))
+        };
+        let effective = runner.as_ref().unwrap_or(self);
+
+        effective.run_script(script, &display_path, &script_stem, log_root, on_event).await
     }
 
     /// 不落文件执行一串 .tks 指令（tke steps）

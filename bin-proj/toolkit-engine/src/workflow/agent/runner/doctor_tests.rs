@@ -98,14 +98,14 @@ async fn doctor_deletes_bad_step_and_reaches_marker() {
     let params = Arc::new(
         Params::resolve(
             Some(device.to_string()),
-            Some(element_path.clone()),
             None,
             None,
             Some(tmp.clone()),
             None,
             false,
             crate::utils::config::TkeConfig::default(),
-        ),
+        )
+        .with_element_lib(element_path.clone()),
     );
     let mut report = VerifyReport { ran: true, ..Default::default() };
 
@@ -184,14 +184,14 @@ async fn doctor_gives_up_after_stagnation() {
     let params = Arc::new(
         Params::resolve(
             Some(device.to_string()),
-            Some(element_path.clone()),
             None,
             None,
             Some(tmp.clone()),
             None,
             false,
             crate::utils::config::TkeConfig::default(),
-        ),
+        )
+        .with_element_lib(element_path.clone()),
     );
     let mut report = VerifyReport { ran: true, ..Default::default() };
 

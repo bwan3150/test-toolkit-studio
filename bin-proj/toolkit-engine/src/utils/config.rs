@@ -8,14 +8,12 @@ use std::path::{Path, PathBuf};
 /// tke.toml 配置
 /// 示例:
 ///   device = "f64b3b4d"
-///   element = "locator/element.json"   # 相对路径基于 config 文件所在目录
 ///   log = "logs"
 #[derive(Debug, Default, Deserialize)]
 pub struct TkeConfig {
     /// 目标设备 ID
     pub device: Option<String>,
     /// 元素库路径
-    pub element: Option<PathBuf>,
     /// 产物输出目录
     pub log: Option<PathBuf>,
     /// 脚本输出目录（harness 生成的 .tks 落点；CLI/显式参数优先）
@@ -98,7 +96,6 @@ impl TkeConfig {
 
         // 相对路径基于 config 文件所在目录
         let base = path.parent().unwrap_or(Path::new("."));
-        config.element = config.element.map(|p| resolve(base, p));
         config.log = config.log.map(|p| resolve(base, p));
         config.scripts = config.scripts.map(|p| resolve(base, p));
 

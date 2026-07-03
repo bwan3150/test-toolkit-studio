@@ -71,7 +71,7 @@ const DEFAULT_OCR_URL: &str = "https://ocr.test-toolkit.app/ocr";
 pub struct Params {
     /// 目标设备 ID
     pub device: Option<String>,
-    /// 元素库路径（显式来源；默认查找经 element_lib* 方法）
+    /// 元素库路径（仅运行期内部注入：装配层解包 .tklib 后 with_element_lib 写入；无 CLI/config 来源）
     element: Option<PathBuf>,
     /// 产物输出根目录（不设则 run/steps 不保存产物）
     pub log: Option<PathBuf>,
@@ -103,7 +103,6 @@ impl Params {
     /// 优先级：CLI 显式 > config > 内置默认
     pub fn resolve(
         cli_device: Option<String>,
-        cli_element: Option<PathBuf>,
         cli_log: Option<PathBuf>,
         cli_scripts: Option<PathBuf>,
         cli_cache: Option<PathBuf>,
@@ -113,7 +112,7 @@ impl Params {
     ) -> Self {
         Self {
             device: cli_device.or(config.device),
-            element: cli_element.or(config.element),
+            element: None, // 元素库无 CLI/config 来源——运行期由装配层解包 .tklib 后 with_element_lib 注入
             log: cli_log.or(config.log),
             scripts: cli_scripts.or(config.scripts),
             cache: cli_cache.or(config.cache),

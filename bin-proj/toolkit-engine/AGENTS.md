@@ -48,7 +48,8 @@ zip 容器：meta.json + element.json + img/ 模板图）。**共享元素库已
 运行期是「解包→操作→回包」（像 docx）：装配层（tksops/`tke run`/finalize）把 tklib 解包到
 cache、element_path 指过去，recognizer/元素工具/回放器对 tklib 无感知；repair 落了新元素再回包。
 诊断/定位回放一律写 cache 临时 .tks，**绝不覆盖用户脚本**（会抹掉 marker 头/尾注）。
-`-e/--element` 仍可显式指定裸 element.json（调试用）；`tke element` 命令必须显式 `-e`。
+全局 `--element` 参数已删除：`tke run foo.tks` 强制要求旁边有同名 `foo.tklib`，缺包直接报错；
+`tke element add` / `tke recognize` 用各自的局部 `--lib`（接受 .tklib 或裸 element.json）。
 
 ## 修复归层（重要）
 

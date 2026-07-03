@@ -41,7 +41,6 @@ fn opts_for(device: &str, scope: &str, workspace: std::path::PathBuf, cache: std
             Some(device.to_string()),
             None,
             None,
-            None,
             Some(cache),
             Some(workspace),
             false,
