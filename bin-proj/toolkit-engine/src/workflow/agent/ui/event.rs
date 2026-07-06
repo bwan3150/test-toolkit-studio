@@ -205,7 +205,8 @@ pub enum UiEvent {
 
     /// 引擎等用户输入（ask_user / setup 触发；前端必须回 UiCommand::Answer）。
     /// options 非空=候选项（设备选择等），前端可渲染成方向键可选列表；空=纯文本输入。
-    AwaitingInput { round: usize, question: String, options: Vec<String> },
+    /// free_input=true 时列表末尾带一个**可直接打字**的输入行（选项 or 自由输入二选一）。
+    AwaitingInput { round: usize, question: String, options: Vec<String>, #[serde(default)] free_input: bool },
 
     /// 指导已采纳回显（收到 Guidance 后引擎确认）
     GuidanceAccepted { text: String },

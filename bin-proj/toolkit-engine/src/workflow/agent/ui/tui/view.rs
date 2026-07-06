@@ -27,7 +27,7 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
                 }
             }
         }
-        (ch.options.len() as u16 + groups + 3).clamp(4, 16)
+        (ch.options.len() as u16 + groups + 3 + u16::from(ch.allow_free)).clamp(4, 17)
     } else if model.input.starts_with('/') {
         // slash 指令菜单：匹配项 + 输入行 + 边框
         (slash_matches(&model.input).len() as u16 + 3).clamp(3, 10)
@@ -131,7 +131,9 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
     }
 
     // ---- 底栏：快捷键提示（暗灰，随状态变化）----
-    let hint = if model.choosing.is_some() {
+    let hint = if model.choosing.as_ref().map(|c| c.allow_free).unwrap_or(false) {
+        "↑↓ 选择 · 直接打字=自行输入 · Enter 确认 · Esc 放弃"
+    } else if model.choosing.is_some() {
         "↑↓ 选择 · Enter 确认 · 1-9 直选 · Esc 放弃"
     } else if model.awaiting.is_some() {
         "Enter 提交 · 输入指导让 AI 继续 · /exit 退出"
@@ -191,6 +193,31 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
                 Style::default().fg(Color::Gray),
             )));
         }
+    }
+    // 内联输入行（allow_free）：直接打字即输入，不必先选"其他"再等输入框
+    if ch.allow_free {
+        let on_input = ch.selected == ch.options.len();
+        let (text, style) = if ch.free_input.is_empty() {
+            (
+                "其他（直接打字…）".to_string(),
+                if on_input {
+                    Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                },
+            )
+        } else {
+            (
+                format!("其他：{}▎", ch.free_input),
+                if on_input {
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Gray)
+                },
+            )
+        };
+        let prefix = if on_input { "▶ " } else { "  " };
+        lines.push(Line::from(Span::styled(format!("{}{}", prefix, text), style)));
     }
     frame.render_widget(
         Paragraph::new(lines).block(

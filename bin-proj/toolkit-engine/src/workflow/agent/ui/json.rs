@@ -82,7 +82,7 @@ impl Frontend for JsonFrontend {
 
     async fn await_answer(&self, round: usize, question: String) -> Option<String> {
         // 先告知前端「正在等输入」，前端据此提示用户并回 Answer / Abort
-        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new() });
+        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new(), free_input: false });
         // 轮询：每 50ms 取一次命令。不可跨 await 持有 std Mutex——锁只在同步块内用。
         loop {
             {
@@ -107,7 +107,7 @@ impl Frontend for JsonFrontend {
     /// app 弹窗后回 `{"type":"answer","text":"…"}`——text 为 **0-based 下标**（与 TUI 内部一致），
     /// 也接受选项原文精确匹配。Abort → None（调用方按"拒绝/放弃"处理）。
     async fn await_choice(&self, prompt: String, options: Vec<String>) -> Option<usize> {
-        self.emit(UiEvent::AwaitingInput { round: 0, question: prompt, options: options.clone() });
+        self.emit(UiEvent::AwaitingInput { round: 0, question: prompt, options: options.clone(), free_input: false });
         loop {
             {
                 let mut rx = match self.cmd_rx.lock() {

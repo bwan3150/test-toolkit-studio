@@ -193,7 +193,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
     // 开场：把用户给的初始用例交给编排官（半自动：有用例就让它直接安排）
     let opening = opts.case.trim();
     if opening.is_empty() {
-        sess.user("会话已开始，用户还没有说要做什么。请先用 ask_user 简短地问用户想让你在这台设备上做什么。".to_string());
+        sess.user("会话已开始，用户还没有说要做什么。请先用 ask_user 简短地问用户想让你在这台设备上做什么（开放性问题，**不要带 options**）。".to_string());
     } else {
         sess.user(format!(
             "用户给的任务：\n{}\n\n请先判断这是「要可回放脚本的测试」还是「一般任务」，再选对工具安排执行。",

@@ -84,7 +84,7 @@ impl Frontend for TuiFrontend {
 
     async fn await_answer(&self, round: usize, question: String) -> Option<String> {
         // 先告知 TUI「正在等回答」（高亮输入框、回显提问）
-        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new() });
+        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new(), free_input: false });
         // 轮询：每 50ms 取一次命令。不可跨 await 持 std Mutex——锁只在同步块内用。
         loop {
             {
@@ -114,6 +114,7 @@ impl Frontend for TuiFrontend {
             round: 0,
             question: prompt,
             options: options.clone(),
+            free_input: false,
         });
         // 与 await_answer 同模式：同步块取锁 try_recv，绝不跨 await 持 std Mutex。
         loop {
@@ -127,6 +128,42 @@ impl Frontend for TuiFrontend {
                         UiCommand::Answer { text } => return text.trim().parse::<usize>().ok(),
                         UiCommand::Abort => return None,
                         // Guidance/Pause/Resume：选择期间忽略
+                        _ => {}
+                    }
+                }
+            } // 锁在此释放，再 await
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    /// 「选项 或 直接输入」：choosing 列表末尾带**内联输入行**——用户可 ↑↓ 选，也可直接打字
+    /// （一打字焦点自动跳到输入行），不必先选"其他"再等输入框。
+    /// 内部协议（仅 TUI 线程 ↔ 本方法）：Answer.text = "pick:N"（选中第 N 项）或 "text:…"（自由输入）。
+    async fn await_choice_or_text(&self, prompt: String, options: Vec<String>) -> Option<super::ChoiceReply> {
+        self.emit(UiEvent::AwaitingInput {
+            round: 0,
+            question: prompt,
+            options: options.clone(),
+            free_input: true,
+        });
+        loop {
+            {
+                let mut rx = match self.commands_rx.lock() {
+                    Ok(rx) => rx,
+                    Err(_) => return None,
+                };
+                while let Ok(c) = rx.try_recv() {
+                    match c {
+                        UiCommand::Answer { text } => {
+                            if let Some(n) = text.strip_prefix("pick:").and_then(|s| s.parse::<usize>().ok()) {
+                                return Some(super::ChoiceReply::Pick(n));
+                            }
+                            if let Some(t) = text.strip_prefix("text:") {
+                                return Some(super::ChoiceReply::Text(t.to_string()));
+                            }
+                            return None;
+                        }
+                        UiCommand::Abort => return None,
                         _ => {}
                     }
                 }

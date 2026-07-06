@@ -65,20 +65,45 @@ pub trait Frontend: Send + Sync {
             .map(|n| n - 1)
     }
 
+    /// 「从候选里选 **或** 直接输入」（ask_user 带 options 用）：TUI 渲染成列表+内联输入行；
+    /// 默认实现走 await_answer（编号选择或直接作答），覆盖 Plain。
+    async fn await_choice_or_text(&self, prompt: String, options: Vec<String>) -> Option<ChoiceReply> {
+        let mut q = prompt;
+        for (i, o) in options.iter().enumerate() {
+            q.push_str(&format!("\n  [{}] {}", i + 1, o));
+        }
+        q.push_str("\n（输入序号选择，或直接输入你的回答）");
+        let ans = self.await_answer(0, q).await?;
+        let t = ans.trim();
+        if let Ok(n) = t.parse::<usize>() {
+            if n >= 1 && n <= options.len() {
+                return Some(ChoiceReply::Pick(n - 1));
+            }
+        }
+        if t.is_empty() {
+            return None;
+        }
+        Some(ChoiceReply::Text(ans))
+    }
+
     /// 引擎结束时调用：让前端收尾（TUI 退出 alt-screen / JSON flush / 线程 join）。
     async fn shutdown(self: Box<Self>);
 }
 
-/// 带候选项的提问（opencode 式选择）：渲染成方向键可选列表，末尾自动补「其他（自行输入）」
-/// 兜底——选中它退回纯文本输入。返回选中的选项文本或自由输入；None = 用户放弃/中断。
-/// ask_user（编排官/探索官）带 options 时统一走这里，用户不必打字。
-pub async fn ask_with_options(ui: &dyn Frontend, round: usize, question: &str, options: &[String]) -> Option<String> {
-    let mut opts: Vec<String> = options.to_vec();
-    opts.push("其他（自行输入）".to_string());
-    let idx = ui.await_choice(question.to_string(), opts.clone()).await?;
-    if idx + 1 == opts.len() {
-        ui.await_answer(round, question.to_string()).await
-    } else {
-        opts.get(idx).cloned()
+/// 「选项 或 自由输入」的答复
+pub enum ChoiceReply {
+    /// 选中了第 n 个候选项（0-based）
+    Pick(usize),
+    /// 用户直接输入了文本
+    Text(String),
+}
+
+/// 带候选项的提问（opencode 式）：ask_user 带 options 时统一走这里。
+/// TUI 渲染成"方向键选择 + 末尾可**直接打字**的输入行"（不必先选『其他』再弹输入框）；
+/// Plain/JSON 由 await_choice_or_text 的各自实现兜底。None = 用户放弃/中断。
+pub async fn ask_with_options(ui: &dyn Frontend, _round: usize, question: &str, options: &[String]) -> Option<String> {
+    match ui.await_choice_or_text(question.to_string(), options.to_vec()).await? {
+        ChoiceReply::Pick(i) => options.get(i).cloned(),
+        ChoiceReply::Text(t) => Some(t),
     }
 }
