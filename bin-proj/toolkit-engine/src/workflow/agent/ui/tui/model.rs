@@ -315,12 +315,23 @@ impl TuiModel {
             }
             UiEvent::AwaitingInput { question, options, .. } => {
                 if !options.is_empty() {
-                    // 候选项 → 进 choosing 模式（方向键列表，在输入区渲染）；不灌消息流
+                    // 候选项 → choosing 模式（方向键列表）；问题推进消息流留痕（选择结果提交时回显 ❯）
+                    self.ensure_blank();
+                    self.push(Line::from(vec![
+                        Span::styled("? ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::styled(question.clone(), Style::default().fg(Color::Cyan)),
+                    ]));
                     self.choosing = Some(ChoiceState {
                         prompt: question,
                         options,
                         selected: 0,
                     });
+                    self.follow = true;
+                    self.scroll = 0;
+                } else if question.trim().is_empty() {
+                    // 空问题 = 纯"等输入"状态（编排官 REPL 每轮的等待）——不灌消息流，免得刷屏
+                    self.awaiting = Some(question);
+                    self.cursor = 0;
                     self.follow = true;
                     self.scroll = 0;
                 } else {
@@ -504,17 +515,28 @@ impl TuiModel {
                     }
                 }
                 KeyCode::Enter => {
+                    let label = ch.options.get(ch.selected).map(|o| o.split('\t').last().unwrap_or(o).to_string()).unwrap_or_default();
                     let _ = tx.send(UiCommand::Answer {
                         text: ch.selected.to_string(),
                     });
                     self.choosing = None;
+                    // 回显选中项（与文字输入的 ❯ 回显一致，问答成对留痕）
+                    self.push(Line::from(vec![
+                        Span::styled("❯ ", Style::default().fg(Color::Blue)),
+                        Span::raw(label),
+                    ]));
                 }
                 // 数字键 1..9 直接选对应项并提交（增强）
                 KeyCode::Char(c @ '1'..='9') => {
                     let idx = (c as usize) - ('1' as usize);
                     if idx < n {
+                        let label = ch.options.get(idx).map(|o| o.split('\t').last().unwrap_or(o).to_string()).unwrap_or_default();
                         let _ = tx.send(UiCommand::Answer { text: idx.to_string() });
                         self.choosing = None;
+                        self.push(Line::from(vec![
+                            Span::styled("❯ ", Style::default().fg(Color::Blue)),
+                            Span::raw(label),
+                        ]));
                     }
                 }
                 _ => {}

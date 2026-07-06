@@ -28,7 +28,18 @@ pub async fn recognize_online(
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
-        .await?;
+        .await
+        .map_err(|e| -> Box<dyn StdError + Send + Sync> {
+            // reqwest 顶层 Display 只有 "error sending request"，真实原因（连接拒绝=服务没起 /
+            // 超时=服务卡死 / DNS 解析失败=地址写错）藏在错误链里——全部展开，让人能对症
+            let mut msg = format!("{}", e);
+            let mut src = e.source();
+            while let Some(s) = src {
+                msg.push_str(&format!("：{}", s));
+                src = s.source();
+            }
+            msg.into()
+        })?;
 
     if !response.status().is_success() {
         return Err(format!("OCR service error: {}", response.status()).into());

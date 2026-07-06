@@ -204,7 +204,10 @@ pub fn tool_schemas(platform: crate::Platform) -> Vec<ToolSchema> {
             name: "ask_user",
             schema: serde_json::json!({
                 "type": "object",
-                "properties": { "question": { "type": "string", "description": "向用户提出的问题" } },
+                "properties": {
+                    "question": { "type": "string", "description": "向用户提出的问题" },
+                    "options": { "type": "array", "items": { "type": "string" }, "description": "可选：给用户 2~5 个候选答案（会渲染成方向键可选列表，用户不用打字）；开放性问题省略" }
+                },
                 "required": ["question"]
             }),
         },

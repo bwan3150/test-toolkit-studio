@@ -18,7 +18,7 @@ use super::super::transcript::Transcript;
 use super::ctx::{DriveCtx, DriveOutcome};
 use super::fmt::{brief, friendly, parse_desc_json, preview_action};
 use super::super::perception::{capture, match_known, render_element_list, Perceived};
-use super::super::ui::{Level, NotReady, StepState, SubAgent, Tokens, UiCommand, UiEvent};
+use super::super::ui::{ask_with_options, Level, NotReady, StepState, SubAgent, Tokens, UiCommand, UiEvent};
 use super::super::prompt::render;
 use super::super::tools::{parse_tool_call, AgentAction};
 use super::asserter;
@@ -582,6 +582,9 @@ pub async fn drive(
                     break 'outer;
                 }
                 AgentAction::RequestScreenshot { reason } => {
+                    // 工具调用可见化：设备动作有 [N] 步骤行、改名有 ✎ 行，这个此前是隐形的——
+                    // 用户只看到"AI 说要看图"然后凭空继续，不知道它真调了工具
+                    ctx.ui.emit(UiEvent::Notice { level: Level::Dim, text: "⚒ request_screenshot：查看当前页面截图".to_string() });
                     tx.log("screenshot_requested", serde_json::json!({ "round": round, "reason": reason }));
                     sess.tool_result(primary.call_id.as_str(), "已附上当前页面截图（见下一条消息）");
                     let shot_msg = ctx.prompts.message("explorer", "screenshot_provided");
@@ -600,14 +603,20 @@ pub async fn drive(
                     }
                     continue; // 不前进，重新询问
                 }
-                AgentAction::AskUser { question } => {
-                    tx.log("ask_user", serde_json::json!({ "round": round, "question": question.clone() }));
+                AgentAction::AskUser { question, options } => {
+                    tx.log("ask_user", serde_json::json!({ "round": round, "question": question.clone(), "options": options.clone() }));
                     // Plain（管道/CI）没人可问：绝不阻塞等 stdin，回兜底让 AI 自行决定
                     if !ctx.ui.supports_prompts() {
                         sess.tool_result(primary.call_id.as_str(), "（当前为非交互运行，无法向用户提问——请基于已有信息自行决定并继续）");
                         continue;
                     }
-                    let answer = match ctx.ui.await_answer(round, question.clone()).await {
+                    // AI 给了候选项 → 方向键列表选择（末尾自动加"其他（自行输入）"兜底）；否则纯文本
+                    let answer = if options.is_empty() {
+                        ctx.ui.await_answer(round, question.clone()).await
+                    } else {
+                        ask_with_options(ctx.ui, round, &question, &options).await
+                    };
+                    let answer = match answer {
                         Some(a) => a,
                         None => { aborted = true; finish = Some((false, "已终止（用户中断）".to_string())); break 'outer; }
                     };

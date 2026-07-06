@@ -66,7 +66,7 @@ pub enum AgentAction {
     /// 信息不足，主动请求当前页面截图
     RequestScreenshot { reason: String },
     /// 向用户反问
-    AskUser { question: String },
+    AskUser { question: String, options: Vec<String> },
     /// 结束探索（给出成功与否及依据）；script_name=给生成脚本起的简短文件名（不含扩展名）
     Finish { success: bool, reason: String, script_name: Option<String> },
     /// 纠正已知元素的名字（当初起错了名，如把 logo 当成导航选项）。不改变页面、不产生 .tks 步骤。
@@ -80,7 +80,7 @@ impl AgentAction {
         match self {
             AgentAction::RequestScreenshot { reason }
             | AgentAction::Finish { reason, .. } => Some(reason.as_str()),
-            AgentAction::AskUser { question } => Some(question.as_str()),
+            AgentAction::AskUser { question, .. } => Some(question.as_str()),
             _ => None,
         }
     }

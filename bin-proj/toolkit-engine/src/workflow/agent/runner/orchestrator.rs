@@ -160,7 +160,10 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             desc("ask_user"),
             json!({
                 "type": "object",
-                "properties": { "question": { "type": "string", "description": "要问用户的问题" } },
+                "properties": {
+                    "question": { "type": "string", "description": "要问用户的问题" },
+                    "options": { "type": "array", "items": { "type": "string" }, "description": "可选：给用户 2~5 个候选答案（渲染成方向键可选列表，用户不用打字）；开放性问题省略" }
+                },
                 "required": ["question"]
             }),
         ),
@@ -249,7 +252,9 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 if !ui.is_interactive() {
                     break;
                 }
-                match ui.await_answer(0, "你的回复（直接回车结束会话）".to_string()).await {
+                // REPL 等下一句：问题传空串——不往消息流灌"你的回复…"提示行（每轮都发太吵），
+                // 输入框固定"请输入回复"、顶栏"等待回复"已足够
+                match ui.await_answer(0, String::new()).await {
                     Some(s) if !s.trim().is_empty() => sess.user(s),
                     _ => break,
                 }
@@ -495,7 +500,19 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 sess.tool_result(call.call_id, "（当前为非交互运行，无法向用户提问——请基于已有信息自行决定并继续）");
                                 continue;
                             }
-                            let ans = ui.await_answer(0, q).await.unwrap_or_default();
+                            let opts: Vec<String> = call
+                                .arguments
+                                .get("options")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                                .unwrap_or_default();
+                            // 带候选项 → 方向键列表（末尾自动补"其他（自行输入）"）；否则纯文本
+                            let ans = if opts.is_empty() {
+                                ui.await_answer(0, q).await
+                            } else {
+                                crate::workflow::agent::ui::ask_with_options(ui, 0, &q, &opts).await
+                            }
+                            .unwrap_or_default();
                             sess.tool_result(
                                 call.call_id,
                                 if ans.trim().is_empty() { "（用户未回答）".to_string() } else { ans },

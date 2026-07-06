@@ -9,7 +9,6 @@ use ratatui::{
     Frame,
 };
 
-use crate::workflow::agent::runner::fmt::brief;
 
 use super::model::{slash_matches, ChoiceState, TuiModel};
 
@@ -205,10 +204,9 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
 
 /// 普通/awaiting 文本输入框 + 可见光标。
 fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel) {
-    let (title, border_style): (String, Style) = if let Some(q) = model.awaiting.as_ref() {
-        // AI 提问直接显示在输入框标题处（opencode 风格）。不再写死"描述你要测什么"——
-        // 问什么由编排官提示词决定（tke 是通用设备 agent，测试只是其一），UI 只如实显示它问的那句。
-        (format!("? {}", brief(q, 70)), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+    let (title, border_style): (String, Style) = if model.awaiting.is_some() {
+        // 问题本体已推进消息流（`? …` 行）——输入框只给固定短提示，不再重复长问题
+        ("请输入回复".to_string(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
     } else {
         // 普通状态：输入框左上角不显示提示文字（提示统一在底栏）
         (String::new(), Style::default().fg(Color::DarkGray))

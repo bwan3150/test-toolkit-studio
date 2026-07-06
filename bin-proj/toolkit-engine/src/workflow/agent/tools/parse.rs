@@ -91,7 +91,10 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             element: opt_str(a, "element"),
         },
         "request_screenshot" => AgentAction::RequestScreenshot { reason: req_str(a, "reason")? },
-        "ask_user" => AgentAction::AskUser { question: req_str(a, "question")? },
+        "ask_user" => AgentAction::AskUser {
+            question: req_str(a, "question")?,
+            options: a.get("options").and_then(|v| v.as_array()).map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect()).unwrap_or_default(),
+        },
         "finish" => AgentAction::Finish {
             success: a.get("success").and_then(|v| v.as_bool()).unwrap_or(false),
             reason: req_str(a, "reason")?,

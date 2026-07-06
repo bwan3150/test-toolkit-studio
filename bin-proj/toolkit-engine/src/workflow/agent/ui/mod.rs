@@ -68,3 +68,17 @@ pub trait Frontend: Send + Sync {
     /// 引擎结束时调用：让前端收尾（TUI 退出 alt-screen / JSON flush / 线程 join）。
     async fn shutdown(self: Box<Self>);
 }
+
+/// 带候选项的提问（opencode 式选择）：渲染成方向键可选列表，末尾自动补「其他（自行输入）」
+/// 兜底——选中它退回纯文本输入。返回选中的选项文本或自由输入；None = 用户放弃/中断。
+/// ask_user（编排官/探索官）带 options 时统一走这里，用户不必打字。
+pub async fn ask_with_options(ui: &dyn Frontend, round: usize, question: &str, options: &[String]) -> Option<String> {
+    let mut opts: Vec<String> = options.to_vec();
+    opts.push("其他（自行输入）".to_string());
+    let idx = ui.await_choice(question.to_string(), opts.clone()).await?;
+    if idx + 1 == opts.len() {
+        ui.await_answer(round, question.to_string()).await
+    } else {
+        opts.get(idx).cloned()
+    }
+}
