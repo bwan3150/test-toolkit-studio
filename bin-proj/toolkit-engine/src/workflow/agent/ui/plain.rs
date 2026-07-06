@@ -208,10 +208,11 @@ impl Frontend for PlainFrontend {
             }
             // 行式模式下：ask_user 由 await_answer 直接走 read_user_line（自带提问输出），
             // 这里不再重复打印；Done 的产物路径由 harness::handle 在收尾时统一打印。
-            UiEvent::SessionInfo { device, platform, case } => {
+            UiEvent::SessionInfo { device, platform, model, .. } => {
+                // 行式日志保留模型名便于复盘（TUI 里则收进 /model 查询）
                 eprintln!(
                     "{}",
-                    paint(tty, "1", &format!("准备就绪 · 设备 {} · 平台 {} · 用例 {}", device, platform, brief(&case, 80)))
+                    paint(tty, "1", &format!("准备就绪 · 设备 {} · 平台 {} · 模型 {}", device, platform, model))
                 );
             }
             UiEvent::AwaitingInput { .. } | UiEvent::Done { .. } => {}

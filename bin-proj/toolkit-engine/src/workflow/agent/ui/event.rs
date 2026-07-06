@@ -210,8 +210,10 @@ pub enum UiEvent {
     /// 指导已采纳回显（收到 Guidance 后引擎确认）
     GuidanceAccepted { text: String },
 
-    /// setup 完成后的会话参数（设备/平台/用例），前端显示在顶部
-    SessionInfo { device: String, platform: String, case: String },
+    /// setup 完成后的会话参数（发一次）：设备/平台一行展示；模型/供应商/推理不灌消息流，
+    /// TUI 存起来供 `/model` 查询（JSON 前端全量透出给 app）。不携带用例文本——用户的话
+    /// 已有输入回显，重复展示只添乱。
+    SessionInfo { device: String, platform: String, model: String, provider: String, reasoning: String },
 
     /// 脚本生成完毕
     ScriptGenerated { name: String, steps: usize, success: bool },

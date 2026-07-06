@@ -21,8 +21,11 @@ pub struct OcrSource {
 }
 
 impl OcrSource {
-    /// 在线服务（给定 URL）
+    /// 在线服务（给定 URL）。
+    /// `0.0.0.0` 是**服务端监听地址**、不是客户端可连接的地址——配置里常被照抄服务端的
+    /// bind 地址误填进来（连它在多数系统上直接失败），自动改写为本机回环 127.0.0.1。
     pub fn online_url(url: String) -> Self {
+        let url = url.replacen("//0.0.0.0:", "//127.0.0.1:", 1).replacen("//0.0.0.0/", "//127.0.0.1/", 1);
         Self { online: true, param: url }
     }
 

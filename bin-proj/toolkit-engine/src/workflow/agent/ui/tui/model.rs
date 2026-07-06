@@ -44,6 +44,8 @@ pub(super) struct TuiModel {
     pub(super) cursor: usize,
     /// 当前平台（从 SessionInfo 取，用于 Page 行的平台图标）
     platform: Option<String>,
+    /// 当前 AI 配置 (模型, 供应商, 推理)——从 SessionInfo 存下，/model 查询用，不灌消息流
+    ai_config: Option<(String, String, String)>,
 }
 
 impl TuiModel {
@@ -64,6 +66,7 @@ impl TuiModel {
             last_step_idx: None,
             cursor: 0,
             platform: None,
+            ai_config: None,
         }
     }
 
@@ -142,22 +145,14 @@ impl TuiModel {
         }
         match ev {
             UiEvent::Phase { phase, n } => {
+                // 阶段只更新顶栏状态（「探索中·第N轮」），不再往消息流里插 `━━ 探索 ━━` 标题——
+                // 与顶栏重复、还把对话流切得支离破碎
                 self.phase = Some((phase, n));
-                let title = match n {
-                    Some(k) => format!("━━ {} #{} ━━", phase.label(), k),
-                    None => format!("━━ {} ━━", phase.label()),
-                };
-                // 粗体下划线标题（块间空行由 apply 统一处理）
-                self.push(Line::from(Span::styled(
-                    title,
-                    Style::default()
-                        .add_modifier(Modifier::BOLD)
-                        .add_modifier(Modifier::UNDERLINED),
-                )));
             }
-            UiEvent::SessionInfo { device, platform, case } => {
+            UiEvent::SessionInfo { device, platform, model, provider, reasoning } => {
                 self.platform = Some(platform.clone());
-                // setup 选好的参数，显示在最上面（探索开始前的第一条）
+                self.ai_config = Some((model, provider, reasoning)); // /model 查询用，不灌消息流
+                // setup 选好的参数：一行即可（不再显示用例——用户的话已有输入回显）
                 self.push(Line::from(vec![
                     Span::styled("● ", Style::default().fg(Color::Green)),
                     Span::styled("准备就绪", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
@@ -166,7 +161,6 @@ impl TuiModel {
                         Style::default().fg(Color::DarkGray),
                     ),
                 ]));
-                self.push_sub(format!("用例：{}", brief(&case, 80)));
             }
             UiEvent::Page {
                 round,
@@ -330,7 +324,13 @@ impl TuiModel {
                     self.follow = true;
                     self.scroll = 0;
                 } else {
-                    // 纯文本输入：问题直接显示在输入框标题处（不再灌进消息流），更像 opencode
+                    // 纯文本输入：问题**推进消息流留痕**（? 前缀）——ask_user 问了什么必须能回看，
+                    // 只显示在输入框标题的话，答完就消失了；输入框标题同时也显示。
+                    self.ensure_blank();
+                    self.push(Line::from(vec![
+                        Span::styled("? ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                        Span::styled(question.clone(), Style::default().fg(Color::Cyan)),
+                    ]));
                     self.awaiting = Some(question);
                     self.cursor = 0;
                     self.follow = true;
@@ -585,6 +585,16 @@ impl TuiModel {
                                 let _ = tx.send(UiCommand::Pause);
                             }
                         }
+                        "/model" => {
+                            self.ensure_blank();
+                            match &self.ai_config {
+                                Some((model, provider, reasoning)) => self.push_colored(
+                                    format!("模型 {} · 供应商 {} · 推理 {}（运行中切换暂未支持：改 config 的 [ai] 段或 --ai-* 参数后重启生效）", model, provider, reasoning),
+                                    Color::Cyan,
+                                ),
+                                None => self.push_colored("尚未收到配置信息（会话还没开始）".to_string(), Color::Yellow),
+                            }
+                        }
                         "/help" => self.push_help(),
                         other => self.push_colored(
                             format!("未知指令：{}（输入 / 看可用指令）", other),
@@ -642,6 +652,7 @@ impl TuiModel {
 pub(super) const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/exit", "退出 TUI"),
     ("/stop", "停止当前探索（可继续输入指导）"),
+    ("/model", "显示当前模型/供应商/推理配置"),
     ("/help", "显示可用指令"),
 ];
 

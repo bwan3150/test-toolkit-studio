@@ -152,14 +152,17 @@ pub async fn handle(
         );
     }
 
-    // setup 选好的参数显示在 TUI 顶部（探索开始前的第一条）
+    // setup 选好的参数（探索开始前发一次）：设备/平台展示一行；模型/供应商/推理由 TUI
+    // 存起来供 /model 查询，不再灌进消息流（此前的"配置 · 模型 …"整行已移除）
     frontend.emit(tke::UiEvent::SessionInfo {
         device: dev_override
             .clone()
             .or_else(|| params.device())
             .unwrap_or_else(|| "(web)".to_string()),
         platform: platform.map(|p| p.name().to_string()).unwrap_or_else(|| "(推断)".to_string()),
-        case: case_text.lines().next().unwrap_or("").trim().to_string(),
+        model: merged_ai.model.clone().unwrap_or_else(|| "默认（按供应商）".to_string()),
+        provider: merged_ai.provider.clone().unwrap_or_else(|| "anthropic（默认）".to_string()),
+        reasoning: merged_ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string()),
     });
 
     // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir
@@ -287,14 +290,6 @@ async fn interactive_setup(ui: &dyn tke::Frontend, ai: &AiConfig) -> Option<Setu
         }
     };
 
-    // —— 配置一览：显示当前生效的模型/供应商/推理（来自 CLI/--config，未设则标默认）——
-    let model_disp = ai.model.clone().unwrap_or_else(|| "默认（按供应商）".to_string());
-    let prov_disp = ai.provider.clone().unwrap_or_else(|| "默认".to_string());
-    let reason_disp = ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string());
-    ui.emit(tke::UiEvent::Notice {
-        level: tke::Level::Info,
-        text: format!("配置 · 模型 {} · 供应商 {} · 推理 {}", model_disp, prov_disp, reason_disp),
-    });
-
+    // 模型/供应商/推理不再打进消息流——随 SessionInfo 一次性下发，TUI 用 /model 查询
     Some(SetupResult { device, platform })
 }
