@@ -157,6 +157,24 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
     );
 }
 
+
+/// 取字符串**尾部**能放进 max_w 显示宽度的一段（中文等宽字符按显示宽度算）——
+/// 输入超宽时水平滚动用：光标在末尾，保证末尾可见。
+fn tail_fit(s: &str, max_w: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut start = chars.len();
+    let mut w = 0usize;
+    while start > 0 {
+        let cw = Span::raw(chars[start - 1].to_string()).width();
+        if w + cw > max_w {
+            break;
+        }
+        w += cw;
+        start -= 1;
+    }
+    chars[start..].iter().collect()
+}
+
 /// choosing 模式：在输入区渲染 prompt + 高亮选项列表（方向键选择）。
 fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceState) {
     let mut lines: Vec<Line<'static>> = Vec::new();
@@ -207,8 +225,10 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
                 },
             )
         } else {
+            // 超宽时只显示尾部（正在输入的位置必须可见）
+            let budget = (area.width as usize).saturating_sub(12); // 边框2+前缀2+"其他："+光标
             (
-                format!("其他：{}▎", ch.free_input),
+                format!("其他：{}▎", tail_fit(&ch.free_input, budget)),
                 if on_input {
                     Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
                 } else {
@@ -253,7 +273,23 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
             ]));
         }
     }
-    body.push(Line::from(format!("> {}", model.input)));
+    // 输入超宽时**水平滚动**：以光标为锚截取可见窗口——此前整行塞进去，超宽部分被裁剪、
+    // 光标被钳在边缘，正在输入的内容看不见（真机反馈的 bug）
+    let inner_w = (area.width as usize).saturating_sub(5); // 边框2 + "> "2 + 光标占位1
+    let chars: Vec<char> = model.input.chars().collect();
+    let cur = model.cursor.min(chars.len());
+    let mut start = cur;
+    let mut w = 0usize;
+    while start > 0 {
+        let cw = Span::raw(chars[start - 1].to_string()).width();
+        if w + cw > inner_w {
+            break;
+        }
+        w += cw;
+        start -= 1;
+    }
+    let visible: String = chars[start..].iter().collect();
+    body.push(Line::from(format!("> {}", visible)));
     frame.render_widget(
         Paragraph::new(body).block(
             Block::bordered()
@@ -262,8 +298,8 @@ fn render_input(frame: &mut Frame, area: ratatui::layout::Rect, model: &TuiModel
         ),
         area,
     );
-    // 光标定位到 model.cursor 处（输入行是块内最后一行）：x = 边框1 + "> "2 + 光标前子串宽度。
-    let prefix: String = model.input.chars().take(model.cursor).collect();
+    // 光标定位（输入行是块内最后一行）：x = 边框1 + "> "2 + 窗口内光标前子串宽度
+    let prefix: String = chars[start..cur].iter().collect();
     let pre_w = Span::raw(prefix).width() as u16;
     let cursor_x = area.x + 1 + 2 + pre_w;
     let cursor_y = area.y + area.height.saturating_sub(2);

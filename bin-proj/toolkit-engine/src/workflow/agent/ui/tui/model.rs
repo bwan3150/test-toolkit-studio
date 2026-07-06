@@ -467,11 +467,10 @@ impl TuiModel {
     /// 粘贴（bracketed paste）：整段插到光标处——换行转空格，绝不当 Enter 误提交半截内容
     pub(super) fn handle_paste(&mut self, s: &str) {
         if let Some(ch) = self.choosing.as_mut() {
-            // 带内联输入行的选择：粘贴进输入行（换行转空格）；纯列表选择粘贴无意义
-            if ch.allow_free {
+            // 带内联输入行的选择：**选中输入行时**粘贴进它（换行转空格）；其余情况粘贴无意义
+            if ch.allow_free && ch.selected == ch.options.len() {
                 let cleaned: String = s.chars().map(|c| if c == '\n' || c == '\r' { ' ' } else { c }).collect();
                 ch.free_input.push_str(&cleaned);
-                ch.selected = ch.options.len();
             }
             return;
         }
@@ -555,26 +554,26 @@ impl TuiModel {
                         ]));
                     }
                 }
-                // 内联输入行编辑：一打字焦点自动跳到输入行（数字也算内容，不再做直选）
-                KeyCode::Backspace if ch.allow_free => {
+                // 内联输入行编辑：**仅当选中它时**打字才生效（其余行保持纯上下选择）
+                KeyCode::Backspace if ch.allow_free && ch.selected == n => {
                     ch.free_input.pop();
                 }
-                KeyCode::Char(c) if ch.allow_free && !k.modifiers.contains(KeyModifiers::CONTROL) => {
-                    ch.free_input.push(c);
-                    ch.selected = n;
-                }
-                // 数字键 1..9 直接选对应项并提交（仅无输入行的旧列表：设备选择/授权）
-                KeyCode::Char(c @ '1'..='9') if !ch.allow_free => {
+                // 数字键 1..9 直接选对应项并提交（选中输入行时数字是内容，走上面 Char 分支之前先排除）
+                KeyCode::Char(c @ '1'..='9') if !(ch.allow_free && ch.selected == n) => {
                     let idx = (c as usize) - ('1' as usize);
                     if idx < n {
                         let label = ch.options.get(idx).map(|o| o.split('\t').last().unwrap_or(o).to_string()).unwrap_or_default();
-                        let _ = tx.send(UiCommand::Answer { text: idx.to_string() });
+                        let text = if ch.allow_free { format!("pick:{}", idx) } else { idx.to_string() };
+                        let _ = tx.send(UiCommand::Answer { text });
                         self.choosing = None;
                         self.push(Line::from(vec![
                             Span::styled("❯ ", Style::default().fg(Color::Blue)),
                             Span::raw(label),
                         ]));
                     }
+                }
+                KeyCode::Char(c) if ch.allow_free && ch.selected == n && !k.modifiers.contains(KeyModifiers::CONTROL) => {
+                    ch.free_input.push(c);
                 }
                 _ => {}
             }
