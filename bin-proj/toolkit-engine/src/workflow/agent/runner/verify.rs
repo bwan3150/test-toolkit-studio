@@ -28,8 +28,50 @@ use super::fmt::{brief, friendly, parse_desc_json};
 
 
 
+/// 探索成功收尾时：从**实际末页文字**里"摘取"目标标志（必须是末页原文的片段，机械校验
+/// 包含关系——杜绝 LLM 发明页面上不存在的标志）。这是 marker 的**首选来源**：真机教训是
+/// 凭 goal+步骤"猜"的 marker 可能指向中途页面（如"登录再登出"猜成登录后主页标题），
+/// 错误基线会诱导医生把正确的收尾步骤当"多余流程"删掉。
+/// 返回 (marker, prompt_tokens, completion_tokens)；挑不出/校验不过返回空串。
+pub(super) async fn derive_marker_from_page(
+    ai: &AiConfig,
+    prompts: &PromptSet,
+    tx: &mut Transcript,
+    case: &str,
+    final_page_text: &str,
+) -> (String, i64, i64) {
+    if final_page_text.trim().is_empty() {
+        return (String::new(), 0, 0);
+    }
+    let system = "你帮助从任务完成后的最终页面文字里，原样摘取一段独特文字，用作回放是否到位的判据。".to_string();
+    let mut sess = match LlmSession::new_for_role(ai, "verify", system, Vec::new()) {
+        Ok(s) => s,
+        Err(_) => return (String::new(), 0, 0),
+    };
+    let ask = render(&prompts.message("verify", "goal_marker_from_page"), &[("case", case), ("page", final_page_text)]);
+    tx.log("llm_message", serde_json::json!({ "content": ask.clone() }));
+    sess.user(ask);
+    let reply = match sess.next().await {
+        Ok(LlmReply::Text(t)) => t,
+        _ => return (String::new(), 0, 0),
+    };
+    let (pt, ct) = sess.total_usage();
+    tx.log("goal_marker_from_page", serde_json::json!({ "content": reply.clone() }));
+    let marker = parse_desc_json(&reply)
+        .and_then(|o| o["goal_marker"].as_str().map(|s| s.trim().to_string()))
+        .unwrap_or_default();
+    // 机械校验：标志必须真实存在于末页文字（空格/大小写不敏感，与 page_contains 同规则）——
+    // LLM 改写/发明的一律丢弃，宁可不校验也不要错误基线
+    let norm = |s: &str| -> String { s.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect() };
+    if marker.is_empty() || !norm(final_page_text).contains(&norm(&marker)) {
+        return (String::new(), pt, ct);
+    }
+    (marker, pt, ct)
+}
+
 /// 路径化工具用：脱离探索会话，**自建一次性会话**从「目标 + 脚本步骤」推出目标标志文本。
-/// 供 replay_tks / repair_tks / optimize_tks 这些独立工具复用（D2 的实现）。
+/// 供 replay_tks / repair_tks / optimize_tks 复用——**兜底路径**：仅当脚本头没有已持久化的
+/// marker（手写/老脚本）才用；探索产出的脚本 finalize 时已从真实末页摘取并写头。
 pub(super) async fn derive_marker(
     ai: &AiConfig,
     prompts: &PromptSet,

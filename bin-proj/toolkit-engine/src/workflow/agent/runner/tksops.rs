@@ -72,7 +72,7 @@ fn write_tks_lines(path: &Path, lines: &[String]) -> Result<()> {
 const MARKER_PREFIX: &str = "# 目标标志: ";
 
 /// 从 .tks 头注释读已持久化的目标标志。
-fn read_marker(path: &Path) -> Option<String> {
+pub(crate) fn read_marker(path: &Path) -> Option<String> {
     let content = std::fs::read_to_string(path).ok()?;
     content
         .lines()
@@ -82,7 +82,7 @@ fn read_marker(path: &Path) -> Option<String> {
 }
 
 /// 把目标标志写进 .tks 头注释（已有则更新，没有则插在 `步骤:` 之前）。
-fn write_marker(path: &Path, marker: &str) -> Result<()> {
+pub(crate) fn write_marker(path: &Path, marker: &str) -> Result<()> {
     let content = std::fs::read_to_string(path).map_err(TkeError::IoError)?;
     let line = format!("{}{}", MARKER_PREFIX, marker);
     let mut out: Vec<String> = Vec::new();
@@ -123,6 +123,7 @@ async fn ensure_marker(
     if let Some(m) = read_marker(tks) {
         return m;
     }
+    ui.emit(UiEvent::Notice { level: Level::Dim, text: "▶ 脚本头无目标标志，按目标推导中…（探索产出的脚本会自带；手写/老脚本走此兜底）".to_string() });
     let m = super::verify::derive_marker(&opts.ai, prompts, tx, lines, goal).await;
     if m.trim().is_empty() {
         ui.emit(UiEvent::Notice {
@@ -233,8 +234,10 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     }
     ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
     let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
+    ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 回放开始（{} 步）", env.lines.len()) });
     let ctx = op_ctx!(env, opts, ui);
-    let diag = super::doctor::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, "replay_tks", 0, false).await;
+    // verbose=true：回放逐步可见——此前静默跑完全程，用户只看到"卡了很久"
+    let diag = super::doctor::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, "replay_tks", 0, true).await;
     let n = env.lines.len();
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)

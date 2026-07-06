@@ -386,6 +386,17 @@ impl TestRun {
         let stable = self.verified.as_ref().map(|r| r.passed);
         let overall_success = self.outcome.success && stable.unwrap_or(true);
 
+        // 目标标志：探索成功且是完整测试时，从**实际末页文字**里摘取（机械校验必须是原文片段）——
+        // 之后写进脚本头，replay/repair 直接复用真实基线，不再凭 goal 瞎猜（真机教训：猜出的
+        // 标志指向中途页面，错误基线诱导医生把正确的收尾步骤当"多余流程"删掉）。
+        let mut goal_marker = String::new();
+        if overall_success && !self.task_mode {
+            let (m, mpt, mct) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, &self.final_text).await;
+            self.sup_pt += mpt;
+            self.sup_ct += mct;
+            goal_marker = m;
+        }
+
         // 总 token = 探索会话 + 被弃用重探旧会话 + 反思官 + 监督官 + 脚本医生独立会话
         let (mut total_prompt, mut total_completion) = self.sess.total_usage();
         total_prompt += self.discarded_pt + self.refl_pt + self.sup_pt;
@@ -455,6 +466,12 @@ impl TestRun {
         };
         self.result_lines = renamed;
         let _ = write_script(&self.script_path, &self.case, &self.result_lines);
+        if !goal_marker.is_empty() && super::tksops::write_marker(&self.script_path, &goal_marker).is_ok() {
+            ui.emit(UiEvent::Notice {
+                level: Level::Dim,
+                text: format!("目标标志（取自实际末页）已写入脚本头：{}", super::fmt::brief(&goal_marker, 40)),
+            });
+        }
         // 引用元素 → staging 库 → 打包 .tklib（两件套：foo.tks + foo.tklib，复制即跑；无共享库）
         let stage_json = self.run_dir.join("tklib-stage").join("element.json");
         let committed = crate::tools::element::commit_elements(&self.element_path, &stage_json, &semantic).unwrap_or(0);

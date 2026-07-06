@@ -120,6 +120,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("doctor", "finish_check") => include_str!("builtin/messages/doctor/finish_check.md"),
         // —— verify：验证编排消息 ——
         ("verify", "goal_marker") => include_str!("builtin/messages/verify/goal_marker.md"),
+        ("verify", "goal_marker_from_page") => include_str!("builtin/messages/verify/goal_marker_from_page.md"),
         // —— reflector：探索反思官 ——
         ("reflector", "analyze_failure") => include_str!("builtin/messages/reflector/analyze_failure.md"),
         ("reflector", "analyze_success") => include_str!("builtin/messages/reflector/analyze_success.md"),
