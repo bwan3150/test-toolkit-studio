@@ -3,11 +3,11 @@
 
 pub mod asserter;
 pub mod ctx;
-pub mod doctor;
-#[cfg(test)]
-mod doctor_tests;
+pub mod diagnose;
 #[cfg(test)]
 mod drive_tests;
+#[cfg(test)]
+mod repair_tests;
 #[cfg(test)]
 mod tklib_tests;
 pub mod flow;

@@ -12,9 +12,6 @@
 /// 默认探索官系统提示词（角色 explorer——被编排官调度的 worker，非 primary）
 pub const DEFAULT_EXPLORER_SYSTEM: &str = include_str!("builtin/agents/explorer.md");
 
-/// 默认脚本医生系统提示词（角色 doctor）
-pub const DEFAULT_DOCTOR_SYSTEM: &str = include_str!("builtin/agents/doctor.md");
-
 /// 默认探索反思官系统提示词（角色 reflector）
 pub const DEFAULT_REFLECTOR_SYSTEM: &str = include_str!("builtin/agents/reflector.md");
 
@@ -37,7 +34,6 @@ pub fn default_role_system(role: &str) -> &'static str {
     match role {
         "orchestrator" => DEFAULT_ORCHESTRATOR_SYSTEM,
         "explorer" => DEFAULT_EXPLORER_SYSTEM,
-        "doctor" => DEFAULT_DOCTOR_SYSTEM,
         "reflector" => DEFAULT_REFLECTOR_SYSTEM,
         "optimizer" => DEFAULT_OPTIMIZER_SYSTEM,
         "supervisor" => DEFAULT_SUPERVISOR_SYSTEM,
@@ -49,7 +45,6 @@ pub fn default_role_system(role: &str) -> &'static str {
 /// 某角色某工具的默认 description（外部目录可覆盖：explorer→tools/<name>.md，其它→tools/<role>/<name>.md）
 pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
     match role {
-        "doctor" => default_doctor_tool_description(name),
         "optimizer" => default_optimizer_tool_description(name),
         "orchestrator" => default_orchestrator_tool_description(name),
         _ => default_tool_description(name),
@@ -91,6 +86,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
     match (role, name) {
         // —— explorer：探索 agent 每轮 / 控制类消息 ——
         ("explorer", "case_intro") => include_str!("builtin/messages/explorer/case_intro.md"),
+        ("explorer", "repair_resume") => include_str!("builtin/messages/explorer/repair_resume.md"),
         ("explorer", "element_tag") => include_str!("builtin/messages/explorer/element_tag.md"),
         ("explorer", "page_round") => include_str!("builtin/messages/explorer/page_round.md"),
         ("explorer", "page_round_visual") => include_str!("builtin/messages/explorer/page_round_visual.md"),
@@ -109,15 +105,6 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("supervisor", "pushback") => include_str!("builtin/messages/supervisor/pushback.md"),
         // —— asserter：踩实官（每次导航后自动断言）——
         ("asserter", "pick") => include_str!("builtin/messages/asserter/pick.md"),
-        // —— doctor：脚本医生消息 ——
-        ("doctor", "trace") => include_str!("builtin/messages/doctor/trace.md"),
-        ("doctor", "trace_objective_minimize") => include_str!("builtin/messages/doctor/trace_objective_minimize.md"),
-        ("doctor", "trace_objective_fix") => include_str!("builtin/messages/doctor/trace_objective_fix.md"),
-        ("doctor", "reexplore_preamble") => include_str!("builtin/messages/doctor/reexplore_preamble.md"),
-        ("doctor", "auto_revert") => include_str!("builtin/messages/doctor/auto_revert.md"),
-        ("doctor", "nudge_use_tool") => include_str!("builtin/messages/doctor/nudge_use_tool.md"),
-        ("doctor", "finish_pushback") => include_str!("builtin/messages/doctor/finish_pushback.md"),
-        ("doctor", "finish_check") => include_str!("builtin/messages/doctor/finish_check.md"),
         // —— verify：验证编排消息 ——
         ("verify", "goal_marker") => include_str!("builtin/messages/verify/goal_marker.md"),
         ("verify", "goal_marker_from_page") => include_str!("builtin/messages/verify/goal_marker_from_page.md"),
@@ -137,21 +124,6 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("optimizer", "fb_merge_overlap") => include_str!("builtin/messages/optimizer/fb_merge_overlap.md"),
         ("optimizer", "fb_merge_done") => include_str!("builtin/messages/optimizer/fb_merge_done.md"),
         ("optimizer", "fb_bad_action") => include_str!("builtin/messages/optimizer/fb_bad_action.md"),
-        _ => "",
-    }
-}
-
-/// 脚本医生（编辑器 agent）各工具默认 description
-fn default_doctor_tool_description(name: &str) -> &'static str {
-    match name {
-        "delete_lines" => include_str!("builtin/tools/doctor/delete_lines.md"),
-        "replace_line" => include_str!("builtin/tools/doctor/replace_line.md"),
-        "insert_after" => include_str!("builtin/tools/doctor/insert_after.md"),
-        "reexplore" => include_str!("builtin/tools/doctor/reexplore.md"),
-        "pick" => include_str!("builtin/tools/doctor/pick.md"),
-        "pick_visual" => include_str!("builtin/tools/doctor/pick_visual.md"),
-        "run" => include_str!("builtin/tools/doctor/run.md"),
-        "finish" => include_str!("builtin/tools/doctor/finish.md"),
         _ => "",
     }
 }

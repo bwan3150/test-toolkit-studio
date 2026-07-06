@@ -42,7 +42,6 @@ pub enum SubAgent {
     Asserter,   // 断言官
     Supervisor, // 监督官
     Reflector,  // 反思官
-    Doctor,     // 脚本医生
     Optimizer,  // 优化官
 }
 
@@ -53,7 +52,6 @@ impl SubAgent {
             SubAgent::Asserter => "Asserter",
             SubAgent::Supervisor => "Supervisor",
             SubAgent::Reflector => "Reflector",
-            SubAgent::Doctor => "Doctor",
             SubAgent::Optimizer => "Optimizer",
         }
     }

@@ -1,7 +1,7 @@
 // 【探索反思官】两类职责：
 //  ① 探索失败 → `reflect()` 出「重探指导」，上层带指导重探（治"绕大圈没找到"，探索阶段安全网）；
 //  ② 脚本已正确 → `optimize()` 做**软优化**：看正确脚本的 trace，指出可删的绕路/冗余步并删掉
-//     （大胆删、不逐条验证；删坏了由医生在下一轮复检兜底——医生⇄反思官交替收敛）。
+//     （大胆删、不逐条验证；删坏了由删后整体重诊断兜底）。
 // 独立会话(无工具)，按作用域归属 "reflector"；token 单独计、并入总量。
 
 use std::path::Path;
@@ -103,7 +103,7 @@ pub(super) async fn reflect(
 }
 
 /// 软优化：脚本已正确时，看其逐步 trace 找出可删的绕路/冗余步并删掉（大胆删、不逐条验证；
-/// 删坏了由医生下一轮复检兜底）。返回优化后的脚本（有改动）或 None（无可优化/失败）。
+/// 删坏了由删后整体重诊断兜底）。返回优化后的脚本（有改动）或 None（无可优化/失败）。
 #[allow(clippy::too_many_arguments)]
 /// 脚本优化官的工具表（name + JSON schema）；description 由 tools/optimizer/*.md 提供。
 fn optimizer_tool_schemas() -> Vec<(&'static str, serde_json::Value)> {
@@ -167,7 +167,7 @@ pub(super) async fn optimize(
     let tx = &mut *scope;
 
     // 诊断当前脚本拿逐步 trace（调用前应已正确；不正确则不优化）
-    let diag = super::doctor::diagnose(tx, ctx, params, case, lines, marker, "reflect_diagnose", 0, false).await;
+    let diag = super::diagnose::diagnose(tx, ctx, params, case, lines, marker, "reflect_diagnose", 0, false).await;
     if !diag.reached {
         return None;
     }
@@ -316,7 +316,7 @@ pub(super) async fn optimize(
     }
 
     // 一次性验证：重建后还到不到目标？到不了就放弃本次优化（上层用医生确认的正确版本兜底）。
-    let verify = super::doctor::diagnose(tx, ctx, params, case, &new, marker, "reflect_verify", 0, false).await;
+    let verify = super::diagnose::diagnose(tx, ctx, params, case, &new, marker, "reflect_verify", 0, false).await;
     if !verify.reached {
         ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "↩ 优化后跑不到目标，放弃本次优化（保留医生的正确版本）".into() });
         return None;

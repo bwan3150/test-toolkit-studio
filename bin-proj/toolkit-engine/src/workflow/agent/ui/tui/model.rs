@@ -736,7 +736,6 @@ fn subagent_color(kind: SubAgent) -> Color {
         SubAgent::Asserter => Color::Cyan,
         SubAgent::Supervisor => Color::Yellow,
         SubAgent::Reflector => Color::Magenta,
-        SubAgent::Doctor => Color::LightBlue,
         SubAgent::Optimizer => Color::Green,
     }
 }

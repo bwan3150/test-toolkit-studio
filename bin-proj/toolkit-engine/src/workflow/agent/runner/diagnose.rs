@@ -1,6 +1,7 @@
 // 【诊断回放】整脚本跑一遍、每步留下页面(结构+OCR)，产出富 trace(Diagnosis)：
-// 是否到达目标 / 第几步失败 / 每步页面 / 无效步分析 / 页面重复分析 / 给医生的 trace 提示词。
-// 医生的编辑工具在 edits.rs，主循环在 mod.rs。
+// 是否真到达目标 / 第几步失败 / 每步页面 / 无效步分析(优化官用) / 页面重复分析。
+// 这是验证与修复共用的**测量仪器**：修复(断点续探)在 tksops::repair_tks——旧的
+// 「医生」文本编辑 agent 已删除(对着看不见的设备做脑内手术,越修越坏)。
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,14 +9,13 @@ use std::sync::Arc;
 use crate::engines::ocr::enrich_with_ocr;
 use crate::{Params, RunEvent, ScriptRunner, UIElement};
 
-use super::super::super::execution::script::write_script;
-use super::super::super::perception::{capture, render_element_list};
-use super::super::super::prompt::{render, PromptSet};
-use super::super::super::transcript::Transcript;
-use super::super::super::ui::{Level, StepState, UiEvent};
-use super::super::ctx::DriveCtx;
-use super::super::fmt::{brief, friendly};
-use super::super::verify::{page_contains, reset_state, strip_trailing_close};
+use super::super::execution::script::write_script;
+use super::super::perception::{capture, render_element_list};
+use super::super::transcript::Transcript;
+use super::super::ui::{Level, StepState, UiEvent};
+use super::ctx::DriveCtx;
+use super::fmt::{brief, friendly};
+use super::verify::{page_contains, reset_state, strip_trailing_close};
 
 /// 诊断回放中的一步
 struct DiagStep {
@@ -56,10 +56,8 @@ pub(crate) struct Diagnosis {
     steps: Vec<DiagStep>,
     /// 第一个失败步的下标(0-based)；None=全跑通
     pub(crate) fail_idx: Option<usize>,
-    /// 一句话结论(给医生 & CLI)
+    /// 一句话结论(给修复流程 & CLI)
     pub(crate) note: String,
-    /// 脚本跑完后的最终页面元素（渲染文本），供医生 finish 时对照用户需求做终点校验
-    pub(crate) final_page: String,
 }
 
 impl Diagnosis {
@@ -160,7 +158,7 @@ pub(crate) async fn diagnose(
     let check = strip_trailing_close(lines);
     if check.is_empty() {
         tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
-        return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into(), final_page: String::new() };
+        return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into() };
     }
     // 回放版本写 cache 临时文件，**绝不写用户的 .tks**——此前直接覆盖 script_path，
     // 会把脚本头的 `# 目标标志:`、尾部关闭步、`# 注：` 全部抹掉（tklib 可移植性测试抓出的 bug）。
@@ -209,7 +207,7 @@ pub(crate) async fn diagnose(
         Ok(r) => r,
         Err(e) => {
             tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": format!("回放出错：{}", e), "steps": [] }));
-            return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: format!("回放出错：{}", e), final_page: String::new() };
+            return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: format!("回放出错：{}", e) };
         }
     };
     let run_dir = result.run_dir.clone().map(PathBuf::from).unwrap_or_else(|| log_root.clone());
@@ -249,20 +247,13 @@ pub(crate) async fn diagnose(
 
     // 目标标志校验：全跑通才有意义(失败步中断时设备停在错页)。等渲染稳定后取一帧实时页面。
     // 同时把这帧最终页面渲染出来存 final_page，供医生 finish 时做"对照用户原话需求"的终点校验。
-    let mut final_page = String::new();
     let reached = if result.success {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
-            Ok(p) => {
-                let none = vec![None; p.elements.len()];
-                final_page = render_element_list(&p.elements, &none, &ctx.prompts.message("explorer", "element_tag"));
-                marker.is_empty() || page_contains(&p, marker)
-            }
+            Ok(p) => marker.is_empty() || page_contains(&p, marker),
             Err(_) => marker.is_empty(),
         }
     } else {
-        // 失败中断：最终页取最后一步的页面
-        final_page = steps.last().map(|s| s.page_full.clone()).unwrap_or_default();
         false
     };
 
@@ -302,7 +293,7 @@ pub(crate) async fn diagnose(
             })).collect::<Vec<_>>(),
         }),
     );
-    Diagnosis { reached, steps, fail_idx, note, final_page }
+    Diagnosis { reached, steps, fail_idx, note }
 }
 
 /// 取文本前 n 行（每页元素列表可能很长，逐步展示时截断防 token 爆炸）
@@ -314,36 +305,4 @@ fn top_lines(s: &str, n: usize) -> String {
     } else {
         head
     }
-}
-
-/// 多行页面文本统一缩进，嵌进 trace 时对齐
-fn indent_page(s: &str) -> String {
-    s.lines().map(|l| format!("      {}", l)).collect::<Vec<_>>().join("\n")
-}
-
-/// 把诊断结果渲染成给医生的提示词：编号脚本 + **本轮诊断回放每一步都带「该步执行后页面」**
-/// （失败步/终点页给完整元素列表，其余步给前若干个），让医生看清整条脚本实际走了哪条路。
-/// 历史轮次的 trace 由 `user_trace` 自动省略页面详情，故这里可以放心给全（每轮只有一份完整 trace 在上下文里）。
-pub(super) fn render_trace_prompt(prompts: &PromptSet, case: &str, marker: &str, diag: &Diagnosis) -> String {
-    const PER_STEP_ELEMENTS: usize = 8; // 普通步每步展示的元素条数（失败步/终点页给全量）
-    let last_no = diag.steps.last().map(|s| s.no).unwrap_or(0);
-    // 逐步 trace 文本（数据，按规则组装；模板只提供外层说明文字）
-    let mut steps = String::new();
-    for st in &diag.steps {
-        let mark = if st.ok { "✓" } else { "✗" };
-        let err = st.err.as_deref().map(|e| format!("  ← 错误：{}", brief(e, 70))).unwrap_or_default();
-        steps.push_str(&format!("{}. {} {}{}\n", st.no, mark, friendly(&st.line), err));
-        if !st.page_full.trim().is_empty() {
-            // 失败步、以及"全跑通但没到目标"时的终点步 → 完整页面；其余步 → 前若干个元素
-            let critical = !st.ok || (diag.fail_idx.is_none() && !diag.reached && st.no == last_no);
-            let page = if critical { st.page_full.clone() } else { top_lines(&st.page_full, PER_STEP_ELEMENTS) };
-            steps.push_str(&format!("    页面：\n{}\n", indent_page(&page)));
-        }
-    }
-    // 医生只管修到正确（路径优化交给反思官），目标固定为"修复"
-    let objective = prompts.message("doctor", "trace_objective_fix");
-    render(
-        &prompts.message("doctor", "trace"),
-        &[("case", case), ("marker", marker), ("note", &diag.note), ("steps", &steps), ("objective", &objective)],
-    )
 }

@@ -1,30 +1,17 @@
-// 【生成后自检 + 自修复】(--verify) —— 脚本医生(编辑器 agent)的入口 + 验证基础设施
+// 【验证基础设施】目标标志(marker)推导 + 回放校验原语（page_contains / reset_state /
+// strip_trailing_close / launch_spec）。诊断回放在 diagnose.rs；修复(断点续探)在 tksops。
 //
-// harness 探索产出 .tks 后，验证它能否被 `tke run` 稳定回放、并把它修到「稳定到达目标」：
-//   ① 目标标志：问探索会话要一段"只有真到达目标才出现的独特文字"(marker)，用于自动校验是否真达成；
-//   ② 脚本医生(doctor.rs)：诊断回放(每步留页面)→ 医生编辑脚本任意行(删/改/插 + 活体重探)→ 重跑 →
-//      直到稳定到达目标并提炼最短(详见 doctor.rs)；
-//   ③ 稳定性：连续 need_pass 次(默认 2)重启净化后回放都到达目标才算稳定，期间不稳就再请医生修。
-//
-// 全景记录（conversation.json）：除 AI 交互外还记 verify_start / doctor_* / verify_end，可复盘
-// 一开始脚本哪里错、医生怎么改、最终结论。
-//
-// 本文件保留「回放 / 目标校验」基础设施(goal_probe / do_replay / reset_state / strip_trailing_close /
-// page_contains / launch_spec)，供 doctor.rs 复用；真正的「编辑→跑→看→改」主循环在 doctor.rs。
+// marker 两条来源（可靠性递减）：
+//   ① derive_marker_from_page —— 探索成功时从**实际末页文字**原样摘取（首选，finalize 写头）；
+//   ② derive_marker —— 凭 goal+步骤"猜"（仅手写/老脚本无头 marker 时兜底）。
 
-use std::path::Path;
-use std::sync::Arc;
-
-use crate::{AiConfig, ControlAction, ExecutionResult, LlmReply, LlmSession, Params, Result, RunEvent, ScriptParser, ScriptRunner, TksCommand, TksParam};
+use crate::{AiConfig, ControlAction, LlmReply, LlmSession, ScriptParser, TksCommand, TksParam};
 
 use super::super::execution::device::exec;
 use super::super::perception::Perceived;
 use super::super::transcript::Transcript;
 use super::super::prompt::{render, PromptSet};
-use super::super::ui::{Frontend, StepState, UiEvent};
-use super::fmt::{brief, friendly, parse_desc_json};
-
-// 稳定性通过次数 / 修复(活体重探)上限均来自 config [harness]（params.harness），不再写死。
+use super::fmt::{friendly, parse_desc_json};
 
 
 
@@ -105,42 +92,6 @@ async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Tr
     tx.log("goal_marker", serde_json::json!({ "content": reply.clone() }));
     let obj = parse_desc_json(&reply)?;
     Some(obj["goal_marker"].as_str().unwrap_or("").trim().to_string())
-}
-
-/// 回放一遍：verbose=true 时逐步经 ui.emit(Step) 流式上报（不再裸 eprintln 撕裂 TUI）。
-pub(super) async fn do_replay(params: &Arc<Params>, script_path: &Path, verbose: bool, ui: &dyn Frontend) -> Result<ExecutionResult> {
-    let mut last_preview = String::new();
-    let mut sink = |e: &RunEvent| {
-        if !verbose {
-            return;
-        }
-        match e {
-            // 先显示「即将执行的指令」再操作设备，执行后接上 ✓/✗ + 耗时（与 tke run 对齐）
-            RunEvent::StepStart { index, command, .. } => {
-                last_preview = friendly(command);
-                ui.emit(UiEvent::Step {
-                    step: index + 1,
-                    state: StepState::Running,
-                    preview: last_preview.clone(),
-                    line: None,
-                    duration_ms: None,
-                    error: None,
-                });
-            }
-            RunEvent::StepEnd { index, success, error, duration_ms, .. } => {
-                ui.emit(UiEvent::Step {
-                    step: index + 1,
-                    state: if *success { StepState::Ok } else { StepState::Fail },
-                    preview: last_preview.clone(),
-                    line: None,
-                    duration_ms: Some(*duration_ms),
-                    error: if *success { None } else { error.as_ref().map(|e| brief(e, 120)) },
-                });
-            }
-            _ => {}
-        }
-    };
-    ScriptRunner::new(params.clone()).run(script_path, None, &mut sink).await
 }
 
 /// 去掉结尾连续的"关闭"步
