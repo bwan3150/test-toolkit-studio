@@ -13,11 +13,19 @@ use std::time::Instant;
 /// 脚本运行器（持有参数表，device/element 查表取得）
 pub struct ScriptRunner {
     params: Arc<Params>,
+    /// 定位自愈钩子（None=关闭；replay/repair 装配时注入）
+    healer: Option<Arc<dyn super::tks::ElementHealer>>,
 }
 
 impl ScriptRunner {
     pub fn new(params: Arc<Params>) -> Self {
-        Self { params }
+        Self { params, healer: None }
+    }
+
+    /// 注入定位自愈钩子（builder 式）
+    pub fn with_healer(mut self, healer: Arc<dyn super::tks::ElementHealer>) -> Self {
+        self.healer = Some(healer);
+        self
     }
 
     /// 执行脚本文件
@@ -117,6 +125,9 @@ impl ScriptRunner {
             element.as_deref(),
             workarea.clone(),
         )?;
+        if let Some(h) = self.healer.clone() {
+            interpreter.set_healer(h);
+        }
 
         let start_time = chrono::Local::now().to_rfc3339();
 

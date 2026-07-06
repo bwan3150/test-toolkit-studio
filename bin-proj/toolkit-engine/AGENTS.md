@@ -28,7 +28,7 @@
 | `prompt/`     | 提示词体系：`builtin/*.md` 编译期内嵌（agents/tools/messages 三类），`--prompts-dir` 可外部覆盖；解析为空有守卫（防"漏登记→静默空串"）。 |
 | `perception/` | 页面采集 + 元素解析 + 元素库对照 + 渲染给 AI 的元素列表。 |
 | `execution/`  | AgentAction → 设备动作 / 元素落库 / .tks 行生成。 |
-| `runner/`     | agent 编排：`orchestrator`(主 AI REPL) / `testrun`(explore 全流程) / `flow`(驱动循环) / `asserter`(踩实) / `supervisor`(finish 把关) / `doctor/`(诊断修复) / `reflect`(重探指导+优化官) / `tksops`(replay/repair/optimize 路径化工具) / `verify`(marker 推导+回放基建) / `fmt`+`ctx`(共用件)。 |
+| `runner/`     | agent 编排：`orchestrator`(主 AI REPL) / `testrun`(explore 全流程) / `flow`(驱动循环) / `asserter`(踩实) / `supervisor`(finish 把关) / `diagnose`(诊断回放·测量仪器) / `healer`(定位自愈) / `reflect`(重探指导+优化官) / `tksops`(replay/repair/optimize 路径化工具) / `verify`(marker 推导+回放基建) / `fmt`+`ctx`(共用件)。 |
 | `ui/`         | 引擎/前端解耦：`UiEvent`/`UiCommand` + Plain(行式)/Json(NDJSON 给 app)/Tui(ratatui) 三前端；提问/授权经 `supports_prompts()`。 |
 | `transcript/` | conversation.jsonl 全景记录（按 agent 作用域分栏）。 |
 
@@ -36,8 +36,15 @@
 
 - **orchestrator** 是唯一与用户对话的主 AI（REPL），经颗粒化工具调度一切：
   `explore`（→ explorer 驱动循环，内含 asserter 每次导航踩实、supervisor finish 把关）、
-  `replay_tks`/`repair_tks`(doctor)/`optimize_tks`(optimizer)、文件增删改查（写/改/删需授权）。
-- 多轮带工具 = explorer / doctor / optimizer / orchestrator；单次 JSON 无工具 = asserter / supervisor / reflector / verify(marker)。
+  `replay_tks`/`repair_tks`(断点续探)/`optimize_tks`(optimizer)、文件增删改查（写/改/删需授权）。
+- 多轮带工具 = explorer / optimizer / orchestrator；单次 JSON 无工具 = asserter / supervisor / reflector / verify(marker) / healer(定位自愈挑选)。
+- **接地规则（几十版医生换来的教训）**：多轮 agent 必须**接地在它正在改变的状态上**（explorer 每轮看真实页面），
+  不接地的任务一律拆成单次调用。旧「医生」（多轮编辑 .tks 文本、看过期 trace）因此被整体删除——
+  修复 = ①定位级自愈（`runner/healer` 单次挑选，Healenium 式，解析失败时基于当前实时页面修正元素库）
+  ②断点续探（`tksops::repair_tks`：诊断回放停在失败现场，explorer 从当前实时页面接管走完目标，
+  脚本=成功前缀+新尾巴；失败不写回）。
+- **标志契约**：`# 目标标志:`（终点，探索成功时从实际末页摘取）+ `# 起始标志:`（无启动步脚本的起始前提，
+  回放前校验、不匹配快速失败）——判据一律来自真实页面，禁止 LLM 发明。
 - 目标标志(marker)首次推导后持久化在 .tks 头注释 `# 目标标志: `，replay/repair/optimize 共用同一判定基线。
 
 ## 元素包（.tklib）——没有共享元素库
@@ -56,7 +63,7 @@ cache、element_path 指过去，recognizer/元素工具/回放器对 tklib 无�
 - **感知/定位问题**（同名元素点错、元素找不到）修 `perception`/`engines`/`drivers`，**不许拿提示词打补丁**——历史教训：web 同名元素靠提示词怎么调都没用，根因是感知层缺唯一 DOM 路径。
 - **平台怪癖**（键盘、弹窗、DPR 换算）修 `drivers/`。
 - **agent 行为**（何时断言、何时 finish、探索策略）改 `prompt/builtin/*.md`；把关/护栏逻辑改 `runner/`。
-- **错误分类**：可重试（元素没找到、断言失败、LLM 限流/5xx/超时）vs 终止（设备连接断、配置错、用户取消）。LLM 层自动重试在 `provider/session.rs`；医生只重试"测试层面"失败。
+- **错误分类**：可重试（元素没找到、断言失败、LLM 限流/5xx/超时）vs 终止（设备连接断、配置错、用户取消）。LLM 层自动重试在 `provider/session.rs`；修复流程只重试"测试层面"失败。
 
 ## 测试（能在低层表达就放低层）
 
@@ -77,7 +84,7 @@ cargo test --no-default-features --lib     # 单测 + 无设备集成（秒级�
 
 - **不用 `cargo build` 产二进制**——用 `./build-mac.sh`（bin 落点/签名由它管）；`cargo check`/`cargo test` 随便用。
 - **提示词 / AI 可见的 schema 禁止写死具体测试内容**（产品名/型号/网站）——那是泄题，tke 是通用 agent。
-- **断言步（踩实）是承重点**：优化官/医生不许当冗余删；**启动步**不许删除或被 reexplore 覆盖成点击（护栏在代码里，改护栏前先懂为什么）。
+- **断言步（踩实）是承重点**：优化官不许当冗余删；**启动步**不许删（护栏在代码里，改护栏前先懂为什么）。
 - **teardown（关浏览器/退 App）是收尾不是测试内容**：终点校验要在收尾前完成，收尾会销毁校验证据。
 - **不许静默吞错**：质量闸门（supervisor/asserter/marker/desc 生成）失败必须 emit Warn——供应商抖动时把关体系"悄悄下线"极难排查。
 - **文件落点**：运行中间产物走 `params.cache_root()`；AI 交付文件必须经 `resolve_in_workspace`（工作区沙箱，拒绝绝对路径/`..`）。

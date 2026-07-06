@@ -17,6 +17,8 @@ pub struct CommandExecutor<'a> {
     trace: &'a mut ActionTrace,
     /// 本次运行启动过的 Android 包名（flow 收尾关闭用）
     launched: &'a mut Vec<String>,
+    /// 定位自愈钩子（None=关闭）
+    healer: Option<std::sync::Arc<dyn super::super::ElementHealer>>,
 }
 
 impl<'a> CommandExecutor<'a> {
@@ -26,6 +28,7 @@ impl<'a> CommandExecutor<'a> {
         recognizer: &'a Recognizer,
         trace: &'a mut ActionTrace,
         launched: &'a mut Vec<String>,
+        healer: Option<std::sync::Arc<dyn super::super::ElementHealer>>,
     ) -> Self {
         Self {
             workarea,
@@ -33,6 +36,7 @@ impl<'a> CommandExecutor<'a> {
             recognizer,
             trace,
             launched,
+            healer,
         }
     }
 
@@ -403,6 +407,7 @@ impl<'a> CommandExecutor<'a> {
             self.controller,
             self.recognizer,
             self.trace,
+            self.healer.clone(),
         );
         resolver.resolve(param).await
     }

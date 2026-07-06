@@ -109,6 +109,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("verify", "goal_marker") => include_str!("builtin/messages/verify/goal_marker.md"),
         ("verify", "goal_marker_from_page") => include_str!("builtin/messages/verify/goal_marker_from_page.md"),
         ("verify", "start_marker_from_page") => include_str!("builtin/messages/verify/start_marker_from_page.md"),
+        ("verify", "heal_pick") => include_str!("builtin/messages/verify/heal_pick.md"),
         // —— reflector：探索反思官 ——
         ("reflector", "analyze_failure") => include_str!("builtin/messages/reflector/analyze_failure.md"),
         ("reflector", "analyze_success") => include_str!("builtin/messages/reflector/analyze_success.md"),

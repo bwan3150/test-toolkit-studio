@@ -152,6 +152,7 @@ pub(crate) async fn diagnose(
     lines: &[String],
     marker: &str,
     start_marker: &str,
+    healer: Option<std::sync::Arc<dyn crate::workflow::tks::ElementHealer>>,
     phase: &str,
     iter: usize,
     verbose: bool,
@@ -224,7 +225,11 @@ pub(crate) async fn diagnose(
             _ => {}
         }
     };
-    let result = ScriptRunner::new(params.clone()).run(&replay_path, Some(&log_root), &mut sink).await;
+        let mut runner = ScriptRunner::new(params.clone());
+    if let Some(h) = healer {
+        runner = runner.with_healer(h);
+    }
+    let result = runner.run(&replay_path, Some(&log_root), &mut sink).await;
     let result = match result {
         Ok(r) => r,
         Err(e) => {

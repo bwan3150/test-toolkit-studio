@@ -10,6 +10,16 @@ mod interpreter;
 pub use parser::{ScriptParser, script_to_source, step_to_source};
 pub use interpreter::{ScriptInterpreter, ActionTrace};
 
+/// 【定位自愈钩子】元素解析失败若干次后回调（Healenium 式 self-healing）：
+/// 实现方（agent 层）基于**当前工作区里最新的页面采集**（解析器每次重试都刚采过）
+/// 判断"页面上哪个元素其实就是它"（改版/文字微调/位置变化），返回该元素的实时坐标与
+/// 边界框——本步当场救活；实现方同时负责把修正**持久化到元素库文件**（供以后的回放）。
+/// None = 救不了（页面上确无对应物），解析器继续按原路径失败。
+#[async_trait::async_trait]
+pub trait ElementHealer: Send + Sync {
+    async fn heal(&self, element_name: &str, workarea: &crate::utils::Workarea) -> Option<(crate::Point, crate::Bounds)>;
+}
+
 use crate::{Result, TkeError, StepResult};
 use crate::utils::Workarea;
 use std::path::Path;

@@ -28,12 +28,17 @@ impl Workarea {
         Ok(Self { dir, is_temp: false })
     }
 
-    /// 运行临时区（run 工作流专用，结束后调用 cleanup 删除）
+    /// 运行临时区（run 工作流专用，结束后调用 cleanup 删除）。
+    /// 目录名带**进程内自增序号**：此前只有 秒级时间戳+pid，同一进程同一秒启动的多个回放
+    /// （并行测试/并行回放）会共享同一目录，截图/XML 互相覆盖——flaky 的经典来源。
     pub fn temp_for_run() -> Result<Self> {
+        static RUN_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = RUN_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir = std::env::temp_dir().join("tke").join(format!(
-            "run-{}-{}",
+            "run-{}-{}-{}",
             chrono::Local::now().format("%Y%m%d%H%M%S"),
-            std::process::id()
+            std::process::id(),
+            seq
         ));
         std::fs::create_dir_all(&dir).map_err(TkeError::IoError)?;
         Ok(Self { dir, is_temp: true })

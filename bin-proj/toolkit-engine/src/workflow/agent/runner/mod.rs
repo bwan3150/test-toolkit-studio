@@ -12,6 +12,7 @@ mod repair_tests;
 mod tklib_tests;
 pub mod flow;
 pub mod fmt;
+pub mod healer;
 pub mod interrupt;
 pub mod options;
 pub mod orchestrator;

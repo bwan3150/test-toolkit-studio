@@ -29,6 +29,7 @@ pub struct PromptSpec {
 const PRIMARY_ROLE: &str = "orchestrator";
 
 /// 解析后的提示词集合（运行时取用）
+#[derive(Clone)]
 pub struct PromptSet {
     /// CLI 注入文本 / 文件覆盖的「primary（编排官）系统提示词」原始模板，含 {device}/{platform} 占位；
     /// None = primary 也走 目录覆盖 > 内置默认（与其它角色同一套解析）。

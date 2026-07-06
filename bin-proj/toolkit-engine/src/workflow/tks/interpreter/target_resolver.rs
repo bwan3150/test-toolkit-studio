@@ -13,6 +13,7 @@ pub struct TargetResolver<'a> {
     controller: &'a mut Controller,
     recognizer: &'a Recognizer,
     trace: &'a mut ActionTrace,
+    healer: Option<std::sync::Arc<dyn super::super::ElementHealer>>,
 }
 
 impl<'a> TargetResolver<'a> {
@@ -21,12 +22,14 @@ impl<'a> TargetResolver<'a> {
         controller: &'a mut Controller,
         recognizer: &'a Recognizer,
         trace: &'a mut ActionTrace,
+        healer: Option<std::sync::Arc<dyn super::super::ElementHealer>>,
     ) -> Self {
         Self {
             workarea,
             controller,
             recognizer,
             trace,
+            healer,
         }
     }
 
@@ -63,6 +66,7 @@ impl<'a> TargetResolver<'a> {
         // 最多 ~6s（12 次 × 500ms），覆盖慢加载/切换动画
         const MAX_TRIES: usize = 12;
         let mut last_err = None;
+        let mut heal_tried = false;
         for attempt in 0..MAX_TRIES {
             // 中断检查点：Ctrl+C 后不再继续 ~6s 的重试，立即返回（否则按了得等这步重试/超时跑完）
             if crate::utils::interrupt::aborted() {
@@ -81,6 +85,20 @@ impl<'a> TargetResolver<'a> {
                 }
                 Err(e) => {
                     last_err = Some(e);
+                    // 定位自愈（Healenium 式）：重试几次仍找不到 → 让 healer 基于**刚采集的
+                    // 当前页面**判断"哪个元素其实就是它"（改版/文字微调）。命中=本步当场救活
+                    // （healer 同时把修正持久化进元素库，供以后回放）；救不了继续原重试路径。
+                    if !heal_tried && attempt >= 2 {
+                        heal_tried = true;
+                        if let Some(h) = self.healer.clone() {
+                            info!("元素 '{}' 连续定位失败，尝试自愈…", name);
+                            if let Some((point, bounds)) = h.heal(name, self.workarea).await {
+                                info!("自愈成功：'{}' → ({}, {})", name, point.x, point.y);
+                                self.trace.bounds = Some(bounds);
+                                return Ok(point);
+                            }
+                        }
+                    }
                     if attempt + 1 < MAX_TRIES {
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     }

@@ -260,7 +260,22 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let ctx = op_ctx!(env, opts, ui);
     // verbose=true：回放逐步可见——此前静默跑完全程，用户只看到"卡了很久"
     let start = read_start_marker(tks).unwrap_or_default();
-    let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, &start, "replay_tks", 0, true).await;
+    // 定位自愈默认开：元素定位失败时基于当前实时页面单次挑选修正（详见 runner::healer）
+    let healer = std::sync::Arc::new(super::healer::LlmElementHealer::new(
+        opts.ai.clone(),
+        env.prompts.clone(),
+        env.device.clone(),
+        env.elem_lib.clone(),
+    ));
+    let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, &start, Some(healer.clone()), "replay_tks", 0, true).await;
+    let healed = healer.healed_names();
+    if !healed.is_empty() {
+        ui.emit(UiEvent::Notice {
+            level: Level::Ok,
+            text: format!("🩹 定位自愈 {} 处（{}），元素包已更新", healed.len(), healed.join("、")),
+        });
+        env.repack(ui); // 自愈修正持久化进 .tklib——以后的回放直接命中
+    }
     let n = env.lines.len();
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)
@@ -294,10 +309,23 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         if super::interrupt::aborted() {
             return Ok("已中断（用户 Ctrl+C），修复未完成，脚本未改动。".into());
         }
-        // ① 诊断回放（逐步可见）：失败即停，设备停在失败现场
+        // ① 诊断回放（逐步可见，定位自愈默认开）：失败即停，设备停在失败现场
         ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（{} 步，重启净化中…）", lines.len()) });
+        let healer = std::sync::Arc::new(super::healer::LlmElementHealer::new(
+            opts.ai.clone(),
+            env.prompts.clone(),
+            env.device.clone(),
+            env.elem_lib.clone(),
+        ));
         let ctx = op_ctx!(env, opts, ui);
-        let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &lines, &marker, &start, "repair_diagnose", report.repairs, true).await;
+        let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &lines, &marker, &start, Some(healer.clone()), "repair_diagnose", report.repairs, true).await;
+        let healed = healer.healed_names();
+        if !healed.is_empty() {
+            ui.emit(UiEvent::Notice {
+                level: Level::Ok,
+                text: format!("🩹 定位自愈 {} 处（{}）", healed.len(), healed.join("、")),
+            });
+        }
         if diag.reached {
             report.reached = true;
             report.created = created.clone();

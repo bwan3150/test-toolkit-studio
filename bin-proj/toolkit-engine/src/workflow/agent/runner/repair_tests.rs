@@ -165,3 +165,76 @@ async fn replay_fails_fast_on_start_precondition_mismatch() {
 
     fake::remove(device);
 }
+
+/// 定位自愈（Healenium 式）：应用"改版"后按钮换了文字和位置 → 回放定位失败 →
+/// healer 基于当前实时页面单次挑选出"其实就是它"→ 当场救活本步 + 修正持久化进 tklib。
+#[tokio::test]
+async fn replay_heals_relocated_element_in_place() {
+    let device = "fake:heal";
+    let scope = "heal-test";
+    // 版本 A：旧按钮——先照生产路径产出脚本+元素包
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("旧按钮", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let ws = temp_dir("heal-ws");
+    let cache = temp_dir("heal-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("launch", serde_json::json!({ "target": "settings.app", "comment": "打开" })),
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "点旧按钮" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "到了" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::text("{}")]);
+
+    let opts = opts_for(device, scope, ws.clone(), cache);
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false).await.unwrap();
+    let tks = ws.join("open.tks");
+    let tklib = crate::utils::tklib::tklib_path(&tks);
+    let result = run.finalize(&opts, &ui, &tks, &tklib).await.unwrap();
+    assert!(result.success);
+    tksops::write_marker(&tks, "设置中心").unwrap();
+
+    // 版本 B："改版"：文字变了、位置挪了、**控件类型和页面结构也变了**——
+    // 结构通道(text/xpath)全失效，逼出自愈路径（轻微改版由 recognizer 结构容错自己扛，
+    // 那不触发 heal——上一版测试就是这样"意外通过"的）
+    fake::install(
+        device,
+        vec![
+            fake::page(&[
+                "  <node index=\"0\" text=\"顶部横幅\" class=\"android.widget.ImageView\" clickable=\"false\" bounds=\"[0,0][720,120]\"/>",
+                "  <node index=\"1\" text=\"新按钮\" class=\"android.widget.TextView\" clickable=\"true\" bounds=\"[100,300][300,360]\"/>",
+            ]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+    // healer 单次挑选：当前页元素 1（新按钮）就是它
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::text(r#"{"index": 1, "reason": "同一功能位，文字与控件类型微调"}"#)]);
+
+    let opts = opts_for(device, scope, ws.clone(), temp_dir("heal-cache2"));
+    let msg = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
+    assert!(msg.contains("回放通过"), "自愈后应到达目标：{}", msg);
+
+    // 点击落在了新位置（新按钮中心 200,330——不是旧的 200,230）
+    let taps: Vec<_> = fake::events(device).into_iter().filter(|e| e.starts_with("tap")).collect();
+    assert_eq!(taps.last().map(String::as_str), Some("tap 200,330"), "应点到新位置：{:?}", taps);
+
+    // 修正已持久化：重新解包 tklib，条目文字线索已更新为「新按钮」
+    let peek = temp_dir("heal-peek");
+    let lib_json = crate::utils::tklib::unpack(&tklib, &peek).unwrap();
+    let lib = std::fs::read_to_string(&lib_json).unwrap();
+    assert!(lib.contains("新按钮"), "自愈修正应持久化进元素包：\n{}", lib);
+
+    fake::remove(device);
+}

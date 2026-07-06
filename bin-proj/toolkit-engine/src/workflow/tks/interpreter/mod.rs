@@ -11,6 +11,9 @@ use tracing::debug;
 
 use command_executor::CommandExecutor;
 
+use super::ElementHealer;
+use std::sync::Arc;
+
 /// 单步执行轨迹 - 记录定位结果，供工作流标注截图/定位问题用
 #[derive(Debug, Default, Clone)]
 pub struct ActionTrace {
@@ -37,6 +40,8 @@ pub struct ScriptInterpreter {
     device_id: Option<String>,
     controller: Controller,
     recognizer: Recognizer,
+    /// 定位自愈钩子（None=关闭；replay/repair 装配时注入）
+    healer: Option<Arc<dyn ElementHealer>>,
     /// 最近一步的执行轨迹
     pub last_trace: ActionTrace,
     /// 本次运行中启动过的 Android 包名（flow 收尾统一关闭用）
@@ -61,9 +66,15 @@ impl ScriptInterpreter {
             device_id,
             controller,
             recognizer,
+            healer: None,
             last_trace: ActionTrace::default(),
             launched_packages: Vec::new(),
         })
+    }
+
+    /// 注入定位自愈钩子
+    pub fn set_healer(&mut self, healer: Arc<dyn ElementHealer>) {
+        self.healer = Some(healer);
     }
 
     /// 解释并执行单个步骤
@@ -78,6 +89,7 @@ impl ScriptInterpreter {
             &self.recognizer,
             &mut self.last_trace,
             &mut self.launched_packages,
+            self.healer.clone(),
         );
 
         match step.command {
