@@ -70,30 +70,31 @@ fn write_tks_lines(path: &Path, lines: &[String]) -> Result<()> {
 
 /// 目标标志(marker)在 .tks 头注释里的持久化前缀。
 const MARKER_PREFIX: &str = "# 目标标志: ";
+/// 起始标志（起始前提契约）的头注释前缀：无「启动」步的脚本隐含假设起点（已登录/某页面），
+/// 把它显式化——回放前校验当前页匹配，不匹配**快速失败并说清**，而不是闭着眼开跑越跑越乱。
+const START_PREFIX: &str = "# 起始标志: ";
 
-/// 从 .tks 头注释读已持久化的目标标志。
-pub(crate) fn read_marker(path: &Path) -> Option<String> {
+fn read_header_value(path: &Path, prefix: &str) -> Option<String> {
     let content = std::fs::read_to_string(path).ok()?;
     content
         .lines()
-        .find_map(|l| l.trim().strip_prefix(MARKER_PREFIX))
+        .find_map(|l| l.trim().strip_prefix(prefix))
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }
 
-/// 把目标标志写进 .tks 头注释（已有则更新，没有则插在 `步骤:` 之前）。
-pub(crate) fn write_marker(path: &Path, marker: &str) -> Result<()> {
+fn write_header_value(path: &Path, prefix: &str, value: &str) -> Result<()> {
     let content = std::fs::read_to_string(path).map_err(TkeError::IoError)?;
-    let line = format!("{}{}", MARKER_PREFIX, marker);
+    let line = format!("{}{}", prefix, value);
     let mut out: Vec<String> = Vec::new();
     let mut placed = false;
     for l in content.lines() {
-        if l.trim().starts_with(MARKER_PREFIX) {
+        if l.trim().starts_with(prefix) {
             if !placed {
                 out.push(line.clone());
                 placed = true;
             }
-            continue; // 旧 marker 行丢弃（含重复行）
+            continue; // 旧行丢弃（含重复行）
         }
         if !placed && l.trim() == "步骤:" {
             out.push(line.clone());
@@ -106,6 +107,27 @@ pub(crate) fn write_marker(path: &Path, marker: &str) -> Result<()> {
     }
     std::fs::write(path, out.join("\n") + "\n").map_err(TkeError::IoError)
 }
+
+/// 从 .tks 头注释读已持久化的目标标志。
+pub(crate) fn read_marker(path: &Path) -> Option<String> {
+    read_header_value(path, MARKER_PREFIX)
+}
+
+/// 把目标标志写进 .tks 头注释（已有则更新，没有则插在 `步骤:` 之前）。
+pub(crate) fn write_marker(path: &Path, marker: &str) -> Result<()> {
+    write_header_value(path, MARKER_PREFIX, marker)
+}
+
+/// 读起始标志（起始前提契约）。
+pub(crate) fn read_start_marker(path: &Path) -> Option<String> {
+    read_header_value(path, START_PREFIX)
+}
+
+/// 写起始标志。
+pub(crate) fn write_start_marker(path: &Path, marker: &str) -> Result<()> {
+    write_header_value(path, START_PREFIX, marker)
+}
+
 
 /// 目标标志一次推导 + 持久化：优先用 .tks 头里已存的 marker（同一脚本 replay/repair/optimize
 /// **共用同一判定基线**）；没有才推导一次并写回脚本头。此前三个工具各自独立推一次，同一脚本
@@ -237,7 +259,8 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 回放开始（{} 步）", env.lines.len()) });
     let ctx = op_ctx!(env, opts, ui);
     // verbose=true：回放逐步可见——此前静默跑完全程，用户只看到"卡了很久"
-    let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, "replay_tks", 0, true).await;
+    let start = read_start_marker(tks).unwrap_or_default();
+    let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, &start, "replay_tks", 0, true).await;
     let n = env.lines.len();
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)
@@ -263,6 +286,7 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let mut lines = env.lines.clone();
+    let start = read_start_marker(tks).unwrap_or_default();
     let max_resumes = env.params.harness.repairs; // 续探预算（config [harness].repairs）
     let mut created: Vec<String> = Vec::new();
 
@@ -273,7 +297,7 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         // ① 诊断回放（逐步可见）：失败即停，设备停在失败现场
         ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（{} 步，重启净化中…）", lines.len()) });
         let ctx = op_ctx!(env, opts, ui);
-        let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &lines, &marker, "repair_diagnose", report.repairs, true).await;
+        let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &lines, &marker, &start, "repair_diagnose", report.repairs, true).await;
         if diag.reached {
             report.reached = true;
             report.created = created.clone();
@@ -352,7 +376,8 @@ pub(crate) async fn optimize_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks:
     let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let ctx = op_ctx!(env, opts, ui);
-    let opt = super::reflect::optimize(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, goal, &marker, &env.lines, &mut report).await;
+    let start = read_start_marker(tks).unwrap_or_default();
+    let opt = super::reflect::optimize(&opts.ai, &env.prompts, &mut tx, &ctx, &env.params, goal, &marker, &start, &env.lines, &mut report).await;
     match opt {
         Some(lines) if lines != env.lines => {
             let n0 = env.lines.len();

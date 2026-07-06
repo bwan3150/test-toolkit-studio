@@ -151,6 +151,7 @@ pub(crate) async fn diagnose(
     case: &str,
     lines: &[String],
     marker: &str,
+    start_marker: &str,
     phase: &str,
     iter: usize,
     verbose: bool,
@@ -159,6 +160,27 @@ pub(crate) async fn diagnose(
     if check.is_empty() {
         tx.log(phase, serde_json::json!({ "iter": iter, "script": check, "reached": false, "note": "空脚本", "steps": [] }));
         return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note: "空脚本".into() };
+    }
+    // 起始前提校验：无「启动」步的脚本隐含假设起点（已登录/某页面）——有起始标志时先核对
+    // 当前页面，不匹配**快速失败并说清**，而不是闭着眼开跑越跑越乱（有启动步的脚本
+    // 由重启净化保证确定性，跳过此检查）。
+    let has_launch = check.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false);
+    if !start_marker.is_empty() && !has_launch {
+        let ok = match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
+            Ok(p) => page_contains(&p, start_marker),
+            Err(_) => false,
+        };
+        if !ok {
+            let note = format!(
+                "起始页不符：脚本期望从含「{}」的页面开始（起始前提），当前页面没有它——请先把设备导航到脚本的起始状态",
+                brief(start_marker, 40)
+            );
+            if verbose {
+                ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: format!("✗ {}", note) });
+            }
+            tx.log(phase, serde_json::json!({ "iter": iter, "reached": false, "note": note.clone(), "steps": [] }));
+            return Diagnosis { reached: false, steps: Vec::new(), fail_idx: Some(0), note };
+        }
     }
     // 回放版本写 cache 临时文件，**绝不写用户的 .tks**——此前直接覆盖 script_path，
     // 会把脚本头的 `# 目标标志:`、尾部关闭步、`# 注：` 全部抹掉（tklib 可移植性测试抓出的 bug）。

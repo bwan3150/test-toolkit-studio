@@ -135,3 +135,33 @@ async fn repair_failure_preserves_original_script() {
 
     fake::remove(device);
 }
+
+/// 起始前提契约：无「启动」步的脚本带 `# 起始标志:`，当前页面不匹配 → 回放**快速失败**
+/// 并说清原因，一步都不执行（此前会闭着眼开跑、越跑越乱）。
+#[tokio::test]
+async fn replay_fails_fast_on_start_precondition_mismatch() {
+    let device = "fake:start-mismatch";
+    // 当前页面是「错误页」——脚本期望从含「设备列表」的页面开始
+    fake::install(device, vec![fake::page(&[&fake::node("错误页", 10, 10, 110, 60)])]);
+
+    let ws = temp_dir("start-ws");
+    let cache = temp_dir("start-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    let tks = ws.join("case.tks");
+    std::fs::write(
+        &tks,
+        "# 用例: 删除第一个设备\n# 目标标志: 删除成功\n# 起始标志: 设备列表\n步骤:\n点击 [{某设备@1_2}]\n",
+    )
+    .unwrap();
+
+    let opts = opts_for(device, "start-mismatch", ws.clone(), cache);
+    let msg = tksops::replay_tks(&opts, &ui, &tks, "删除第一个设备").await.unwrap();
+    assert!(msg.contains("起始页不符"), "应快速失败并说清起始前提：{}", msg);
+    assert!(msg.contains("设备列表"), "应指出期望的起始标志：{}", msg);
+    // 一步都不该执行
+    assert!(fake::events(device).iter().all(|e| !e.starts_with("tap")), "不应执行任何点击：{:?}", fake::events(device));
+
+    fake::remove(device);
+}

@@ -160,6 +160,7 @@ pub(super) async fn optimize(
     params: &Arc<Params>,
     case: &str,
     marker: &str,
+    start_marker: &str,
     lines: &[String],
     report: &mut VerifyReport,
 ) -> Option<Vec<String>> {
@@ -167,7 +168,7 @@ pub(super) async fn optimize(
     let tx = &mut *scope;
 
     // 诊断当前脚本拿逐步 trace（调用前应已正确；不正确则不优化）
-    let diag = super::diagnose::diagnose(tx, ctx, params, case, lines, marker, "reflect_diagnose", 0, false).await;
+    let diag = super::diagnose::diagnose(tx, ctx, params, case, lines, marker, start_marker, "reflect_diagnose", 0, false).await;
     if !diag.reached {
         return None;
     }
@@ -316,7 +317,7 @@ pub(super) async fn optimize(
     }
 
     // 一次性验证：重建后还到不到目标？到不了就放弃本次优化（上层用医生确认的正确版本兜底）。
-    let verify = super::diagnose::diagnose(tx, ctx, params, case, &new, marker, "reflect_verify", 0, false).await;
+    let verify = super::diagnose::diagnose(tx, ctx, params, case, &new, marker, start_marker, "reflect_verify", 0, false).await;
     if !verify.reached {
         ctx.ui.emit(UiEvent::Notice { level: Level::Warn, text: "↩ 优化后跑不到目标，放弃本次优化（保留医生的正确版本）".into() });
         return None;

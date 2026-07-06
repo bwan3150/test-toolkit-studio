@@ -25,6 +25,7 @@ pub(super) async fn derive_marker_from_page(
     prompts: &PromptSet,
     tx: &mut Transcript,
     case: &str,
+    template: &str, // "goal_marker_from_page"(终点) 或 "start_marker_from_page"(起始前提)
     final_page_text: &str,
 ) -> (String, i64, i64) {
     if final_page_text.trim().is_empty() {
@@ -35,7 +36,7 @@ pub(super) async fn derive_marker_from_page(
         Ok(s) => s,
         Err(_) => return (String::new(), 0, 0),
     };
-    let ask = render(&prompts.message("verify", "goal_marker_from_page"), &[("case", case), ("page", final_page_text)]);
+    let ask = render(&prompts.message("verify", template), &[("case", case), ("page", final_page_text)]);
     tx.log("llm_message", serde_json::json!({ "content": ask.clone() }));
     sess.user(ask);
     let reply = match sess.next().await {
@@ -43,7 +44,7 @@ pub(super) async fn derive_marker_from_page(
         _ => return (String::new(), 0, 0),
     };
     let (pt, ct) = sess.total_usage();
-    tx.log("goal_marker_from_page", serde_json::json!({ "content": reply.clone() }));
+    tx.log(template, serde_json::json!({ "content": reply.clone() }));
     let marker = parse_desc_json(&reply)
         .and_then(|o| o["goal_marker"].as_str().map(|s| s.trim().to_string()))
         .unwrap_or_default();

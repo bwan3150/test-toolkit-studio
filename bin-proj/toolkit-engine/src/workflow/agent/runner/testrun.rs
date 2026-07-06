@@ -74,6 +74,8 @@ pub(crate) struct TestRun {
     final_text: String,
     /// 末页截图路径——供"截图/下载头像"交付。
     final_shot: PathBuf,
+    /// **起始页**可读文字（驱动开始前捕获）——finalize 摘取「起始标志」写脚本头（起始前提契约）。
+    start_text: String,
     /// 非设备动作（存文件等）的留痕——finalize 时作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过）。
     notes: Vec<String>,
 }
@@ -224,6 +226,7 @@ impl TestRun {
             task_mode: !full_test,
             final_text: String::new(),
             final_shot: PathBuf::new(),
+            start_text: String::new(),
             notes: Vec::new(),
         };
 
@@ -231,6 +234,18 @@ impl TestRun {
         if matches!(run.platform, Platform::Web) {
             let _ = super::super::execution::device::exec(&run.device, crate::ControlAction::Close { package: String::new() }).await;
         }
+
+        // 起始页快照：驱动开始前捕获一次（起始前提契约的素材——无「启动」步的脚本回放
+        // 必须从这个状态开始）。采集失败不致命（web 冷启动无会话），起始标志就不写。
+        run.start_text = match capture(&run.device, &run.workarea, &run.fetcher, opts.ocr.as_ref()).await {
+            Ok(p) => p
+                .elements
+                .iter()
+                .filter_map(|e| e.text.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Err(_) => String::new(),
+        };
 
         // 顶栏状态：进入初探
         ui.emit(UiEvent::Phase { phase: Phase::Explore, n: None });
@@ -390,11 +405,20 @@ impl TestRun {
         // 之后写进脚本头，replay/repair 直接复用真实基线，不再凭 goal 瞎猜（真机教训：猜出的
         // 标志指向中途页面，错误基线诱导医生把正确的收尾步骤当"多余流程"删掉）。
         let mut goal_marker = String::new();
+        let mut start_marker = String::new();
         if overall_success && !self.task_mode {
-            let (m, mpt, mct) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, &self.final_text).await;
+            let (m, mpt, mct) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "goal_marker_from_page", &self.final_text).await;
             self.sup_pt += mpt;
             self.sup_ct += mct;
             goal_marker = m;
+            // 起始前提：只有**无「启动」步**的脚本需要（有启动步的由重启净化保证起点确定）
+            let first_is_launch = self.result_lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false);
+            if !first_is_launch && !self.start_text.trim().is_empty() {
+                let (sm, spt2, sct2) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "start_marker_from_page", &self.start_text).await;
+                self.sup_pt += spt2;
+                self.sup_ct += sct2;
+                start_marker = sm;
+            }
         }
 
         // 总 token = 探索会话 + 被弃用重探旧会话 + 反思官 + 监督官 + 脚本医生独立会话
@@ -470,6 +494,12 @@ impl TestRun {
             ui.emit(UiEvent::Notice {
                 level: Level::Dim,
                 text: format!("目标标志（取自实际末页）已写入脚本头：{}", super::fmt::brief(&goal_marker, 40)),
+            });
+        }
+        if !start_marker.is_empty() && super::tksops::write_start_marker(&self.script_path, &start_marker).is_ok() {
+            ui.emit(UiEvent::Notice {
+                level: Level::Dim,
+                text: format!("起始标志（起始前提，取自开跑前页面）已写入脚本头：{}", super::fmt::brief(&start_marker, 40)),
             });
         }
         // 引用元素 → staging 库 → 打包 .tklib（两件套：foo.tks + foo.tklib，复制即跑；无共享库）
