@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ContentPart, ReasoningEffort, Tool, ToolResponse};
+use genai::chat::{ChatMessage, ChatOptions, ChatRequest, ContentPart, ReasoningEffort, Tool, ToolChoice, ToolResponse};
 use genai::Client;
 
 use crate::utils::AiConfig;
@@ -206,6 +206,14 @@ impl LlmSession {
             system.into(),
             tools,
         )
+    }
+
+    /// 强制本会话必须调用指定工具（供应商无关，genai 映射到各家原生 tool_choice）。
+    /// 单次结构化输出 agent（asserter/supervisor/advisor/healer/verify/reflector）用：
+    /// schema 由供应商侧校验，取代"提示词求 JSON + 文本手术解析"。Fake 后端忽略（脚本即答案）。
+    pub fn with_forced_tool(mut self, name: &str) -> Self {
+        self.options = self.options.clone().with_tool_choice(ToolChoice::tool(name));
+        self
     }
 
     /// 共同装配：system + 工具 → 初始 ChatRequest

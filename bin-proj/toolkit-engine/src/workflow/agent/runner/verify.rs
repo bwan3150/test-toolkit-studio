@@ -5,13 +5,13 @@
 //   ① derive_marker_from_page —— 探索成功时从**实际末页文字**原样摘取（首选，finalize 写头）；
 //   ② derive_marker —— 凭 goal+步骤"猜"（仅手写/老脚本无头 marker 时兜底）。
 
-use crate::{AiConfig, ControlAction, LlmReply, LlmSession, ScriptParser, TksCommand, TksParam};
+use crate::{AiConfig, ControlAction, ScriptParser, TksCommand, TksParam};
 
 use super::super::execution::device::exec;
 use super::super::perception::Perceived;
 use super::super::transcript::Transcript;
 use super::super::prompt::{render, PromptSet};
-use super::fmt::{friendly, parse_desc_json};
+use super::fmt::friendly;
 
 
 
@@ -32,20 +32,18 @@ pub(super) async fn derive_marker_from_page(
         return (String::new(), 0, 0);
     }
     let system = "你帮助从任务完成后的最终页面文字里，原样摘取一段独特文字，用作回放是否到位的判据。".to_string();
-    let mut sess = match LlmSession::new_for_role(ai, "verify", system, Vec::new()) {
-        Ok(s) => s,
-        Err(_) => return (String::new(), 0, 0),
-    };
     let ask = render(&prompts.message("verify", template), &[("case", case), ("page", final_page_text)]);
     tx.log("llm_message", serde_json::json!({ "content": ask.clone() }));
-    sess.user(ask);
-    let reply = match sess.next().await {
-        Ok(LlmReply::Text(t)) => t,
-        _ => return (String::new(), 0, 0),
-    };
-    let (pt, ct) = sess.total_usage();
-    tx.log(template, serde_json::json!({ "content": reply.clone() }));
-    let marker = parse_desc_json(&reply)
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "goal_marker": { "type": "string", "description": "从页面原文里原样摘取的独特文字；挑不出就空字符串" }
+        },
+        "required": ["goal_marker"]
+    });
+    let (obj, pt, ct) = super::oneshot::one_shot(ai, "verify", system, "提交摘取的目标标志", schema, ask).await;
+    tx.log(template, serde_json::json!({ "content": obj.clone() }));
+    let marker = obj
         .and_then(|o| o["goal_marker"].as_str().map(|s| s.trim().to_string()))
         .unwrap_or_default();
     // 机械校验：标志必须真实存在于末页文字（空格/大小写不敏感，与 page_contains 同规则）——
@@ -68,15 +66,6 @@ pub(super) async fn derive_marker(
     case: &str,
 ) -> String {
     let system = "你帮助从测试脚本步骤和目标描述里，找出一段“只有真正到达目标时最终页面才会出现”的独特文字，用作回放是否到位的判据。".to_string();
-    let mut sess = match LlmSession::new_for_role(ai, "verify", system, Vec::new()) {
-        Ok(s) => s,
-        Err(_) => return String::new(),
-    };
-    ask_goal_marker(prompts, &mut sess, tx, lines, case).await.unwrap_or_default()
-}
-
-/// 问会话要一段「目标标志」文本：只有真正到达目标时最终页面才会出现的独特文字。
-async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Transcript, lines: &[String], case: &str) -> Option<String> {
     let listing = lines
         .iter()
         .enumerate()
@@ -85,14 +74,16 @@ async fn ask_goal_marker(prompts: &PromptSet, sess: &mut LlmSession, tx: &mut Tr
         .join("\n");
     let ask = render(&prompts.message("verify", "goal_marker"), &[("listing", &listing), ("case", case)]);
     tx.log("llm_message", serde_json::json!({ "content": ask.clone() }));
-    sess.user(ask);
-    let reply = match sess.next().await {
-        Ok(LlmReply::Text(t)) => t,
-        _ => return None,
-    };
-    tx.log("goal_marker", serde_json::json!({ "content": reply.clone() }));
-    let obj = parse_desc_json(&reply)?;
-    Some(obj["goal_marker"].as_str().unwrap_or("").trim().to_string())
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "goal_marker": { "type": "string", "description": "从页面原文里原样摘取的独特文字；挑不出就空字符串" }
+        },
+        "required": ["goal_marker"]
+    });
+    let (obj, _pt, _ct) = super::oneshot::one_shot(ai, "verify", system, "提交推导的目标标志", schema, ask).await;
+    tx.log("goal_marker", serde_json::json!({ "content": obj.clone() }));
+    obj.and_then(|o| o["goal_marker"].as_str().map(|s| s.trim().to_string())).unwrap_or_default()
 }
 
 /// 去掉结尾连续的"关闭"步

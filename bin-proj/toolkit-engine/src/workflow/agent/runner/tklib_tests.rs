@@ -79,7 +79,7 @@ async fn tks_and_tklib_are_portable_across_directories() {
             FakeTurn::text("{}"), // desc 生成轮
         ],
     );
-    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::text("{}")]); // 语义命名：全保留特征名
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]); // 语义命名：全保留特征名
 
     let opts_a = opts_for(device, scope, machine_a.clone(), cache.clone());
     let run = TestRun::explore(&opts_a, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask).await.unwrap();
@@ -108,7 +108,7 @@ async fn tks_and_tklib_are_portable_across_directories() {
     std::fs::copy(&tklib_a, tklib::tklib_path(&tks_b)).unwrap();
 
     // —— 机器 B：回放。marker 由 verify 角色一次性会话推导（随后持久化进 .tks 头）——
-    enqueue_fake_role_session(scope, "verify", vec![FakeTurn::text(r#"{"goal_marker": "设置中心"}"#)]);
+    enqueue_fake_role_session(scope, "verify", vec![FakeTurn::tool("report", serde_json::json!({ "goal_marker": "设置中心" }))]);
     let opts_b = opts_for(device, scope, machine_b.clone(), cache.clone());
     let msg = tksops::replay_tks(&opts_b, &ui, &tks_b, "打开设置中心").await.unwrap();
     assert!(msg.contains("回放通过"), "两件套拷走后应能直接回放到达目标，实际：{}", msg);

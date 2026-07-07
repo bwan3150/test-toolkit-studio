@@ -3,7 +3,7 @@
 // 系统据此自动插入一条断言把这步踩实——把"断言"从主 agent 手里拿走，避免主 agent 漏断言。
 // 独立会话(无工具)，按作用域归属 "asserter"；token 单独计、并入总量。
 
-use crate::{AiConfig, LlmReply, LlmSession, Platform, StepResult};
+use crate::{AiConfig, Platform, StepResult};
 
 use super::super::execution;
 use super::super::perception::Perceived;
@@ -12,7 +12,7 @@ use super::super::tools::AgentAction;
 use super::super::transcript::Transcript;
 use super::super::ui::{Level, StepState, SubAgent, Tokens, UiEvent};
 use super::ctx::DriveCtx;
-use super::fmt::{friendly, parse_desc_json, preview_action};
+use super::fmt::{friendly, preview_action};
 use super::fmt::brief;
 
 /// 探索循环中被踩实写入的脚本状态（auto_checkpoint 借用 drive 的可变局部）
@@ -144,17 +144,12 @@ pub(super) async fn pick_checkpoint(
     new_count: usize,
     new_listing: &str,
 ) -> Pick {
-    let none = |reason: String| Pick { index: None, reason, pt: 0, ct: 0 };
     let platform = Platform::from_device(Some(device));
     let mut scope = tx.scoped("asserter");
     let tx = &mut *scope;
 
     let system = prompts.role_system("asserter", device, platform.name());
-    let mut sess = match LlmSession::new_for_role(ai, "asserter", system.clone(), Vec::new()) {
-        Ok(s) => s,
-        Err(e) => return none(format!("断言官会话创建失败：{}", e)),
-    };
-    tx.log("asserter_session", serde_json::json!({ "system_prompt": system }));
+    tx.log("asserter_session", serde_json::json!({ "system_prompt": system.clone() }));
 
     let prompt = render(
         &prompts.message("asserter", "pick"),
@@ -167,19 +162,20 @@ pub(super) async fn pick_checkpoint(
         ],
     );
     tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
-    sess.user(prompt);
-
-    let reply = match sess.next().await {
-        Ok(LlmReply::Text(t)) => t,
-        _ => return none("断言官无文本回复".into()),
+    // 强制工具调用（schema 供应商侧校验），取代文字 JSON 手术
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "index": { "type": ["integer", "null"], "description": "选中的元素序号；没有合适的独特标志就 null" },
+            "reason": { "type": "string", "description": "一句话依据" }
+        },
+        "required": ["reason"]
+    });
+    let (obj, pt, ct) = super::oneshot::one_shot(ai, "asserter", system, "提交断言判断结果", schema, prompt).await;
+    let Some(obj) = obj else {
+        return Pick { index: None, reason: "断言官未提交结构化结果".into(), pt, ct };
     };
-    let (pt, ct) = sess.total_usage();
-    tx.log("asserter_pick", serde_json::json!({ "content": reply.clone() }));
-
-    let obj = match parse_desc_json(&reply) {
-        Some(o) => o,
-        None => return Pick { index: None, reason: "断言官回复非 JSON".into(), pt, ct },
-    };
+    tx.log("asserter_pick", serde_json::json!({ "content": obj.clone() }));
     let index = obj["index"].as_u64().map(|n| n as usize);
     let reason = obj["reason"].as_str().unwrap_or("").trim().to_string();
     Pick { index, reason, pt, ct }

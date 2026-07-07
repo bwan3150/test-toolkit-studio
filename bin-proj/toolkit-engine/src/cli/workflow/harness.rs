@@ -250,7 +250,7 @@ struct SetupResult {
 
 /// 交互式准备阶段：选设备/平台 + **显示当前配置**（模型/供应商/推理，来自 CLI/config）。
 /// 用户中途 Ctrl+C / 放弃返回 None。
-async fn interactive_setup(ui: &dyn tke::Frontend, ai: &AiConfig) -> Option<SetupResult> {
+async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<SetupResult> {
     // —— 设备/平台 ——
     // 列 Android 设备（仅 Android 有列举能力；iOS 手填、Web 直接 Chrome）
     let devices: Vec<String> = match tke::drivers::AdbDriver::new(None) {

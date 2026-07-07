@@ -13,7 +13,7 @@ use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
 use super::super::ui::{Frontend, Level, SubAgent, Tokens, UiEvent};
 use super::ctx::{DriveCtx, DriveOutcome};
-use super::fmt::{brief, friendly, is_assert_line, parse_desc_json};
+use super::fmt::{brief, friendly, is_assert_line};
 use super::options::VerifyReport;
 
 /// 反思产物
@@ -365,31 +365,26 @@ pub(super) async fn finalize_names(
     let keep = || (lines.to_vec(), feat_names.to_vec());
     let prompt = render(&prompts.message("reflector", "finalize"), &[("elements", &info)]);
     tx.log("llm_message", serde_json::json!({ "content": prompt.clone() }));
-    let mut sess = match LlmSession::new_for_role(ai, "reflector", prompts.role_system("reflector", "", ""), Vec::new()) {
-        Ok(s) => s,
-        Err(e) => {
-            name_warn(&brief(&e.to_string(), 60));
-            return keep();
-        }
-    };
-    sess.user(prompt);
-    let reply = match sess.next().await {
-        Ok(LlmReply::Text(t)) => t,
-        Ok(_) => {
-            name_warn("模型没给文本回复");
-            return keep();
-        }
-        Err(e) => {
-            name_warn(&brief(&e.to_string(), 60));
-            return keep();
-        }
-    };
-    let (pt, ct) = sess.total_usage();
-    tx.log("reflector_finalize", serde_json::json!({ "content": reply.clone(), "prompt_tokens": pt, "completion_tokens": ct }));
-    let obj = match parse_desc_json(&reply) {
+    // 强制工具调用（schema 供应商侧校验，键=临时特征名、值=语义名）
+    let schema = serde_json::json!({
+        "type": "object",
+        "additionalProperties": { "type": "string" },
+        "description": "临时特征名 → 语义名 的映射；每个临时名给一个语义名"
+    });
+    let (obj, pt, ct) = super::oneshot::one_shot(
+        ai,
+        "reflector",
+        prompts.role_system("reflector", "", ""),
+        "提交元素语义命名映射",
+        schema,
+        prompt,
+    )
+    .await;
+    tx.log("reflector_finalize", serde_json::json!({ "content": obj.clone(), "prompt_tokens": pt, "completion_tokens": ct }));
+    let obj = match obj {
         Some(o) => o,
         None => {
-            name_warn("回复不是 JSON");
+            name_warn("未提交结构化命名结果");
             return keep();
         }
     };

@@ -15,6 +15,7 @@ pub mod flow;
 pub mod fmt;
 pub mod healer;
 pub mod interrupt;
+pub mod oneshot;
 pub mod options;
 pub mod orchestrator;
 pub mod reflect;

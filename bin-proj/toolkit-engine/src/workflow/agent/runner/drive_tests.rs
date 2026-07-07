@@ -191,20 +191,20 @@ async fn full_test_asserter_inserts_and_supervisor_gates() {
     // 踩实官：两次导航各挑一个标志元素（返回当前页真实序号）
     crate::workflow::agent::provider::enqueue_fake_role_session(
         scope, "asserter",
-        vec![FakeTurn::text(r#"{"index": 0, "reason": "设置中心是该页专属标志"}"#)],
+        vec![FakeTurn::tool("report", serde_json::json!({ "index": 0, "reason": "设置中心是该页专属标志" }))],
     );
     crate::workflow::agent::provider::enqueue_fake_role_session(
         scope, "asserter",
-        vec![FakeTurn::text(r#"{"index": 0, "reason": "详情页是该页专属标志"}"#)],
+        vec![FakeTurn::tool("report", serde_json::json!({ "index": 0, "reason": "详情页是该页专属标志" }))],
     );
     // 监督官：第一次打回、第二次放行
     crate::workflow::agent::provider::enqueue_fake_role_session(
         scope, "supervisor",
-        vec![FakeTurn::text(r#"{"approved": false, "reason": "还没打开详情，继续"}"#)],
+        vec![FakeTurn::tool("report", serde_json::json!({ "approved": false, "reason": "还没打开详情，继续" }))],
     );
     crate::workflow::agent::provider::enqueue_fake_role_session(
         scope, "supervisor",
-        vec![FakeTurn::text(r#"{"approved": true, "reason": "已到详情页"}"#)],
+        vec![FakeTurn::tool("report", serde_json::json!({ "approved": true, "reason": "已到详情页" }))],
     );
 
     let ctx = DriveCtx {
@@ -273,7 +273,7 @@ async fn supervisor_reject_limit_fails_the_run() {
     for _ in 0..3 {
         crate::workflow::agent::provider::enqueue_fake_role_session(
             scope, "supervisor",
-            vec![FakeTurn::text(r#"{"approved": false, "reason": "什么都没做"}"#)],
+            vec![FakeTurn::tool("report", serde_json::json!({ "approved": false, "reason": "什么都没做" }))],
         );
     }
 
@@ -345,7 +345,7 @@ async fn ask_user_auto_mode_advisor_answers() {
     crate::workflow::agent::provider::enqueue_fake_role_session(
         "advisor-auto",
         "advisor",
-        vec![FakeTurn::text(r#"{"answer": "点「设置入口」——目标是设置中心，它是唯一相关入口"}"#)],
+        vec![FakeTurn::tool("report", serde_json::json!({ "answer": "点「设置入口」——目标是设置中心，它是唯一相关入口" }))],
     );
 
     let ctx = DriveCtx {

@@ -84,8 +84,8 @@ async fn repair_resumes_from_failure_point() {
             FakeTurn::text("{}"),
         ],
     );
-    enqueue_fake_role_session(scope, "asserter", vec![FakeTurn::text(r#"{"index": 0, "reason": "设置中心是该页专属标志"}"#)]);
-    enqueue_fake_role_session(scope, "supervisor", vec![FakeTurn::text(r#"{"approved": true, "reason": "已到设置中心"}"#)]);
+    enqueue_fake_role_session(scope, "asserter", vec![FakeTurn::tool("report", serde_json::json!({ "index": 0, "reason": "设置中心是该页专属标志" }))]);
+    enqueue_fake_role_session(scope, "supervisor", vec![FakeTurn::tool("report", serde_json::json!({ "approved": true, "reason": "已到设置中心" }))]);
 
     let opts = opts_for(device, scope, ws.clone(), cache);
     let msg = tksops::repair_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
@@ -196,7 +196,7 @@ async fn replay_heals_relocated_element_in_place() {
             FakeTurn::text("{}"),
         ],
     );
-    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::text("{}")]);
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]);
 
     let opts = opts_for(device, scope, ws.clone(), cache);
     let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask).await.unwrap();
@@ -220,7 +220,7 @@ async fn replay_heals_relocated_element_in_place() {
         ],
     );
     // healer 单次挑选：当前页元素 1（新按钮）就是它
-    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::text(r#"{"index": 1, "reason": "同一功能位，文字与控件类型微调"}"#)]);
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::tool("report", serde_json::json!({ "index": 1, "reason": "同一功能位，文字与控件类型微调" }))]);
 
     let opts = opts_for(device, scope, ws.clone(), temp_dir("heal-cache2"));
     let msg = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();

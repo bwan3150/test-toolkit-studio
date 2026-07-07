@@ -10,10 +10,10 @@ use std::sync::Mutex;
 use crate::tools::element::{add_element_target, OcrChannel};
 use crate::utils::Workarea;
 use crate::workflow::tks::ElementHealer;
-use crate::{AiConfig, Bounds, Fetcher, LlmReply, LlmSession, Point, UIElement};
+use crate::{AiConfig, Bounds, Fetcher, Point, UIElement};
 
 use super::super::prompt::{render, PromptSet};
-use super::fmt::{brief, parse_desc_json};
+use super::fmt::brief;
 
 pub(crate) struct LlmElementHealer {
     ai: AiConfig,
@@ -81,19 +81,22 @@ impl ElementHealer for LlmElementHealer {
             page.push_str(&format!("\n（其余 {} 个略）", elements.len() - MAX_LIST));
         }
 
-        // 3) 单次挑选（稳定的 agent 形状：输入齐全、一次判断、没把握就 null）
+        // 3) 单次挑选（强制工具调用，schema 供应商侧校验；没把握就 null）
         let system = "你帮助判断：回放脚本找不到的元素，在当前页面上哪个其实就是它（应用改版/文字微调）。只在确有把握时选。".to_string();
-        let mut sess = LlmSession::new_for_role(&self.ai, "healer", system, Vec::new()).ok()?;
         let ask = render(
             &self.prompts.message("verify", "heal_pick"),
             &[("name", element_name), ("desc", desc), ("clue", clue), ("page", &page)],
         );
-        sess.user(ask);
-        let reply = match sess.next().await {
-            Ok(LlmReply::Text(t)) => t,
-            _ => return None,
-        };
-        let idx = parse_desc_json(&reply)?.get("index")?.as_u64()? as usize;
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "index": { "type": ["integer", "null"], "description": "当前页面上就是它的元素序号；页面上没有对应物就 null（宁可不修也别乱指）" },
+                "reason": { "type": "string", "description": "一句话依据" }
+            },
+            "required": ["reason"]
+        });
+        let (obj, _pt, _ct) = super::oneshot::one_shot(&self.ai, "healer", system, "提交自愈挑选结果", schema, ask).await;
+        let idx = obj?.get("index")?.as_u64()? as usize;
         let el = elements.get(idx)?;
 
         // 4) 持久化修正（force=true 覆盖旧通道）——回包后以后的回放直接命中，不再走自愈

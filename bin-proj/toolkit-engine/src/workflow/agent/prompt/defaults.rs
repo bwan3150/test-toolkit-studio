@@ -101,7 +101,6 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("explorer", "screenshot_provided") => include_str!("builtin/messages/explorer/screenshot_provided.md"),
         ("explorer", "screenshot_failed") => include_str!("builtin/messages/explorer/screenshot_failed.md"),
         ("explorer", "desc_pass") => include_str!("builtin/messages/explorer/desc_pass.md"),
-        ("explorer", "finish_check") => include_str!("builtin/messages/explorer/finish_check.md"),
         ("explorer", "finish_recheck_fail") => include_str!("builtin/messages/explorer/finish_recheck_fail.md"),
         // —— supervisor：探索监督官（finish 把关）——
         ("supervisor", "review") => include_str!("builtin/messages/supervisor/review.md"),
@@ -121,7 +120,6 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         // —— reflector：探索反思官 ——
         ("reflector", "analyze_failure") => include_str!("builtin/messages/reflector/analyze_failure.md"),
         ("reflector", "analyze_success") => include_str!("builtin/messages/reflector/analyze_success.md"),
-        ("reflector", "optimize") => include_str!("builtin/messages/reflector/optimize.md"),
         ("reflector", "finalize") => include_str!("builtin/messages/reflector/finalize.md"),
         ("optimizer", "intro") => include_str!("builtin/messages/optimizer/intro.md"),
         ("optimizer", "nudge") => include_str!("builtin/messages/optimizer/nudge.md"),

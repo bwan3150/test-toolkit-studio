@@ -4,11 +4,10 @@
 // 这样 explorer 的提问不再是"直通但没人加工"：主 AI 侧的全局视角先过一道,
 // 用户要么完全不被打扰,要么看到的是已经带候选项的好问题。
 
-use crate::{AiConfig, LlmReply, LlmSession};
+use crate::AiConfig;
 
 use super::super::prompt::{render, PromptSet};
 use super::super::transcript::Transcript;
-use super::fmt::parse_desc_json;
 
 /// 参谋答复：Auto 模式取 answer；Ask 模式取 options（空=退化为自由输入）。
 pub(super) struct AdvisorReply {
@@ -34,10 +33,6 @@ pub(super) async fn consult(
 ) -> AdvisorReply {
     let empty = |pt, ct| AdvisorReply { answer: String::new(), options: Vec::new(), pt, ct };
     let system = prompts.role_system("advisor", "", "");
-    let mut sess = match LlmSession::new_for_role(ai, "advisor", system, Vec::new()) {
-        Ok(s) => s,
-        Err(_) => return empty(0, 0),
-    };
     let steps_text = if steps.is_empty() {
         "（还没有执行任何步骤）".to_string()
     } else {
@@ -62,14 +57,23 @@ pub(super) async fn consult(
         ],
     );
     tx.log("advisor_consult", serde_json::json!({ "question": question, "need_answer": need_answer }));
-    sess.user(ask);
-    let reply = match sess.next().await {
-        Ok(LlmReply::Text(t)) => t,
-        _ => return empty(0, 0),
+    // 强制工具调用（schema 按模式二选一，供应商侧校验）
+    let schema = if need_answer {
+        serde_json::json!({
+            "type": "object",
+            "properties": { "answer": { "type": "string", "description": "给探索 agent 的行动指示，果断具体" } },
+            "required": ["answer"]
+        })
+    } else {
+        serde_json::json!({
+            "type": "object",
+            "properties": { "options": { "type": "array", "items": { "type": "string" }, "description": "2~4 个具体、互斥、可直接选用的候选答案；出不了像样选项就空数组" } },
+            "required": ["options"]
+        })
     };
-    let (pt, ct) = sess.total_usage();
-    tx.log("advisor_reply", serde_json::json!({ "content": reply.clone() }));
-    let Some(obj) = parse_desc_json(&reply) else { return empty(pt, ct) };
+    let (obj, pt, ct) = super::oneshot::one_shot(ai, "advisor", system, "提交参谋意见", schema, ask).await;
+    tx.log("advisor_reply", serde_json::json!({ "content": obj.clone() }));
+    let Some(obj) = obj else { return empty(pt, ct) };
     AdvisorReply {
         answer: obj["answer"].as_str().unwrap_or("").trim().to_string(),
         options: obj["options"]
