@@ -511,6 +511,23 @@ impl TestRun {
             (self.result_lines.clone(), feat_names.clone())
         };
         self.result_lines = renamed;
+        // 页面断言步(规范化的起始/终点校验,取代头注释 marker 的散装机制):
+        // 无「启动」步 → 首插起始页断言(回放开跑先验起点,失败信息自带页面 desc);
+        // 尾部(关闭步之前)插完成页断言(终点校验成为脚本自身的普通步骤,回放器真实执行)。
+        if overall_success {
+            let first_is_launch = self.result_lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false);
+            if !first_is_launch && !self.start_text.trim().is_empty() {
+                self.result_lines.insert(0, "断言页面 [\"起始页\"]".to_string());
+            }
+            if !self.final_text.trim().is_empty() {
+                // 找尾部连续「关闭」段的起点,断言插在它之前(关了再断言就晚了)
+                let mut at = self.result_lines.len();
+                while at > 0 && self.result_lines[at - 1].trim_start().starts_with("关闭") {
+                    at -= 1;
+                }
+                self.result_lines.insert(at, "断言页面 [\"完成页\"]".to_string());
+            }
+        }
         let _ = write_script(&self.script_path, &self.case, &self.result_lines);
         if !goal_marker.is_empty() && super::tksops::write_marker(&self.script_path, &goal_marker).is_ok() {
             ui.emit(UiEvent::Notice {
@@ -540,13 +557,39 @@ impl TestRun {
             let _ = std::fs::create_dir_all(stage_json.parent().unwrap_or(&self.run_dir));
             let _ = std::fs::write(&stage_json, "{\"elements\":{}}");
         }
-        // 起始页快照进元素包：txt(元素文本)+png(截图)——回放对齐起始态时给人/AI 具体画面
-        if !self.start_text.trim().is_empty() {
-            if let Some(stage_dir) = stage_json.parent() {
-                let _ = std::fs::write(stage_dir.join("start_page.txt"), &self.start_text);
-                if self.start_shot.is_file() {
-                    let _ = std::fs::copy(&self.start_shot, stage_dir.join("start_page.png"));
-                }
+        // 页面实体进元素包(pages 节:desc+特征集+截图)——「断言页面」指令的匹配依据
+        if overall_success {
+            let stage_dir = stage_json.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| self.run_dir.clone());
+            let _ = std::fs::create_dir_all(stage_dir.join("pages"));
+            let sig = |text: &str| -> Vec<String> {
+                let mut seen = std::collections::HashSet::new();
+                text.lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .filter(|l| seen.insert(l.to_string()))
+                    .take(40)
+                    .map(|l| l.to_string())
+                    .collect()
+            };
+            if !self.start_text.trim().is_empty() {
+                let img = if self.start_shot.is_file()
+                    && std::fs::copy(&self.start_shot, stage_dir.join("pages").join("起始页.png")).is_ok()
+                {
+                    Some("pages/起始页.png")
+                } else {
+                    None
+                };
+                let _ = crate::tools::element::add_page(&stage_json, "起始页", &start_desc, &sig(&self.start_text), img);
+            }
+            if !self.final_text.trim().is_empty() {
+                let img = if self.final_shot.is_file()
+                    && std::fs::copy(&self.final_shot, stage_dir.join("pages").join("完成页.png")).is_ok()
+                {
+                    Some("pages/完成页.png")
+                } else {
+                    None
+                };
+                let _ = crate::tools::element::add_page(&stage_json, "完成页", "", &sig(&self.final_text), img);
             }
         }
         if let Err(e) = crate::utils::tklib::pack(&stage_json, out_tklib, &meta) {

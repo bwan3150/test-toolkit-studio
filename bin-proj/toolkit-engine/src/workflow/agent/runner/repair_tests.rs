@@ -283,3 +283,65 @@ async fn navigate_reaches_state_without_artifacts() {
 
     fake::remove(device);
 }
+
+/// 页面实体+断言页面指令(规范化起始/终点校验):探索自动落"起始页/完成页"进 .tklib、
+/// 首尾插「断言页面」步;回放起点不对→首步页面断言失败(信息带命中率);
+/// 复位后回放全通(终点判据=尾部页面断言真实执行,不再靠头注释 marker)。
+#[tokio::test]
+async fn page_assertions_guard_start_and_end() {
+    let device = "fake:page-assert";
+    let scope = "page-assert";
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("进入设置", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let ws = temp_dir("page-ws");
+    let cache = temp_dir("page-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    // 探索(无启动步,click 起步)→ finalize 应:pages 进包 + 首插起始页断言 + 尾插完成页断言
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "进设置" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "到设置中心" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]);
+
+    let opts = opts_for(device, scope, ws.clone(), cache);
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask, false)
+        .await
+        .unwrap();
+    let tks = ws.join("page-case.tks");
+    let tklib = crate::utils::tklib::tklib_path(&tks);
+    run.finalize(&opts, &ui, &tks, &tklib).await.unwrap();
+
+    let content = std::fs::read_to_string(&tks).unwrap();
+    assert!(content.contains("断言页面 [\"起始页\"]"), "应首插起始页断言：\n{}", content);
+    assert!(content.contains("断言页面 [\"完成页\"]"), "应尾插完成页断言：\n{}", content);
+
+    // 探索后设备停在 P1(完成页)——回放首步「断言页面 起始页」应失败,信息带页面级细节
+    let msg = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
+    assert!(msg.contains("页面断言失败") && msg.contains("起始页"), "起点不对应被页面断言拦住：{}", msg);
+
+    // 复位到起始页(P0)→ 回放全通(终点判据=尾部完成页断言真实执行)
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("进入设置", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+    let msg = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
+    assert!(msg.contains("回放通过"), "复位后应全通：{}", msg);
+
+    fake::remove(device);
+}

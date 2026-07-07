@@ -525,3 +525,56 @@ pub async fn add_element_target(
         "new_desc": desc,
     }))
 }
+
+// ============================ 页面实体（pages） ============================
+// 页面是元素库的一等公民（element.json 的 "pages" 节）：名字 + desc + 特征文字集(signature)
+// + 可选截图。`断言页面 ["名"]` 指令用**命中率投票**匹配（当前页元素文本命中特征集的比例），
+// 比单词 contains 鲁棒——起始/终点校验的规范形式（取代头注释 marker 的散装机制）。
+
+/// 页面匹配阈值：特征集命中率 ≥ 60% 判定"在这个页面"（容忍时间/角标等易变项）
+pub const PAGE_MATCH_THRESHOLD: f32 = 0.6;
+
+/// 存/更新一个页面实体。signature 建议 ≤40 项（调用方从页面元素文本采集、去重）。
+pub fn add_page(lib_path: &Path, name: &str, desc: &str, signature: &[String], img_rel: Option<&str>) -> Result<()> {
+    let mut lib: serde_json::Value = std::fs::read_to_string(lib_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({ "elements": {} }));
+    if !lib["pages"].is_object() {
+        lib["pages"] = serde_json::json!({});
+    }
+    lib["pages"][name] = serde_json::json!({
+        "desc": desc,
+        "signature": signature,
+        "img": img_rel,
+    });
+    let pretty = serde_json::to_string_pretty(&lib).map_err(TkeError::JsonError)?;
+    std::fs::write(lib_path, pretty).map_err(TkeError::IoError)
+}
+
+/// 读页面实体：返回 (desc, signature)。
+pub fn get_page(lib_path: &Path, name: &str) -> Option<(String, Vec<String>)> {
+    let lib: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(lib_path).ok()?).ok()?;
+    let page = lib["pages"].get(name)?;
+    let desc = page["desc"].as_str().unwrap_or("").to_string();
+    let sig = page["signature"]
+        .as_array()?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+    Some((desc, sig))
+}
+
+/// 页面匹配打分：signature 里有多少项出现在当前页面文本里（空格/大小写不敏感）。
+/// 返回 (命中数, 总数)。
+pub fn page_match_score(signature: &[String], page_texts: &[String]) -> (usize, usize) {
+    let norm = |s: &str| -> String { s.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect() };
+    let haystack = page_texts.iter().map(|t| norm(t)).collect::<Vec<_>>().join("\n");
+    let total = signature.len();
+    let hit = signature
+        .iter()
+        .map(|s| norm(s))
+        .filter(|n| !n.is_empty() && haystack.contains(n.as_str()))
+        .count();
+    (hit, total)
+}

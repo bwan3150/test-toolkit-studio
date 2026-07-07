@@ -42,6 +42,8 @@ pub struct ScriptInterpreter {
     recognizer: Recognizer,
     /// 定位自愈钩子（None=关闭；replay/repair 装配时注入）
     healer: Option<Arc<dyn ElementHealer>>,
+    /// 元素库路径（断言页面从库里读页面实体；None=无库）
+    element_path: Option<std::path::PathBuf>,
     /// 最近一步的执行轨迹
     pub last_trace: ActionTrace,
     /// 本次运行中启动过的 Android 包名（flow 收尾统一关闭用）
@@ -67,6 +69,7 @@ impl ScriptInterpreter {
             controller,
             recognizer,
             healer: None,
+            element_path: element_path.map(|p| p.to_path_buf()),
             last_trace: ActionTrace::default(),
             launched_packages: Vec::new(),
         })
@@ -90,6 +93,7 @@ impl ScriptInterpreter {
             &mut self.last_trace,
             &mut self.launched_packages,
             self.healer.clone(),
+            self.element_path.as_deref(),
         );
 
         match step.command {
@@ -106,6 +110,7 @@ impl ScriptInterpreter {
             TksCommand::Back => executor.execute_back().await,
             TksCommand::Wait => executor.execute_wait(&step.params).await,
             TksCommand::Assert => executor.execute_assert(&step.params).await,
+            TksCommand::AssertPage => executor.execute_assert_page(&step.params).await,
             TksCommand::Switch => executor.execute_switch(&step.params).await,
             TksCommand::ScrollFind => executor.execute_scroll_find(&step.params).await,
             TksCommand::Key => executor.execute_key(&step.params).await,

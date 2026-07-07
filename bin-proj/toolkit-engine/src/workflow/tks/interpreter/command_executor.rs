@@ -19,6 +19,8 @@ pub struct CommandExecutor<'a> {
     launched: &'a mut Vec<String>,
     /// 定位自愈钩子（None=关闭）
     healer: Option<std::sync::Arc<dyn super::super::ElementHealer>>,
+    /// 元素库路径（断言页面用）
+    element_path: Option<&'a std::path::Path>,
 }
 
 impl<'a> CommandExecutor<'a> {
@@ -29,6 +31,7 @@ impl<'a> CommandExecutor<'a> {
         trace: &'a mut ActionTrace,
         launched: &'a mut Vec<String>,
         healer: Option<std::sync::Arc<dyn super::super::ElementHealer>>,
+        element_path: Option<&'a std::path::Path>,
     ) -> Self {
         Self {
             workarea,
@@ -37,6 +40,7 @@ impl<'a> CommandExecutor<'a> {
             trace,
             launched,
             healer,
+            element_path,
         }
     }
 
@@ -353,6 +357,49 @@ impl<'a> CommandExecutor<'a> {
         }
 
         Err(TkeError::ScriptExecuteError(format!("等待元素超时: {}", name)))
+    }
+
+    /// 页面断言：当前页与元素包里存的「页面」特征集做命中率匹配（≥60% 判在此页）。
+    /// 起始/终点校验的规范形式——真实执行、失败信息带页面 desc 与命中率，人和 AI 都能看懂差在哪。
+    pub async fn execute_assert_page(&mut self, params: &[TksParam]) -> Result<()> {
+        let name = match params.first() {
+            Some(TksParam::Text(t)) => t.clone(),
+            _ => return Err(TkeError::InvalidArgument("断言页面需要页面名，如 断言页面 [\"起始页\"]".to_string())),
+        };
+        let lib = self.element_path.ok_or_else(|| {
+            TkeError::InvalidArgument("断言页面需要元素库（.tklib）——库里存着页面特征".to_string())
+        })?;
+        let (desc, signature) = crate::tools::element::get_page(lib, &name).ok_or_else(|| {
+            TkeError::InvalidArgument(format!("元素包里没有页面「{}」——请检查 .tklib 是否完整", name))
+        })?;
+        if signature.is_empty() {
+            return Err(TkeError::InvalidArgument(format!("页面「{}」的特征集为空，无法匹配", name)));
+        }
+        // 刷新并解析当前页
+        self.controller.capture_ui_state(self.workarea).await?;
+        self.trace.captured = true;
+        let elements = crate::Fetcher::new().fetch_elements_from_file(&self.workarea.ui_tree_path())?;
+        let texts: Vec<String> = elements
+            .iter()
+            .filter_map(|e| e.text.clone().or_else(|| e.content_desc.clone()))
+            .filter(|t| !t.trim().is_empty())
+            .collect();
+        let (hit, total) = crate::tools::element::page_match_score(&signature, &texts);
+        let ratio = hit as f32 / total as f32;
+        if ratio >= crate::tools::element::PAGE_MATCH_THRESHOLD {
+            Ok(())
+        } else {
+            let seen = texts.iter().take(6).cloned().collect::<Vec<_>>().join("、");
+            Err(TkeError::ScriptExecuteError(format!(
+                "页面断言失败：期望在「{}」{}，特征命中 {}/{}（需≥{:.0}%）。当前页面前几项：{}",
+                name,
+                if desc.is_empty() { String::new() } else { format!("（{}）", desc) },
+                hit,
+                total,
+                crate::tools::element::PAGE_MATCH_THRESHOLD * 100.0,
+                seen
+            )))
+        }
     }
 
     /// 断言操作

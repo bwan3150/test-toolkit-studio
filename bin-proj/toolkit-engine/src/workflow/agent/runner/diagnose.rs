@@ -204,7 +204,10 @@ pub(crate) async fn diagnose(
     // 当前页面，不匹配**快速失败并说清**，而不是闭着眼开跑越跑越乱（有启动步的脚本
     // 由重启净化保证确定性，跳过此检查）。
     let has_launch = check.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false);
-    if !start_marker.is_empty() && !has_launch {
+    // 新脚本首步是「断言页面」→ 起始校验由脚本自己执行(失败信息自带页面 desc/命中率),
+    // 头注释 marker 特判只兜老脚本
+    let first_is_page_assert = check.first().map(|l| l.trim_start().starts_with("断言页面")).unwrap_or(false);
+    if !start_marker.is_empty() && !has_launch && !first_is_page_assert {
         let ok = match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
             Ok(p) => page_contains(&p, start_marker),
             Err(_) => false,
@@ -317,11 +320,18 @@ pub(crate) async fn diagnose(
 
     // 目标标志校验：全跑通才有意义(失败步中断时设备停在错页)。等渲染稳定后取一帧实时页面。
     // 同时把这帧最终页面渲染出来存 final_page，供医生 finish 时做"对照用户原话需求"的终点校验。
+    // 终点判据：尾部是「断言页面」→ 跑通即到达(断言已真实把关,页面级校验比单词 marker 强);
+    // 否则老脚本走 marker 兜底
+    let last_is_page_assert = check.last().map(|l| l.trim_start().starts_with("断言页面")).unwrap_or(false);
     let reached = if result.success {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
-            Ok(p) => marker.is_empty() || page_contains(&p, marker),
-            Err(_) => marker.is_empty(),
+        if last_is_page_assert {
+            true
+        } else {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            match capture(ctx.device, ctx.workarea, ctx.fetcher, ctx.ocr).await {
+                Ok(p) => marker.is_empty() || page_contains(&p, marker),
+                Err(_) => marker.is_empty(),
+            }
         }
     } else {
         false

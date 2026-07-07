@@ -20,6 +20,7 @@ pub enum TksCommand {
     Back,             // 返回
     Wait,             // 等待
     Assert,           // 断言
+    AssertPage,       // 断言页面（页面级校验：当前页与元素包里存的「页面」特征集命中率匹配——起始/终点校验的规范形式）
     Switch,           // 切换（web 标签 / App）
     ScrollFind,       // 滚动查找（朝某方向滚动直到目标文字出现——可复现地"滚到目标可见"，替代固定距离盲滑）
     Key,              // 按键（enter/tab/escape/backspace 等硬键/特殊键）
@@ -42,6 +43,7 @@ impl TksCommand {
             "返回" => Some(Self::Back),
             "等待" => Some(Self::Wait),
             "断言" => Some(Self::Assert),
+            "断言页面" => Some(Self::AssertPage),
             "切换" => Some(Self::Switch),
             "滚动查找" => Some(Self::ScrollFind),
             _ => None,

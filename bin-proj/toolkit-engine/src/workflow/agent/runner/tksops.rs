@@ -315,13 +315,15 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     }
     let n = env.lines.len();
     // 起始不符时附起始页快照摘要(探索时打进 .tklib 的 start_page.txt)——给编排官具体画面
-    let start_ref = if !diag.reached && diag.note.contains("起始页不符") {
-        env.elem_lib
-            .parent()
-            .and_then(|d| std::fs::read_to_string(d.join("start_page.txt")).ok())
-            .map(|t| {
-                let head = t.lines().filter(|l| !l.trim().is_empty()).take(6).collect::<Vec<_>>().join("、");
-                format!("\n- 起始页参考（探索时的样子，前几项）：{}", super::fmt::brief(&head, 160))
+    let start_ref = if !diag.reached && (diag.note.contains("起始页不符") || diag.note.contains("页面断言失败：期望在「起始页」")) {
+        crate::tools::element::get_page(&env.elem_lib, "起始页")
+            .map(|(desc, sig)| {
+                let head = sig.iter().take(6).cloned().collect::<Vec<_>>().join("、");
+                format!(
+                    "\n- 起始页参考（探索时的样子）：{}{}",
+                    if desc.is_empty() { String::new() } else { format!("{}；元素：", desc) },
+                    super::fmt::brief(&head, 160)
+                )
             })
             .unwrap_or_default()
     } else {
