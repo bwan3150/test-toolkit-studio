@@ -20,7 +20,7 @@ use std::time::Duration;
 use std::io::Write;
 
 use crossterm::{
-    cursor::{Hide, MoveToColumn, MoveUp, Show},
+    cursor::{Hide, Show},
     event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyEventKind},
     execute, queue,
     style::Print,
@@ -207,9 +207,15 @@ fn run_tui(
     let mut model = TuiModel::new();
     let mut screen = Inline::default();
     let res = run_loop(&mut out, &mut screen, &mut events_rx, &commands_tx, &mut model);
-    // 收尾：擦掉底部小窗（历史都已在 scrollback），恢复终端
-    let _ = screen.to_top(&mut out);
-    let _ = execute!(out, Clear(ClearType::FromCursorDown), DisableBracketedPaste, Show);
+    // 收尾：擦掉底部小窗、光标停在内容尾（shell 提示接着出现），恢复终端
+    let end_row = screen.content_row;
+    let _ = execute!(
+        out,
+        crossterm::cursor::MoveTo(0, end_row),
+        Clear(ClearType::FromCursorDown),
+        DisableBracketedPaste,
+        Show
+    );
     let _ = disable_raw_mode();
     res
 }
@@ -224,62 +230,58 @@ fn install_panic_hook() {
     }));
 }
 
-/// 手写 inline 屏：只记一件事——**光标当前在小窗顶下第几行**（相对定位，无绝对坐标、
-/// 无需屏幕高度，天然抗 resize；终端滚动由 \r\n 自然驱动）。
+/// 手写 inline 屏(**钉底式**)：小窗永远画在终端窗口最底部;内容从屏幕顶往下长
+/// (content_row 跟踪内容尾的屏幕行),未满屏时中间留空,长到小窗顶后自然滚屏。
+/// 全部基于绝对坐标 MoveTo + 终端自然滚屏,每帧取实际屏幕尺寸,抗 resize。
 #[derive(Default)]
 struct Inline {
-    /// 光标距小窗顶部的行数（0=在顶部行）
-    from_top: u16,
+    /// 内容尾:下一条历史行该打印的屏幕行号(0-based;到达屏幕底后停在底行,靠滚屏前进)
+    content_row: u16,
 }
 
 impl Inline {
-    /// 光标回小窗顶部行首
-    fn to_top(&mut self, out: &mut impl Write) -> std::io::Result<()> {
-        queue!(out, MoveToColumn(0))?;
-        if self.from_top > 0 {
-            queue!(out, MoveUp(self.from_top))?;
-        }
-        self.from_top = 0;
-        Ok(())
-    }
-
-    /// 历史行插入 scrollback：回小窗顶→清到屏底→逐行 print（终端自然滚屏）。
-    /// 打完后小窗消失（下一次 redraw 从当前光标处重画）。
+    /// 历史行插入:光标到内容尾→清到屏底(顺带擦掉小窗)→逐行 print(到底后自然滚屏)。
     fn insert_history(&mut self, out: &mut impl Write, lines: &[ratatui::text::Line<'static>]) -> std::io::Result<()> {
-        self.to_top(out)?;
-        queue!(out, Clear(ClearType::FromCursorDown))?;
+        let (_, sh) = crossterm::terminal::size()?;
+        let bottom = sh.saturating_sub(1);
+        self.content_row = self.content_row.min(bottom);
+        queue!(out, crossterm::cursor::MoveTo(0, self.content_row), Hide, Clear(ClearType::FromCursorDown))?;
         for l in lines {
             queue!(out, Print(line_ansi(l)), Print("\r\n"))?;
+            self.content_row = (self.content_row + 1).min(bottom);
         }
         out.flush()
     }
 
-    /// 重画小窗：回顶→清到屏底→打印各行（最后一行不带换行）→光标定位到输入位。
+    /// 重画小窗(钉在屏幕底部)：内容已侵入小窗区则先滚屏腾位,再从 sh-小窗高 处画。
     fn redraw(
         &mut self,
         out: &mut impl Write,
         rows: &[ratatui::text::Line<'static>],
         cursor: Option<(u16, u16)>,
     ) -> std::io::Result<()> {
-        self.to_top(out)?;
-        queue!(out, Hide, Clear(ClearType::FromCursorDown))?;
-        let last = rows.len().saturating_sub(1) as u16;
+        let (_, sh) = crossterm::terminal::size()?;
+        let win_h = (rows.len() as u16).min(sh);
+        let wy = sh.saturating_sub(win_h);
+        // 内容尾越过小窗顶：在底行发换行滚屏腾位(内容整体上移,不丢——进 scrollback)
+        if self.content_row > wy {
+            queue!(out, crossterm::cursor::MoveTo(0, sh.saturating_sub(1)))?;
+            for _ in 0..(self.content_row - wy) {
+                queue!(out, Print("\r\n"))?;
+            }
+            self.content_row = wy;
+        }
+        queue!(out, crossterm::cursor::MoveTo(0, wy), Hide, Clear(ClearType::FromCursorDown))?;
+        let last = rows.len().saturating_sub(1);
         for (i, r) in rows.iter().enumerate() {
             queue!(out, Print(line_ansi(r)))?;
-            if (i as u16) < last {
+            if i < last {
                 queue!(out, Print("\r\n"))?;
             }
         }
-        self.from_top = last;
-        // 光标：有输入位→移过去并显示；无（choosing）→藏在小窗底
+        // 光标：有输入位→绝对定位并显示;无(choosing)→保持隐藏
         if let Some((row, col)) = cursor {
-            queue!(out, MoveToColumn(0))?;
-            let up = last.saturating_sub(row);
-            if up > 0 {
-                queue!(out, MoveUp(up))?;
-            }
-            self.from_top = row;
-            queue!(out, MoveToColumn(col), Show)?;
+            queue!(out, crossterm::cursor::MoveTo(col, wy + row.min(win_h.saturating_sub(1))), Show)?;
         }
         out.flush()
     }
