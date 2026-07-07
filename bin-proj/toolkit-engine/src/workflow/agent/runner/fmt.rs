@@ -62,6 +62,19 @@ pub(crate) fn fmt_duration(ms: u64) -> String {
 }
 
 /// 取首个非空行并按字符数截断，避免模型长篇刷屏
+/// 多行文本压成一行（换行/连续空白折叠成单空格），max>0 时超长截断。
+/// 历史行由终端自动换行显示——正文类文本用这个保全文，别再用 brief 砍到首行 N 字
+/// （inline 时代真机反馈：Explorer/Supervisor 的长总结被截断）。
+pub(crate) fn flow(s: &str, max: usize) -> String {
+    let joined = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if max > 0 && joined.chars().count() > max {
+        let head: String = joined.chars().take(max).collect();
+        format!("{}…", head)
+    } else {
+        joined
+    }
+}
+
 pub(crate) fn brief(s: &str, max: usize) -> String {
     let line = s.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
     if line.chars().count() > max {

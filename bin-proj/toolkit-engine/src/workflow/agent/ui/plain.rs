@@ -188,7 +188,7 @@ impl Frontend for PlainFrontend {
                 if let Some(v) = verify {
                     eprintln!("  {}   {}", paint(tty, "2", "稳定"), paint(tty, lc(v.level), &v.text));
                 }
-                eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
+                eprintln!("  {}   {}", paint(tty, "2", "依据"), crate::workflow::agent::runner::fmt::flow(&reason, 0));
                 if let Some(sc) = &script {
                     eprintln!("  {}   {}", paint(tty, "2", "脚本"), sc.tks);
                     eprintln!("  {} {}", paint(tty, "2", "元素包"), sc.tklib);

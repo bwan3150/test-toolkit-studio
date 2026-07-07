@@ -8,7 +8,7 @@ use ratatui::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::workflow::agent::runner::fmt::{brief, fmt_duration};
+use crate::workflow::agent::runner::fmt::{brief, flow, fmt_duration};
 use crate::workflow::agent::ui::command::UiCommand;
 use crate::workflow::agent::ui::event::*;
 
@@ -198,7 +198,7 @@ impl TuiModel {
                 }
             }
             UiEvent::OcrError { error, .. } => {
-                self.push_colored(format!("! {}", brief(&error, 160)), Color::Red);
+                self.push_colored(format!("! {}", flow(&error, 300)), Color::Red);
             }
             UiEvent::Stuck { message, .. } => {
                 self.push_colored(format!("~ {}", message), Color::Yellow);
@@ -209,7 +209,7 @@ impl TuiModel {
                 self.push(Line::from(vec![
                     Span::styled("● ", Style::default().fg(Color::Blue)),
                     Span::styled("Explorer ", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)),
-                    Span::raw(brief(&text, 200)),
+                    Span::raw(flow(&text, 0)),
                     Self::tok_span(tokens),
                 ]));
             }
@@ -257,7 +257,7 @@ impl TuiModel {
                 self.push(Line::from(vec![
                     Span::styled("● ", Style::default().fg(color)),
                     Span::styled(format!("{} ", kind.label()), Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                    Span::raw(brief(&text, 200)),
+                    Span::raw(flow(&text, 0)),
                     Self::tok_span(tokens),
                 ]));
             }
@@ -287,7 +287,7 @@ impl TuiModel {
                         Span::raw(preview),
                         Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
                         Span::styled("✗", Style::default().fg(Color::Red)),
-                        Span::styled(format!(" {}", brief(&e, 120)), Style::default().fg(Color::Red)),
+                        Span::styled(format!(" {}", flow(&e, 300)), Style::default().fg(Color::Red)),
                     ]));
                 }
             },
@@ -388,7 +388,7 @@ impl TuiModel {
                 }
                 self.push(Line::from(vec![
                     Span::styled("依据   ", Style::default().fg(Color::DarkGray)),
-                    Span::raw(brief(&reason, 200)),
+                    Span::raw(flow(&reason, 0)),
                 ]));
                 if let Some(sc) = &script {
                     self.push(Line::from(vec![
