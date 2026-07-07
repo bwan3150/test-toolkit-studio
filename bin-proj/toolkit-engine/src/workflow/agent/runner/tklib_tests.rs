@@ -82,7 +82,7 @@ async fn tks_and_tklib_are_portable_across_directories() {
     enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]); // 语义命名：全保留特征名
 
     let opts_a = opts_for(device, scope, machine_a.clone(), cache.clone());
-    let run = TestRun::explore(&opts_a, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask).await.unwrap();
+    let run = TestRun::explore(&opts_a, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask, false).await.unwrap();
     let tks_a = machine_a.join("open-settings.tks");
     let tklib_a = tklib::tklib_path(&tks_a);
     let result = run.finalize(&opts_a, &ui, &tks_a, &tklib_a).await.unwrap();

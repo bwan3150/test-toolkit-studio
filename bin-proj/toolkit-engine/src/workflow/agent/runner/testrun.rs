@@ -119,6 +119,7 @@ impl TestRun {
         full_test: bool,
         read_full: bool,
         ask_mode: AskMode,
+        nav: bool,
     ) -> Result<TestRun> {
         let case = goal; // 目标即用例（统一）
         // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
@@ -329,8 +330,11 @@ impl TestRun {
         // 先落探索原始脚本（草稿）；最终路径/命名在 finalize 决定。
         let final_lines = outcome.lines.clone();
         write_script(&script_path, &run.case, &final_lines)?;
-        let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-        ui.emit(UiEvent::ScriptGenerated { name: fname.clone(), steps: final_lines.len(), success: outcome.success });
+        if !nav {
+            // 导航模式不发"脚本生成完毕"——导航不产脚本（草稿仅落 cache，随运行目录丢弃）
+            let fname = script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            ui.emit(UiEvent::ScriptGenerated { name: fname, steps: final_lines.len(), success: outcome.success });
+        }
 
         run.result_lines = final_lines.clone();
         run.final_lines = final_lines;
@@ -615,4 +619,36 @@ async fn extract_scrolling(
     }
 
     (ordered.join("\n"), last_shot)
+}
+
+/// 【导航原语】把设备开到某个状态（登录态/某页面）——**不产脚本、不写两件套、不写标志、
+/// 不出结果框**，只返回"到了没 + 当前页面摘要"。
+/// 这是测试三件套（稳定性/修复/优化）缺失的"复原"能力：回放前对齐起始态、修复前复原、
+/// 稳定性测试轮间复位都用它——此前编排官只能拿重型 explore 凑合，产垃圾脚本还容易
+/// 顺手做出"退出登录"这类改变待测状态的危险操作。
+pub(crate) async fn navigate(
+    opts: &AgentRunOptions,
+    ui: &dyn Frontend,
+    goal: &str,
+    note: Option<&str>,
+) -> crate::Result<String> {
+    let discipline = "【导航纪律】这是把设备带到目标状态的导航，不是探索测试：走最短的已知路径，到达立即 finish；**禁止**做改变账号/数据状态的操作（退出登录、删除、提交表单/申请），除非目标本身明确要求。";
+    let merged = match note.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(n) => format!("{}\n{}", discipline, n),
+        None => discipline.to_string(),
+    };
+    let run = TestRun::explore(opts, ui, goal, Some(&merged), false, false, AskMode::Ask, true).await?;
+    let page = run
+        .final_text()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .take(10)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let page_block = if page.is_empty() { String::new() } else { format!("\n当前页面摘要：\n{}", page) };
+    Ok(if run.outcome.success {
+        format!("已到达目标状态（{} 轮）：{}{}", run.outcome.rounds, run.outcome.reason, page_block)
+    } else {
+        format!("未能到达目标状态（{} 轮）：{}{}", run.outcome.rounds, run.outcome.reason, page_block)
+    })
 }

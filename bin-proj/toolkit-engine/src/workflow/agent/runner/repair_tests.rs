@@ -204,7 +204,7 @@ async fn replay_heals_relocated_element_in_place() {
     enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]);
 
     let opts = opts_for(device, scope, ws.clone(), cache);
-    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask).await.unwrap();
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask, false).await.unwrap();
     let tks = ws.join("open.tks");
     let tklib = crate::utils::tklib::tklib_path(&tks);
     let result = run.finalize(&opts, &ui, &tks, &tklib).await.unwrap();
@@ -240,6 +240,46 @@ async fn replay_heals_relocated_element_in_place() {
     let lib_json = crate::utils::tklib::unpack(&tklib, &peek).unwrap();
     let lib = std::fs::read_to_string(&lib_json).unwrap();
     assert!(lib.contains("新按钮"), "自愈修正应持久化进元素包：\n{}", lib);
+
+    fake::remove(device);
+}
+
+/// 导航原语：把设备开到目标状态——**不产脚本、不写元素包、不出结果框**,只返回状态+页面摘要。
+/// 这是修复/稳定性测试前"复原"的专用能力,不再拿重型 explore 凑合(那会产垃圾脚本)。
+#[tokio::test]
+async fn navigate_reaches_state_without_artifacts() {
+    let device = "fake:navigate";
+    let scope = "navigate";
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("进入设置", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let ws = temp_dir("nav-ws");
+    let cache = temp_dir("nav-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "进设置" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "已停在设置中心" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+
+    let opts = opts_for(device, scope, ws.clone(), cache);
+    let msg = super::testrun::navigate(&opts, &ui, "进入设置中心页面", None).await.unwrap();
+    assert!(msg.contains("已到达目标状态"), "实际：{}", msg);
+    assert!(msg.contains("设置中心"), "应带当前页面摘要：{}", msg);
+    // 工作区不产任何文件（无 .tks/.tklib——导航不是探索）
+    let files: Vec<_> = std::fs::read_dir(&ws).unwrap().filter_map(|e| e.ok()).collect();
+    assert!(files.is_empty(), "导航不应产出文件：{:?}", files.iter().map(|f| f.file_name()).collect::<Vec<_>>());
 
     fake::remove(device);
 }

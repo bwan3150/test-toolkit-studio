@@ -41,6 +41,18 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             }),
         ),
         LlmTool::new(
+            "navigate",
+            desc("navigate"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "goal": { "type": "string", "description": "要到达的状态/页面（如\"回到应用首页\"\"处于已登录状态并停在登录页\"）" },
+                    "note": { "type": "string", "description": "可选：路径提示/所需信息（账号密码等）" }
+                },
+                "required": ["goal"]
+            }),
+        ),
+        LlmTool::new(
             "replay_tks",
             desc("replay_tks"),
             json!({
@@ -315,7 +327,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 continue;
                             }
                             emit_orch(ui, &sess, &format!("开始：{}", first_line(&goal)));
-                            let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full, ask_mode).await?;
+                            let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full, ask_mode, false).await?;
                             // 命名 + 落工作区（当前目录、目录内去重）+ .tklib 元素包（两件套，复制即跑）
                             let base = {
                                 let n = script_name.trim();
@@ -346,6 +358,19 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             }
                             msg.push_str(&format!("\n- 末页截图：{}", shot.display()));
                             sess.tool_result_bulky(call.call_id, msg, placeholder);
+                        }
+                        // —— 导航原语：把设备开到某状态（不产脚本/不写包/不出结果框）——
+                        "navigate" => {
+                            let goal = arg_str(&call.arguments, "goal");
+                            let note = call.arguments.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            if goal.trim().is_empty() {
+                                sess.tool_result(call.call_id, "未提供 goal，无法导航。");
+                                continue;
+                            }
+                            emit_orch(ui, &sess, &format!("导航：{}", first_line(&goal)));
+                            let r = super::testrun::navigate(opts, ui, &goal, note.as_deref()).await?;
+                            ran_any = true;
+                            sess.tool_result(call.call_id, r);
                         }
                         // —— 对工作区里已有的 .tks 做独立操作：回放 / 修复 / 优化（路径化，主 AI 自由调度）——
                         "replay_tks" | "resume_explore" | "optimize_tks" => {
