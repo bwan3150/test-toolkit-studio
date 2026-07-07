@@ -24,7 +24,7 @@ use crossterm::{
     event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyEventKind},
     execute, queue,
     style::Print,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{disable_raw_mode, enable_raw_mode, BeginSynchronizedUpdate, Clear, ClearType, EndSynchronizedUpdate},
 };
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
@@ -241,15 +241,21 @@ struct Inline {
 
 impl Inline {
     /// 历史行插入:光标到内容尾→清到屏底(顺带擦掉小窗)→逐行 print(到底后自然滚屏)。
+    /// content_row 记账必须按**wrap 后的物理行数**加(长行占多行,只加 1 会与真实光标失配,
+    /// 后续 MoveTo 定位错 → 小窗残影);整段包同步输出,原子刷新不闪。
     fn insert_history(&mut self, out: &mut impl Write, lines: &[ratatui::text::Line<'static>]) -> std::io::Result<()> {
-        let (_, sh) = crossterm::terminal::size()?;
+        let (tw, sh) = crossterm::terminal::size()?;
+        let tw = tw.max(1) as usize;
         let bottom = sh.saturating_sub(1);
         self.content_row = self.content_row.min(bottom);
-        queue!(out, crossterm::cursor::MoveTo(0, self.content_row), Hide, Clear(ClearType::FromCursorDown))?;
+        queue!(out, BeginSynchronizedUpdate, crossterm::cursor::MoveTo(0, self.content_row), Hide, Clear(ClearType::FromCursorDown))?;
         for l in lines {
             queue!(out, Print(line_ansi(l)), Print("\r\n"))?;
-            self.content_row = (self.content_row + 1).min(bottom);
+            let w = l.width();
+            let used = ((w / tw + usize::from(w % tw != 0)).max(1)) as u16;
+            self.content_row = (self.content_row + used).min(bottom);
         }
+        queue!(out, EndSynchronizedUpdate)?;
         out.flush()
     }
 
@@ -263,6 +269,7 @@ impl Inline {
         let (_, sh) = crossterm::terminal::size()?;
         let win_h = (rows.len() as u16).min(sh);
         let wy = sh.saturating_sub(win_h);
+        queue!(out, BeginSynchronizedUpdate)?;
         // 内容尾越过小窗顶：在底行发换行滚屏腾位(内容整体上移,不丢——进 scrollback)
         if self.content_row > wy {
             queue!(out, crossterm::cursor::MoveTo(0, sh.saturating_sub(1)))?;
@@ -283,6 +290,7 @@ impl Inline {
         if let Some((row, col)) = cursor {
             queue!(out, crossterm::cursor::MoveTo(col, wy + row.min(win_h.saturating_sub(1))), Show)?;
         }
+        queue!(out, EndSynchronizedUpdate)?;
         out.flush()
     }
 }
@@ -329,7 +337,11 @@ fn run_loop(
                     model.handle_paste(&s);
                     dirty = true;
                 }
-                Event::Resize(_, _) => dirty = true,
+                Event::Resize(_, h) => {
+                    // 终端 reflow 后绝对坐标记账失效——夹紧到新屏高,下一帧整窗重画
+                    screen.content_row = screen.content_row.min(h.saturating_sub(1));
+                    dirty = true;
+                }
                 _ => {}
             }
         }
