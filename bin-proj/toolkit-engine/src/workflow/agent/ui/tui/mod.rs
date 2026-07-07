@@ -197,7 +197,56 @@ fn run_tui(
     let res = run_loop(&mut terminal, &mut events_rx, &commands_tx, &mut model);
     // 无论 res 如何都要恢复终端
     let _ = leave_terminal(&mut terminal);
+    // 备用屏幕(alt-screen)不属于终端滚动缓冲区——TUI 里的内容退出即蒸发,选择也不跟滚动。
+    // 退出后把整场消息流(带颜色)完整回放进 scrollback:记录永在,可滚/可选/可复制,排查全靠它。
+    dump_transcript(&model.lines);
     res
+}
+
+/// 把消息流按原有颜色回放到普通终端（stderr，与其余输出一致）。
+fn dump_transcript(lines: &[ratatui::text::Line<'static>]) {
+    use ratatui::style::{Color, Modifier};
+    fn fg_code(c: Color) -> Option<&'static str> {
+        Some(match c {
+            Color::Black => "30",
+            Color::Red => "31",
+            Color::Green => "32",
+            Color::Yellow => "33",
+            Color::Blue => "34",
+            Color::Magenta => "35",
+            Color::Cyan => "36",
+            Color::Gray => "37",
+            Color::DarkGray => "90",
+            Color::LightRed => "91",
+            Color::LightGreen => "92",
+            Color::LightYellow => "93",
+            Color::LightBlue => "94",
+            Color::LightMagenta => "95",
+            Color::LightCyan => "96",
+            Color::White => "97",
+            _ => return None,
+        })
+    }
+    eprintln!();
+    eprintln!("\x1b[2m─ 本次会话完整记录（可滚动/复制排查）─\x1b[0m");
+    for line in lines {
+        let mut out = String::new();
+        for span in &line.spans {
+            let mut codes: Vec<&str> = Vec::new();
+            if span.style.add_modifier.contains(Modifier::BOLD) {
+                codes.push("1");
+            }
+            if let Some(c) = span.style.fg.and_then(fg_code) {
+                codes.push(c);
+            }
+            if codes.is_empty() {
+                out.push_str(&span.content);
+            } else {
+                out.push_str(&format!("\x1b[{}m{}\x1b[0m", codes.join(";"), span.content));
+            }
+        }
+        eprintln!("{}", out);
+    }
 }
 
 /// raw mode + 备用屏幕 + 隐藏光标 + bracketed paste（粘贴走 Event::Paste，不再逐字当按键）
