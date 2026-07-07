@@ -375,15 +375,30 @@ impl TuiModel {
                 }
             }
             UiEvent::Summary { status, diagnose, verify, reason, script, model, tokens } => {
+                // 脚本（语法染色）放在结果框前：文件名 + 逐步
+                if let Some(sc) = &script {
+                    self.push(Line::from(""));
+                    if let Some(name) = std::path::Path::new(&sc.tks).file_name() {
+                        self.push(Line::from(Span::styled(
+                            name.to_string_lossy().to_string(),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        )));
+                    }
+                    for (i, step) in sc.steps.iter().enumerate() {
+                        let mut spans = vec![Span::styled(
+                            format!("  {:>2}  ", i + 1),
+                            Style::default().fg(Color::DarkGray),
+                        )];
+                        spans.extend(Self::tks_spans(step));
+                        self.push(Line::from(spans));
+                    }
+                }
+                // 结果框：标题即状态；框内=回放/稳定(仅真跑过)+依据+两件套路径+用量
+                let border = level_color(status.level);
                 self.push(Line::from(""));
                 self.push(Line::from(Span::styled(
-                    "─ 结果 ──────────────────────────────",
-                    Style::default().add_modifier(Modifier::BOLD),
-                )));
-                // 状态一行（✓/✗/■），回放/稳定只在真跑过时显示
-                self.push(Line::from(Span::styled(
-                    status.text.clone(),
-                    Style::default().fg(level_color(status.level)).add_modifier(Modifier::BOLD),
+                    format!("─ {} ─────────────────────", status.text),
+                    Style::default().fg(border).add_modifier(Modifier::BOLD),
                 )));
                 if let Some(d) = diagnose {
                     self.push_status("回放", &d);
@@ -392,66 +407,35 @@ impl TuiModel {
                     self.push_status("稳定", &v);
                 }
                 self.push(Line::from(vec![
-                    Span::styled("依据  ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("依据   ", Style::default().fg(Color::DarkGray)),
                     Span::raw(brief(&reason, 200)),
                 ]));
-                // 脚本两件套：文件名 + 逐步预览 + 元素清单
-                if let Some(sc) = script {
-                    let stem = sc.name.strip_suffix(".tks").unwrap_or(&sc.name).to_string();
-                    self.push(Line::from(""));
+                if let Some(sc) = &script {
                     self.push(Line::from(vec![
-                        Span::styled("脚本  ", Style::default().fg(Color::DarkGray)),
-                        Span::styled(
-                            format!("{}.tks + {}.tklib", stem, stem),
-                            Style::default().add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(
-                            format!("（{} 元素，两件套一起拷贝即可回放）", sc.elements.len()),
-                            Style::default().fg(Color::DarkGray),
-                        ),
+                        Span::styled("脚本   ", Style::default().fg(Color::DarkGray)),
+                        Span::raw(sc.tks.clone()),
                     ]));
-                    for (i, step) in sc.steps.iter().enumerate() {
-                        self.push(Line::from(Span::styled(
-                            format!("  {:>2}  {}", i + 1, brief(step, 90)),
-                            Style::default().fg(Color::Gray),
-                        )));
-                    }
-                    if !sc.elements.is_empty() {
-                        self.push(Line::from(""));
-                        // 元素名列宽对齐，desc 暗灰跟在后面
-                        let w = sc.elements.iter().map(|e| e.name.chars().count()).max().unwrap_or(0);
-                        for (i, e) in sc.elements.iter().enumerate() {
-                            let label = if i == 0 { "元素  " } else { "      " };
-                            let pad = " ".repeat(w.saturating_sub(e.name.chars().count()) + 2);
-                            let mut spans = vec![
-                                Span::styled(label, Style::default().fg(Color::DarkGray)),
-                                Span::styled(e.name.clone(), Style::default().fg(Color::Green)),
-                            ];
-                            if let Some(d) = &e.desc {
-                                spans.push(Span::styled(format!("{}{}", pad, brief(d, 60)), Style::default().fg(Color::DarkGray)));
-                            }
-                            self.push(Line::from(spans));
-                        }
-                        self.push(Line::from(Span::styled(
-                            "      （desc 自动生成，建议人工复核）",
-                            Style::default().fg(Color::DarkGray),
-                        )));
-                    }
+                    self.push(Line::from(vec![
+                        Span::styled("元素包 ", Style::default().fg(Color::DarkGray)),
+                        Span::raw(sc.tklib.clone()),
+                    ]));
                 }
-                self.push(Line::from(""));
-                self.push(Line::from(Span::styled(
-                    format!(
-                        "{} · ↑{} ↓{} · 合计 {}",
-                        model,
-                        tokens.prompt,
-                        tokens.completion,
-                        tokens.prompt + tokens.completion
+                self.push(Line::from(vec![
+                    Span::styled("用量   ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!(
+                            "{} · ↑{} ↓{} · 合计 {}",
+                            model,
+                            tokens.prompt,
+                            tokens.completion,
+                            tokens.prompt + tokens.completion
+                        ),
+                        Style::default().fg(Color::DarkGray),
                     ),
-                    Style::default().fg(Color::DarkGray),
-                )));
+                ]));
                 self.push(Line::from(Span::styled(
-                    "─────────────────────────────────────",
-                    Style::default().add_modifier(Modifier::BOLD),
+                    "──────────────────────────────────────",
+                    Style::default().fg(border).add_modifier(Modifier::BOLD),
                 )));
             }
             UiEvent::Done { .. } => {
@@ -470,7 +454,53 @@ impl TuiModel {
         ]));
     }
 
-    /// 粘贴（bracketed paste）：整段插到光标处——换行转空格，绝不当 Enter 误提交半截内容
+    /// .tks 行的简易语法染色：首词=指令(青)、{元素}=绿、"文本"=黄，其余默认色。
+    fn tks_spans(line: &str) -> Vec<Span<'static>> {
+    let trimmed = line.trim_start();
+    let (cmd, rest) = match trimmed.split_once(char::is_whitespace) {
+        Some((c, r)) => (c, r),
+        None => (trimmed, ""),
+    };
+    let mut spans = vec![Span::styled(format!("{} ", cmd), Style::default().fg(Color::Cyan))];
+    let mut plain = String::new();
+    let mut chars = rest.chars().peekable();
+    let flush = |plain: &mut String, spans: &mut Vec<Span<'static>>| {
+        if !plain.is_empty() {
+            spans.push(Span::raw(std::mem::take(plain)));
+        }
+    };
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => {
+                flush(&mut plain, &mut spans);
+                let mut seg = String::from("{");
+                for c2 in chars.by_ref() {
+                    seg.push(c2);
+                    if c2 == '}' {
+                        break;
+                    }
+                }
+                spans.push(Span::styled(seg, Style::default().fg(Color::Green)));
+            }
+            '"' => {
+                flush(&mut plain, &mut spans);
+                let mut seg = String::from("\"");
+                for c2 in chars.by_ref() {
+                    seg.push(c2);
+                    if c2 == '"' {
+                        break;
+                    }
+                }
+                spans.push(Span::styled(seg, Style::default().fg(Color::Yellow)));
+            }
+            _ => plain.push(c),
+        }
+    }
+    flush(&mut plain, &mut spans);
+    spans
+}
+
+/// 粘贴（bracketed paste）：整段插到光标处——换行转空格，绝不当 Enter 误提交半截内容
     pub(super) fn handle_paste(&mut self, s: &str) {
         if let Some(ch) = self.choosing.as_mut() {
             // 带内联输入行的选择：**选中输入行时**粘贴进它（换行转空格）；其余情况粘贴无意义

@@ -169,9 +169,19 @@ impl Frontend for PlainFrontend {
                 }
             }
             UiEvent::Summary { status, diagnose, verify, reason, script, model, tokens } => {
+                // 脚本（染色）放在结果框前
+                if let Some(sc) = &script {
+                    eprintln!();
+                    if let Some(name) = std::path::Path::new(&sc.tks).file_name() {
+                        eprintln!("{}", paint(tty, "1", &name.to_string_lossy()));
+                    }
+                    for (i, step) in sc.steps.iter().enumerate() {
+                        eprintln!("  {:>2}  {}", i + 1, paint_tks_line(tty, step));
+                    }
+                }
                 eprintln!();
-                eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
-                eprintln!("  {}", paint(tty, lc(status.level), &status.text));
+                let border = lc(status.level);
+                eprintln!("{}", paint(tty, border, &format!("╭─ {} ─────────────────────", status.text)));
                 if let Some(d) = diagnose {
                     eprintln!("  {}   {}", paint(tty, "2", "回放"), paint(tty, lc(d.level), &d.text));
                 }
@@ -179,36 +189,16 @@ impl Frontend for PlainFrontend {
                     eprintln!("  {}   {}", paint(tty, "2", "稳定"), paint(tty, lc(v.level), &v.text));
                 }
                 eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
-                if let Some(sc) = script {
-                    let stem = sc.name.strip_suffix(".tks").unwrap_or(&sc.name);
-                    eprintln!();
-                    eprintln!(
-                        "  {}   {}",
-                        paint(tty, "2", "脚本"),
-                        paint(tty, "1", &format!("{}.tks + {}.tklib（{} 元素）", stem, stem, sc.elements.len()))
-                    );
-                    for (i, step) in sc.steps.iter().enumerate() {
-                        eprintln!("    {}", paint(tty, "2", &format!("{:>2}  {}", i + 1, brief(step, 90))));
-                    }
-                    if !sc.elements.is_empty() {
-                        eprintln!();
-                        let w = sc.elements.iter().map(|e| e.name.chars().count()).max().unwrap_or(0);
-                        for e in &sc.elements {
-                            let pad = " ".repeat(w.saturating_sub(e.name.chars().count()));
-                            match &e.desc {
-                                Some(d) => eprintln!("  {}   {}{}  {}", paint(tty, "2", "元素"), paint(tty, "32", &e.name), pad, paint(tty, "2", &brief(d, 70))),
-                                None => eprintln!("  {}   {}", paint(tty, "2", "元素"), paint(tty, "32", &e.name)),
-                            }
-                        }
-                        eprintln!("  {}", paint(tty, "2", "（desc 自动生成，建议人工复核）"));
-                    }
+                if let Some(sc) = &script {
+                    eprintln!("  {}   {}", paint(tty, "2", "脚本"), sc.tks);
+                    eprintln!("  {} {}", paint(tty, "2", "元素包"), sc.tklib);
                 }
-                eprintln!();
                 eprintln!(
-                    "  {}",
+                    "  {}   {}",
+                    paint(tty, "2", "用量"),
                     paint(tty, "2", &format!("{} · ↑{} ↓{} · 合计 {}", model, fmt_tokens(tokens.prompt), fmt_tokens(tokens.completion), fmt_tokens(tokens.prompt + tokens.completion)))
                 );
-                eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
+                eprintln!("{}", paint(tty, border, "╰─────────────────────────────────────"));
             }
             // 行式模式下：ask_user 由 await_answer 直接走 read_user_line（自带提问输出），
             // 这里不再重复打印；Done 的产物路径由 harness::handle 在收尾时统一打印。
@@ -236,4 +226,44 @@ impl Frontend for PlainFrontend {
     }
 
     async fn shutdown(self: Box<Self>) {}
+}
+
+/// .tks 行的简易语法染色（ANSI）：首词=指令(青)、{元素}=绿、"文本"=黄，其余原样。
+fn paint_tks_line(tty: bool, line: &str) -> String {
+    if !tty {
+        return line.to_string();
+    }
+    let trimmed = line.trim_start();
+    let (cmd, rest) = match trimmed.split_once(char::is_whitespace) {
+        Some((c, r)) => (c, r),
+        None => (trimmed, ""),
+    };
+    let mut out = format!("\x1b[36m{}\x1b[0m ", cmd);
+    let mut chars = rest.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => {
+                let mut seg = String::from("{");
+                for c2 in chars.by_ref() {
+                    seg.push(c2);
+                    if c2 == '}' {
+                        break;
+                    }
+                }
+                out.push_str(&format!("\x1b[32m{}\x1b[0m", seg));
+            }
+            '"' => {
+                let mut seg = String::from("\"");
+                for c2 in chars.by_ref() {
+                    seg.push(c2);
+                    if c2 == '"' {
+                        break;
+                    }
+                }
+                out.push_str(&format!("\x1b[33m{}\x1b[0m", seg));
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }

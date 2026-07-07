@@ -34,8 +34,7 @@ use crate::Result;
 
 use super::knowledge::KnowledgeOutcome;
 use super::transcript::Transcript;
-use super::ui::{ElementItem, Frontend, Level, StatusLine, Tokens, UiEvent};
-
+use super::ui::{Frontend, Level, StatusLine, Tokens, UiEvent};
 
 /// AI 探索测试编排器
 pub struct AgentRunner;
@@ -51,8 +50,8 @@ impl AgentRunner {
     }
 }
 
-/// 末尾统一渲染结果框（在 verify 之后调用，token 覆盖全程）：
-/// 状态一行 + 依据 + 脚本两件套（步骤预览/元素清单）+ 用量。诊断/验证只在真跑过时显示。
+/// 末尾统一渲染结果框：标题即状态（探索完成/未达成/已终止 + 步数轮数），框前由前端
+/// 展示染色脚本；框内=依据 + 两件套路径 + 用量。回放/稳定只在真跑过时显示。
 #[allow(clippy::too_many_arguments)]
 fn render_summary(
     success: bool,
@@ -64,20 +63,19 @@ fn render_summary(
     tp: i64,
     tc: i64,
     script_path: &Path,
+    tklib_path: &Path,
     steps: &[String],
-    created: &[String],
-    element_path: &Path,
     ui: &dyn Frontend,
 ) {
     let n = steps.len();
     let status = if aborted {
-        StatusLine::new(Level::Warn, format!("■ 已终止 · {} 步（{} 轮）", n, rounds))
+        StatusLine::new(Level::Warn, format!("已终止 · {} 步（{} 轮）", n, rounds))
     } else if success {
-        StatusLine::new(Level::Ok, format!("✓ 达成 · {} 步（{} 轮）", n, rounds))
+        StatusLine::new(Level::Ok, format!("探索完成 · {} 步（{} 轮）", n, rounds))
     } else {
-        StatusLine::new(Level::Err, format!("✗ 未达成 · {} 步（{} 轮）", n, rounds))
+        StatusLine::new(Level::Err, format!("探索未达成 · {} 步（{} 轮）", n, rounds))
     };
-    // 诊断/验证：只在真跑过时给行（None 不渲染）
+    // 回放/稳定：只在真跑过时给行（None 不渲染）
     let diagnose = verified.map(|r| {
         if !r.reached {
             StatusLine::new(Level::Err, "✗ 修复失败（脚本仍跑不到目标）".to_string())
@@ -96,16 +94,10 @@ fn render_summary(
             StatusLine::new(Level::Err, format!("✗ 不稳定（连续到达仅 {} 次）", r.stability_passes))
         }
     });
-    // 脚本两件套信息：步骤 friendly 化 + 元素清单（desc 从解包库读）
-    let descs = read_descs(element_path, created);
-    let elements: Vec<ElementItem> = created
-        .iter()
-        .map(|name| ElementItem { name: name.clone(), desc: descs.get(name).cloned().flatten() })
-        .collect();
     let script = Some(crate::workflow::agent::ui::ScriptInfo {
-        name: script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-        steps: steps.iter().map(|l| fmt::friendly(l)).collect(),
-        elements,
+        tks: script_path.to_string_lossy().to_string(),
+        tklib: tklib_path.to_string_lossy().to_string(),
+        steps: steps.to_vec(),
     });
 
     ui.emit(UiEvent::Summary {
@@ -117,18 +109,6 @@ fn render_summary(
         model: model.to_string(),
         tokens: Tokens::new(tp, tc),
     });
-}
-
-/// 从 element.json 读出若干元素的 desc（用于最终汇总展示）
-fn read_descs(lib_path: &Path, names: &[String]) -> std::collections::HashMap<String, Option<String>> {
-    let lib: serde_json::Value = std::fs::read_to_string(lib_path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_else(|| serde_json::json!({}));
-    names
-        .iter()
-        .map(|name| (name.clone(), lib["elements"][name]["desc"].as_str().map(|s| s.to_string())))
-        .collect()
 }
 
 /// 记录一次知识检索结果

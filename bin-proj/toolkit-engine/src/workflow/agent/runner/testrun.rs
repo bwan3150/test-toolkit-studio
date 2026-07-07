@@ -522,7 +522,6 @@ impl TestRun {
                 text: format!("元素包打包失败（{}）：脚本已保存，但 {} 缺失——回放将只剩坐标步可用", e, out_tklib.display()),
             });
         }
-        let display_created = semantic;
         // 非设备动作留痕：把 notes 作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过；脚本已写完才追加，不被覆盖）。
         if !self.notes.is_empty() {
             use std::io::Write;
@@ -532,7 +531,7 @@ impl TestRun {
                 }
             }
         }
-        let _ = committed; // 元素数已由 elements 清单本身表达
+        let _ = committed; // 元素随 .tklib 两件套走，不再单列
         render_summary(
             self.outcome.success,
             self.outcome.aborted,
@@ -543,9 +542,8 @@ impl TestRun {
             total_prompt,
             total_completion,
             &self.script_path,
+            out_tklib,
             &self.result_lines,
-            &display_created,
-            &stage_json,
             ui,
         );
 

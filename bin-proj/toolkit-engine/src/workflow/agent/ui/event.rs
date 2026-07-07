@@ -111,22 +111,15 @@ impl StatusLine {
     }
 }
 
-/// 元素包(.tklib)内的一个元素（结果框展示用）
-#[derive(Debug, Clone, Serialize)]
-pub struct ElementItem {
-    pub name: String,
-    pub desc: Option<String>,
-}
-
-/// 结果框里的脚本信息：两件套 + 步骤预览 + 元素清单
+/// 结果框里的脚本信息：两件套完整路径 + 原始 .tks 步骤行（前端自行做语法染色）
 #[derive(Debug, Clone, Serialize)]
 pub struct ScriptInfo {
-    /// 脚本文件名（如 foo.tks；两件套=同名 .tklib）
-    pub name: String,
-    /// 友好化的步骤行（friendly 处理过，无 .tks 括号噪声）
+    /// .tks 完整路径
+    pub tks: String,
+    /// .tklib 完整路径
+    pub tklib: String,
+    /// 原始 .tks 步骤行（未 friendly 化——保留结构供染色）
     pub steps: Vec<String>,
-    /// 打进 .tklib 的元素（name + 自动生成的 desc）
-    pub elements: Vec<ElementItem>,
 }
 
 /// 编排官 todo 项状态
