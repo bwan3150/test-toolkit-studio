@@ -81,8 +81,15 @@ fi
 # 创建目标目录
 mkdir -p "$TARGET_DIR"
 
-# 复制二进制文件
+# 复制二进制文件——先删旧文件(拿新 inode)再拷:macOS(Apple Silicon)内核按 inode 缓存
+# 代码签名,原地覆盖会导致签名不匹配、执行直接 Killed: 9
+rm -f "$TARGET_BINARY"
 cp "$SOURCE_BINARY" "$TARGET_BINARY"
+
+# macOS 保险:ad-hoc 重签(签名缺失/失效时 AMFI 会杀进程)
+if [[ "$OS" == darwin* ]]; then
+    codesign --force -s - "$TARGET_BINARY" 2>/dev/null || true
+fi
 
 # 给二进制文件添加执行权限（Linux/macOS）
 if [[ "$OS" != MINGW* && "$OS" != MSYS* && "$OS" != CYGWIN* ]]; then
