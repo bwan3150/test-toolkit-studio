@@ -67,6 +67,7 @@ async fn drive_click_then_finish() {
         ai: &ai,
         ui: &ui,
         task_mode: true, // 跳过踩实官/监督官（它们各起独立 LLM 会话）
+        ask_mode: super::ctx::AskMode::Ask,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -129,6 +130,7 @@ async fn drive_autostops_on_repeated_noop_click() {
         ai: &ai,
         ui: &ui,
         task_mode: true,
+        ask_mode: super::ctx::AskMode::Ask,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -218,6 +220,7 @@ async fn full_test_asserter_inserts_and_supervisor_gates() {
         ai: &ai,
         ui: &ui,
         task_mode: false, // 完整测试：开踩实官 + 监督官
+        ask_mode: super::ctx::AskMode::Ask,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -287,6 +290,7 @@ async fn supervisor_reject_limit_fails_the_run() {
         ai: &ai,
         ui: &ui,
         task_mode: false,
+        ask_mode: super::ctx::AskMode::Ask,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -295,6 +299,76 @@ async fn supervisor_reject_limit_fails_the_run() {
     assert!(outcome.reason.contains("监督官"), "失败原因应指明监督官打回：{}", outcome.reason);
     assert!(outcome.lines.is_empty(), "全程没有设备动作，脚本应为空");
     assert!(fake::events(device).is_empty(), "设备不应有任何动作");
+
+    fake::remove(device);
+}
+
+/// 托管代答闭环：explorer 提问 → 没人可问（Plain）强制走托管 → **参谋单次代答** →
+/// 循环不阻塞继续 → 点击 → finish。ask_user 从"直通用户"变成"先过主 AI 视角这一道"。
+#[tokio::test]
+async fn ask_user_auto_mode_advisor_answers() {
+    let device = "fake:advisor-auto";
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("设置入口", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let tmp = temp_dir("advisor-auto");
+    let prompts = PromptSet::resolve(&PromptSpec::default()).unwrap();
+    let ai = crate::utils::AiConfig {
+        provider: Some("fake".into()),
+        model: Some("advisor-auto".into()),
+        ..Default::default()
+    };
+    let ui = PlainFrontend::new();
+    let workarea = Workarea::for_device(Some(device)).unwrap();
+    let fetcher = Fetcher::new();
+    let artifacts = RunArtifacts::create(&tmp, "advisor-auto").unwrap();
+    let element_path = tmp.join("element.json");
+    let mut tx = Transcript::create(tmp.join("conversation.jsonl")).unwrap();
+
+    // explorer：先拿不准提问 → 收到参谋代答后点击 → finish
+    let mut sess = LlmSession::new_fake(
+        "你是测试探索官",
+        Vec::new(),
+        vec![
+            FakeTurn::tool("ask_user", serde_json::json!({ "question": "有两个入口，进哪个？" })),
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "按参谋指示进设置" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "已到设置中心" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+    // 参谋（单次 JSON 会话）：代答
+    crate::workflow::agent::provider::enqueue_fake_role_session(
+        "advisor-auto",
+        "advisor",
+        vec![FakeTurn::text(r#"{"answer": "点「设置入口」——目标是设置中心，它是唯一相关入口"}"#)],
+    );
+
+    let ctx = DriveCtx {
+        device,
+        element_path: &element_path,
+        workarea: &workarea,
+        fetcher: &fetcher,
+        artifacts: &artifacts,
+        ocr: None,
+        max_rounds: 6,
+        prompts: &prompts,
+        case: "打开设置中心",
+        ai: &ai,
+        ui: &ui,
+        task_mode: true,
+        ask_mode: super::ctx::AskMode::Ask, // Plain 无提问能力 → flow 强制按托管处理
+    };
+    let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
+
+    assert!(outcome.success, "代答后应顺利完成：{}", outcome.reason);
+    assert!(outcome.subagent_pt > 0 || outcome.subagent_ct >= 0, "参谋 token 应计入子 agent 账目");
+    let taps: Vec<_> = fake::events(device).into_iter().filter(|e| e.starts_with("tap")).collect();
+    assert_eq!(taps.len(), 1, "代答后应发生点击：{:?}", taps);
 
     fake::remove(device);
 }

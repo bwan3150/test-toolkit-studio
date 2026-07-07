@@ -207,6 +207,7 @@ macro_rules! op_ctx {
             ai: &$opts.ai,
             ui: $ui,
             task_mode: false,
+            ask_mode: super::ctx::AskMode::Ask,
         }
     };
 }

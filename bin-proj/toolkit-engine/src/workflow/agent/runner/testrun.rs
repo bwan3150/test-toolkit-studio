@@ -24,7 +24,7 @@ use super::super::prompt::{render, PromptSet};
 use super::super::tools::build_tools;
 use super::super::transcript::Transcript;
 use super::super::ui::{Frontend, Level, Phase, SubAgent, Tokens, UiEvent};
-use super::ctx::{DriveCtx, DriveOutcome};
+use super::ctx::{AskMode, DriveCtx, DriveOutcome};
 use super::flow::drive;
 use super::options::{AgentResult, AgentRunOptions, VerifyReport};
 use super::{record_knowledge, referenced_element_names, render_summary, slug, unique_script_path};
@@ -70,6 +70,8 @@ pub(crate) struct TestRun {
     /// 轻模式（通用任务/不要求校验）：驱动时跳过踩实官(自动断言)与监督官(finish 把关)；
     /// 仍照常产 .tks/log/元素。false=完整测试（开断言+把关，脚本可验证）。
     task_mode: bool,
+    /// explorer 提问模式（编排官按用户意愿下发：Ask=转给用户/Auto=参谋托管代答）
+    ask_mode: AskMode,
     /// 末页可读文字（驱动结束后捕获，read_full 时滚动逐屏收集）——供"读内容/存 md/答问"。
     final_text: String,
     /// 末页截图路径——供"截图/下载头像"交付。
@@ -97,6 +99,7 @@ macro_rules! drive_ctx {
             ai: &$opts.ai,
             ui: $ui,
             task_mode: $r.task_mode,
+            ask_mode: $r.ask_mode,
         }
     };
 }
@@ -115,6 +118,7 @@ impl TestRun {
         note: Option<&str>,
         full_test: bool,
         read_full: bool,
+        ask_mode: AskMode,
     ) -> Result<TestRun> {
         let case = goal; // 目标即用例（统一）
         // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
@@ -224,6 +228,7 @@ impl TestRun {
             result_lines: Vec::new(),
             verified: None,
             task_mode: !full_test,
+            ask_mode,
             final_text: String::new(),
             final_shot: PathBuf::new(),
             start_text: String::new(),

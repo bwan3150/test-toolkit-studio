@@ -66,6 +66,7 @@ pub async fn drive(
     let mut renames: Vec<(String, String)> = Vec::new(); // 本次元素改名记录
     let mut loop_streak = 0usize; // 连续"同一操作且页面不变"的次数（真打转信号）
     let mut pingpong_streak = 0usize; // 连续"页面变了但回到旧页、且没探出新页面"的次数（A↔B 横跳信号）
+    let mut escalated = false; // 是否已注入过"升级求助"硬指令（每次探索只强制一次）
     let mut last_was_swipe = false; // 上一步是否是滑动（用于剔除"空滑"——回放会滑过头）
     let mut last_was_close = false; // 上一步是否是主动关闭/收尾（关 app/销毁会话）——下一轮空页面不催 launch
     let mut last_was_nav = false; // 上一步是否是「导航」动作（点击/视觉点击/切换/拖拽）——用于「踩实」判定
@@ -246,6 +247,21 @@ pub async fn drive(
             break 'outer;
         }
         let stuck = !last_no_pagecheck && (no_progress >= 1 || revisits >= 2) && !p.elements.is_empty();
+        // 升级求助（nudge 之上、自动停止之下的中间层）：温和提示后仍多轮无进展/横跳，
+        // 注入硬指令——必须 ask_user 求助（交互→转用户；托管→参谋代答）或 finish(false) 交卡点报告。
+        // 只触发一次：求助后要么方向被纠正，要么继续恶化由上面的自动停止兜底。
+        let escalate = !escalated
+            && !p.elements.is_empty()
+            && !last_no_pagecheck
+            && (no_progress >= 4 || pingpong_streak >= 3);
+        if escalate {
+            escalated = true;
+            tx.log("stuck_escalate", serde_json::json!({ "round": round, "no_progress": no_progress, "pingpong": pingpong_streak }));
+            ctx.ui.emit(UiEvent::Stuck { round, message: "多轮无进展，已要求 AI 求助或交卡点报告".to_string() });
+            let m = ctx.prompts.message("explorer", "stuck_escalate");
+            tx.log("llm_message", serde_json::json!({ "round": round, "content": m.clone() }));
+            sess.user(m);
+        }
 
         tx.log(
             "page_snapshot",
@@ -605,16 +621,35 @@ pub async fn drive(
                 }
                 AgentAction::AskUser { question, options } => {
                     tx.log("ask_user", serde_json::json!({ "round": round, "question": question.clone(), "options": options.clone() }));
-                    // Plain（管道/CI）没人可问：绝不阻塞等 stdin，回兜底让 AI 自行决定
-                    if !ctx.ui.supports_prompts() {
-                        sess.tool_result(primary.call_id.as_str(), "（当前为非交互运行，无法向用户提问——请基于已有信息自行决定并继续）");
+                    // 托管（用户点名 auto）或没人可问（Plain/CI）→ **参谋代答**：
+                    // 单次调用站在全局目标+当前页面视角给行动指示，绝不阻塞、绝不打扰用户
+                    let auto = ctx.ask_mode == super::ctx::AskMode::Auto || !ctx.ui.supports_prompts();
+                    if auto {
+                        ctx.ui.emit(UiEvent::Notice { level: Level::Dim, text: format!("? Explorer 求助：{}", brief(&question, 80)) });
+                        let adv = super::advisor::consult(ctx.ai, ctx.prompts, tx, ctx.case, &question, &options, &lines, &list_text, true).await;
+                        subagent_pt += adv.pt;
+                        subagent_ct += adv.ct;
+                        if adv.answer.is_empty() {
+                            sess.tool_result(primary.call_id.as_str(), "（托管模式，参谋暂无答复——请基于已有信息选最稳妥的方向继续）");
+                        } else {
+                            ctx.ui.emit(UiEvent::Notice { level: Level::Dim, text: format!("◇ 参谋代答：{}", brief(&adv.answer, 100)) });
+                            sess.tool_result(primary.call_id.as_str(), format!("（托管模式，参谋代答）{}", adv.answer));
+                        }
                         continue;
                     }
-                    // AI 给了候选项 → 方向键列表选择（末尾自动加"其他（自行输入）"兜底）；否则纯文本
-                    let answer = if options.is_empty() {
+                    // 交互：探索 agent 没自带候选时，请参谋把问题提炼成候选选项（用户可选可输入,少打字）
+                    let opts_final = if options.is_empty() {
+                        let adv = super::advisor::consult(ctx.ai, ctx.prompts, tx, ctx.case, &question, &options, &lines, &list_text, false).await;
+                        subagent_pt += adv.pt;
+                        subagent_ct += adv.ct;
+                        adv.options
+                    } else {
+                        options
+                    };
+                    let answer = if opts_final.is_empty() {
                         ctx.ui.await_answer(round, question.clone()).await
                     } else {
-                        ask_with_options(ctx.ui, round, &question, &options).await
+                        ask_with_options(ctx.ui, round, &question, &opts_final).await
                     };
                     let answer = match answer {
                         Some(a) => a,

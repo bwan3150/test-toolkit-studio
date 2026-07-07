@@ -199,7 +199,7 @@ async fn replay_heals_relocated_element_in_place() {
     enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::text("{}")]);
 
     let opts = opts_for(device, scope, ws.clone(), cache);
-    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false).await.unwrap();
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask).await.unwrap();
     let tks = ws.join("open.tks");
     let tklib = crate::utils::tklib::tklib_path(&tks);
     let result = run.finalize(&opts, &ui, &tks, &tklib).await.unwrap();

@@ -37,7 +37,7 @@
 - **orchestrator** 是唯一与用户对话的主 AI（REPL），经颗粒化工具调度一切：
   `explore`（→ explorer 驱动循环，内含 asserter 每次导航踩实、supervisor finish 把关）、
   `replay_tks`/`repair_tks`(断点续探)/`optimize_tks`(optimizer)、文件增删改查（写/改/删需授权）。
-- 多轮带工具 = explorer / optimizer / orchestrator；单次 JSON 无工具 = asserter / supervisor / reflector / verify(marker) / healer(定位自愈挑选)。
+- 多轮带工具 = explorer / optimizer / orchestrator；单次 JSON 无工具 = asserter / supervisor / reflector / verify(marker) / healer(定位自愈挑选) / advisor(参谋:explorer 提问中转,托管代答/交互出选项)。
 - **接地规则（几十版医生换来的教训）**：多轮 agent 必须**接地在它正在改变的状态上**（explorer 每轮看真实页面），
   不接地的任务一律拆成单次调用。旧「医生」（多轮编辑 .tks 文本、看过期 trace）因此被整体删除——
   修复 = ①定位级自愈（`runner/healer` 单次挑选，Healenium 式，解析失败时基于当前实时页面修正元素库）

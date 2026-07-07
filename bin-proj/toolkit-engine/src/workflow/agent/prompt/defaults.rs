@@ -14,6 +14,8 @@ pub const DEFAULT_EXPLORER_SYSTEM: &str = include_str!("builtin/agents/explorer.
 
 /// 默认探索反思官系统提示词（角色 reflector）
 pub const DEFAULT_REFLECTOR_SYSTEM: &str = include_str!("builtin/agents/reflector.md");
+/// 默认参谋系统提示词（角色 advisor）：explorer 提问中转——托管代答/交互出选项
+pub const DEFAULT_ADVISOR_SYSTEM: &str = include_str!("builtin/agents/advisor.md");
 
 /// 默认脚本优化官系统提示词（角色 optimizer：逐步删冗余/合并盲滑）
 pub const DEFAULT_OPTIMIZER_SYSTEM: &str = include_str!("builtin/agents/optimizer.md");
@@ -34,6 +36,7 @@ pub fn default_role_system(role: &str) -> &'static str {
     match role {
         "orchestrator" => DEFAULT_ORCHESTRATOR_SYSTEM,
         "explorer" => DEFAULT_EXPLORER_SYSTEM,
+        "advisor" => DEFAULT_ADVISOR_SYSTEM,
         "reflector" => DEFAULT_REFLECTOR_SYSTEM,
         "optimizer" => DEFAULT_OPTIMIZER_SYSTEM,
         "supervisor" => DEFAULT_SUPERVISOR_SYSTEM,
@@ -110,6 +113,11 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("verify", "goal_marker_from_page") => include_str!("builtin/messages/verify/goal_marker_from_page.md"),
         ("verify", "start_marker_from_page") => include_str!("builtin/messages/verify/start_marker_from_page.md"),
         ("verify", "heal_pick") => include_str!("builtin/messages/verify/heal_pick.md"),
+        // —— advisor：参谋（explorer 提问中转：托管代答/交互出选项）——
+        ("explorer", "stuck_escalate") => include_str!("builtin/messages/explorer/stuck_escalate.md"),
+        ("advisor", "consult") => include_str!("builtin/messages/advisor/consult.md"),
+        ("advisor", "mode_answer") => include_str!("builtin/messages/advisor/mode_answer.md"),
+        ("advisor", "mode_options") => include_str!("builtin/messages/advisor/mode_options.md"),
         // —— reflector：探索反思官 ——
         ("reflector", "analyze_failure") => include_str!("builtin/messages/reflector/analyze_failure.md"),
         ("reflector", "analyze_success") => include_str!("builtin/messages/reflector/analyze_success.md"),

@@ -10,6 +10,15 @@ use super::super::prompt::PromptSet;
 use super::super::ui::Frontend;
 
 /// 循环所需的只读上下文
+/// explorer 提问模式（用户在对话里说"全自动/别打扰"→ 编排官下发 Auto）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskMode {
+    /// 转给用户（默认）：参谋先把问题提炼出候选选项，用户可选可输入
+    Ask,
+    /// 完全托管：参谋（主 AI 视角）代答，不打扰用户
+    Auto,
+}
+
 pub struct DriveCtx<'a> {
     pub device: &'a str,
     pub element_path: &'a Path,
@@ -30,6 +39,9 @@ pub struct DriveCtx<'a> {
     /// 通用任务模式（operate）：朝任意目标驱动设备、不产可回放脚本——跳过测试专属的
     /// 踩实官(自动断言)与监督官(finish 把关)。false=测试探索（行为不变）。
     pub task_mode: bool,
+    /// explorer 提问模式：Ask=转给用户(参谋先生成候选选项)；Auto=完全托管(参谋代答,不打扰用户)。
+    /// 无提问能力的前端(Plain/CI)运行时强制按 Auto 处理。
+    pub ask_mode: AskMode,
 }
 
 /// 循环结果

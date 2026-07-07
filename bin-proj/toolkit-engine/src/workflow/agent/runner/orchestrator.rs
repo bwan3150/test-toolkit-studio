@@ -34,7 +34,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                     "note": { "type": "string", "description": "可选：额外约束/提示（用户纠偏、已否定路径、需留意的细节）" },
                     "script_name": { "type": "string", "description": "可选：给产出的 .tks 起的文件名（落到当前工作目录、目录内自动去重）。不给则按 goal 取名。一次对话可产多个不同脚本。" },
                     "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 replay_tks/repair_tks）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
-                    "read_full": { "type": "boolean", "description": "任务是读**长内容**（整页 policy 等）时设 true：到达目标后滚动逐屏收集全文。截图/找元素留 false（默认，不乱滚）" }
+                    "read_full": { "type": "boolean", "description": "任务是读**长内容**（整页 policy 等）时设 true：到达目标后滚动逐屏收集全文。截图/找元素留 false（默认，不乱滚）" },
+                    "ask_mode": { "type": "string", "enum": ["ask", "auto"], "description": "探索中遇到拿不准的问题怎么办：ask（默认）=转给用户（参谋会先生成候选选项，用户可选可输入）；auto=完全托管（参谋以全局视角代答，绝不打扰用户）。用户表达过\"全自动跑/别问我/托管\"就传 auto" }
                 },
                 "required": ["goal"]
             }),
@@ -274,13 +275,17 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let note = call.arguments.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
                             let make_test = call.arguments.get("make_test").and_then(|v| v.as_bool()).unwrap_or(false);
                             let read_full = call.arguments.get("read_full").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let ask_mode = match call.arguments.get("ask_mode").and_then(|v| v.as_str()) {
+                                Some("auto") => super::ctx::AskMode::Auto,
+                                _ => super::ctx::AskMode::Ask,
+                            };
                             let script_name = arg_str(&call.arguments, "script_name");
                             if goal.trim().is_empty() {
                                 sess.tool_result(call.call_id, "未提供 goal，无法开始。");
                                 continue;
                             }
                             emit_orch(ui, &sess, &format!("开始：{}", first_line(&goal)));
-                            let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full).await?;
+                            let run = TestRun::explore(opts, ui, &goal, note.as_deref(), make_test, read_full, ask_mode).await?;
                             // 命名 + 落工作区（当前目录、目录内去重）+ .tklib 元素包（两件套，复制即跑）
                             let base = {
                                 let n = script_name.trim();

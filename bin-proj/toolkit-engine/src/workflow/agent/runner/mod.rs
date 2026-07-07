@@ -1,6 +1,7 @@
 // 【编排】AgentRunner：装配 + 开一场主 AI(orchestrator) 会话。
 // 本文件只做"装配 + 收尾渲染辅助"；主 AI 会话循环在 orchestrator.rs，驱动循环在 flow.rs。
 
+pub mod advisor;
 pub mod asserter;
 pub mod ctx;
 pub mod diagnose;
