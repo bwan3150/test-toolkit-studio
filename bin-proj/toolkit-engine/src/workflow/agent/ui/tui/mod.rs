@@ -1,4 +1,6 @@
-// 【TUI 前端】ratatui 全屏交互（真 TTY 时用）。三分结构：
+// 【TUI 前端】ratatui **inline viewport**（Claude Code 式，真 TTY 时用）：不进备用屏幕——
+// 历史消息批量 insert_before 直接进终端 scrollback（原生滚动/选择/复制全程可用、退出即留痕），
+// 屏幕底部只固定一小块：状态行 + 输入区 + 底栏。三分结构：
 //   mod.rs    TuiFrontend(引擎侧句柄/Frontend impl) + 终端生命周期 + 主循环
 //   model.rs  TuiModel 渲染状态：UiEvent→彩色行、键盘/粘贴处理、/指令
 //   view.rs   画屏：布局/顶栏/消息区(窗口化)/输入区/底栏
@@ -16,12 +18,12 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use crossterm::{
-    cursor::{Hide, Show},
+    cursor::Show,
     event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyEventKind},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, Terminal, TerminalOptions, Viewport};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use super::command::UiCommand;
@@ -197,80 +199,63 @@ fn run_tui(
     let res = run_loop(&mut terminal, &mut events_rx, &commands_tx, &mut model);
     // 无论 res 如何都要恢复终端
     let _ = leave_terminal(&mut terminal);
-    // 备用屏幕(alt-screen)不属于终端滚动缓冲区——TUI 里的内容退出即蒸发,选择也不跟滚动。
-    // 退出后把整场消息流(带颜色)完整回放进 scrollback:记录永在,可滚/可选/可复制,排查全靠它。
-    dump_transcript(&model.lines);
     res
 }
 
-/// 把消息流按原有颜色回放到普通终端（stderr，与其余输出一致）。
-fn dump_transcript(lines: &[ratatui::text::Line<'static>]) {
-    use ratatui::style::{Color, Modifier};
-    fn fg_code(c: Color) -> Option<&'static str> {
-        Some(match c {
-            Color::Black => "30",
-            Color::Red => "31",
-            Color::Green => "32",
-            Color::Yellow => "33",
-            Color::Blue => "34",
-            Color::Magenta => "35",
-            Color::Cyan => "36",
-            Color::Gray => "37",
-            Color::DarkGray => "90",
-            Color::LightRed => "91",
-            Color::LightGreen => "92",
-            Color::LightYellow => "93",
-            Color::LightBlue => "94",
-            Color::LightMagenta => "95",
-            Color::LightCyan => "96",
-            Color::White => "97",
-            _ => return None,
+/// 把 model 里新产生的定稿行批量 insert_before 进 scrollback（按显示宽度估算 wrap 高度）。
+fn flush_lines(terminal: &mut Terminal<Backend>, model: &mut TuiModel) -> std::io::Result<()> {
+    if model.flushed >= model.lines.len() {
+        return Ok(());
+    }
+    let width = terminal.size()?.width.max(1) as usize;
+    let new: Vec<ratatui::text::Line<'static>> = model.lines[model.flushed..].to_vec();
+    model.flushed = model.lines.len();
+    let total: u16 = new
+        .iter()
+        .map(|l| {
+            let w = l.width();
+            ((w / width + usize::from(w % width != 0)).max(1)) as u16
         })
+        .sum();
+    if total == 0 {
+        return Ok(());
     }
-    eprintln!();
-    eprintln!("\x1b[2m─ 本次会话完整记录（可滚动/复制排查）─\x1b[0m");
-    for line in lines {
-        let mut out = String::new();
-        for span in &line.spans {
-            let mut codes: Vec<&str> = Vec::new();
-            if span.style.add_modifier.contains(Modifier::BOLD) {
-                codes.push("1");
-            }
-            if let Some(c) = span.style.fg.and_then(fg_code) {
-                codes.push(c);
-            }
-            if codes.is_empty() {
-                out.push_str(&span.content);
-            } else {
-                out.push_str(&format!("\x1b[{}m{}\x1b[0m", codes.join(";"), span.content));
-            }
-        }
-        eprintln!("{}", out);
-    }
+    terminal.insert_before(total, |buf| {
+        use ratatui::widgets::Widget;
+        ratatui::widgets::Paragraph::new(ratatui::text::Text::from(new))
+            .wrap(ratatui::widgets::Wrap { trim: false })
+            .render(buf.area, buf);
+    })?;
+    Ok(())
 }
 
-/// raw mode + 备用屏幕 + 隐藏光标 + bracketed paste（粘贴走 Event::Paste，不再逐字当按键）
+/// raw mode + inline viewport（不进备用屏幕）+ bracketed paste（粘贴走 Event::Paste）。
+/// 历史进 scrollback，底部固定 VIEWPORT_H 行画状态/输入/底栏。
 fn enter_terminal() -> std::io::Result<Terminal<Backend>> {
     enable_raw_mode()?;
     let mut out = std::io::stdout();
-    execute!(out, EnterAlternateScreen, EnableBracketedPaste, Hide)?;
-    Terminal::new(CrosstermBackend::new(out))
+    execute!(out, EnableBracketedPaste)?;
+    Terminal::with_options(
+        CrosstermBackend::new(out),
+        TerminalOptions { viewport: Viewport::Inline(view::VIEWPORT_H) },
+    )
 }
 
-/// 退出备用屏幕 + 显示光标 + 关 raw mode（CrosstermBackend 实现了 Write）
+/// 清掉底部小窗 + 显示光标 + 关 raw mode——历史都在 scrollback 里，退出后可滚/可选/可复制。
 fn leave_terminal(terminal: &mut Terminal<Backend>) -> std::io::Result<()> {
-    execute!(terminal.backend_mut(), DisableBracketedPaste, LeaveAlternateScreen, Show)?;
+    let _ = terminal.clear(); // inline viewport：clear 只清底部小窗区域
+    execute!(terminal.backend_mut(), DisableBracketedPaste, Show)?;
     disable_raw_mode()?;
     let _ = terminal.show_cursor();
     Ok(())
 }
 
-/// panic 时也恢复终端（否则用户终端卡在 raw/alt-screen）
+/// panic 时也恢复终端（否则用户终端卡在 raw mode）
 fn install_panic_hook() {
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
-        let _ = execute!(std::io::stdout(), DisableBracketedPaste, LeaveAlternateScreen, Show);
+        let _ = execute!(std::io::stdout(), DisableBracketedPaste, Show);
         prev(info);
     }));
 }
@@ -291,6 +276,8 @@ fn run_loop(
             model.apply(ev);
             dirty = true;
         }
+        // 新定稿行批量插入终端 scrollback（inline viewport 核心：历史归终端管）
+        flush_lines(terminal, model)?;
         if event::poll(Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(k) if k.kind == KeyEventKind::Press => {

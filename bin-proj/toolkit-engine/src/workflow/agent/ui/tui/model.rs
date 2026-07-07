@@ -36,14 +36,12 @@ pub(super) struct TuiModel {
     /// 方向键列表选择（Some=正在从候选里选，如设备选择）
     pub(super) choosing: Option<ChoiceState>,
     pub(super) input: String,
-    /// 从底向上的滚动偏移（仅 follow=false 时生效）
-    pub(super) scroll: u16,
-    /// true=自动贴底显示最新
-    pub(super) follow: bool,
+    /// lines 里已插入终端 scrollback 的行数（inline viewport：新行批量 insert_before）
+    pub(super) flushed: usize,
+    /// 正在执行的步骤预览（显示在底部状态行；完成时以定稿行进 scrollback）
+    pub(super) running_step: Option<String>,
     pub(super) finished: bool,
     pub(super) should_quit: bool,
-    /// 最近一条「步骤进行中」行的下标；done 时原地替换成 ✓/✗（步骤保持单行，不另起一行）
-    last_step_idx: Option<usize>,
     /// 输入框光标位置（字符索引，0..=input.chars().count()）
     pub(super) cursor: usize,
     /// 当前平台（从 SessionInfo 取，用于 Page 行的平台图标）
@@ -63,11 +61,10 @@ impl TuiModel {
             awaiting: None,
             choosing: None,
             input: String::new(),
-            scroll: 0,
-            follow: true,
+            flushed: 0,
+            running_step: None,
             finished: false,
             should_quit: false,
-            last_step_idx: None,
             cursor: 0,
             platform: None,
             ai_config: None,
@@ -111,17 +108,6 @@ impl TuiModel {
             format!("⎿ {}", text),
             Style::default().fg(Color::DarkGray),
         )));
-    }
-
-    /// 步骤完成：原地把「进行中」行替换成 ✓/✗ 结果行（步骤单行，不另起一行）
-    fn replace_step_line(&mut self, line: Line<'static>) {
-        if let Some(i) = self.last_step_idx.take() {
-            if i < self.lines.len() {
-                self.lines[i] = line;
-                return;
-            }
-        }
-        self.push(line);
     }
 
     /// 清空输入框（光标归零）
@@ -273,19 +259,15 @@ impl TuiModel {
                 ]));
             }
             UiEvent::Step { step, state, preview, duration_ms, error, .. } => match state {
-                // 进行中：`[ N] 动作 ...`（记下行号，done 时原地替换，不另起一行）
+                // 进行中：不进 scrollback（插入后就改不了），显示在底部状态行
                 StepState::Running => {
-                    self.push(Line::from(vec![
-                        Span::styled(format!("  [{:>2}] ", step), Style::default().fg(Color::DarkGray)),
-                        Span::raw(preview),
-                        Span::styled(" ...", Style::default().fg(Color::DarkGray)),
-                    ]));
-                    self.last_step_idx = Some(self.lines.len() - 1);
+                    self.running_step = Some(format!("[{:>2}] {} …", step, preview));
                 }
-                // 成功：原地替换为 `[ N] 动作 ... ✓ 耗时`
+                // 成功：定稿行 `[ N] 动作 ... ✓ 耗时` 进 scrollback
                 StepState::Ok => {
+                    self.running_step = None;
                     let dur = duration_ms.map(fmt_duration).unwrap_or_default();
-                    self.replace_step_line(Line::from(vec![
+                    self.push(Line::from(vec![
                         Span::styled(format!("  [{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
                         Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
@@ -293,10 +275,11 @@ impl TuiModel {
                         Span::styled(format!(" {}", dur), Style::default().fg(Color::DarkGray)),
                     ]));
                 }
-                // 失败：原地替换为 `[ N] 动作 ... ✗ 错误`
+                // 失败：定稿行 `[ N] 动作 ... ✗ 错误` 进 scrollback
                 StepState::Fail => {
+                    self.running_step = None;
                     let e = error.unwrap_or_default();
-                    self.replace_step_line(Line::from(vec![
+                    self.push(Line::from(vec![
                         Span::styled(format!("  [{:>2}] ", step), Style::default().fg(Color::DarkGray)),
                         Span::raw(preview),
                         Span::styled(" ... ", Style::default().fg(Color::DarkGray)),
@@ -335,14 +318,10 @@ impl TuiModel {
                         allow_free: free_input,
                         free_input: String::new(),
                     });
-                    self.follow = true;
-                    self.scroll = 0;
                 } else if question.trim().is_empty() {
                     // 空问题 = 纯"等输入"状态（编排官 REPL 每轮的等待）——不灌消息流，免得刷屏
                     self.awaiting = Some(question);
                     self.cursor = 0;
-                    self.follow = true;
-                    self.scroll = 0;
                 } else {
                     // 纯文本输入：问题**推进消息流留痕**（? 前缀）——ask_user 问了什么必须能回看，
                     // 只显示在输入框标题的话，答完就消失了；输入框标题同时也显示。
@@ -353,8 +332,6 @@ impl TuiModel {
                     ]));
                     self.awaiting = Some(question);
                     self.cursor = 0;
-                    self.follow = true;
-                    self.scroll = 0;
                 }
             }
             UiEvent::GuidanceAccepted { .. } => {
@@ -617,27 +594,7 @@ impl TuiModel {
         }
 
         match k.code {
-            // ↑↓ / PageUp·PageDown 滚动消息区（不再用 j/k，避免吃掉字母输入）
-            KeyCode::Up => {
-                self.scroll = self.scroll.saturating_add(1);
-                self.follow = false;
-            }
-            KeyCode::Down => {
-                self.scroll = self.scroll.saturating_sub(1);
-                if self.scroll == 0 {
-                    self.follow = true;
-                }
-            }
-            KeyCode::PageUp => {
-                self.scroll = self.scroll.saturating_add(10);
-                self.follow = false;
-            }
-            KeyCode::PageDown => {
-                self.scroll = self.scroll.saturating_sub(10);
-                if self.scroll == 0 {
-                    self.follow = true;
-                }
-            }
+            // 滚动交还终端原生 scrollback（inline viewport：历史都在缓冲区里，鼠标/滚轮直接用）
             // ←→ Home End 移动输入光标
             KeyCode::Left => {
                 self.cursor = self.cursor.saturating_sub(1);

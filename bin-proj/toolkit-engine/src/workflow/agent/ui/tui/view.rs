@@ -1,18 +1,23 @@
-// 【TUI 画屏】布局 + 各区渲染：顶栏(状态) / 消息区(自动换行+贴底+窗口化) / 输入区(输入框或
-// choosing 列表) / 底栏(快捷键+token)。渲染状态在 model.rs。
+// 【TUI 画屏】inline viewport（Claude Code 式）：历史消息不在这里画——它们由 mod.rs 的
+// flush 批量 insert_before 进终端 scrollback（原生滚动/选择/复制全程可用）；本文件只画
+// 底部固定小窗：状态行(1) / 输入区(输入框或 choosing 列表) / 底栏(1)。
 
 use ratatui::{
     layout::{Constraint, Layout, Position},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Wrap},
+    text::{Line, Span},
+    widgets::{Block, Paragraph},
     Frame,
 };
 
 
 use super::model::{slash_matches, ChoiceState, TuiModel};
 
-/// 四段布局：顶栏(1) / 消息区(min) / 输入框(动态) / 底栏(1)
+/// inline viewport 总高度：状态 1 + 输入区(3~最大 10) + 底栏 1 + 顶部呼吸空行。
+/// ratatui 的 Inline viewport 高度固定——取输入区可能的最大值，平时多余空间留白在顶部。
+pub(super) const VIEWPORT_H: u16 = 12;
+
+/// 底部小窗布局：[顶部留白 Min(0)] / 状态行(1) / 输入区(动态) / 底栏(1)，内容贴底。
 pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
     // choosing 模式时输入区要容纳 prompt + 选项列表，按需放大；否则固定 3 行单行输入框。
     let input_h: u16 = if let Some(ch) = model.choosing.as_ref() {
@@ -27,25 +32,23 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
                 }
             }
         }
-        (ch.options.len() as u16 + groups + 2 + u16::from(!ch.prompt.trim().is_empty()) + u16::from(ch.allow_free)).clamp(4, 17)
+        (ch.options.len() as u16 + groups + 2 + u16::from(!ch.prompt.trim().is_empty()) + u16::from(ch.allow_free)).clamp(4, VIEWPORT_H - 2)
     } else if model.input.starts_with('/') {
         // slash 指令菜单：匹配项 + 输入行 + 边框
-        (slash_matches(&model.input).len() as u16 + 3).clamp(3, 10)
+        (slash_matches(&model.input).len() as u16 + 3).clamp(3, VIEWPORT_H - 2)
     } else {
         3
     };
     let chunks = Layout::vertical([
-        Constraint::Length(1),       // 顶栏
-        Constraint::Min(0),          // 消息区
-        Constraint::Length(1),       // 空行，隔开消息区与输入框
-        Constraint::Length(input_h), // 输入框
+        Constraint::Min(0),          // 顶部留白（与 scrollback 的呼吸空隙）
+        Constraint::Length(1),       // 状态行
+        Constraint::Length(input_h), // 输入区
         Constraint::Length(1),       // 底栏
     ])
     .split(frame.area());
 
-    // ---- 顶栏：随当前进程状态变化（反色粗体）----
-    // 准备中 / 等待回复 / 已暂停 / 探索中 / 诊断修复中 / 稳定性验证中 …
-    let top = if let Some(q) = model.awaiting.as_ref() {
+    // ---- 状态行：进程状态 + 正在执行的步骤（反色粗体）----
+    let mut top = if let Some(q) = model.awaiting.as_ref() {
         if q.starts_with("已暂停") {
             " ● 已暂停 · 等待指令 ".to_string()
         } else {
@@ -60,6 +63,9 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
     } else {
         " ● 准备中 ".to_string()
     };
+    if let Some(rs) = model.running_step.as_ref() {
+        top.push_str(&format!(" {} ", rs));
+    }
     frame.render_widget(
         Paragraph::new(Line::from(top)).style(
             Style::default()
@@ -67,63 +73,11 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         ),
-        chunks[0],
-    );
-
-    // ---- 消息区：自动换行 + 准确贴底 + **窗口化渲染** ----
-    // ratatui 0.29 的 Paragraph::line_count 是 unstable 私有方法，不能用；
-    // 退而按宽度逐行估算 wrap 后行数累加（每条按显示宽度 ceil 折行），比按 lines.len() 估算准。
-    // 只克隆可视窗口覆盖到的那几行（≤ 屏高 + 1 行）交给 Paragraph——此前整段 clone 全部历史，
-    // 每帧 O(历史) 的克隆/布局成本随会话线性上涨。行数统计用 usize（u16 在长会话 6.5 万行处会溢出）。
-    let msg_area = chunks[1];
-    let height = msg_area.height as usize;
-    let width = msg_area.width.max(1) as usize;
-    // 每条 Line 折行后的行数（空行算 1 行；否则 ceil(显示宽度 / 区宽)）
-    let heights: Vec<usize> = model
-        .lines
-        .iter()
-        .map(|l| {
-            let w = l.width();
-            (w / width + usize::from(w % width != 0)).max(1)
-        })
-        .collect();
-    let total_wrapped: usize = heights.iter().sum();
-    let max_top = total_wrapped.saturating_sub(height);
-    let y = if model.follow {
-        max_top
-    } else {
-        max_top.saturating_sub(model.scroll as usize)
-    };
-    // 定位覆盖 [y, y+height) 的行区间：start = 首条进入视口的行，skip = 它折行后要跳过的前几行
-    let mut acc = 0usize;
-    let mut start = model.lines.len();
-    let mut skip = 0usize;
-    for (i, h) in heights.iter().enumerate() {
-        if acc + h > y {
-            start = i;
-            skip = y - acc;
-            break;
-        }
-        acc += h;
-    }
-    let mut visible: Vec<Line<'static>> = Vec::new();
-    let mut covered = 0usize;
-    for (i, l) in model.lines.iter().enumerate().skip(start) {
-        visible.push(l.clone());
-        covered += heights[i];
-        if covered >= skip + height {
-            break;
-        }
-    }
-    frame.render_widget(
-        Paragraph::new(Text::from(visible))
-            .wrap(Wrap { trim: false })
-            .scroll((skip as u16, 0)),
-        msg_area,
+        chunks[1],
     );
 
     // ---- 输入区：choosing 列表 / awaiting 文本输入 / 普通指导 ----
-    let input_area = chunks[3];
+    let input_area = chunks[2];
     if let Some(ch) = model.choosing.as_ref() {
         render_choice(frame, input_area, ch);
     } else {
@@ -142,18 +96,18 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
     } else if model.input.starts_with('/') {
         "Tab 补全 · Enter 执行 · 输入 / 看指令"
     } else {
-        "Esc 停止 · 打字+Enter 指导 · / 指令 · ↑↓ 滚动 · /exit 退出"
+        "Esc 停止 · 打字+Enter 指导 · / 指令 · /exit 退出"
     };
     frame.render_widget(
         Paragraph::new(hint).style(Style::default().fg(Color::DarkGray)),
-        chunks[4],
+        chunks[3],
     );
     // 总 token 显示在底栏右侧（与提示同一行，不再内嵌输入框）
     frame.render_widget(
         Paragraph::new(format!("↑{} ↓{} ", model.tok_up, model.tok_down))
             .right_aligned()
             .style(Style::default().fg(Color::DarkGray)),
-        chunks[4],
+        chunks[3],
     );
 }
 
@@ -247,12 +201,21 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
     } else {
         "↑↓ 选择 · Enter 确认"
     };
+    // 选项多于窗口时滚动，保证选中行可见（viewport 高度固定，放不下就窗口化）
+    let inner_h = area.height.saturating_sub(2) as usize;
+    let sel_line = lines
+        .iter()
+        .position(|l| l.spans.iter().any(|sp| sp.style.bg == Some(Color::Cyan)))
+        .unwrap_or(0);
+    let offset = sel_line.saturating_sub(inner_h.saturating_sub(1)) as u16;
     frame.render_widget(
-        Paragraph::new(lines).block(
-            Block::bordered()
-                .title(title)
-                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        ),
+        Paragraph::new(lines)
+            .scroll((offset, 0))
+            .block(
+                Block::bordered()
+                    .title(title)
+                    .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            ),
         area,
     );
 }
