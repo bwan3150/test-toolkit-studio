@@ -1,6 +1,7 @@
-// 【TUI 前端】ratatui **inline viewport**（Claude Code 式，真 TTY 时用）：不进备用屏幕——
-// 历史消息批量 insert_before 直接进终端 scrollback（原生滚动/选择/复制全程可用、退出即留痕），
-// 屏幕底部只固定一小块：状态行 + 输入区 + 底栏。三分结构：
+// 【TUI 前端】**手写 inline 渲染**（dialoguer/Claude Code 模式，真 TTY 时用）：不进备用屏幕、
+// 不用 ratatui Terminal（其 insert_before 逐 cell 输出会把中文宽字符打成"选 择 设 备"）——
+// 历史行转 ANSI 字符串直接 print 进 scrollback（宽字符终端原生处理；原生滚动/选择/复制、退出留痕）；
+// 底部小窗（状态行+输入区+底栏，**高度动态**）用相对定位每帧重画：光标上移 N 行→清到屏底→重打。三分结构：
 //   mod.rs    TuiFrontend(引擎侧句柄/Frontend impl) + 终端生命周期 + 主循环
 //   model.rs  TuiModel 渲染状态：UiEvent→彩色行、键盘/粘贴处理、/指令
 //   view.rs   画屏：布局/顶栏/消息区(窗口化)/输入区/底栏
@@ -13,26 +14,26 @@
 mod model;
 mod view;
 
-use std::io::Stdout;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use std::io::Write;
+
 use crossterm::{
-    cursor::Show,
+    cursor::{Hide, MoveToColumn, MoveUp, Show},
     event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyEventKind},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode},
+    execute, queue,
+    style::Print,
+    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
 };
-use ratatui::{backend::CrosstermBackend, Terminal, TerminalOptions, Viewport};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use super::command::UiCommand;
 use super::event::UiEvent;
 use super::Frontend;
 use model::TuiModel;
-use view::view;
+use view::{build_view, line_ansi};
 
-type Backend = CrosstermBackend<Stdout>;
 
 /// 引擎在 tokio 侧持有的 TUI 句柄；TUI 跑在独立 std::thread。
 pub struct TuiFrontend {
@@ -194,60 +195,17 @@ fn run_tui(
     commands_tx: UnboundedSender<UiCommand>,
 ) -> std::io::Result<()> {
     install_panic_hook();
-    let mut terminal = enter_terminal()?;
-    let mut model = TuiModel::new();
-    let res = run_loop(&mut terminal, &mut events_rx, &commands_tx, &mut model);
-    // 无论 res 如何都要恢复终端
-    let _ = leave_terminal(&mut terminal);
-    res
-}
-
-/// 把 model 里新产生的定稿行批量 insert_before 进 scrollback（按显示宽度估算 wrap 高度）。
-fn flush_lines(terminal: &mut Terminal<Backend>, model: &mut TuiModel) -> std::io::Result<()> {
-    if model.flushed >= model.lines.len() {
-        return Ok(());
-    }
-    let width = terminal.size()?.width.max(1) as usize;
-    let new: Vec<ratatui::text::Line<'static>> = model.lines[model.flushed..].to_vec();
-    model.flushed = model.lines.len();
-    let total: u16 = new
-        .iter()
-        .map(|l| {
-            let w = l.width();
-            ((w / width + usize::from(w % width != 0)).max(1)) as u16
-        })
-        .sum();
-    if total == 0 {
-        return Ok(());
-    }
-    terminal.insert_before(total, |buf| {
-        use ratatui::widgets::Widget;
-        ratatui::widgets::Paragraph::new(ratatui::text::Text::from(new))
-            .wrap(ratatui::widgets::Wrap { trim: false })
-            .render(buf.area, buf);
-    })?;
-    Ok(())
-}
-
-/// raw mode + inline viewport（不进备用屏幕）+ bracketed paste（粘贴走 Event::Paste）。
-/// 历史进 scrollback，底部固定 VIEWPORT_H 行画状态/输入/底栏。
-fn enter_terminal() -> std::io::Result<Terminal<Backend>> {
     enable_raw_mode()?;
     let mut out = std::io::stdout();
     execute!(out, EnableBracketedPaste)?;
-    Terminal::with_options(
-        CrosstermBackend::new(out),
-        TerminalOptions { viewport: Viewport::Inline(view::VIEWPORT_H) },
-    )
-}
-
-/// 清掉底部小窗 + 显示光标 + 关 raw mode——历史都在 scrollback 里，退出后可滚/可选/可复制。
-fn leave_terminal(terminal: &mut Terminal<Backend>) -> std::io::Result<()> {
-    let _ = terminal.clear(); // inline viewport：clear 只清底部小窗区域
-    execute!(terminal.backend_mut(), DisableBracketedPaste, Show)?;
-    disable_raw_mode()?;
-    let _ = terminal.show_cursor();
-    Ok(())
+    let mut model = TuiModel::new();
+    let mut screen = Inline::default();
+    let res = run_loop(&mut out, &mut screen, &mut events_rx, &commands_tx, &mut model);
+    // 收尾：擦掉底部小窗（历史都已在 scrollback），恢复终端
+    let _ = screen.to_top(&mut out);
+    let _ = execute!(out, Clear(ClearType::FromCursorDown), DisableBracketedPaste, Show);
+    let _ = disable_raw_mode();
+    res
 }
 
 /// panic 时也恢复终端（否则用户终端卡在 raw mode）
@@ -260,24 +218,89 @@ fn install_panic_hook() {
     }));
 }
 
-/// 主循环：抽干引擎事件 → 处理键盘 → 重绘。靠用户按 q 退出。
-/// **脏标记**：只有真的有事件/输入/resize 时才重绘——TUI 无动画元素，空闲时每 16ms
-/// 无条件 draw 纯属烧 CPU（配合 view 的窗口化渲染，把"每帧 O(历史)"的老债一起清掉）。
+/// 手写 inline 屏：只记一件事——**光标当前在小窗顶下第几行**（相对定位，无绝对坐标、
+/// 无需屏幕高度，天然抗 resize；终端滚动由 \r\n 自然驱动）。
+#[derive(Default)]
+struct Inline {
+    /// 光标距小窗顶部的行数（0=在顶部行）
+    from_top: u16,
+}
+
+impl Inline {
+    /// 光标回小窗顶部行首
+    fn to_top(&mut self, out: &mut impl Write) -> std::io::Result<()> {
+        queue!(out, MoveToColumn(0))?;
+        if self.from_top > 0 {
+            queue!(out, MoveUp(self.from_top))?;
+        }
+        self.from_top = 0;
+        Ok(())
+    }
+
+    /// 历史行插入 scrollback：回小窗顶→清到屏底→逐行 print（终端自然滚屏）。
+    /// 打完后小窗消失（下一次 redraw 从当前光标处重画）。
+    fn insert_history(&mut self, out: &mut impl Write, lines: &[ratatui::text::Line<'static>]) -> std::io::Result<()> {
+        self.to_top(out)?;
+        queue!(out, Clear(ClearType::FromCursorDown))?;
+        for l in lines {
+            queue!(out, Print(line_ansi(l)), Print("\r\n"))?;
+        }
+        out.flush()
+    }
+
+    /// 重画小窗：回顶→清到屏底→打印各行（最后一行不带换行）→光标定位到输入位。
+    fn redraw(
+        &mut self,
+        out: &mut impl Write,
+        rows: &[ratatui::text::Line<'static>],
+        cursor: Option<(u16, u16)>,
+    ) -> std::io::Result<()> {
+        self.to_top(out)?;
+        queue!(out, Hide, Clear(ClearType::FromCursorDown))?;
+        let last = rows.len().saturating_sub(1) as u16;
+        for (i, r) in rows.iter().enumerate() {
+            queue!(out, Print(line_ansi(r)))?;
+            if (i as u16) < last {
+                queue!(out, Print("\r\n"))?;
+            }
+        }
+        self.from_top = last;
+        // 光标：有输入位→移过去并显示；无（choosing）→藏在小窗底
+        if let Some((row, col)) = cursor {
+            queue!(out, MoveToColumn(0))?;
+            let up = last.saturating_sub(row);
+            if up > 0 {
+                queue!(out, MoveUp(up))?;
+            }
+            self.from_top = row;
+            queue!(out, MoveToColumn(col), Show)?;
+        }
+        out.flush()
+    }
+}
+
+/// 主循环：抽干引擎事件 → flush 历史进 scrollback → 处理键盘 → 重画小窗。靠 /exit(q) 退出。
 fn run_loop(
-    terminal: &mut Terminal<Backend>,
+    out: &mut std::io::Stdout,
+    screen: &mut Inline,
     events_rx: &mut UnboundedReceiver<UiEvent>,
     commands_tx: &UnboundedSender<UiCommand>,
     model: &mut TuiModel,
 ) -> std::io::Result<()> {
     let mut dirty = true; // 首帧必画
     loop {
-        // 抽干引擎事件（断开返回 Disconnected，正常忽略——靠用户按 q 退出）
+        // 抽干引擎事件（断开返回 Disconnected，正常忽略——靠用户退出）
         while let Ok(ev) = events_rx.try_recv() {
             model.apply(ev);
             dirty = true;
         }
-        // 新定稿行批量插入终端 scrollback（inline viewport 核心：历史归终端管）
-        flush_lines(terminal, model)?;
+        // 新定稿行进 scrollback（历史归终端管，宽字符原生渲染）
+        if model.flushed < model.lines.len() {
+            let new: Vec<ratatui::text::Line<'static>> = model.lines[model.flushed..].to_vec();
+            model.flushed = model.lines.len();
+            screen.insert_history(out, &new)?;
+            dirty = true;
+        }
         if event::poll(Duration::from_millis(16))? {
             match event::read()? {
                 Event::Key(k) if k.kind == KeyEventKind::Press => {
@@ -294,7 +317,9 @@ fn run_loop(
             }
         }
         if dirty {
-            terminal.draw(|f| view(f, model))?;
+            let width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
+            let (rows, cursor) = build_view(model, width);
+            screen.redraw(out, &rows, cursor)?;
             dirty = false;
         }
         if model.should_quit {
