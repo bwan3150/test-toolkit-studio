@@ -78,6 +78,8 @@ pub(crate) struct TestRun {
     final_shot: PathBuf,
     /// **起始页**可读文字（驱动开始前捕获）——finalize 摘取「起始标志」写脚本头（起始前提契约）。
     start_text: String,
+    /// 起始页截图留档（finalize 打进 .tklib 作 start_page.png）
+    start_shot: PathBuf,
     /// 非设备动作（存文件等）的留痕——finalize 时作为 `# 注：…` 注释追加到 .tks 末尾（回放跳过）。
     notes: Vec<String>,
 }
@@ -233,6 +235,7 @@ impl TestRun {
             final_text: String::new(),
             final_shot: PathBuf::new(),
             start_text: String::new(),
+            start_shot: PathBuf::new(),
             notes: Vec::new(),
         };
 
@@ -244,12 +247,18 @@ impl TestRun {
         // 起始页快照：驱动开始前捕获一次（起始前提契约的素材——无「启动」步的脚本回放
         // 必须从这个状态开始）。采集失败不致命（web 冷启动无会话），起始标志就不写。
         run.start_text = match capture(&run.device, &run.workarea, &run.fetcher, opts.ocr.as_ref()).await {
-            Ok(p) => p
-                .elements
-                .iter()
-                .filter_map(|e| e.text.as_deref().map(str::trim).filter(|s| !s.is_empty()))
-                .collect::<Vec<_>>()
-                .join("\n"),
+            Ok(p) => {
+                // 顺手把起始页截图留档(workarea 的截图会被后续轮次覆盖)——finalize 打进 .tklib
+                let dst = run.run_dir.join("start_page.png");
+                if std::fs::copy(&p.shot_path, &dst).is_ok() {
+                    run.start_shot = dst;
+                }
+                p.elements
+                    .iter()
+                    .filter_map(|e| e.text.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
             Err(_) => String::new(),
         };
 
@@ -415,20 +424,22 @@ impl TestRun {
         // 标志指向中途页面，错误基线诱导医生把正确的收尾步骤当"多余流程"删掉）。
         let mut goal_marker = String::new();
         let mut start_marker = String::new();
+        let mut start_desc = String::new();
         // 不论轻/完整模式都写：轻模式产的脚本之后同样会被 replay/repair，缺了判据就是
         // "闭着眼回放"（真机复盘：默认轻模式 → 无 marker/起始标志 → 起始态没对齐直接开跑卡死）
         if overall_success {
-            let (m, mpt, mct) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "goal_marker_from_page", &self.final_text).await;
+            let (m, _gdesc, mpt, mct) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "goal_marker_from_page", &self.final_text).await;
             self.sup_pt += mpt;
             self.sup_ct += mct;
             goal_marker = m;
             // 起始前提：只有**无「启动」步**的脚本需要（有启动步的由重启净化保证起点确定）
             let first_is_launch = self.result_lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false);
             if !first_is_launch && !self.start_text.trim().is_empty() {
-                let (sm, spt2, sct2) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "start_marker_from_page", &self.start_text).await;
+                let (sm, sdesc, spt2, sct2) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "start_marker_from_page", &self.start_text).await;
                 self.sup_pt += spt2;
                 self.sup_ct += sct2;
                 start_marker = sm;
+                start_desc = sdesc;
             }
         }
 
@@ -508,9 +519,16 @@ impl TestRun {
             });
         }
         if !start_marker.is_empty() && super::tksops::write_start_marker(&self.script_path, &start_marker).is_ok() {
+            if !start_desc.is_empty() {
+                let _ = super::tksops::write_start_desc(&self.script_path, &start_desc);
+            }
             ui.emit(UiEvent::Notice {
                 level: Level::Dim,
-                text: format!("起始标志（起始前提，取自开跑前页面）已写入脚本头：{}", super::fmt::brief(&start_marker, 40)),
+                text: format!(
+                    "起始前提已写入脚本头：{}（{}）",
+                    super::fmt::brief(&start_marker, 40),
+                    if start_desc.is_empty() { "起始页" } else { &start_desc }
+                ),
             });
         }
         // 引用元素 → staging 库 → 打包 .tklib（两件套：foo.tks + foo.tklib，复制即跑；无共享库）
@@ -521,6 +539,15 @@ impl TestRun {
             // 一个元素都没有（如纯坐标/等待脚本）也要产出合法的空包，保证两件套完整
             let _ = std::fs::create_dir_all(stage_json.parent().unwrap_or(&self.run_dir));
             let _ = std::fs::write(&stage_json, "{\"elements\":{}}");
+        }
+        // 起始页快照进元素包：txt(元素文本)+png(截图)——回放对齐起始态时给人/AI 具体画面
+        if !self.start_text.trim().is_empty() {
+            if let Some(stage_dir) = stage_json.parent() {
+                let _ = std::fs::write(stage_dir.join("start_page.txt"), &self.start_text);
+                if self.start_shot.is_file() {
+                    let _ = std::fs::copy(&self.start_shot, stage_dir.join("start_page.png"));
+                }
+            }
         }
         if let Err(e) = crate::utils::tklib::pack(&stage_json, out_tklib, &meta) {
             ui.emit(UiEvent::Notice {

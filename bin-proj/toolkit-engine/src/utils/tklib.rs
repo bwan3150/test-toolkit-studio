@@ -75,6 +75,16 @@ pub fn pack(lib_json: &Path, out_tklib: &Path, meta: &TklibMeta) -> Result<()> {
     zip.start_file("element.json", opts).map_err(|e| zip_err("tklib 写入 element.json 失败", e))?;
     zip.write_all(lib_content.as_bytes()).map_err(TkeError::IoError)?;
 
+    // 起始页快照（可选）：start_page.txt(元素文本) + start_page.png(截图)——回放对齐起始态时
+    // 给人/AI 具体画面（头注释的「# 起始页:」一句话负责指路，重的细节进包）
+    for snap in ["start_page.txt", "start_page.png"] {
+        let src = lib_dir.join(snap);
+        if let Ok(bytes) = std::fs::read(&src) {
+            zip.start_file(snap, opts).map_err(|e| zip_err("tklib 写入起始页快照失败", e))?;
+            zip.write_all(&bytes).map_err(TkeError::IoError)?;
+        }
+    }
+
     // img/*：只收录条目实际引用的模板图（img 字段是相对库目录的路径，如 "img/xxx.png"）
     if let Some(elements) = lib["elements"].as_object() {
         for (name, entry) in elements {

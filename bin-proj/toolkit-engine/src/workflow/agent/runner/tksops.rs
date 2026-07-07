@@ -73,6 +73,9 @@ const MARKER_PREFIX: &str = "# 目标标志: ";
 /// 起始标志（起始前提契约）的头注释前缀：无「启动」步的脚本隐含假设起点（已登录/某页面），
 /// 把它显式化——回放前校验当前页匹配，不匹配**快速失败并说清**，而不是闭着眼开跑越跑越乱。
 const START_PREFIX: &str = "# 起始标志: ";
+/// 起始页**描述**("这个页面是什么"一句话)的头注释前缀——回放对齐起始态时,
+/// 人和编排官都靠它知道该导航到哪(标志本身可能只是一个词,如"KonecHome")。
+const START_DESC_PREFIX: &str = "# 起始页: ";
 
 fn read_header_value(path: &Path, prefix: &str) -> Option<String> {
     let content = std::fs::read_to_string(path).ok()?;
@@ -126,6 +129,16 @@ pub(crate) fn read_start_marker(path: &Path) -> Option<String> {
 /// 写起始标志。
 pub(crate) fn write_start_marker(path: &Path, marker: &str) -> Result<()> {
     write_header_value(path, START_PREFIX, marker)
+}
+
+/// 读起始页描述。
+pub(crate) fn read_start_desc(path: &Path) -> Option<String> {
+    read_header_value(path, START_DESC_PREFIX)
+}
+
+/// 写起始页描述。
+pub(crate) fn write_start_desc(path: &Path, desc: &str) -> Result<()> {
+    write_header_value(path, START_DESC_PREFIX, desc)
 }
 
 
@@ -282,6 +295,7 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let ctx = op_ctx!(env, opts, ui);
     // verbose=true：回放逐步可见——此前静默跑完全程，用户只看到"卡了很久"
     let start = read_start_marker(tks).unwrap_or_default();
+    let start_desc = read_start_desc(tks).unwrap_or_default();
     warn_blind_start(ui, &env.lines, &start);
     // 定位自愈默认开：元素定位失败时基于当前实时页面单次挑选修正（详见 runner::healer）
     let healer = std::sync::Arc::new(super::healer::LlmElementHealer::new(
@@ -290,7 +304,7 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         env.device.clone(),
         env.elem_lib.clone(),
     ));
-    let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, &start, Some(healer.clone()), "replay_tks", 0, true).await;
+    let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &env.lines, &marker, &start, &start_desc, Some(healer.clone()), "replay_tks", 0, true).await;
     let healed = healer.healed_names();
     if !healed.is_empty() {
         ui.emit(UiEvent::Notice {
@@ -300,6 +314,19 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         env.repack(ui); // 自愈修正持久化进 .tklib——以后的回放直接命中
     }
     let n = env.lines.len();
+    // 起始不符时附起始页快照摘要(探索时打进 .tklib 的 start_page.txt)——给编排官具体画面
+    let start_ref = if !diag.reached && diag.note.contains("起始页不符") {
+        env.elem_lib
+            .parent()
+            .and_then(|d| std::fs::read_to_string(d.join("start_page.txt")).ok())
+            .map(|t| {
+                let head = t.lines().filter(|l| !l.trim().is_empty()).take(6).collect::<Vec<_>>().join("、");
+                format!("\n- 起始页参考（探索时的样子，前几项）：{}", super::fmt::brief(&head, 160))
+            })
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)
     } else {
@@ -308,8 +335,8 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
         let keep = diag.fail_idx.unwrap_or(n);
         let where_ = diag.fail_idx.map(|i| format!("第 {} 步", i + 1)).unwrap_or_else(|| "目标判定".into());
         format!(
-            "回放未到达目标（{}）：{}\n\n{}\n- 可选下一步：resume_explore{{keep_steps: {}}} 从当前页面续探修复；若轨迹显示**起始态就没对齐**（第 1 步落的页面就不对/登录态不对），先 explore 导航对齐再重放；拿不准就问用户。设备现停在失败现场。",
-            where_, diag.note, diag.trace_report(), keep
+            "回放未到达目标（{}）：{}{}\n\n{}\n- 可选下一步：resume_explore{{keep_steps: {}}} 从当前页面续探修复；若轨迹显示**起始态就没对齐**（第 1 步落的页面就不对/登录态不对），先 navigate 导航对齐再重放；拿不准就问用户。设备现停在失败现场。",
+            where_, diag.note, start_ref, diag.trace_report(), keep
         )
     };
     Ok(msg)

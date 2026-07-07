@@ -19,7 +19,9 @@ use super::fmt::friendly;
 /// 包含关系——杜绝 LLM 发明页面上不存在的标志）。这是 marker 的**首选来源**：真机教训是
 /// 凭 goal+步骤"猜"的 marker 可能指向中途页面（如"登录再登出"猜成登录后主页标题），
 /// 错误基线会诱导医生把正确的收尾步骤当"多余流程"删掉。
-/// 返回 (marker, prompt_tokens, completion_tokens)；挑不出/校验不过返回空串。
+/// 返回 (marker, page_desc, prompt_tokens, completion_tokens)；挑不出/校验不过 marker 为空。
+/// page_desc="这个页面是什么"的一句话(起始模板产出;终点模板忽略)——回放对齐起始态时,
+/// 人和 AI 都靠它知道该回到哪里(真机教训:标志只有一个词"KonecHome",没人知道那是手机桌面)。
 pub(super) async fn derive_marker_from_page(
     ai: &AiConfig,
     prompts: &PromptSet,
@@ -27,9 +29,9 @@ pub(super) async fn derive_marker_from_page(
     case: &str,
     template: &str, // "goal_marker_from_page"(终点) 或 "start_marker_from_page"(起始前提)
     final_page_text: &str,
-) -> (String, i64, i64) {
+) -> (String, String, i64, i64) {
     if final_page_text.trim().is_empty() {
-        return (String::new(), 0, 0);
+        return (String::new(), String::new(), 0, 0);
     }
     let system = "你帮助从任务完成后的最终页面文字里，原样摘取一段独特文字，用作回放是否到位的判据。".to_string();
     let ask = render(&prompts.message("verify", template), &[("case", case), ("page", final_page_text)]);
@@ -37,22 +39,28 @@ pub(super) async fn derive_marker_from_page(
     let schema = serde_json::json!({
         "type": "object",
         "properties": {
-            "goal_marker": { "type": "string", "description": "从页面原文里原样摘取的独特文字；挑不出就空字符串" }
+            "goal_marker": { "type": "string", "description": "从页面原文里原样摘取的独特文字；挑不出就空字符串" },
+            "page_desc": { "type": "string", "description": "一句话：这个页面是什么（如\"手机桌面/应用列表\"\"某 app 的登录入口页\"）" }
         },
         "required": ["goal_marker"]
     });
-    let (obj, pt, ct) = super::oneshot::one_shot(ai, "verify", system, "提交摘取的目标标志", schema, ask).await;
+    let (obj, pt, ct) = super::oneshot::one_shot(ai, "verify", system, "提交摘取的页面标志", schema, ask).await;
     tx.log(template, serde_json::json!({ "content": obj.clone() }));
-    let marker = obj
-        .and_then(|o| o["goal_marker"].as_str().map(|s| s.trim().to_string()))
+    let (marker, desc) = obj
+        .map(|o| {
+            (
+                o["goal_marker"].as_str().unwrap_or("").trim().to_string(),
+                o["page_desc"].as_str().unwrap_or("").trim().to_string(),
+            )
+        })
         .unwrap_or_default();
     // 机械校验：标志必须真实存在于末页文字（空格/大小写不敏感，与 page_contains 同规则）——
     // LLM 改写/发明的一律丢弃，宁可不校验也不要错误基线
     let norm = |s: &str| -> String { s.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect() };
     if marker.is_empty() || !norm(final_page_text).contains(&norm(&marker)) {
-        return (String::new(), pt, ct);
+        return (String::new(), desc, pt, ct);
     }
-    (marker, pt, ct)
+    (marker, desc, pt, ct)
 }
 
 /// 路径化工具用：脱离探索会话，**自建一次性会话**从「目标 + 脚本步骤」推出目标标志文本。

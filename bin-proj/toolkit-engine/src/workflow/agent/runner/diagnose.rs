@@ -189,6 +189,7 @@ pub(crate) async fn diagnose(
     lines: &[String],
     marker: &str,
     start_marker: &str,
+    start_desc: &str,
     healer: Option<std::sync::Arc<dyn crate::workflow::tks::ElementHealer>>,
     phase: &str,
     iter: usize,
@@ -209,9 +210,14 @@ pub(crate) async fn diagnose(
             Err(_) => false,
         };
         if !ok {
+            let where_ = if start_desc.trim().is_empty() {
+                format!("含「{}」的页面", brief(start_marker, 40))
+            } else {
+                format!("「{}」（标志「{}」）", start_desc.trim(), brief(start_marker, 40))
+            };
             let note = format!(
-                "起始页不符：脚本期望从含「{}」的页面开始（起始前提），当前页面没有它——请先把设备导航到脚本的起始状态",
-                brief(start_marker, 40)
+                "起始页不符：脚本期望从 {} 开始（起始前提），当前页面没有该标志——请先把设备导航到这个状态",
+                where_
             );
             if verbose {
                 ctx.ui.emit(UiEvent::Notice { level: Level::Err, text: format!("✗ {}", note) });
