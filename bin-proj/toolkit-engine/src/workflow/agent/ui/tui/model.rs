@@ -42,6 +42,8 @@ pub(super) struct TuiModel {
     pub(super) running_step: Option<String>,
     pub(super) finished: bool,
     pub(super) should_quit: bool,
+    /// spinner 帧计数(活动中由 run_loop 周期递增驱动动画)
+    pub(super) spin: u8,
     /// 输入框光标位置（字符索引，0..=input.chars().count()）
     pub(super) cursor: usize,
     /// 当前平台（从 SessionInfo 取，用于 Page 行的平台图标）
@@ -65,6 +67,7 @@ impl TuiModel {
             running_step: None,
             finished: false,
             should_quit: false,
+            spin: 0,
             cursor: 0,
             platform: None,
             ai_config: None,

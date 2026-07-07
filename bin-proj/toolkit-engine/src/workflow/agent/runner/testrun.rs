@@ -632,7 +632,7 @@ pub(crate) async fn navigate(
     goal: &str,
     note: Option<&str>,
 ) -> crate::Result<String> {
-    let discipline = "【导航纪律】这是把设备带到目标状态的导航，不是探索测试：走最短的已知路径，到达立即 finish；**禁止**做改变账号/数据状态的操作（退出登录、删除、提交表单/申请），除非目标本身明确要求。";
+    let discipline = "【导航纪律】这是把设备带到目标状态的导航，不是探索测试：走最短的已知路径，到达立即 finish；**禁止**做改变账号/数据状态的操作（退出登录、删除、提交表单/申请），除非目标本身明确要求。常识：目标是手机桌面/含应用图标的页面（起始标志是某个应用名时基本就是桌面）→ Android 直接 press_key home 一步到位，不要在 app 里翻找。";
     let merged = match note.map(str::trim).filter(|s| !s.is_empty()) {
         Some(n) => format!("{}\n{}", discipline, n),
         None => discipline.to_string(),

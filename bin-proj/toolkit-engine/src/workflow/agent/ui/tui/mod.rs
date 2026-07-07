@@ -296,6 +296,7 @@ fn run_loop(
     model: &mut TuiModel,
 ) -> std::io::Result<()> {
     let mut dirty = true; // 首帧必画
+    let mut last_tick = std::time::Instant::now();
     loop {
         // 抽干引擎事件（断开返回 Disconnected，正常忽略——靠用户退出）
         while let Ok(ev) = events_rx.try_recv() {
@@ -307,6 +308,14 @@ fn run_loop(
             let new: Vec<ratatui::text::Line<'static>> = model.lines[model.flushed..].to_vec();
             model.flushed = model.lines.len();
             screen.insert_history(out, &new)?;
+            dirty = true;
+        }
+        // 活动中驱动 spinner 动画(~120ms 一帧);空闲(等输入/选择/已结束)不重绘,
+        // 用户可自由上滚查看历史而不被输出拉回底部
+        let busy = !model.finished && model.awaiting.is_none() && model.choosing.is_none();
+        if busy && last_tick.elapsed() >= Duration::from_millis(120) {
+            model.spin = model.spin.wrapping_add(1);
+            last_tick = std::time::Instant::now();
             dirty = true;
         }
         if event::poll(Duration::from_millis(16))? {

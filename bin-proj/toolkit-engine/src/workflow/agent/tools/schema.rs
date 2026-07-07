@@ -165,7 +165,7 @@ pub fn tool_schemas(platform: crate::Platform) -> Vec<ToolSchema> {
             schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "key": { "type": "string", "description": "键名：enter / tab / escape / backspace。输入框里输入完想提交搜索/表单，常用 enter。" }
+                    "key": { "type": "string", "description": "键名：enter / tab / escape / backspace / home。输入框里输入完想提交搜索/表单，常用 enter；home = Android 回到手机桌面（对齐起始态/退出 app 找应用图标时用，别在 app 里翻找）。" }
                 },
                 "required": ["key"]
             }),

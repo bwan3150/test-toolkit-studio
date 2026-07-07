@@ -29,33 +29,35 @@ pub(super) fn build_view(model: &TuiModel, width: u16) -> (Vec<Line<'static>>, O
 
     // ---- 底栏 = 状态栏(反色块:进程状态+正在执行的步骤) + 右对齐 token ----
     // 快捷键提示按用户要求移除:choosing/输入框的操作提示已在各自边框标题里
+    // 活动中带 spinner 动画(run_loop 周期递增 spin,持续重绘——多数终端只在键盘输入时跳底,
+    // 观感与 Claude Code 一致);普通文字不上背景色
+    const SPIN: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let busy = !model.finished && model.awaiting.is_none() && model.choosing.is_none();
+    let dot = if busy { SPIN[model.spin as usize % SPIN.len()] } else { "●" };
     let mut top = if model.finished {
-        " ● 已结束 · 输入 /exit 退出 ".to_string()
+        format!("{} 已结束 · 输入 /exit 退出", dot)
     } else if let Some(q) = model.awaiting.as_ref() {
         if q.starts_with("已暂停") {
-            " ● 已暂停 · 等待指令 ".to_string()
+            format!("{} 已暂停 · 等待指令", dot)
         } else {
-            " ● 等待回复 ".to_string()
+            format!("{} 等待回复", dot)
         }
     } else if let Some((p, n)) = model.phase {
         let label = match n {
             Some(k) => format!("{}#{}", p.label(), k),
             None => p.label().to_string(),
         };
-        format!(" ● {}中 · 第{}轮 ", label, model.round)
+        format!("{} {}中 · 第{}轮", dot, label, model.round)
     } else {
-        " ● 准备中 ".to_string()
+        format!("{} 准备中", dot)
     };
     if let Some(rs) = model.running_step.as_ref() {
-        top.push_str(&format!(" {}", rs));
-        if disp_width(&top) < w.saturating_sub(2) {
-            top.push(' ');
-        }
+        top.push_str(&format!("  {}", rs));
     }
     let tok = format!("↑{} ↓{}", model.tok_up, model.tok_down);
     let pad = w.saturating_sub(disp_width(&top) + disp_width(&tok)).max(1);
     rows.push(Line::from(vec![
-        Span::styled(top, Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(top, Style::default().fg(Color::Cyan)),
         Span::raw(" ".repeat(pad)),
         Span::styled(tok, Style::default().fg(Color::DarkGray)),
     ]));
