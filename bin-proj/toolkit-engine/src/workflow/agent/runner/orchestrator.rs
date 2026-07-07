@@ -2,7 +2,7 @@
 //
 // 它能对话、讨论、定方案；通过**颗粒化工具**自由调度，**没有固定流水线、没有常驻运行态**：
 //   explore                     驱动设备把过程录成 .tks 写进工作区（AI 命名、可多个）+ .tklib 元素包
-//   replay_tks/repair_tks/optimize_tks  对工作区已有 .tks 回放/修复/优化（路径化，见 tksops）
+//   replay_tks/resume_explore/optimize_tks  对工作区已有 .tks 回放/续探修复/优化（路径化，见 tksops）
 //   save_file/read_file/list_dir/edit_file/delete_file  工作区文件增删改查（写改删需授权，仿 opencode）
 //   update_todos / ask_user / finish
 // .tks 都是工作区里独立的文件；一次对话可产多个脚本、反复打磨、混着读写文件。用户随时插话当硬约束（Guidance）。
@@ -33,7 +33,7 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                     "goal": { "type": "string", "description": "要在设备上完成的任务目标——测试用例 或 一般任务（如『进入隐私政策页』『找到并截取用户头像』）" },
                     "note": { "type": "string", "description": "可选：额外约束/提示（用户纠偏、已否定路径、需留意的细节）" },
                     "script_name": { "type": "string", "description": "可选：给产出的 .tks 起的文件名（落到当前工作目录、目录内自动去重）。不给则按 goal 取名。一次对话可产多个不同脚本。" },
-                    "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 replay_tks/repair_tks）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
+                    "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 replay_tks/resume_explore）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
                     "read_full": { "type": "boolean", "description": "任务是读**长内容**（整页 policy 等）时设 true：到达目标后滚动逐屏收集全文。截图/找元素留 false（默认，不乱滚）" },
                     "ask_mode": { "type": "string", "enum": ["ask", "auto"], "description": "探索中遇到拿不准的问题怎么办：ask（默认）=转给用户（参谋会先生成候选选项，用户可选可输入）；auto=完全托管（参谋以全局视角代答，绝不打扰用户）。用户表达过\"全自动跑/别问我/托管\"就传 auto" }
                 },
@@ -53,15 +53,17 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             }),
         ),
         LlmTool::new(
-            "repair_tks",
-            desc("repair_tks"),
+            "resume_explore",
+            desc("resume_explore"),
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
-                    "goal": { "type": "string", "description": "这条脚本要达成的目标" }
+                    "goal": { "type": "string", "description": "这条脚本要达成的目标" },
+                    "keep_steps": { "type": "integer", "description": "保留脚本前几步（通常= replay_tks 报告的失败步-1；全跑通但终点不符=全部步数）" },
+                    "note": { "type": "string", "description": "给续探 explorer 的失败上下文+指导：哪步为什么失败、用户给的纠偏（如\"先重新登录\"）——它看不到你的对话，全靠这里" }
                 },
-                "required": ["path", "goal"]
+                "required": ["path", "goal", "keep_steps"]
             }),
         ),
         LlmTool::new(
@@ -346,7 +348,7 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             sess.tool_result_bulky(call.call_id, msg, placeholder);
                         }
                         // —— 对工作区里已有的 .tks 做独立操作：回放 / 修复 / 优化（路径化，主 AI 自由调度）——
-                        "replay_tks" | "repair_tks" | "optimize_tks" => {
+                        "replay_tks" | "resume_explore" | "optimize_tks" => {
                             let p = arg_str(&call.arguments, "path");
                             let goal = arg_str(&call.arguments, "goal");
                             let path = match resolve_in_workspace(&opts.params.workspace_root(), &p) {
@@ -358,10 +360,14 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 continue;
                             }
                             let kind = call.name.as_str();
-                            emit_orch(ui, &sess, &format!("{} {}", match kind { "replay_tks" => "回放", "repair_tks" => "修复", _ => "优化" }, p.trim()));
+                            emit_orch(ui, &sess, &format!("{} {}", match kind { "replay_tks" => "回放", "resume_explore" => "续探修复", _ => "优化" }, p.trim()));
                             let r = match kind {
                                 "replay_tks" => tksops::replay_tks(opts, ui, &path, &goal).await,
-                                "repair_tks" => tksops::repair_tks(opts, ui, &path, &goal).await,
+                                "resume_explore" => {
+                                    let keep = call.arguments.get("keep_steps").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                                    let note = arg_str(&call.arguments, "note");
+                                    tksops::resume_explore(opts, ui, &path, &goal, keep, &note).await
+                                }
                                 _ => tksops::optimize_tks(opts, ui, &path, &goal).await,
                             }?;
                             ran_any = true;

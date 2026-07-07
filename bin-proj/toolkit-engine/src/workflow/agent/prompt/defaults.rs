@@ -59,7 +59,7 @@ fn default_orchestrator_tool_description(name: &str) -> &'static str {
     match name {
         "explore" => include_str!("builtin/tools/orchestrator/explore.md"),
         "replay_tks" => include_str!("builtin/tools/orchestrator/replay_tks.md"),
-        "repair_tks" => include_str!("builtin/tools/orchestrator/repair_tks.md"),
+        "resume_explore" => include_str!("builtin/tools/orchestrator/resume_explore.md"),
         "optimize_tks" => include_str!("builtin/tools/orchestrator/optimize_tks.md"),
         "save_file" => include_str!("builtin/tools/orchestrator/save_file.md"),
         "suggest_next" => include_str!("builtin/tools/orchestrator/suggest_next.md"),

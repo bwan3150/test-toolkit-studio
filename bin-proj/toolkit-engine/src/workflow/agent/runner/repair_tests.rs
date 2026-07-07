@@ -47,8 +47,8 @@ fn opts_for(device: &str, scope: &str, workspace: std::path::PathBuf, cache: std
     }
 }
 
-/// 坏脚本（第 2 步点不存在的元素）→ 诊断停在失败现场 → explorer 续探点对按钮 →
-/// 前缀+新尾巴复诊达标 → 写回脚本 + 回包 tklib，marker 头保留。
+/// 编排官式修复闭环：replay 拿结构化失败报告（含续探建议）→ resume_explore 从失败现场
+/// 续探（保留成功前缀）→ replay 验证达标。脚本写回 + 回包 tklib，marker 头保留。
 #[tokio::test]
 async fn repair_resumes_from_failure_point() {
     let device = "fake:repair-fix";
@@ -87,10 +87,15 @@ async fn repair_resumes_from_failure_point() {
     enqueue_fake_role_session(scope, "asserter", vec![FakeTurn::tool("report", serde_json::json!({ "index": 0, "reason": "设置中心是该页专属标志" }))]);
     enqueue_fake_role_session(scope, "supervisor", vec![FakeTurn::tool("report", serde_json::json!({ "approved": true, "reason": "已到设置中心" }))]);
 
+    // 编排官式修复流程：replay 拿失败报告 → resume_explore 续探 → replay 验证
     let opts = opts_for(device, scope, ws.clone(), cache);
-    let msg = tksops::repair_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
-    assert!(msg.contains("已修复"), "实际：{}", msg);
-    assert!(msg.contains("断点续探 1 次"), "实际：{}", msg);
+    let report = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
+    assert!(report.contains("回放未到达目标"), "实际：{}", report);
+    assert!(report.contains("keep_steps: 1"), "失败报告应给出续探建议：{}", report);
+    let msg = tksops::resume_explore(&opts, &ui, &tks, "打开设置中心", 1, "第 2 步点击幽灵按钮定位失败").await.unwrap();
+    assert!(msg.contains("已续写"), "实际：{}", msg);
+    let verify = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
+    assert!(verify.contains("回放通过"), "续探后应能到达目标：{}", verify);
 
     // 脚本 = 成功前缀(启动) + 续探新尾巴(点击 + 自动断言)；坏步已消失；marker 头保留
     let content = std::fs::read_to_string(&tks).unwrap();
@@ -104,7 +109,7 @@ async fn repair_resumes_from_failure_point() {
     fake::remove(device);
 }
 
-/// 续探也走不到目标（explorer 判失败）→ 修复放弃，**脚本一字不改**——绝不把还能跑一半的脚本改坏。
+/// 续探走不到目标（explorer 判失败）→ **脚本一字不改**——绝不把还能跑一半的脚本改坏。
 #[tokio::test]
 async fn repair_failure_preserves_original_script() {
     let device = "fake:repair-stall";
@@ -128,8 +133,8 @@ async fn repair_failure_preserves_original_script() {
     );
 
     let opts = opts_for(device, scope, ws.clone(), cache);
-    let msg = tksops::repair_tks(&opts, &ui, &tks, "到一个不存在的页面").await.unwrap();
-    assert!(msg.contains("修复失败"), "实际：{}", msg);
+    let msg = tksops::resume_explore(&opts, &ui, &tks, "到一个不存在的页面", 1, "第 2 步失败").await.unwrap();
+    assert!(msg.contains("续探未能走到目标"), "实际：{}", msg);
     assert!(msg.contains("未改动"), "实际：{}", msg);
     assert_eq!(std::fs::read_to_string(&tks).unwrap(), original, "失败时脚本必须原样保留");
 

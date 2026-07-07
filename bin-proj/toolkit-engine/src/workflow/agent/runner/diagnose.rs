@@ -61,6 +61,12 @@ pub(crate) struct Diagnosis {
 }
 
 impl Diagnosis {
+    /// 失败/结束现场的页面摘要（最后一步执行后的采集）——给编排官接地：它据此决定
+    /// 续探/导航/问用户，而不是只凭一句错误文本猜。
+    pub(crate) fn fail_scene(&self) -> String {
+        self.steps.last().map(|st| top_lines(&st.page_full, 8)).unwrap_or_default()
+    }
+
     /// 「无效操作步」的步号集合（1-based）——执行后**页面结构没变化**（点了个不起作用的元素），
     /// 反思官可安全删。判据三条同时满足：
     ///  ① 该步执行后**结构签名与上一步相同**（排除 OCR 噪声，比"page_full 精确相等"稳健得多——

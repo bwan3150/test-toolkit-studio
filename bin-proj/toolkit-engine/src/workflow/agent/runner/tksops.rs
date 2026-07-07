@@ -303,119 +303,84 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)
     } else {
+        // 结构化失败报告：失败步 + 失败现场页面摘要 + 建议动作——编排官据此**决策**
+        // （续探/先导航对齐起始态/问用户），而不是闷头重跑
+        let keep = diag.fail_idx.unwrap_or(n);
         let where_ = diag.fail_idx.map(|i| format!("第 {} 步", i + 1)).unwrap_or_else(|| "目标判定".into());
-        format!("回放未到达目标（{}）：{}", where_, diag.note)
+        let fail_line = diag
+            .fail_idx
+            .and_then(|i| env.lines.get(i))
+            .map(|l| format!("\n- 失败步：{}", super::fmt::friendly(l)))
+            .unwrap_or_default();
+        let scene = diag.fail_scene();
+        let scene_block = if scene.trim().is_empty() {
+            String::new()
+        } else {
+            format!("\n- 设备现停在失败现场，当前页面摘要：\n{}", scene)
+        };
+        format!(
+            "回放未到达目标（{}）：{}{}{}\n- 可选下一步：resume_explore{{keep_steps: {}}} 从当前页面续探修复；若是起始态没对齐（登录态/所在页不对），先 explore 导航对齐再重放；拿不准就问用户。",
+            where_, diag.note, fail_line, scene_block, keep
+        )
     };
     Ok(msg)
 }
 
-/// 回放并修复脚本——**断点续探**（取代已删除的「医生」文本编辑 agent）：
-/// ① 诊断回放：整脚本跑一遍，停在失败步/错误终点——设备**此刻就停在真实的失败现场**；
-/// ② 失败 → 把控制权交给 explorer：从当前实时页面出发把剩下的目标走完（drive 驱动循环，
-///    每轮看真实页面——这是唯一"接地"的修复方式，不再对着过期 trace 做文本手术）；
-/// ③ 脚本 = 成功前缀 + 续探出的新尾巴 → 再诊断验证，直到达标或用尽预算。
-/// 修好后写回 .tks + 回包 .tklib。失败**不写回**——绝不把还能跑一半的脚本改坏。
-pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &Path, goal: &str) -> Result<String> {
+/// 断点续探（编排官的修复**原语**，取代旧的一键黑盒 repair）：设备**此刻停在失败/中断现场**
+/// （通常刚 replay_tks 失败），保留脚本前 keep_steps 步，explorer 从当前实时页面把 goal 走完，
+/// 脚本 = 成功前缀 + 新尾巴，写回 .tks + 回包 .tklib。失败**不写回**。
+/// 本工具**不做诊断回放、不做验证**——什么时候续探、保留几步、要不要先导航对齐起始态、
+/// 修完何时 replay 确认，全部由编排官结合对话上下文决策（用户的指导经 note 直达 explorer）。
+pub(crate) async fn resume_explore(
+    opts: &AgentRunOptions,
+    ui: &dyn Frontend,
+    tks: &Path,
+    goal: &str,
+    keep_steps: usize,
+    note: &str,
+) -> Result<String> {
     let (env, mut tx) = setup(opts, tks, goal).await?;
-    if env.lines.is_empty() {
-        return Ok("脚本为空，无可修复。".into());
+    let keep = keep_steps.min(env.lines.len());
+    ui.emit(UiEvent::Phase { phase: Phase::Reexplore, n: None });
+    ui.emit(UiEvent::Notice {
+        level: Level::Warn,
+        text: format!("◆ 断点续探：保留前 {} 步，explorer 从设备当前页面继续走目标", keep),
+    });
+    let platform = Platform::from_device(Some(&env.device));
+    let mut sess = crate::LlmSession::new_for_role(
+        &opts.ai,
+        "explorer",
+        env.prompts.role_system("explorer", &env.device, platform.name()),
+        super::super::tools::build_tools(&env.prompts, platform),
+    )?;
+    let failure = if note.trim().is_empty() {
+        "回放在保留步之后失败/未到达目标（具体原因见上一次回放报告）。".to_string()
+    } else {
+        note.trim().to_string()
+    };
+    let resume_msg = render(
+        &env.prompts.message("explorer", "repair_resume"),
+        &[("case", goal), ("n", &keep.to_string()), ("failure", &failure)],
+    );
+    tx.log("llm_message", serde_json::json!({ "content": resume_msg.clone() }));
+    sess.user(resume_msg);
+    let ctx = op_ctx!(env, opts, ui);
+    let outcome = super::flow::drive(&mut sess, &mut tx, &ctx, false, "").await?;
+    if outcome.aborted {
+        return Ok("已中断（用户），脚本未改动。".into());
     }
-    ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
-    let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
-    let mut report = VerifyReport { ran: true, ..Default::default() };
-    let mut lines = env.lines.clone();
-    let start = read_start_marker(tks).unwrap_or_default();
-    warn_blind_start(ui, &env.lines, &start);
-    let max_resumes = env.params.harness.repairs; // 续探预算（config [harness].repairs）
-    let mut created: Vec<String> = Vec::new();
-
-    loop {
-        if super::interrupt::aborted() {
-            return Ok("已中断（用户 Ctrl+C），修复未完成，脚本未改动。".into());
-        }
-        // ① 诊断回放（逐步可见，定位自愈默认开）：失败即停，设备停在失败现场
-        ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（{} 步{}）", lines.len(), replay_prelude(&lines)) });
-        let healer = std::sync::Arc::new(super::healer::LlmElementHealer::new(
-            opts.ai.clone(),
-            env.prompts.clone(),
-            env.device.clone(),
-            env.elem_lib.clone(),
-        ));
-        let ctx = op_ctx!(env, opts, ui);
-        let diag = super::diagnose::diagnose(&mut tx, &ctx, &env.params, goal, &lines, &marker, &start, Some(healer.clone()), "repair_diagnose", report.repairs, true).await;
-        let healed = healer.healed_names();
-        if !healed.is_empty() {
-            ui.emit(UiEvent::Notice {
-                level: Level::Ok,
-                text: format!("🩹 定位自愈 {} 处（{}）", healed.len(), healed.join("、")),
-            });
-        }
-        if diag.reached {
-            report.reached = true;
-            report.created = created.clone();
-            report.final_steps = lines.len();
-            write_tks_lines(tks, &lines)?;
-            env.repack(ui); // 续探落的新元素随包写回，保持两件套自包含
-            return Ok(format!("已修复：脚本能跑通并到达目标（断点续探 {} 次 · {} 步）。", report.repairs, lines.len()));
-        }
-        if report.repairs >= max_resumes {
-            return Ok(format!(
-                "修复失败：断点续探 {} 次后仍未到达目标（{}）。脚本保持原样未改动。",
-                report.repairs, diag.note
-            ));
-        }
-        report.repairs += 1;
-
-        // ② 断点续探：保留成功前缀，explorer 从**当前实时页面**接管走完目标
-        let keep = diag.fail_idx.unwrap_or(lines.len()); // 失败步之前保留；全跑通但终点不符 → 全保留
-        let failure = match diag.fail_idx {
-            Some(k) => format!(
-                "第 {} 步「{}」执行失败：{}",
-                k + 1,
-                super::fmt::friendly(lines.get(k).map(String::as_str).unwrap_or("")),
-                diag.note
-            ),
-            None => format!("脚本全部跑通，但终点校验未通过——{}。当前页面不是目标终点，请继续走到真正的目标。", diag.note),
-        };
-        ui.emit(UiEvent::Phase { phase: Phase::Reexplore, n: Some(report.repairs as u32) });
-        ui.emit(UiEvent::Notice {
-            level: Level::Warn,
-            text: format!("◆ 断点续探（第 {} 次）：保留前 {} 步，explorer 从失败现场继续", report.repairs, keep),
-        });
-        let platform = Platform::from_device(Some(&env.device));
-        let mut sess = crate::LlmSession::new_for_role(
-            &opts.ai,
-            "explorer",
-            env.prompts.role_system("explorer", &env.device, platform.name()),
-            super::super::tools::build_tools(&env.prompts, platform),
-        )?;
-        let resume_msg = render(
-            &env.prompts.message("explorer", "repair_resume"),
-            &[("case", goal), ("n", &keep.to_string()), ("failure", &failure)],
-        );
-        tx.log("llm_message", serde_json::json!({ "content": resume_msg.clone() }));
-        sess.user(resume_msg);
-        let ctx = op_ctx!(env, opts, ui);
-        let outcome = super::flow::drive(&mut sess, &mut tx, &ctx, false, "").await?;
-        let (spt, sct) = sess.total_usage();
-        report.extra_prompt += spt + outcome.subagent_pt;
-        report.extra_completion += sct + outcome.subagent_ct;
-        for c in &outcome.created {
-            if !created.contains(c) {
-                created.push(c.clone());
-            }
-        }
-        if outcome.aborted {
-            return Ok("已中断（用户），修复未完成，脚本未改动。".into());
-        }
-        if !outcome.success {
-            return Ok(format!("修复失败：断点续探未能走到目标（{}）。脚本保持原样未改动。", outcome.reason));
-        }
-        // ③ 拼接：成功前缀 + 新尾巴 → 回到循环顶再诊断验证
-        let mut next: Vec<String> = lines[..keep.min(lines.len())].to_vec();
-        next.extend(outcome.lines);
-        lines = next;
+    if !outcome.success {
+        return Ok(format!("续探未能走到目标（{}）。脚本保持原样未改动。", outcome.reason));
     }
+    let mut lines: Vec<String> = env.lines[..keep].to_vec();
+    let added = outcome.lines.len();
+    lines.extend(outcome.lines);
+    write_tks_lines(tks, &lines)?;
+    env.repack(ui); // 续探落的新元素随包写回，保持两件套自包含
+    Ok(format!(
+        "已续写：保留前 {} 步 + 新增 {} 步（共 {} 步），元素包已更新。**尚未验证**——请 replay_tks 确认能稳定到达目标。",
+        keep, added, lines.len()
+    ))
 }
 
 /// 优化脚本（反思官：删绕路/冗余步）。有改动写回 .tks；建议改完再 replay 确认。
