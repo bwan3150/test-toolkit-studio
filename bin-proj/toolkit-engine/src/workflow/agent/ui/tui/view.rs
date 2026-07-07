@@ -19,8 +19,19 @@ pub(super) fn build_view(model: &TuiModel, width: u16) -> (Vec<Line<'static>>, O
     // 小窗顶部空一行:内容流与状态栏/输入框之间的呼吸,不再糊在一起
     rows.push(Line::from(""));
 
-    // ---- 状态行:进程状态 + 正在执行的步骤(反色粗体) ----
-    let mut top = if let Some(q) = model.awaiting.as_ref() {
+    // ---- 输入区:choosing 列表 / 文本输入框 ----
+    let cursor = if let Some(ch) = model.choosing.as_ref() {
+        push_choice_rows(&mut rows, ch, w);
+        None
+    } else {
+        Some(push_input_rows(&mut rows, model, w))
+    };
+
+    // ---- 底栏 = 状态栏(反色块:进程状态+正在执行的步骤) + 右对齐 token ----
+    // 快捷键提示按用户要求移除:choosing/输入框的操作提示已在各自边框标题里
+    let mut top = if model.finished {
+        " ● 已结束 · 输入 /exit 退出 ".to_string()
+    } else if let Some(q) = model.awaiting.as_ref() {
         if q.starts_with("已暂停") {
             " ● 已暂停 · 等待指令 ".to_string()
         } else {
@@ -36,41 +47,18 @@ pub(super) fn build_view(model: &TuiModel, width: u16) -> (Vec<Line<'static>>, O
         " ● 准备中 ".to_string()
     };
     if let Some(rs) = model.running_step.as_ref() {
-        top.push_str(&format!(" {} ", rs));
+        top.push_str(&format!(" {}", rs));
+        if disp_width(&top) < w.saturating_sub(2) {
+            top.push(' ');
+        }
     }
-    rows.push(Line::from(Span::styled(
-        top,
-        Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
-    )));
-
-    // ---- 输入区:choosing 列表 / 文本输入框 ----
-    let cursor = if let Some(ch) = model.choosing.as_ref() {
-        push_choice_rows(&mut rows, ch, w);
-        None
-    } else {
-        Some(push_input_rows(&mut rows, model, w))
-    };
-
-    // ---- 底栏:快捷键提示 + 右对齐 token ----
-    let hint = if model.choosing.as_ref().map(|c| c.allow_free).unwrap_or(false) {
-        "↑↓ 选择 · 直接打字=自行输入 · Enter 确认 · Esc 放弃"
-    } else if model.choosing.is_some() {
-        "↑↓ 选择 · Enter 确认 · 1-9 直选 · Esc 放弃"
-    } else if model.awaiting.is_some() {
-        "Enter 提交 · 输入指导让 AI 继续 · /exit 退出"
-    } else if model.finished {
-        "输入 /exit 退出"
-    } else if model.input.starts_with('/') {
-        "Tab 补全 · Enter 执行 · 输入 / 看指令"
-    } else {
-        "Esc 停止 · 打字+Enter 指导 · / 指令 · /exit 退出"
-    };
     let tok = format!("↑{} ↓{}", model.tok_up, model.tok_down);
-    let pad = w.saturating_sub(disp_width(hint) + disp_width(&tok)).max(1);
-    rows.push(Line::from(Span::styled(
-        format!("{}{}{}", hint, " ".repeat(pad), tok),
-        Style::default().fg(Color::DarkGray),
-    )));
+    let pad = w.saturating_sub(disp_width(&top) + disp_width(&tok)).max(1);
+    rows.push(Line::from(vec![
+        Span::styled(top, Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::raw(" ".repeat(pad)),
+        Span::styled(tok, Style::default().fg(Color::DarkGray)),
+    ]));
 
     // 行宽统一裁到 w 以内(防终端 auto-wrap 破坏相对定位)
     let rows = rows.into_iter().map(|l| clip_line(l, w)).collect();
