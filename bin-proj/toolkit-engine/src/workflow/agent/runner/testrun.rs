@@ -532,18 +532,19 @@ impl TestRun {
                 }
             }
         }
+        let _ = committed; // 元素数已由 elements 清单本身表达
         render_summary(
             self.outcome.success,
             self.outcome.aborted,
             &self.outcome.reason,
             self.outcome.rounds,
-            self.final_lines.len(),
             self.verified.as_ref(),
             &model,
             total_prompt,
             total_completion,
+            &self.script_path,
+            &self.result_lines,
             &display_created,
-            committed,
             &stage_json,
             ui,
         );

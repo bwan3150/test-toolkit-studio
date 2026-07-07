@@ -16,7 +16,7 @@ pub mod tui;
 pub use command::UiCommand;
 pub use event::{
     ElementItem, Level, NotReady, Phase, StatusLine, StepState, SubAgent, TodoItem, TodoStatus,
-    Tokens, UiEvent,
+    Tokens, UiEvent, ScriptInfo,
 };
 pub use json::JsonFrontend;
 pub use plain::PlainFrontend;

@@ -168,42 +168,46 @@ impl Frontend for PlainFrontend {
                     eprintln!("{}", paint(tty, "1;33", &format!("⚠ 探索未达成，脚本不完整：{}（{} 步）", name, steps)));
                 }
             }
-            UiEvent::Summary { explore, diagnose, verify, reason, model, tokens } => {
+            UiEvent::Summary { status, diagnose, verify, reason, script, model, tokens } => {
                 eprintln!();
                 eprintln!("{}", paint(tty, "1", "╭─ 结果 ──────────────────────────────"));
-                eprintln!("  {}   {}", paint(tty, "2", "探索"), paint(tty, lc(explore.level), &explore.text));
-                eprintln!("  {}   {}", paint(tty, "2", "诊断"), paint(tty, lc(diagnose.level), &diagnose.text));
-                eprintln!("  {}   {}", paint(tty, "2", "验证"), paint(tty, lc(verify.level), &verify.text));
-                eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
-                eprintln!("  {}   {}", paint(tty, "2", "模型"), model);
-                eprintln!(
-                    "  {}  {}",
-                    paint(tty, "2", "Token"),
-                    paint(tty, "2", &format!("↑{} ↓{} · 合计 {}", fmt_tokens(tokens.prompt), fmt_tokens(tokens.completion), fmt_tokens(tokens.prompt + tokens.completion)))
-                );
-                eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
-            }
-            UiEvent::Elements { committed, items, committed_to_lib } => {
-                eprintln!();
-                eprintln!("{}", paint(tty, "1", "╭─ 元素库更新 ────────────────────────"));
-                if !committed_to_lib {
-                    eprintln!(
-                        "  {}",
-                        paint(tty, "33", "未稳定通过——脚本未保存；本次元素只存在临时库（随运行目录丢弃），正式元素库未改动")
-                    );
-                } else if items.is_empty() {
-                    eprintln!("  {}   {}", paint(tty, "2", "提交"), paint(tty, "2", "（无新元素）"));
-                } else {
-                    let line_for = |it: &ElementItem| match &it.desc {
-                        Some(d) => format!("{} · {}", it.name, brief(d, 80)),
-                        None => it.name.clone(),
-                    };
-                    eprintln!("  {}   {}", paint(tty, "2", &format!("提交 {} 个", committed)), paint(tty, "32", &line_for(&items[0])));
-                    for it in &items[1..] {
-                        eprintln!("         {}", paint(tty, "32", &line_for(it)));
-                    }
-                    eprintln!("  {}", paint(tty, "2", "（最终脚本用到的元素已写入正式库，desc 据实际作用生成，请人工二次审核）"));
+                eprintln!("  {}", paint(tty, lc(status.level), &status.text));
+                if let Some(d) = diagnose {
+                    eprintln!("  {}   {}", paint(tty, "2", "回放"), paint(tty, lc(d.level), &d.text));
                 }
+                if let Some(v) = verify {
+                    eprintln!("  {}   {}", paint(tty, "2", "稳定"), paint(tty, lc(v.level), &v.text));
+                }
+                eprintln!("  {}   {}", paint(tty, "2", "依据"), brief(&reason, 200));
+                if let Some(sc) = script {
+                    let stem = sc.name.strip_suffix(".tks").unwrap_or(&sc.name);
+                    eprintln!();
+                    eprintln!(
+                        "  {}   {}",
+                        paint(tty, "2", "脚本"),
+                        paint(tty, "1", &format!("{}.tks + {}.tklib（{} 元素）", stem, stem, sc.elements.len()))
+                    );
+                    for (i, step) in sc.steps.iter().enumerate() {
+                        eprintln!("    {}", paint(tty, "2", &format!("{:>2}  {}", i + 1, brief(step, 90))));
+                    }
+                    if !sc.elements.is_empty() {
+                        eprintln!();
+                        let w = sc.elements.iter().map(|e| e.name.chars().count()).max().unwrap_or(0);
+                        for e in &sc.elements {
+                            let pad = " ".repeat(w.saturating_sub(e.name.chars().count()));
+                            match &e.desc {
+                                Some(d) => eprintln!("  {}   {}{}  {}", paint(tty, "2", "元素"), paint(tty, "32", &e.name), pad, paint(tty, "2", &brief(d, 70))),
+                                None => eprintln!("  {}   {}", paint(tty, "2", "元素"), paint(tty, "32", &e.name)),
+                            }
+                        }
+                        eprintln!("  {}", paint(tty, "2", "（desc 自动生成，建议人工复核）"));
+                    }
+                }
+                eprintln!();
+                eprintln!(
+                    "  {}",
+                    paint(tty, "2", &format!("{} · ↑{} ↓{} · 合计 {}", model, fmt_tokens(tokens.prompt), fmt_tokens(tokens.completion), fmt_tokens(tokens.prompt + tokens.completion)))
+                );
                 eprintln!("{}", paint(tty, "1", "╰─────────────────────────────────────"));
             }
             // 行式模式下：ask_user 由 await_answer 直接走 read_user_line（自带提问输出），

@@ -89,6 +89,21 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
             }),
         ),
         LlmTool::new(
+            "suggest_next",
+            desc("suggest_next"),
+            json!({
+                "type": "object",
+                "properties": {
+                    "suggestions": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "2~4 条下一步建议，每条一句可直接执行的话（如「回放确认脚本稳定」「把脚本优化得更短」）"
+                    }
+                },
+                "required": ["suggestions"]
+            }),
+        ),
+        LlmTool::new(
             "read_file",
             desc("read_file"),
             json!({
@@ -210,6 +225,8 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
     // 会话级文件操作授权记忆：记住用户"本次都允许"的类别（write/edit/delete）——仿 opencode
     let mut granted: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // suggest_next 暂存的下一步建议：AI 收尾时给出,REPL 等待处渲染成可选列表
+    let mut pending_suggestions: Vec<String> = Vec::new();
     loop {
         if interrupt::aborted() {
             break;
@@ -253,9 +270,20 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 if !ui.is_interactive() {
                     break;
                 }
-                // REPL 等下一句：问题传空串——不往消息流灌"你的回复…"提示行（每轮都发太吵），
-                // 输入框固定"请输入回复"、顶栏"等待回复"已足够
-                match ui.await_answer(0, String::new()).await {
+                // REPL 等下一句：问题传空串——不往消息流灌"你的回复…"提示行（每轮都发太吵）。
+                // AI 若刚用 suggest_next 给了下一步建议 → 渲染成可选列表（↑↓ 选或末行直接打字），
+                // 选中项原文作为用户输入发回；否则纯文本输入。
+                let input = if pending_suggestions.is_empty() || !ui.supports_prompts() {
+                    ui.await_answer(0, String::new()).await
+                } else {
+                    let sugg = std::mem::take(&mut pending_suggestions);
+                    match ui.await_choice_or_text(String::new(), sugg.clone()).await {
+                        Some(crate::workflow::agent::ui::ChoiceReply::Pick(i)) => sugg.get(i).cloned(),
+                        Some(crate::workflow::agent::ui::ChoiceReply::Text(t)) => Some(t),
+                        None => None,
+                    }
+                };
+                match input {
                     Some(s) if !s.trim().is_empty() => sess.user(s),
                     _ => break,
                 }
@@ -340,6 +368,23 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             sess.tool_result(call.call_id, r);
                         }
                         // —— 把内容写成文件交付（如 policy.md）。非设备动作→给当前 .tks 追加一行注释留痕 ——
+                        "suggest_next" => {
+                            let sugg: Vec<String> = call
+                                .arguments
+                                .get("suggestions")
+                                .and_then(|v| v.as_array())
+                                .map(|a| a.iter().filter_map(|x| x.as_str().map(|t| t.trim().to_string())).filter(|t| !t.is_empty()).collect())
+                                .unwrap_or_default();
+                            if sugg.is_empty() || !ui.supports_prompts() {
+                                sess.tool_result(call.call_id.as_str(), "（当前环境无法展示可选建议，已忽略——请用文字简短说明即可）");
+                            } else {
+                                pending_suggestions = sugg;
+                                sess.tool_result(
+                                    call.call_id.as_str(),
+                                    "建议已渲染成可选列表；用户的选择或输入会作为下一条消息到来。不要再用文字重复这些建议。",
+                                );
+                            }
+                        }
                         "save_file" => {
                             let filename = arg_str(&call.arguments, "filename");
                             let content = arg_str(&call.arguments, "content");

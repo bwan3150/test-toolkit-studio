@@ -36,6 +36,7 @@ use super::knowledge::KnowledgeOutcome;
 use super::transcript::Transcript;
 use super::ui::{ElementItem, Frontend, Level, StatusLine, Tokens, UiEvent};
 
+
 /// AI 探索测试编排器
 pub struct AgentRunner;
 
@@ -50,70 +51,72 @@ impl AgentRunner {
     }
 }
 
-/// 末尾统一渲染「结果 + 元素库更新」框（在 verify 之后调用，token 覆盖全程）。
-/// 结果框分**三层状态**：探索（探索 agent 是否完成 + 原始步数/轮数）、
-/// 诊断（脚本医生复跑修复：优化完成 / 优化达上限仍可跑 / 修复失败 + 修复次数 + 最终步数）、
-/// 验证（稳定性测试：连续通过几次 / 未通过 / 未验证）。
+/// 末尾统一渲染结果框（在 verify 之后调用，token 覆盖全程）：
+/// 状态一行 + 依据 + 脚本两件套（步骤预览/元素清单）+ 用量。诊断/验证只在真跑过时显示。
 #[allow(clippy::too_many_arguments)]
 fn render_summary(
     success: bool,
     aborted: bool,
     reason: &str,
     rounds: usize,
-    explore_steps: usize,
     verified: Option<&options::VerifyReport>,
     model: &str,
     tp: i64,
     tc: i64,
+    script_path: &Path,
+    steps: &[String],
     created: &[String],
-    committed: usize,
     element_path: &Path,
     ui: &dyn Frontend,
 ) {
-    // ① 探索状态（原 paint 颜色 → Level：绿32→Ok、红31→Err、黄33→Warn、灰2→Dim）
-    let explore = if aborted {
-        StatusLine::new(Level::Warn, format!("■ 已终止 · 原始 {} 步（{} 轮）", explore_steps, rounds))
+    let n = steps.len();
+    let status = if aborted {
+        StatusLine::new(Level::Warn, format!("■ 已终止 · {} 步（{} 轮）", n, rounds))
     } else if success {
-        StatusLine::new(Level::Ok, format!("✓ 达成 · 原始 {} 步（{} 轮）", explore_steps, rounds))
+        StatusLine::new(Level::Ok, format!("✓ 达成 · {} 步（{} 轮）", n, rounds))
     } else {
-        StatusLine::new(Level::Err, format!("✗ 未达成 · {} 步（{} 轮）", explore_steps, rounds))
+        StatusLine::new(Level::Err, format!("✗ 未达成 · {} 步（{} 轮）", n, rounds))
     };
-    // ② 诊断状态（脚本医生复跑修复）
-    let diagnose = match verified {
-        None => StatusLine::new(Level::Dim, "未运行（未开启 --verify 或探索未达成）"),
-        Some(r) if !r.reached => StatusLine::new(Level::Err, "✗ 修复失败（脚本仍跑不到目标）"),
-        Some(r) if r.hit_iter_limit => StatusLine::new(Level::Warn, format!("■ 优化达上限·仍可跑（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
-        Some(r) => StatusLine::new(Level::Ok, format!("✓ 优化完成（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps)),
-    };
-    // ③ 验证状态（稳定性测试）
-    let verify = match verified {
-        None => StatusLine::new(Level::Dim, "未验证"),
-        Some(r) if r.passed => StatusLine::new(Level::Ok, format!("✓ 验证通过（连续 {} 次到达目标）", r.stability_passes)),
-        Some(r) if !r.reached => StatusLine::new(Level::Dim, "未验证（诊断未修复，未进入稳定性测试）"),
-        Some(r) => StatusLine::new(Level::Err, format!("✗ 验证未通过（连续到达 {} 次）", r.stability_passes)),
-    };
+    // 诊断/验证：只在真跑过时给行（None 不渲染）
+    let diagnose = verified.map(|r| {
+        if !r.reached {
+            StatusLine::new(Level::Err, "✗ 修复失败（脚本仍跑不到目标）".to_string())
+        } else if r.hit_iter_limit {
+            StatusLine::new(Level::Warn, format!("■ 优化达上限·仍可跑（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps))
+        } else {
+            StatusLine::new(Level::Ok, format!("✓ 回放可达目标（修复 {} 次 · 最终 {} 步）", r.repairs, r.final_steps))
+        }
+    });
+    let verify = verified.map(|r| {
+        if r.passed {
+            StatusLine::new(Level::Ok, format!("✓ 稳定（连续 {} 次到达目标）", r.stability_passes))
+        } else if !r.reached {
+            StatusLine::new(Level::Dim, "未进入稳定性测试（诊断未修复）".to_string())
+        } else {
+            StatusLine::new(Level::Err, format!("✗ 不稳定（连续到达仅 {} 次）", r.stability_passes))
+        }
+    });
+    // 脚本两件套信息：步骤 friendly 化 + 元素清单（desc 从解包库读）
+    let descs = read_descs(element_path, created);
+    let elements: Vec<ElementItem> = created
+        .iter()
+        .map(|name| ElementItem { name: name.clone(), desc: descs.get(name).cloned().flatten() })
+        .collect();
+    let script = Some(crate::workflow::agent::ui::ScriptInfo {
+        name: script_path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+        steps: steps.iter().map(|l| fmt::friendly(l)).collect(),
+        elements,
+    });
 
     ui.emit(UiEvent::Summary {
-        explore,
+        status,
         diagnose,
         verify,
         reason: reason.to_string(),
+        script,
         model: model.to_string(),
         tokens: Tokens::new(tp, tc),
     });
-
-    // 元素库更新：committed_to_lib = 是否整体稳定通过（成功且未中断且验证通过/未验证）。
-    let committed_to_lib = !aborted && success && verified.map(|r| r.passed).unwrap_or(true);
-    // 成功时 desc 从正式库读；未成功时 created 仍照传（前端据 committed_to_lib=false 显示未提交提示）。
-    let descs = read_descs(element_path, created);
-    let items: Vec<ElementItem> = created
-        .iter()
-        .map(|name| ElementItem {
-            name: name.clone(),
-            desc: descs.get(name).cloned().flatten(),
-        })
-        .collect();
-    ui.emit(UiEvent::Elements { committed, items, committed_to_lib });
 }
 
 /// 从 element.json 读出若干元素的 desc（用于最终汇总展示）

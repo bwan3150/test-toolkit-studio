@@ -27,7 +27,7 @@ pub(super) fn view(frame: &mut Frame, model: &TuiModel) {
                 }
             }
         }
-        (ch.options.len() as u16 + groups + 3 + u16::from(ch.allow_free)).clamp(4, 17)
+        (ch.options.len() as u16 + groups + 2 + u16::from(!ch.prompt.trim().is_empty()) + u16::from(ch.allow_free)).clamp(4, 17)
     } else if model.input.starts_with('/') {
         // slash 指令菜单：匹配项 + 输入行 + 边框
         (slash_matches(&model.input).len() as u16 + 3).clamp(3, 10)
@@ -178,10 +178,13 @@ fn tail_fit(s: &str, max_w: usize) -> String {
 /// choosing 模式：在输入区渲染 prompt + 高亮选项列表（方向键选择）。
 fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceState) {
     let mut lines: Vec<Line<'static>> = Vec::new();
-    lines.push(Line::from(Span::styled(
-        ch.prompt.clone(),
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-    )));
+    // 空 prompt = REPL 收尾的"下一步建议"列表——不渲染空问题行
+    if !ch.prompt.trim().is_empty() {
+        lines.push(Line::from(Span::styled(
+            ch.prompt.clone(),
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        )));
+    }
     // 选项串可用「组\t标签」编码分组：组变了就先插一行小标题，选项缩进列在其下。
     let mut last_group: Option<&str> = None;
     for (i, opt) in ch.options.iter().enumerate() {
@@ -239,10 +242,15 @@ fn render_choice(frame: &mut Frame, area: ratatui::layout::Rect, ch: &ChoiceStat
         let prefix = if on_input { "▶ " } else { "  " };
         lines.push(Line::from(Span::styled(format!("{}{}", prefix, text), style)));
     }
+    let title = if ch.prompt.trim().is_empty() {
+        "下一步 · ↑↓ 选择 · Enter 确认"
+    } else {
+        "↑↓ 选择 · Enter 确认"
+    };
     frame.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
-                .title("↑↓ 选择 · Enter 确认")
+                .title(title)
                 .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         ),
         area,

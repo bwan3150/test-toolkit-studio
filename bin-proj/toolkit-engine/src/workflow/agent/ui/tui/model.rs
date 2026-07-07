@@ -319,12 +319,15 @@ impl TuiModel {
             }
             UiEvent::AwaitingInput { question, options, free_input, .. } => {
                 if !options.is_empty() {
-                    // 候选项 → choosing 模式（方向键列表）；问题推进消息流留痕（选择结果提交时回显 ❯）
-                    self.ensure_blank();
-                    self.push(Line::from(vec![
-                        Span::styled("? ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                        Span::styled(question.clone(), Style::default().fg(Color::Cyan)),
-                    ]));
+                    // 候选项 → choosing 模式（方向键列表）；问题推进消息流留痕（选择结果提交时回显 ❯）。
+                    // 空问题 = REPL 收尾的"下一步建议"列表——没有问题文本，不推 ? 行
+                    if !question.trim().is_empty() {
+                        self.ensure_blank();
+                        self.push(Line::from(vec![
+                            Span::styled("? ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                            Span::styled(question.clone(), Style::default().fg(Color::Cyan)),
+                        ]));
+                    }
                     self.choosing = Some(ChoiceState {
                         prompt: question,
                         options,
@@ -371,78 +374,81 @@ impl TuiModel {
                     );
                 }
             }
-            UiEvent::Summary { explore, diagnose, verify, reason, model, tokens } => {
+            UiEvent::Summary { status, diagnose, verify, reason, script, model, tokens } => {
                 self.push(Line::from(""));
                 self.push(Line::from(Span::styled(
                     "─ 结果 ──────────────────────────────",
                     Style::default().add_modifier(Modifier::BOLD),
                 )));
-                self.push_status("探索", &explore);
-                self.push_status("诊断", &diagnose);
-                self.push_status("验证", &verify);
+                // 状态一行（✓/✗/■），回放/稳定只在真跑过时显示
+                self.push(Line::from(Span::styled(
+                    status.text.clone(),
+                    Style::default().fg(level_color(status.level)).add_modifier(Modifier::BOLD),
+                )));
+                if let Some(d) = diagnose {
+                    self.push_status("回放", &d);
+                }
+                if let Some(v) = verify {
+                    self.push_status("稳定", &v);
+                }
                 self.push(Line::from(vec![
                     Span::styled("依据  ", Style::default().fg(Color::DarkGray)),
                     Span::raw(brief(&reason, 200)),
                 ]));
-                self.push(Line::from(vec![
-                    Span::styled("模型  ", Style::default().fg(Color::DarkGray)),
-                    Span::raw(model),
-                ]));
+                // 脚本两件套：文件名 + 逐步预览 + 元素清单
+                if let Some(sc) = script {
+                    let stem = sc.name.strip_suffix(".tks").unwrap_or(&sc.name).to_string();
+                    self.push(Line::from(""));
+                    self.push(Line::from(vec![
+                        Span::styled("脚本  ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(
+                            format!("{}.tks + {}.tklib", stem, stem),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!("（{} 元素，两件套一起拷贝即可回放）", sc.elements.len()),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                    ]));
+                    for (i, step) in sc.steps.iter().enumerate() {
+                        self.push(Line::from(Span::styled(
+                            format!("  {:>2}  {}", i + 1, brief(step, 90)),
+                            Style::default().fg(Color::Gray),
+                        )));
+                    }
+                    if !sc.elements.is_empty() {
+                        self.push(Line::from(""));
+                        // 元素名列宽对齐，desc 暗灰跟在后面
+                        let w = sc.elements.iter().map(|e| e.name.chars().count()).max().unwrap_or(0);
+                        for (i, e) in sc.elements.iter().enumerate() {
+                            let label = if i == 0 { "元素  " } else { "      " };
+                            let pad = " ".repeat(w.saturating_sub(e.name.chars().count()) + 2);
+                            let mut spans = vec![
+                                Span::styled(label, Style::default().fg(Color::DarkGray)),
+                                Span::styled(e.name.clone(), Style::default().fg(Color::Green)),
+                            ];
+                            if let Some(d) = &e.desc {
+                                spans.push(Span::styled(format!("{}{}", pad, brief(d, 60)), Style::default().fg(Color::DarkGray)));
+                            }
+                            self.push(Line::from(spans));
+                        }
+                        self.push(Line::from(Span::styled(
+                            "      （desc 自动生成，建议人工复核）",
+                            Style::default().fg(Color::DarkGray),
+                        )));
+                    }
+                }
+                self.push(Line::from(""));
                 self.push(Line::from(Span::styled(
                     format!(
-                        "Token ↑{} ↓{} · 合计 {}",
+                        "{} · ↑{} ↓{} · 合计 {}",
+                        model,
                         tokens.prompt,
                         tokens.completion,
                         tokens.prompt + tokens.completion
                     ),
                     Style::default().fg(Color::DarkGray),
                 )));
-                self.push(Line::from(Span::styled(
-                    "─────────────────────────────────────",
-                    Style::default().add_modifier(Modifier::BOLD),
-                )));
-            }
-            UiEvent::Elements { committed, items, committed_to_lib } => {
-                self.push(Line::from(""));
-                self.push(Line::from(Span::styled(
-                    "─ 元素库更新 ────────────────────────",
-                    Style::default().add_modifier(Modifier::BOLD),
-                )));
-                if !committed_to_lib {
-                    self.push_colored(
-                        "未稳定通过——脚本未保存；本次元素只存在临时库（随运行目录丢弃），正式元素库未改动"
-                            .to_string(),
-                        Color::Yellow,
-                    );
-                } else if items.is_empty() {
-                    self.push(Line::from(vec![
-                        Span::styled("提交  ", Style::default().fg(Color::DarkGray)),
-                        Span::styled("（无新元素）", Style::default().fg(Color::DarkGray)),
-                    ]));
-                } else {
-                    let line_for = |it: &ElementItem| match &it.desc {
-                        Some(d) => format!("{} · {}", it.name, brief(d, 80)),
-                        None => it.name.clone(),
-                    };
-                    self.push(Line::from(vec![
-                        Span::styled(
-                            format!("提交 {} 个  ", committed),
-                            Style::default().fg(Color::DarkGray),
-                        ),
-                        Span::styled(line_for(&items[0]), Style::default().fg(Color::Green)),
-                    ]));
-                    for it in &items[1..] {
-                        self.push(Line::from(Span::styled(
-                            format!("           {}", line_for(it)),
-                            Style::default().fg(Color::Green),
-                        )));
-                    }
-                    self.push_colored(
-                        "（最终脚本用到的元素已写入正式库，desc 据实际作用生成，请人工二次审核）"
-                            .to_string(),
-                        Color::DarkGray,
-                    );
-                }
                 self.push(Line::from(Span::styled(
                     "─────────────────────────────────────",
                     Style::default().add_modifier(Modifier::BOLD),

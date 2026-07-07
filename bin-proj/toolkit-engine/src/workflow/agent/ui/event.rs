@@ -111,11 +111,22 @@ impl StatusLine {
     }
 }
 
-/// 元素库提交项
+/// 元素包(.tklib)内的一个元素（结果框展示用）
 #[derive(Debug, Clone, Serialize)]
 pub struct ElementItem {
     pub name: String,
     pub desc: Option<String>,
+}
+
+/// 结果框里的脚本信息：两件套 + 步骤预览 + 元素清单
+#[derive(Debug, Clone, Serialize)]
+pub struct ScriptInfo {
+    /// 脚本文件名（如 foo.tks；两件套=同名 .tklib）
+    pub name: String,
+    /// 友好化的步骤行（friendly 处理过，无 .tks 括号噪声）
+    pub steps: Vec<String>,
+    /// 打进 .tklib 的元素（name + 自动生成的 desc）
+    pub elements: Vec<ElementItem>,
 }
 
 /// 编排官 todo 项状态
@@ -217,21 +228,16 @@ pub enum UiEvent {
     /// 脚本生成完毕
     ScriptGenerated { name: String, steps: usize, success: bool },
 
-    /// 最终结果框（三层状态）
+    /// 最终结果框（单框）：状态 + 依据 + 脚本两件套（步骤/元素）+ 用量。
+    /// 诊断/验证只在真跑过时才有（None 不渲染——"未运行/未验证"是噪音）。
     Summary {
-        explore: StatusLine,
-        diagnose: StatusLine,
-        verify: StatusLine,
+        status: StatusLine,
+        diagnose: Option<StatusLine>,
+        verify: Option<StatusLine>,
         reason: String,
+        script: Option<ScriptInfo>,
         model: String,
         tokens: Tokens, // 全程总量
-    },
-
-    /// 元素库更新框
-    Elements {
-        committed: usize,
-        items: Vec<ElementItem>,
-        committed_to_lib: bool, // false=未稳定通过,未提交
     },
 
     /// 引擎整体收束（前端据此退出 alt-screen / 关 NDJSON 流）
