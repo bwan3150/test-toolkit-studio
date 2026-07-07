@@ -16,6 +16,8 @@ use super::model::{slash_matches, ChoiceState, TuiModel};
 pub(super) fn build_view(model: &TuiModel, width: u16) -> (Vec<Line<'static>>, Option<(u16, u16)>) {
     let w = (width.max(20) as usize).saturating_sub(1);
     let mut rows: Vec<Line<'static>> = Vec::new();
+    // 小窗顶部空一行:内容流与状态栏/输入框之间的呼吸,不再糊在一起
+    rows.push(Line::from(""));
 
     // ---- 状态行:进程状态 + 正在执行的步骤(反色粗体) ----
     let mut top = if let Some(q) = model.awaiting.as_ref() {

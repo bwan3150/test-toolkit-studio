@@ -197,7 +197,13 @@ fn run_tui(
     install_panic_hook();
     enable_raw_mode()?;
     let mut out = std::io::stdout();
-    execute!(out, EnableBracketedPaste)?;
+    // 开局清屏：shell 历史/上次会话残留全部推进 scrollback（往上滚仍可见），本场从干净首屏开始
+    execute!(
+        out,
+        EnableBracketedPaste,
+        Clear(ClearType::All),
+        crossterm::cursor::MoveTo(0, 0)
+    )?;
     let mut model = TuiModel::new();
     let mut screen = Inline::default();
     let res = run_loop(&mut out, &mut screen, &mut events_rx, &commands_tx, &mut model);
