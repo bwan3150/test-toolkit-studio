@@ -371,7 +371,17 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 _ => tksops::optimize_tks(opts, ui, &path, &goal).await,
                             }?;
                             ran_any = true;
-                            sess.tool_result(call.call_id, r);
+                            if kind == "replay_tks" {
+                                // 回放报告含逐步轨迹（可能很长）——bulky 提交：本轮全量可见，
+                                // 后续轮次自动替换成占位符，不永久占对话
+                                sess.tool_result_bulky(
+                                    call.call_id,
+                                    r,
+                                    "（此前一次回放的轨迹详情已省略——已据它做过决策；需要再看就重新 replay_tks）",
+                                );
+                            } else {
+                                sess.tool_result(call.call_id, r);
+                            }
                         }
                         // —— 把内容写成文件交付（如 policy.md）。非设备动作→给当前 .tks 追加一行注释留痕 ——
                         "suggest_next" => {

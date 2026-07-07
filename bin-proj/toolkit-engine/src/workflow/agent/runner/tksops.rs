@@ -303,24 +303,13 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let msg = if diag.reached {
         format!("回放通过：脚本能跑通并到达目标（{} 步）。", n)
     } else {
-        // 结构化失败报告：失败步 + 失败现场页面摘要 + 建议动作——编排官据此**决策**
-        // （续探/先导航对齐起始态/问用户），而不是闷头重跑
+        // 完整测量结果：逐步轨迹（步骤→页面链，判断哪步走偏必需）+ 失败点页面详情 + 建议——
+        // 决策（续探/先导航/问用户）在编排官；本报告经 bulky 提交，后续轮次自动滚动省略
         let keep = diag.fail_idx.unwrap_or(n);
         let where_ = diag.fail_idx.map(|i| format!("第 {} 步", i + 1)).unwrap_or_else(|| "目标判定".into());
-        let fail_line = diag
-            .fail_idx
-            .and_then(|i| env.lines.get(i))
-            .map(|l| format!("\n- 失败步：{}", super::fmt::friendly(l)))
-            .unwrap_or_default();
-        let scene = diag.fail_scene();
-        let scene_block = if scene.trim().is_empty() {
-            String::new()
-        } else {
-            format!("\n- 设备现停在失败现场，当前页面摘要：\n{}", scene)
-        };
         format!(
-            "回放未到达目标（{}）：{}{}{}\n- 可选下一步：resume_explore{{keep_steps: {}}} 从当前页面续探修复；若是起始态没对齐（登录态/所在页不对），先 explore 导航对齐再重放；拿不准就问用户。",
-            where_, diag.note, fail_line, scene_block, keep
+            "回放未到达目标（{}）：{}\n\n{}\n- 可选下一步：resume_explore{{keep_steps: {}}} 从当前页面续探修复；若轨迹显示**起始态就没对齐**（第 1 步落的页面就不对/登录态不对），先 explore 导航对齐再重放；拿不准就问用户。设备现停在失败现场。",
+            where_, diag.note, diag.trace_report(), keep
         )
     };
     Ok(msg)

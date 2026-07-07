@@ -61,10 +61,41 @@ pub(crate) struct Diagnosis {
 }
 
 impl Diagnosis {
-    /// 失败/结束现场的页面摘要（最后一步执行后的采集）——给编排官接地：它据此决定
-    /// 续探/导航/问用户，而不是只凭一句错误文本猜。
-    pub(crate) fn fail_scene(&self) -> String {
-        self.steps.last().map(|st| top_lines(&st.page_full, 8)).unwrap_or_default()
+    /// 完整轨迹报告（给编排官决策）：每步一行「步骤 → 执行后落在哪个页面」，失败点附近
+    /// 再给页面详情。判断"哪步走偏"需要整条 步骤→页面→步骤 链——只看失败单页会误诊
+    /// （页面不对可能是三步之前就偏了）。replay 是测量工具，这就是它完整的测量结果；
+    /// 决策（续探/导航/问用户）在编排官，这里不做任何判断。
+    pub(crate) fn trace_report(&self) -> String {
+        let mut out = String::from("逐步轨迹（步骤 → 执行后页面）：\n");
+        let mut prev_sig: Option<u64> = None;
+        for st in &self.steps {
+            let mark = if st.ok { "✓" } else { "✗" };
+            let page = if prev_sig == Some(st.struct_sig) {
+                "页面未变（同上一步）".to_string()
+            } else {
+                page_fingerprint(&st.page_full)
+            };
+            let err = st.err.as_deref().map(|e| format!(" — {}", brief(e, 60))).unwrap_or_default();
+            out.push_str(&format!("{:>3} {} {}{} → {}\n", st.no, mark, friendly(&st.line), err, page));
+            prev_sig = Some(st.struct_sig);
+        }
+        // 失败点前后页面详情（失败前一步的页面 = "点之前看到的是什么"，判断是没点中还是早就偏了）；
+        // 全跑通但终点不符时给终点页面详情
+        match self.fail_idx {
+            Some(k) => {
+                out.push_str("\n失败点前后页面详情：\n");
+                let lo = k.saturating_sub(1);
+                for st in self.steps.iter().filter(|s| s.no >= lo + 1 && s.no <= k + 1) {
+                    out.push_str(&format!("— 第 {} 步「{}」执行后页面：\n{}\n", st.no, friendly(&st.line), top_lines(&st.page_full, 8)));
+                }
+            }
+            None => {
+                if let Some(st) = self.steps.last() {
+                    out.push_str(&format!("\n终点页面详情（第 {} 步后）：\n{}\n", st.no, top_lines(&st.page_full, 8)));
+                }
+            }
+        }
+        out
     }
 
     /// 「无效操作步」的步号集合（1-based）——执行后**页面结构没变化**（点了个不起作用的元素），
@@ -327,6 +358,22 @@ pub(crate) async fn diagnose(
         }),
     );
     Diagnosis { reached, steps, fail_idx, note }
+}
+
+/// 页面指纹：取页面元素文本前几行拼成一行（轨迹简报里"这步落在哪"的一眼判断）
+fn page_fingerprint(page_full: &str) -> String {
+    let fp = page_full
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .take(3)
+        .collect::<Vec<_>>()
+        .join(" · ");
+    if fp.is_empty() {
+        "（空页面）".to_string()
+    } else {
+        brief(&fp, 80)
+    }
 }
 
 /// 取文本前 n 行（每页元素列表可能很长，逐步展示时截断防 token 爆炸）
