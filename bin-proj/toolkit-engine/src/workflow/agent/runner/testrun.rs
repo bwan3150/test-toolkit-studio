@@ -411,7 +411,9 @@ impl TestRun {
         // 标志指向中途页面，错误基线诱导医生把正确的收尾步骤当"多余流程"删掉）。
         let mut goal_marker = String::new();
         let mut start_marker = String::new();
-        if overall_success && !self.task_mode {
+        // 不论轻/完整模式都写：轻模式产的脚本之后同样会被 replay/repair，缺了判据就是
+        // "闭着眼回放"（真机复盘：默认轻模式 → 无 marker/起始标志 → 起始态没对齐直接开跑卡死）
+        if overall_success {
             let (m, mpt, mct) = super::verify::derive_marker_from_page(&opts.ai, &self.prompts, &mut self.tx, &self.case, "goal_marker_from_page", &self.final_text).await;
             self.sup_pt += mpt;
             self.sup_ct += mct;

@@ -161,6 +161,27 @@ async fn ensure_marker(
     m
 }
 
+/// 回放开场括注：有「启动」步=会重启净化；没有=从当前页面直接开始（别谎称"重启净化中"）。
+fn replay_prelude(lines: &[String]) -> &'static str {
+    if lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false) {
+        "，重启净化中…"
+    } else {
+        "，无启动步——从当前页面直接开始"
+    }
+}
+
+/// "闭眼起跑"警告：脚本既无「启动」步（没法重启净化）又无「# 起始标志:」（没法校验起点）——
+/// 回放起点完全取决于设备当前停在哪，必须让用户/编排官知道。
+fn warn_blind_start(ui: &dyn Frontend, lines: &[String], start_marker: &str) {
+    let has_launch = lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false);
+    if !has_launch && start_marker.is_empty() {
+        ui.emit(UiEvent::Notice {
+            level: Level::Warn,
+            text: "脚本无「启动」步且无起始标志——回放将从设备**当前页面**直接开始，请先确认已处于脚本的起始状态（登录态/所在页）".to_string(),
+        });
+    }
+}
+
 /// 一次操作所需的环境（拥有所有权，ctx 借用其字段）。
 struct OpEnv {
     device: String,
@@ -257,10 +278,11 @@ pub(crate) async fn replay_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     }
     ui.emit(UiEvent::Phase { phase: Phase::Diagnose, n: None });
     let marker = ensure_marker(opts, ui, &mut tx, &env.prompts, tks, goal, &env.lines).await;
-    ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 回放开始（{} 步）", env.lines.len()) });
+    ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 回放开始（{} 步{}）", env.lines.len(), replay_prelude(&env.lines)) });
     let ctx = op_ctx!(env, opts, ui);
     // verbose=true：回放逐步可见——此前静默跑完全程，用户只看到"卡了很久"
     let start = read_start_marker(tks).unwrap_or_default();
+    warn_blind_start(ui, &env.lines, &start);
     // 定位自愈默认开：元素定位失败时基于当前实时页面单次挑选修正（详见 runner::healer）
     let healer = std::sync::Arc::new(super::healer::LlmElementHealer::new(
         opts.ai.clone(),
@@ -303,6 +325,7 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
     let mut report = VerifyReport { ran: true, ..Default::default() };
     let mut lines = env.lines.clone();
     let start = read_start_marker(tks).unwrap_or_default();
+    warn_blind_start(ui, &env.lines, &start);
     let max_resumes = env.params.harness.repairs; // 续探预算（config [harness].repairs）
     let mut created: Vec<String> = Vec::new();
 
@@ -311,7 +334,7 @@ pub(crate) async fn repair_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks: &
             return Ok("已中断（用户 Ctrl+C），修复未完成，脚本未改动。".into());
         }
         // ① 诊断回放（逐步可见，定位自愈默认开）：失败即停，设备停在失败现场
-        ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（{} 步，重启净化中…）", lines.len()) });
+        ui.emit(UiEvent::Notice { level: Level::Info, text: format!("▶ 诊断回放（{} 步{}）", lines.len(), replay_prelude(&lines)) });
         let healer = std::sync::Arc::new(super::healer::LlmElementHealer::new(
             opts.ai.clone(),
             env.prompts.clone(),
