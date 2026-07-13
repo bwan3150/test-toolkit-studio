@@ -29,14 +29,14 @@ use super::fmt::brief;
 /// 【AI 辅助驾驶】纯回放（tke run / flow）的定位自愈装配入口。
 /// ScriptRunner 解包 .tklib 后以解包出的元素库 json 路径调用（构造需要库路径，而解包发生在
 /// 其内部，故经工厂延迟构造，见 ScriptRunner::with_healer_factory）。
-/// 设备未指定时返回 None——自愈要向元素库落修正，没有设备连采集都做不了（回放本身也跑不动）。
-/// 提示词走 config [ai].prompts_dir（与 harness 同一套覆盖机制）。
+/// 设备缺省不拦（adb 单设备默认，与 tke run 本身同一容忍度）——曾把它当硬前提，
+/// 用户不带 -d 时自愈全程静默失效。提示词走 config [ai].prompts_dir（与 harness 同一套覆盖机制）。
 pub fn copilot_healer(
     params: &crate::Params,
     lib_json: PathBuf,
     script_text: &str,
 ) -> Option<std::sync::Arc<dyn ElementHealer>> {
-    let device = params.device()?;
+    let device = params.device().unwrap_or_default();
     let prompts = PromptSet::resolve(&PromptSpec {
         prompts_dir: params.ai.prompts_dir.clone().map(PathBuf::from),
         ..Default::default()

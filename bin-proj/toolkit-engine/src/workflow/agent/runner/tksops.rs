@@ -450,7 +450,9 @@ pub async fn align_start(params: &Arc<crate::Params>, ui: &dyn Frontend, tks: &P
     if lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false) {
         return AlignOutcome::Skipped("脚本有启动步，冷启动自会对齐");
     }
-    let Some(device) = params.device() else { return AlignOutcome::Skipped("未指定设备") };
+    // 设备缺省不拦：与 ScriptRunner 同一容忍度（adb 单设备默认，Controller/Workarea 都吃 Option）。
+    // 曾把「未指定设备」当硬前提静默跳过——用户不带 -d 时对齐/自愈全程失效，真机踩过。
+    let device = params.device();
     let tklib_file = tklib::tklib_path(tks);
     if !tklib_file.is_file() {
         return AlignOutcome::Skipped("缺元素包"); // run 会报缺包错，这里不抢话
@@ -481,16 +483,21 @@ pub async fn align_start(params: &Arc<crate::Params>, ui: &dyn Frontend, tks: &P
     };
 
     // —— 当前页本地匹配（零 AI 成本）——
-    let Ok(workarea) = Workarea::for_device(Some(&device)) else {
-        return AlignOutcome::Skipped("工作区不可用");
+    // 采集/设备类失败要可见：对齐静默放弃会让用户以为"没对齐是 bug"（真机踩过静默 Skip 的坑）
+    let skip_loud = |reason: &'static str| {
+        ui.emit(UiEvent::Notice { level: Level::Warn, text: format!("起始态对齐跳过：{}——将从当前页面直接开跑", reason) });
+        AlignOutcome::Skipped(reason)
     };
-    let Ok(mut controller) = crate::Controller::new(Some(device.clone())) else {
-        return AlignOutcome::Skipped("设备不可用");
+    let Ok(workarea) = Workarea::for_device(device.as_deref()) else {
+        return skip_loud("工作区不可用");
+    };
+    let Ok(mut controller) = crate::Controller::new(device.clone()) else {
+        return skip_loud("设备不可用");
     };
     match on_start_page(&mut controller, &workarea, &sig).await {
         Some(true) => return AlignOutcome::AlreadyThere,
         Some(false) => {}
-        None => return AlignOutcome::Skipped("当前页面采集失败"),
+        None => return skip_loud("当前页面采集失败"),
     }
 
     // —— AI 导航对齐 ——
@@ -518,7 +525,7 @@ pub async fn align_start(params: &Arc<crate::Params>, ui: &dyn Frontend, tks: &P
         ocr: None,
         verify: false,
         platform: None,
-        device: Some(device.clone()),
+        device: device.clone(),
         params: params.clone(),
     };
     let report = match super::testrun::navigate(&opts, ui, &goal, None).await {

@@ -57,9 +57,9 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
-    /// AI 辅助驾驶（run/flow 回放的定位自愈，默认开启）：元素定位失败时让 AI 按当前页面
-    /// 修正并更新元素包（需配置 [ai]）。--copilot false 关闭；也可 config 里 copilot = false
-    #[arg(long, global = true)]
+    /// AI 辅助驾驶（run 回放：开跑前起始态对齐 + 元素定位失败时按当前页面找回，默认开启，
+    /// 需配置 [ai]）。--copilot 等价 --copilot true；--copilot false 或 config copilot = false 关闭
+    #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true")]
     copilot: Option<bool>,
 
     /// 输出 DEBUG 级别日志
