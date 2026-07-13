@@ -57,6 +57,11 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
+    /// AI 辅助驾驶（run/flow 回放的定位自愈，默认开启）：元素定位失败时让 AI 按当前页面
+    /// 修正并更新元素包（需配置 [ai]）。--copilot false 关闭；也可 config 里 copilot = false
+    #[arg(long, global = true)]
+    copilot: Option<bool>,
+
     /// 输出 DEBUG 级别日志
     #[arg(short, long, global = true)]
     verbose: bool,
@@ -182,7 +187,7 @@ async fn main() -> tke::Result<()> {
     };
 
     // 参数层：CLI + config 解析一次，形成统一参数表（Arc 共享，编排层各模块持有并查表）
-    let params = Arc::new(tke::Params::resolve(cli.device, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, config));
+    let params = Arc::new(tke::Params::resolve(cli.device, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, cli.copilot, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
     // 安装进程级 Ctrl+C 中断监听：run/steps/harness 各阶段（含 ScriptRunner 逐步回放）统一查中断、及时停

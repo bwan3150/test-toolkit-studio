@@ -40,6 +40,10 @@ pub struct StepResult {
     /// 本步 UI 结构文件路径（相对 run_dir）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xml: Option<String>,
+    /// AI 辅助驾驶：本步元素按原定位找不到、由 AI 依当前页面找回才通过（值 = 元素名）。
+    /// 只影响本次执行，不改 .tks / .tklib——报告用，提示脚本定位可能需要更新。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub healed: Option<String>,
 }
 
 /// 应用信息

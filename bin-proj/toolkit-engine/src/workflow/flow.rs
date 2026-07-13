@@ -42,11 +42,19 @@ pub struct FlowResult {
 /// Flow 运行器
 pub struct FlowRunner {
     params: Arc<Params>,
+    /// 自愈钩子工厂（AI 辅助驾驶）：透传给每个脚本的 ScriptRunner，见 script_runner::HealerFactory
+    healer_factory: Option<super::script_runner::HealerFactory>,
 }
 
 impl FlowRunner {
     pub fn new(params: Arc<Params>) -> Self {
-        Self { params }
+        Self { params, healer_factory: None }
+    }
+
+    /// 注入自愈钩子工厂（builder 式；AI 辅助驾驶）
+    pub fn with_healer_factory(mut self, factory: super::script_runner::HealerFactory) -> Self {
+        self.healer_factory = Some(factory);
+        self
     }
 
     /// 执行 flow 文件
@@ -94,7 +102,10 @@ impl FlowRunner {
         });
 
         // 3. 依次执行每个脚本
-        let runner = ScriptRunner::new(self.params.clone());
+        let mut runner = ScriptRunner::new(self.params.clone());
+        if let Some(factory) = &self.healer_factory {
+            runner = runner.with_healer_factory(factory.clone());
+        }
         let mut results: Vec<ExecutionResult> = Vec::new();
         let mut all_success = true;
 

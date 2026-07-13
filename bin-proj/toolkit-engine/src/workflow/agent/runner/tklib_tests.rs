@@ -44,6 +44,7 @@ fn opts_for(device: &str, scope: &str, workspace: std::path::PathBuf, cache: std
             Some(cache),
             Some(workspace),
             false,
+            None,
             crate::utils::config::TkeConfig::default(),
         )),
     }

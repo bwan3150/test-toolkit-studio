@@ -55,6 +55,7 @@ pub fn build_help() -> String {
       {g}--log{r} <dir>        产物输出目录 {d}(不传则 run/steps 不保存产物){r}
   {g}-c, --config{r} <toml>    配置文件 {d}(缺省读 tke 同目录 config.toml; CLI 参数优先){r}
       {g}--json{r}             强制 NDJSON 输出 {d}(终端默认友好格式, 管道自动 NDJSON){r}
+      {g}--copilot{r} <bool>   AI 辅助驾驶 {d}(默认开; 回放定位失败让 AI 按当前页面找回, 不改脚本/元素包){r}
   {g}-v, --verbose{r}          DEBUG 日志    {g}-h{r} 帮助    {g}-V{r} 版本
 ",
         env!("BUILD_VERSION")

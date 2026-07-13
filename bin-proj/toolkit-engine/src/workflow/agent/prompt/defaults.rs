@@ -114,6 +114,7 @@ pub fn default_message(role: &str, name: &str) -> &'static str {
         ("verify", "goal_marker_from_page") => include_str!("builtin/messages/verify/goal_marker_from_page.md"),
         ("verify", "start_marker_from_page") => include_str!("builtin/messages/verify/start_marker_from_page.md"),
         ("verify", "heal_pick") => include_str!("builtin/messages/verify/heal_pick.md"),
+        ("verify", "heal_triage") => include_str!("builtin/messages/verify/heal_triage.md"),
         // —— advisor：参谋（explorer 提问中转：托管代答/交互出选项）——
         ("explorer", "stuck_escalate") => include_str!("builtin/messages/explorer/stuck_escalate.md"),
         ("advisor", "consult") => include_str!("builtin/messages/advisor/consult.md"),

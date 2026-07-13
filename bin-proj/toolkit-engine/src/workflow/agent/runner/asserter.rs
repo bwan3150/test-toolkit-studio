@@ -95,7 +95,7 @@ pub(super) async fn auto_checkpoint(
                     let step_index = s.steps.len();
                     let (screenshot, xml) = ctx.artifacts.save_step(ctx.workarea, step_index, &trace, &line, true);
                     tx.log("tks_step", serde_json::json!({ "round": round, "step": step_index + 1, "line": line.clone(), "exec": detail.clone(), "screenshot": screenshot.clone(), "xml": xml.clone(), "auto_checkpoint": true, "reason": pick.reason.clone() }));
-                    s.steps.push(StepResult { index: step_index, command: line.clone(), success: true, error: None, duration_ms: 0, line: None, screenshot, xml });
+                    s.steps.push(StepResult { index: step_index, command: line.clone(), success: true, error: None, duration_ms: 0, line: None, screenshot, xml, healed: None });
                     s.lines.push(line.clone());
                     s.step_comments.push(format!("断言：{}", pick.reason));
                 }

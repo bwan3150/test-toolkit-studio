@@ -28,6 +28,11 @@ pub struct TkeConfig {
     pub ocr: Option<String>,
     /// harness 生成脚本后是否自检+自修复（等价 CLI --verify）；CLI --verify 出现则也为 true
     pub verify: Option<bool>,
+    /// AI 辅助驾驶（run/flow 回放的定位自愈）：某步元素定位失败时，让 AI 按当前实时页面
+    /// 判断"哪个其实就是它"（App 小改版/文案微调/位置变化），当场救活本步并把修正持久化
+    /// 回元素包——后续回放直接命中，无须 AI 再介入。默认开启；需配置 [ai] 才真正生效。
+    /// CLI --copilot true/false 优先于此。
+    pub copilot: Option<bool>,
     /// AI 配置（tke harness 探索测试用）：[ai] 段
     #[serde(default)]
     pub ai: AiConfig,

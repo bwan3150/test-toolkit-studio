@@ -8,6 +8,7 @@ use std::io::{IsTerminal, Write};
 const GREEN: &str = "\x1b[32m";
 const RED: &str = "\x1b[31m";
 const CYAN: &str = "\x1b[36m";
+const YELLOW: &str = "\x1b[33m";
 const DIM: &str = "\x1b[2m";
 const BOLD: &str = "\x1b[1m";
 const RESET: &str = "\x1b[0m";
@@ -67,7 +68,7 @@ fn print_pretty(state: &mut PrettyState, event: &RunEvent) {
                    index + 1, state.total_steps, command);
             let _ = std::io::stdout().flush();
         }
-        RunEvent::StepEnd { success, error, duration_ms, .. } => {
+        RunEvent::StepEnd { success, error, duration_ms, healed, .. } => {
             if *success {
                 println!("{GREEN}✓{RESET} {DIM}{}{RESET}", fmt_duration(*duration_ms));
             } else {
@@ -76,12 +77,20 @@ fn print_pretty(state: &mut PrettyState, event: &RunEvent) {
                     println!("         {RED}{}{RESET}", err);
                 }
             }
+            // AI 辅助驾驶：本步元素按原定位没找到，AI 依当前页面找回（不改脚本/元素包）
+            if let Some(h) = healed {
+                println!("         {YELLOW}🩹 AI 辅助:「{h}」原定位失效，已按当前页面找回{RESET}");
+            }
         }
-        RunEvent::RunEnd { success, total_steps, successful_steps, run_dir, .. } => {
+        RunEvent::RunEnd { success, total_steps, successful_steps, run_dir, healed, .. } => {
             if *success {
                 println!("{GREEN}{BOLD}✓ 通过{RESET} {DIM}({successful_steps}/{total_steps} 步){RESET}");
             } else {
                 println!("{RED}{BOLD}✗ 失败{RESET} {DIM}({successful_steps}/{total_steps} 步通过){RESET}");
+            }
+            if !healed.is_empty() {
+                println!("  {YELLOW}🩹 AI 辅助驾驶介入 {} 处: {}{RESET}", healed.len(), healed.join("、"));
+                println!("  {DIM}这些元素的原定位在当前 App 上已失效（本次未改动脚本/元素包，建议更新）{RESET}");
             }
             if !run_dir.is_empty() {
                 println!("  {DIM}产物: {}{RESET}", run_dir);

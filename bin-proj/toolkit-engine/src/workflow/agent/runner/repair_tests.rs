@@ -42,6 +42,7 @@ fn opts_for(device: &str, scope: &str, workspace: std::path::PathBuf, cache: std
             Some(cache),
             Some(workspace),
             false,
+            None,
             crate::utils::config::TkeConfig::default(),
         )),
     }
@@ -342,6 +343,241 @@ async fn page_assertions_guard_start_and_end() {
     );
     let msg = tksops::replay_tks(&opts, &ui, &tks, "打开设置中心").await.unwrap();
     assert!(msg.contains("回放通过"), "复位后应全通：{}", msg);
+
+    fake::remove(device);
+}
+
+/// 【AI 辅助驾驶 · tke run 路径】纯回放装配 healer 工厂：App"改版"后元素原定位失效 →
+/// AI 依当前页面找回、救活当次执行并继续跑完；报告（StepResult.healed / run_end 汇总）标注
+/// 自愈；**原 .tks / .tklib 一个字节不动**（修正只落解包出的临时副本——与 harness 的
+/// replay_tks 回包行为相反，这是两条路径的语义分界）。
+#[tokio::test]
+async fn run_copilot_heals_without_touching_assets() {
+    let device = "fake:copilot";
+    let scope = "copilot-test";
+    // 版本 A：照生产路径产出 foo.tks + foo.tklib 两件套
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("旧按钮", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let ws = temp_dir("copilot-ws");
+    let cache = temp_dir("copilot-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("launch", serde_json::json!({ "target": "settings.app", "comment": "打开" })),
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "点旧按钮" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "到了" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]);
+
+    let opts = opts_for(device, scope, ws.clone(), cache);
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask, false).await.unwrap();
+    let tks = ws.join("open.tks");
+    let tklib = crate::utils::tklib::tklib_path(&tks);
+    let result = run.finalize(&opts, &ui, &tks, &tklib).await.unwrap();
+    assert!(result.success);
+
+    // 版本 B："改版"——结构通道全失效，逼出自愈路径（同 replay_heals 测试的改版形状）
+    fake::install(
+        device,
+        vec![
+            fake::page(&[
+                "  <node index=\"0\" text=\"顶部横幅\" class=\"android.widget.ImageView\" clickable=\"false\" bounds=\"[0,0][720,120]\"/>",
+                "  <node index=\"1\" text=\"新按钮\" class=\"android.widget.TextView\" clickable=\"true\" bounds=\"[100,300][300,360]\"/>",
+            ]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::tool("report", serde_json::json!({ "index": 1, "reason": "同一功能位，文字与控件类型微调" }))]);
+
+    // tke run 的装配方式（同 cli/workflow/run.rs::healer_factory）：copilot 开 → 工厂延迟构造
+    let mut p = (*opts.params).clone();
+    p.ai = opts.ai.clone(); // 测试里 fake ai 挂在 opts.ai，生产路径本来就在 params.ai
+    let params = Arc::new(p);
+    let p2 = params.clone();
+    let runner = crate::workflow::script_runner::ScriptRunner::new(params)
+        .with_healer_factory(Arc::new(move |lib_json, script_text: &str| super::healer::copilot_healer(&p2, lib_json, script_text)));
+
+    let tklib_before = std::fs::read(&tklib).unwrap();
+    let tks_before = std::fs::read(&tks).unwrap();
+    let mut events: Vec<String> = Vec::new();
+    let exec = runner
+        .run(&tks, None, &mut |e| {
+            if let Ok(j) = serde_json::to_string(e) {
+                events.push(j);
+            }
+        })
+        .await
+        .unwrap();
+
+    // 跑通 + 报告标注自愈
+    assert!(exec.success, "自愈后应跑通：{:?}", exec.error);
+    let healed_steps: Vec<_> = exec.steps.iter().filter(|s| s.healed.is_some()).collect();
+    assert_eq!(healed_steps.len(), 1, "应有且只有一步被自愈：{:?}", exec.steps);
+    // run_end 事件带自愈汇总（NDJSON 消费方/终端结尾报告都吃这个）
+    let run_end = events.iter().find(|e| e.contains("\"run_end\"")).expect("应有 run_end 事件");
+    assert!(run_end.contains("\"healed\""), "run_end 应带自愈汇总：{}", run_end);
+    // 点击落在了新位置（新按钮中心 200,330）
+    let taps: Vec<_> = fake::events(device).into_iter().filter(|e| e.starts_with("tap")).collect();
+    assert!(taps.iter().any(|t| t == "tap 200,330"), "应点到新位置：{:?}", taps);
+
+    // 资产零改动：tke run 的自愈只救活当次执行，不回写脚本/元素包
+    assert_eq!(std::fs::read(&tks).unwrap(), tks_before, "tke run 不得改 .tks");
+    assert_eq!(std::fs::read(&tklib).unwrap(), tklib_before, "tke run 的自愈不得回写 .tklib");
+
+    fake::remove(device);
+}
+
+/// 【分诊 · 层2 同页替代】改版后原元素没有对应物（pick 层 null），但同页有**功能等价**的
+/// 替代入口 → triage 判 replace → 点替代元素救活当次执行；记账标注"→替代"；**不落库**
+/// （替代元素不是"它"，写进原元素名会污染元素库——tklib 字节级不变照旧成立）。
+#[tokio::test]
+async fn run_copilot_triage_replaces_with_equivalent_element() {
+    let device = "fake:triage-replace";
+    let scope = "triage-replace";
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("旧按钮", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let ws = temp_dir("triage-replace-ws");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("launch", serde_json::json!({ "target": "settings.app", "comment": "打开" })),
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "点旧按钮" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "到了" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]);
+
+    let opts = opts_for(device, scope, ws.clone(), temp_dir("triage-replace-cache"));
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask, false).await.unwrap();
+    let tks = ws.join("open.tks");
+    let tklib = crate::utils::tklib::tklib_path(&tks);
+    assert!(run.finalize(&opts, &ui, &tks, &tklib).await.unwrap().success);
+
+    // 版本 B："旧按钮"彻底没了，同页有功能等价的"进入新设置"入口。
+    // 注意 class 必须≠库条目的（fake::node 全是 Button）——否则 recognizer 的 class_name
+    // 结构容错会"意外命中"，heal 根本不触发（原 heal 测试踩过同一个坑）
+    fake::install(
+        device,
+        vec![
+            fake::page(&[
+                "  <node index=\"0\" text=\"顶部横幅\" class=\"android.widget.ImageView\" clickable=\"false\" bounds=\"[0,0][720,120]\"/>",
+                "  <node index=\"1\" text=\"进入新设置\" class=\"android.widget.TextView\" clickable=\"true\" bounds=\"[100,400][300,460]\"/>",
+            ]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+    // 第一段 pick：没有"就是它"的对应物 → null；第二段 triage：同页替代
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::tool("report", serde_json::json!({ "index": null, "reason": "页面上没有对应物" }))]);
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::tool("report", serde_json::json!({ "verdict": "replace", "index": 1, "diagnosis": "入口疑改名为「进入新设置」，功能等价" }))]);
+
+    let mut p = (*opts.params).clone();
+    p.ai = opts.ai.clone();
+    let params = Arc::new(p);
+    let p2 = params.clone();
+    let runner = crate::workflow::script_runner::ScriptRunner::new(params)
+        .with_healer_factory(Arc::new(move |lib_json, script_text: &str| super::healer::copilot_healer(&p2, lib_json, script_text)));
+
+    let tklib_before = std::fs::read(&tklib).unwrap();
+    let exec = runner.run(&tks, None, &mut |_| {}).await.unwrap();
+
+    assert!(exec.success, "替代救活后应跑通：{:?}", exec.error);
+    let healed: Vec<_> = exec.steps.iter().filter_map(|s| s.healed.clone()).collect();
+    assert_eq!(healed.len(), 1, "应有一步替代记账：{:?}", exec.steps);
+    assert!(healed[0].contains("→替代"), "记账应标注替代路径：{}", healed[0]);
+    // 点击落在替代元素中心（200,430）
+    let taps: Vec<_> = fake::events(device).into_iter().filter(|e| e.starts_with("tap")).collect();
+    assert!(taps.iter().any(|t| t == "tap 200,430"), "应点到替代元素：{:?}", taps);
+    // 替代不落库：tklib（乃至解包副本的来源）字节级不变
+    assert_eq!(std::fs::read(&tklib).unwrap(), tklib_before, "替代救活不得回写 .tklib");
+
+    fake::remove(device);
+}
+
+/// 【分诊 · 层3 前面走偏】回放一开始就落在无关页面（前步没生效的典型现场）→ pick null →
+/// triage 判 wrong_page → **不救**，该步失败，报错里带 AI 分诊结论（果不是因，指向前面步骤）。
+#[tokio::test]
+async fn run_copilot_triage_diagnoses_wrong_page() {
+    let device = "fake:triage-wrongpage";
+    let scope = "triage-wrongpage";
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("旧按钮", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("设置中心", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let ws = temp_dir("triage-wp-ws");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("launch", serde_json::json!({ "target": "settings.app", "comment": "打开" })),
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "点旧按钮" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "到了" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+    enqueue_fake_role_session(scope, "reflector", vec![FakeTurn::tool("report", serde_json::json!({}))]);
+
+    let opts = opts_for(device, scope, ws.clone(), temp_dir("triage-wp-cache"));
+    let run = super::testrun::TestRun::explore(&opts, &ui, "打开设置中心", None, false, false, super::ctx::AskMode::Ask, false).await.unwrap();
+    let tks = ws.join("open.tks");
+    let tklib = crate::utils::tklib::tklib_path(&tks);
+    assert!(run.finalize(&opts, &ui, &tks, &tklib).await.unwrap().success);
+
+    // 版本 B：启动后落在完全无关的页面（前步走偏/没生效的现场）。
+    // 手写非 Button class：防 recognizer class_name 结构容错"意外命中"同 class 节点
+    fake::install(
+        device,
+        vec![fake::page(&[
+            "  <node index=\"0\" text=\"每日推荐\" class=\"android.widget.TextView\" clickable=\"true\" bounds=\"[100,200][300,260]\"/>",
+        ])],
+    );
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::tool("report", serde_json::json!({ "index": null, "reason": "页面上没有对应物" }))]);
+    enqueue_fake_role_session(scope, "healer", vec![FakeTurn::tool("report", serde_json::json!({ "verdict": "wrong_page", "diagnosis": "当前是推荐页而非设置入口页，疑第 1 步启动后未落到预期页面" }))]);
+
+    let mut p = (*opts.params).clone();
+    p.ai = opts.ai.clone();
+    let params = Arc::new(p);
+    let p2 = params.clone();
+    let runner = crate::workflow::script_runner::ScriptRunner::new(params)
+        .with_healer_factory(Arc::new(move |lib_json, script_text: &str| super::healer::copilot_healer(&p2, lib_json, script_text)));
+
+    let exec = runner.run(&tks, None, &mut |_| {}).await.unwrap();
+
+    assert!(!exec.success, "走偏场景不应救活");
+    let err = exec.error.clone().unwrap_or_default();
+    assert!(err.contains("AI 分诊"), "报错应带分诊结论：{}", err);
+    assert!(err.contains("走偏"), "分诊应指向前面步骤：{}", err);
+    // 没有任何自愈记账（诊断不是救活）
+    assert!(exec.steps.iter().all(|s| s.healed.is_none()), "诊断路径不应有自愈记账");
 
     fake::remove(device);
 }

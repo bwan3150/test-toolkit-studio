@@ -18,6 +18,20 @@ pub use interpreter::{ScriptInterpreter, ActionTrace};
 #[async_trait::async_trait]
 pub trait ElementHealer: Send + Sync {
     async fn heal(&self, element_name: &str, workarea: &crate::utils::Workarea) -> Option<(crate::Point, crate::Bounds)>;
+
+    /// 本次运行自愈成功的元素名（按发生顺序）。上层用它做两件事：
+    /// ① 逐步提示"这步是 AI 救活的"② 运行结束后把修正过的元素库回包 .tklib。
+    /// 默认空 = 实现方不做自愈记账。
+    fn healed(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// 分诊诊断：heal 救不活时，对失败真正原因的分析（前面步骤走偏/路径整体重构/
+    /// App 元素消失或不可交互…）。上层在该步最终失败时取走、拼进报错让人看到。
+    /// **取走即清空**——诊断只归属当前失败的这一步，不得串到后续步骤。默认 None。
+    fn take_diagnosis(&self) -> Option<String> {
+        None
+    }
 }
 
 use crate::{Result, TkeError, StepResult};
@@ -80,6 +94,7 @@ impl TksRunner {
                 line: None,
                 screenshot: None,
                 xml: None,
+                healed: None,
             }),
             Err(e) => Ok(StepResult {
                 index: 0,
@@ -90,6 +105,7 @@ impl TksRunner {
                 line: None,
                 screenshot: None,
                 xml: None,
+                healed: None,
             })
         }
     }

@@ -4,8 +4,24 @@
 
 use tke::{Result, ScriptRunner, FlowRunner, JsonOutput};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use super::EventPrinter;
+
+/// AI 辅助驾驶（定位自愈）的装配：copilot 开启时构造 healer 工厂——回放中某步元素按原
+/// 定位找不到（App 小改版/文案微调），AI 依当前实时页面找回并救活本步，然后继续无 AI 运行。
+/// 修正只写解包出的临时副本 + 在报告里标注，**不改原 .tks / .tklib**。
+/// 默认开启；--copilot false 或 config copilot = false 关闭；未配置 [ai] 时自愈调用会
+/// 静默失败、回放按原路径报错（行为同关闭）。
+fn healer_factory(params: &Arc<tke::Params>) -> Option<tke::workflow::script_runner::HealerFactory> {
+    if !params.copilot {
+        return None;
+    }
+    let p = params.clone();
+    Some(Arc::new(move |lib_json, script_text: &str| {
+        tke::workflow::agent::runner::healer::copilot_healer(&p, lib_json, script_text)
+    }))
+}
 
 /// Run 命令参数
 #[derive(clap::Args)]
@@ -42,7 +58,10 @@ pub async fn handle(
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
             // 元素库：ScriptRunner 内部按「同名 .tklib 两件套」解析，缺包直接报错（无共享库）
-            let runner = ScriptRunner::new(params.clone());
+            let mut runner = ScriptRunner::new(params.clone());
+            if let Some(factory) = healer_factory(&params) {
+                runner = runner.with_healer_factory(factory);
+            }
             let result = runner
                 .run(&path, params.log.as_deref(), &mut emit)
                 .await
@@ -56,7 +75,10 @@ pub async fn handle(
                 JsonOutput::error(format!("flow 文件不存在: {}", path.display()));
             }
 
-            let runner = FlowRunner::new(params.clone());
+            let mut runner = FlowRunner::new(params.clone());
+            if let Some(factory) = healer_factory(&params) {
+                runner = runner.with_healer_factory(factory);
+            }
             let result = runner
                 .run(&path, params.log.as_deref(), &mut emit)
                 .await

@@ -34,6 +34,10 @@ pub enum RunEvent {
         screenshot: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         xml: Option<String>,
+        /// AI 辅助驾驶：本步元素按原定位找不到、由 AI 依当前页面找回才通过（值 = 元素名）。
+        /// 只影响本次执行，不改 .tks / .tklib
+        #[serde(skip_serializing_if = "Option::is_none")]
+        healed: Option<String>,
     },
     /// 脚本结束
     RunEnd {
@@ -44,6 +48,10 @@ pub enum RunEvent {
         error: Option<String>,
         run_dir: String,
         log: String,
+        /// AI 辅助驾驶汇总：本次被 AI 救活的步骤（"第N步「元素名」"），空 = 全程无 AI 介入。
+        /// 出现即提示：脚本这些定位在当前 App 版本上已经找不到了，值得更新脚本/元素包
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        healed: Vec<String>,
     },
     /// Flow 开始
     FlowStart {

@@ -90,6 +90,9 @@ pub struct Params {
     pub ocr: Option<String>,
     /// harness 是否自检+自修复（config 默认；CLI --verify 出现则也为 true）
     pub verify: bool,
+    /// AI 辅助驾驶（run/flow 回放的定位自愈）：CLI --copilot > config copilot > 默认 true。
+    /// 开启且配置了 [ai] 时，回放中元素定位失败会让 AI 按当前页面修正并回写元素包。
+    pub copilot: bool,
     /// harness 各环节次数上限
     pub harness: HarnessLimits,
     /// AI 配置
@@ -108,6 +111,7 @@ impl Params {
         cli_cache: Option<PathBuf>,
         cli_current_dir: Option<PathBuf>,
         json: bool,
+        cli_copilot: Option<bool>,
         config: TkeConfig,
     ) -> Self {
         Self {
@@ -121,6 +125,7 @@ impl Params {
             ocr_url: config.ocr_url.unwrap_or_else(|| DEFAULT_OCR_URL.to_string()),
             ocr: config.ocr,
             verify: config.verify.unwrap_or(false),
+            copilot: cli_copilot.or(config.copilot).unwrap_or(true),
             harness: HarnessLimits::from_config(&config.harness),
             ai: config.ai,
             knowledge: config.knowledge,

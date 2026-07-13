@@ -10,21 +10,37 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
+/// 定位自愈钩子工厂（AI 辅助驾驶的装配形式）：构造 healer 需要元素库 json 路径与脚本原文
+/// （分诊上下文），而 .tklib 解包/脚本读取发生在 run() 内部——装配层（CLI）注入工厂，
+/// run() 拿到后再造。返回 None = 造不了（如未指定设备），本次回放不带自愈。
+pub type HealerFactory = Arc<
+    dyn Fn(std::path::PathBuf, &str) -> Option<Arc<dyn super::tks::ElementHealer>> + Send + Sync,
+>;
+
 /// 脚本运行器（持有参数表，device/element 查表取得）
 pub struct ScriptRunner {
     params: Arc<Params>,
     /// 定位自愈钩子（None=关闭；replay/repair 装配时注入）
     healer: Option<Arc<dyn super::tks::ElementHealer>>,
+    /// 自愈钩子工厂（AI 辅助驾驶）：run/flow 装配时注入，解包 .tklib 后延迟构造 healer。
+    /// 自愈只救活当次执行 + 在报告里标注，**不回写 .tks / .tklib**（修正落在解包出的临时副本上）
+    healer_factory: Option<HealerFactory>,
 }
 
 impl ScriptRunner {
     pub fn new(params: Arc<Params>) -> Self {
-        Self { params, healer: None }
+        Self { params, healer: None, healer_factory: None }
     }
 
     /// 注入定位自愈钩子（builder 式）
     pub fn with_healer(mut self, healer: Arc<dyn super::tks::ElementHealer>) -> Self {
         self.healer = Some(healer);
+        self
+    }
+
+    /// 注入自愈钩子工厂（builder 式；AI 辅助驾驶，见 HealerFactory）
+    pub fn with_healer_factory(mut self, factory: HealerFactory) -> Self {
+        self.healer_factory = Some(factory);
         self
     }
 
@@ -71,7 +87,14 @@ impl ScriptRunner {
                 .join("tklib-unpack")
                 .join(format!("{}-{}", script_stem, std::process::id()));
             let lib_json = crate::utils::tklib::unpack(&tklib, &dest)?;
-            Some(Self::new(Arc::new(self.params.with_element_lib(lib_json))))
+            let mut nested = Self::new(Arc::new(self.params.with_element_lib(lib_json.clone())));
+            // AI 辅助驾驶：装配层注入了工厂时，以解包出的**临时副本** + 脚本原文（分诊上下文）
+            // 构造自愈钩子——AI 的修正只写副本救活当次执行，原 .tks / .tklib 一个字节都不动
+            if let Some(factory) = &self.healer_factory {
+                let script_text = std::fs::read_to_string(script_path).unwrap_or_default();
+                nested.healer = factory(lib_json, &script_text);
+            }
+            Some(nested)
         };
         let effective = runner.as_ref().unwrap_or(self);
 
@@ -157,6 +180,9 @@ impl ScriptRunner {
         });
 
         // 4. 逐步执行
+        // AI 辅助驾驶记账：healer 按发生顺序记自愈成功的元素名，每步执行后 diff 出
+        // "这步新增的自愈"，标进 StepResult / StepEnd（报告用，不改脚本资产）
+        let mut healed_seen = 0usize;
         for (index, step) in script.steps.iter().enumerate() {
             // 中断检查点：Ctrl+C 后不再继续后续步骤，及时停下（否则一整段回放要跑完才轮到上层检查）
             // 软停（Esc）：用户请求停下当前回放、转入暂停等指导——同样在每步执行前提前停。
@@ -180,6 +206,9 @@ impl ScriptRunner {
             //   等待命令自带超时参数，也放宽到不被外层夹掉。
             let step_timeout_secs: u64 = match step.command {
                 TksCommand::ScrollFind => 75,
+                // AI 辅助驾驶在场：元素定位失败第 3 次会触发一次 LLM 挑选（oneshot 最多两问），
+                // 20s 会把自愈掐死在半路——放宽到 60s。代价是真死页面要多等 40s 才判失败。
+                _ if self.healer.is_some() => 60,
                 _ => 20,
             };
             let exec_result = match tokio::time::timeout(
@@ -203,6 +232,23 @@ impl ScriptRunner {
             let (success, error) = match exec_result {
                 Ok(()) => (true, None),
                 Err(e) => (false, Some(e.to_string())),
+            };
+            // 分诊诊断（AI 辅助驾驶）：本步救不活时 healer 给出失败真因分析
+            // （前面步骤走偏/路径重构/App 元素消失…）→ 拼进报错，报告/终端可见
+            let error = match (error, self.healer.as_ref().and_then(|h| h.take_diagnosis())) {
+                (Some(e), Some(d)) => Some(format!("{}\n🩺 AI 分诊：{}", e, d)),
+                (e, _) => e,
+            };
+
+            // 本步是否发生了定位自愈（AI 辅助驾驶）：diff healer 的顺序记账
+            let healed = match &self.healer {
+                Some(h) => {
+                    let names = h.healed();
+                    let new = names.get(healed_seen..).unwrap_or(&[]).join("、");
+                    healed_seen = names.len();
+                    (!new.is_empty()).then_some(new)
+                }
+                None => None,
             };
 
             // 保存本步产物（仅 --log 时）
@@ -232,6 +278,7 @@ impl ScriptRunner {
                 line: Some(step.line_number),
                 screenshot: screenshot.clone(),
                 xml: xml.clone(),
+                healed: healed.clone(),
             };
 
             on_event(&RunEvent::StepEnd {
@@ -243,6 +290,7 @@ impl ScriptRunner {
                 duration_ms,
                 screenshot,
                 xml,
+                healed,
             });
 
             result.steps.push(step_result);
@@ -279,6 +327,12 @@ impl ScriptRunner {
             error: result.error.clone(),
             run_dir: run_dir_str,
             log: log_path,
+            // AI 辅助驾驶汇总：哪些步是 AI 找回定位才通过的（提示脚本定位在新版 App 上已失效）
+            healed: result
+                .steps
+                .iter()
+                .filter_map(|s| s.healed.as_ref().map(|h| format!("第{}步「{}」", s.index + 1, h)))
+                .collect(),
         });
 
         Ok(result)
