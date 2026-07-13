@@ -57,6 +57,22 @@ pub async fn handle(
             tke::workflow::script_runner::validate_script_path(&path)
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
+            // AI 辅助驾驶 · 起始态对齐：无启动步的脚本开跑前把设备带回起始页（防止"从
+            // 当前页面闭眼开跑"）。已在起始页/有启动步/无参照 → 零成本跳过；导航后仍
+            // 不在起始页 → 不开跑（在错误页面上回放可能产生副作用），报告说清前提
+            // （登录态/权限类只诊断不代办）。UiEvent 走 stderr，不污染 stdout 的 NDJSON。
+            // flow(.toml) 不做：脚本间连续性是有意设计（web 会话保留可测联动）。
+            if params.copilot {
+                use tke::workflow::agent::runner::tksops::{align_start, AlignOutcome};
+                let ui = tke::PlainFrontend::new();
+                match align_start(&params, &ui, &path).await {
+                    AlignOutcome::Failed(report) => {
+                        JsonOutput::error(format!("起始态对齐失败，未开始回放。{}", report))
+                    }
+                    AlignOutcome::Aligned | AlignOutcome::AlreadyThere | AlignOutcome::Skipped(_) => {}
+                }
+            }
+
             // 元素库：ScriptRunner 内部按「同名 .tklib 两件套」解析，缺包直接报错（无共享库）
             let mut runner = ScriptRunner::new(params.clone());
             if let Some(factory) = healer_factory(&params) {

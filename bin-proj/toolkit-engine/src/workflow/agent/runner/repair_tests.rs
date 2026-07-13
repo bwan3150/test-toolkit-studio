@@ -581,3 +581,121 @@ async fn run_copilot_triage_diagnoses_wrong_page() {
 
     fake::remove(device);
 }
+
+/// 复用 opts_for 拼一份带 fake ai 的 Params（align_start / copilot 装配都吃 Params）
+fn params_with_fake_ai(device: &str, scope: &str, ws: std::path::PathBuf, cache: std::path::PathBuf) -> Arc<Params> {
+    let opts = opts_for(device, scope, ws, cache);
+    let mut p = (*opts.params).clone();
+    p.ai = opts.ai.clone();
+    Arc::new(p)
+}
+
+/// 手造两件套：无启动步脚本 + 带「起始页」页面实体的 .tklib
+fn make_pair_with_start_page(ws: &std::path::Path, cache: &std::path::Path) -> std::path::PathBuf {
+    let tks = ws.join("case.tks");
+    std::fs::write(&tks, "# 用例: 对齐测试\n步骤:\n点击 [{某按钮}]\n").unwrap();
+    let lib_dir = cache.join("mklib");
+    std::fs::create_dir_all(&lib_dir).unwrap();
+    let lib_json = lib_dir.join("element.json");
+    std::fs::write(
+        &lib_json,
+        r#"{"elements":{},"pages":{"起始页":{"desc":"设置入口页","signature":["进入设置"]}}}"#,
+    )
+    .unwrap();
+    crate::utils::tklib::pack(&lib_json, &crate::utils::tklib::tklib_path(&tks), &crate::utils::tklib::TklibMeta::new("android", "fake")).unwrap();
+    tks
+}
+
+/// 【起始态对齐 · 导航成功】无启动步脚本 + 当前停在无关页 → 本地匹配不中 → AI navigate
+/// 回到起始页 → 实测复验命中 → Aligned。
+#[tokio::test]
+async fn align_start_navigates_back_to_start_page() {
+    let device = "fake:align-ok";
+    let scope = "align-ok";
+    // 页0=无关页（可点），页1=起始页（含特征「进入设置」）
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("每日推荐", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("进入设置", 100, 200, 300, 260)]),
+        ],
+    );
+
+    let ws = temp_dir("align-ok-ws");
+    let cache = temp_dir("align-ok-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+    let tks = make_pair_with_start_page(&ws, &cache);
+
+    // 导航 explorer：点一下（推进到起始页）→ finish
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "回起始页" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "已回到起始页" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+
+    let params = params_with_fake_ai(device, scope, ws.clone(), cache);
+    let out = tksops::align_start(&params, &ui, &tks).await;
+    assert!(matches!(out, tksops::AlignOutcome::Aligned), "应导航对齐成功");
+
+    fake::remove(device);
+}
+
+/// 【起始态对齐 · 有启动步跳过】首步「启动」→ 冷启动自会对齐，零 LLM 调用直接 Skipped。
+#[tokio::test]
+async fn align_start_skips_scripts_with_launch_step() {
+    let device = "fake:align-skip";
+    fake::install(device, vec![fake::page(&[&fake::node("随便", 0, 0, 100, 50)])]);
+
+    let ws = temp_dir("align-skip-ws");
+    let cache = temp_dir("align-skip-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+
+    let tks = ws.join("case.tks");
+    std::fs::write(&tks, "步骤:\n启动 [\"x.app\"]\n点击 [{某按钮}]\n").unwrap();
+
+    let params = params_with_fake_ai(device, "align-skip", ws.clone(), cache);
+    // 未 enqueue 任何 fake 会话——走到 LLM 就会 panic/报错，Skipped 证明零 AI 成本
+    let out = tksops::align_start(&params, &ui, &tks).await;
+    assert!(matches!(out, tksops::AlignOutcome::Skipped(_)), "有启动步应跳过对齐");
+
+    fake::remove(device);
+}
+
+/// 【起始态对齐 · 导航失败】navigate 认输且页面未变 → Failed，不该开跑；
+/// 报告说明前提须人工处理（登录态/权限类：查得出、说得清、不代办）。
+#[tokio::test]
+async fn align_start_fails_cleanly_when_navigation_cannot_reach() {
+    let device = "fake:align-fail";
+    let scope = "align-fail";
+    fake::install(device, vec![fake::page(&[&fake::node("每日推荐", 100, 200, 300, 260)])]);
+
+    let ws = temp_dir("align-fail-ws");
+    let cache = temp_dir("align-fail-cache");
+    let ui = PlainFrontend::new();
+    let _wa = Workarea::for_device(Some(device)).unwrap();
+    let tks = make_pair_with_start_page(&ws, &cache);
+
+    enqueue_fake_role_session(
+        scope,
+        "explorer",
+        vec![FakeTurn::tool("finish", serde_json::json!({ "success": false, "reason": "找不到回起始页的路" }))],
+    );
+
+    let params = params_with_fake_ai(device, scope, ws.clone(), cache);
+    let out = tksops::align_start(&params, &ui, &tks).await;
+    match out {
+        tksops::AlignOutcome::Failed(report) => {
+            assert!(report.contains("登录态"), "报告应提示登录态类前提须人工处理：{}", report);
+            assert!(report.contains("未到达起始页"), "报告应说清对齐失败：{}", report);
+        }
+        _ => panic!("导航失败应返回 Failed"),
+    }
+
+    fake::remove(device);
+}

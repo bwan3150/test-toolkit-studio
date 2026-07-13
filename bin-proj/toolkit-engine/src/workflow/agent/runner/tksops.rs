@@ -422,3 +422,134 @@ pub(crate) async fn optimize_tks(opts: &AgentRunOptions, ui: &dyn Frontend, tks:
         _ => Ok("无可优化（没有可删的绕路/冗余步）。".into()),
     }
 }
+
+// ============ 【AI 辅助驾驶 · 起始态对齐】tke run 开跑前的起点校准 ============
+
+/// 起始态对齐结果（见 align_start）
+pub enum AlignOutcome {
+    /// 无需/无法对齐（有启动步/无起始参照/缺前提），照旧开跑——对齐是增强，绝不拦住本可运行的脚本
+    Skipped(&'static str),
+    /// 当前已在起始页（零 AI 成本，本地匹配命中）
+    AlreadyThere,
+    /// AI 导航后到达起始页
+    Aligned,
+    /// AI 导航后仍不在起始页——**不该开跑**（在错误页面上回放可能产生副作用），带诊断报告
+    Failed(String),
+}
+
+/// 【起始态对齐】把设备带回脚本的起始页，防止"从当前页面闭眼开跑"：
+/// - 脚本有「启动」步 → 跳过（冷启动自会对齐，剩余偏差由步内自愈/分诊兜底）
+/// - 起始参照 = .tklib pages「起始页」（desc+特征集）；老脚本退回「# 起始标志:」头注释
+/// - 当前页**本地匹配**（page_match_score，零 AI 成本）命中 → 直接跑
+/// - 不匹配 → navigate 轻导航（纪律：最短路径 + 禁改账号/数据状态；**绝不代替登录**）→ 实测复验
+/// - 复验仍不匹配 → Failed：登录态/权限/特定数据类前提查得出、说得清，但只能人工处理——
+///   自动登录既要凭据又改变账号状态，是纪律红线（同不幂等操作的"起始警告+与用户商量"出口）
+pub async fn align_start(params: &Arc<crate::Params>, ui: &dyn Frontend, tks: &Path) -> AlignOutcome {
+    // —— 前提收集：任何一环缺失都 Skipped，让 ScriptRunner 照旧跑/报它自己的错 ——
+    let Ok(lines) = read_tks_lines(tks) else { return AlignOutcome::Skipped("脚本不可读") };
+    if lines.first().map(|l| super::fmt::is_launch_line(l)).unwrap_or(false) {
+        return AlignOutcome::Skipped("脚本有启动步，冷启动自会对齐");
+    }
+    let Some(device) = params.device() else { return AlignOutcome::Skipped("未指定设备") };
+    let tklib_file = tklib::tklib_path(tks);
+    if !tklib_file.is_file() {
+        return AlignOutcome::Skipped("缺元素包"); // run 会报缺包错，这里不抢话
+    }
+    // 解一次包读起始参照（ScriptRunner 稍后自会再解包运行，互不干扰）
+    let stem = tks.file_stem().and_then(|s| s.to_str()).unwrap_or("script");
+    let dest = params
+        .cache_root()
+        .join("tklib-unpack")
+        .join(format!("align-{}-{}", stem, std::process::id()));
+    let Ok(lib_json) = tklib::unpack(&tklib_file, &dest) else {
+        return AlignOutcome::Skipped("元素包不可读");
+    };
+    let (desc, sig) = match crate::tools::element::get_page(&lib_json, "起始页") {
+        Some((d, s)) if !s.is_empty() => (d, s),
+        _ => {
+            // 老脚本兜底：头注释起始标志（单词）
+            let marker = read_start_marker(tks).unwrap_or_default();
+            if marker.is_empty() {
+                ui.emit(UiEvent::Notice {
+                    level: Level::Warn,
+                    text: "脚本无「启动」步且无起始页参照——将从设备当前页面直接开始，请确认已处于起始状态（登录态/所在页）".into(),
+                });
+                return AlignOutcome::Skipped("无起始参照");
+            }
+            (read_start_desc(tks).unwrap_or_default(), vec![marker])
+        }
+    };
+
+    // —— 当前页本地匹配（零 AI 成本）——
+    let Ok(workarea) = Workarea::for_device(Some(&device)) else {
+        return AlignOutcome::Skipped("工作区不可用");
+    };
+    let Ok(mut controller) = crate::Controller::new(Some(device.clone())) else {
+        return AlignOutcome::Skipped("设备不可用");
+    };
+    match on_start_page(&mut controller, &workarea, &sig).await {
+        Some(true) => return AlignOutcome::AlreadyThere,
+        Some(false) => {}
+        None => return AlignOutcome::Skipped("当前页面采集失败"),
+    }
+
+    // —— AI 导航对齐 ——
+    let shown = if desc.is_empty() { String::new() } else { format!("（{}）", desc) };
+    ui.emit(UiEvent::Notice {
+        level: Level::Warn,
+        text: format!("当前不在脚本起始页{}——AI 辅助驾驶导航对齐中…", shown),
+    });
+    let goal = format!(
+        "回到该测试脚本的起始页面：{}。页面特征参考：{}",
+        if desc.is_empty() { "见特征列表" } else { &desc },
+        sig.iter().take(6).cloned().collect::<Vec<_>>().join("、")
+    );
+    // 导航预算收紧：对齐是回原地，不是探索（max_rounds 封顶 12）
+    let mut ai = params.ai.clone();
+    ai.max_rounds = Some(ai.max_rounds.map(|r| r.min(12)).unwrap_or(12));
+    let opts = AgentRunOptions {
+        case: goal.clone(),
+        script_dir: params.workspace_root(),
+        ai,
+        prompt: super::super::prompt::PromptSpec {
+            prompts_dir: params.ai.prompts_dir.clone().map(PathBuf::from),
+            ..Default::default()
+        },
+        ocr: None,
+        verify: false,
+        platform: None,
+        device: Some(device.clone()),
+        params: params.clone(),
+    };
+    let report = match super::testrun::navigate(&opts, ui, &goal, None).await {
+        Ok(r) => r,
+        Err(e) => format!("导航执行失败：{}", e),
+    };
+
+    // —— 实测复验（不信导航自述，以当前页面匹配为准）——
+    match on_start_page(&mut controller, &workarea, &sig).await {
+        Some(true) => AlignOutcome::Aligned,
+        _ => AlignOutcome::Failed(format!(
+            "AI 导航后仍未到达起始页{}。{}\n若起始前提是登录态/权限/特定数据，辅助驾驶不会代替登录或改动账号状态——请人工把设备调到起始状态后重跑，或用 tke harness 重探更新脚本。",
+            shown, report
+        )),
+    }
+}
+
+/// 采集当前页并与起始页特征集做命中率匹配（复用「断言页面」同一套 page_match_score/阈值）。
+/// None = 采集失败（设备不可用等）。
+async fn on_start_page(
+    controller: &mut crate::Controller,
+    workarea: &Workarea,
+    sig: &[String],
+) -> Option<bool> {
+    controller.capture_ui_state(workarea).await.ok()?;
+    let elements = Fetcher::new().fetch_elements_from_file(&workarea.ui_tree_path()).ok()?;
+    let texts: Vec<String> = elements
+        .iter()
+        .filter_map(|e| e.text.clone().or_else(|| e.content_desc.clone()))
+        .filter(|t| !t.trim().is_empty())
+        .collect();
+    let (hit, total) = crate::tools::element::page_match_score(sig, &texts);
+    Some(total > 0 && hit as f32 / total as f32 >= crate::tools::element::PAGE_MATCH_THRESHOLD)
+}
