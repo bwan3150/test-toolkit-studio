@@ -25,11 +25,19 @@ fn lc(l: Level) -> &'static str {
 
 pub struct PlainFrontend {
     tty: bool,
+    /// 紧凑模式（tke run 起始态对齐这类"顺带的小段 AI 过程"用）：
+    /// 不打阶段标题（━━ 探索 ━━），Notice 顶格——别让配角输出摆出主角排场
+    compact: bool,
 }
 
 impl PlainFrontend {
     pub fn new() -> Self {
-        Self { tty: std::io::stderr().is_terminal() }
+        Self { tty: std::io::stderr().is_terminal(), compact: false }
+    }
+
+    /// 紧凑模式构造（见字段说明）
+    pub fn compact() -> Self {
+        Self { tty: std::io::stderr().is_terminal(), compact: true }
     }
 
     fn toks(&self, t: Tokens) -> String {
@@ -49,6 +57,9 @@ impl Frontend for PlainFrontend {
         let tty = self.tty;
         match ev {
             UiEvent::Phase { phase, n } => {
+                if self.compact {
+                    return; // 紧凑模式：小段过程不打阶段大标题
+                }
                 let title = match n {
                     Some(k) => format!("{} #{}", phase.label(), k),
                     None => phase.label().to_string(),
@@ -155,7 +166,9 @@ impl Frontend for PlainFrontend {
                 eprintln!("  {}", paint(tty, "33", &message));
             }
             UiEvent::Notice { level, text } => {
-                eprintln!("  {}", paint(tty, lc(level), &text));
+                // 紧凑模式顶格：与 Page（· N 元素）行对齐，不悬在半空
+                let indent = if self.compact { "" } else { "  " };
+                eprintln!("{}{}", indent, paint(tty, lc(level), &text));
             }
             UiEvent::GuidanceAccepted { text } => {
                 eprintln!("  {}", paint(tty, "36", &format!("↳ 已采纳指导：{}", brief(&text, 200))));

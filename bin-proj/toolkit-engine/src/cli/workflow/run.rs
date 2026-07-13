@@ -64,12 +64,14 @@ pub async fn handle(
             // flow(.toml) 不做：脚本间连续性是有意设计（web 会话保留可测联动）。
             if params.copilot {
                 use tke::workflow::agent::runner::tksops::{align_start, AlignOutcome};
-                let ui = tke::PlainFrontend::new();
+                let ui = tke::PlainFrontend::compact(); // 紧凑输出：不打阶段大标题，Notice 顶格
                 match align_start(&params, &ui, &path).await {
                     AlignOutcome::Failed(report) => {
                         JsonOutput::error(format!("起始态对齐失败，未开始回放。{}", report))
                     }
-                    AlignOutcome::Aligned | AlignOutcome::AlreadyThere | AlignOutcome::Skipped(_) => {}
+                    // 有过导航输出 → 空一行再开脚本执行（与对齐过程视觉分段）
+                    AlignOutcome::Aligned => eprintln!(),
+                    AlignOutcome::AlreadyThere | AlignOutcome::Skipped(_) => {}
                 }
             }
 

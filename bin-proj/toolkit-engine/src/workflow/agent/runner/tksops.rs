@@ -504,7 +504,7 @@ pub async fn align_start(params: &Arc<crate::Params>, ui: &dyn Frontend, tks: &P
     let shown = if desc.is_empty() { String::new() } else { format!("（{}）", desc) };
     ui.emit(UiEvent::Notice {
         level: Level::Warn,
-        text: format!("当前不在脚本起始页{}——AI 辅助驾驶导航对齐中…", shown),
+        text: "未处于脚本起始页，已开启 AI 辅助驾驶".into(),
     });
     let goal = format!(
         "回到该测试脚本的起始页面：{}。页面特征参考：{}",
