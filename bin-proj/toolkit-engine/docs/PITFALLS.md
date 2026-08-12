@@ -126,7 +126,7 @@ web 会话存 `$TMPDIR/tke/web/<设备>.json` 跨命令复用,而 `--headless` *
 **沿用的还是那个有头会话**——参数看似接受、实则毫无效果,且零提示。
 
 用户实测对照时正是这样撞上的:两次截图尺寸/XML 完全一致,差点被当成"两种模式渲染一致"的
-证据(**假阳性**)。真正的对照必须先 `rm -f $TMPDIR/tke/web/*.json` + `pkill` 旧 Chrome。
+证据(**假阳性**)。真正的对照必须先销毁会话:`tke -d web control close`（web 省略包名即销毁会话）。
 
 已修:`SessionInfo` 记 `headless` 字段,复用前比对——模式不符则销毁旧会话 + 明确报错要求
 重新 launch(不静默沿用,INV-9)。

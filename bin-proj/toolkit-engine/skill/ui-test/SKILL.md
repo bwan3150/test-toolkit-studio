@@ -164,3 +164,6 @@ tke -d web run tests/ui/<feature>.tks --log .tke-runs/
 - **不要改产品代码来让测试通过**。
 - 并发跑多个时，每次传独立 `--cache <dir>`（否则共享工作区互相覆盖）。
 - 无头/有头由 tke 自动判断（无桌面自动无头）；要强制用 `--headless=on` / `--headless=off`（**必须带等号**）。
+- **需要干净起点时销毁会话**：`tke -d web control close`（web 省略包名即销毁会话——
+  浏览器、chromedriver、会话文件、孤儿进程一起清）。web 会话跨命令复用，
+  上一次探索的页面状态会留到下一次；换无头/有头模式时也需要重来（否则 tke 会拦住你）。

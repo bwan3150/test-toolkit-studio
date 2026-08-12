@@ -130,7 +130,12 @@ tke --headless=off ...  # 强制有头
 （1280x813 = window-size 1280x900 减去 87px 浏览器 UI 高度，`headless=new` 会模拟真实窗口装饰。）
 **结论：像素坐标跨模式、跨平台可移植，"本地录、CI 回放"成立。**
 
-> ⚠️ 做这类对照时**必须先销毁会话**：`rm -f $TMPDIR/tke/web/*.json` + `pkill -f "Google Chrome for Testing"`。
+> ⚠️ 做这类对照时**必须先销毁会话**——一条命令搞定：
+>
+> ```bash
+> tke -d web control close      # web 省略包名 = 销毁会话(浏览器+chromedriver+会话文件+孤儿收割)
+> ```
+>
 > 否则第二条命令会复用第一个会话，得到"两种模式一致"的**假阳性**（P-18，已修：模式不符会销毁重建）。
 
 ### ⚠️ 还没验证的

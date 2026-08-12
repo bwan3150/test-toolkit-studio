@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### 2026-08-12 · `control close` 可省包名（web）
+- **feat** `tke -d web control close` **省略包名即销毁会话**（浏览器 + chromedriver + 会话文件 + 孤儿收割）——替掉此前要人手敲的 `rm -f $TMPDIR/tke/web/*.json` + `pkill Chrome`。web 分支本就忽略这个参数（`Controller::stop_app` → `close_session`），只是 CLI 强制要求填一个没意义的值
+- **feat** 移动端省略包名 → 明确报错（不拿空串去 force-stop）
+- **test** CLI 契约 +2（11→13）;文档里的手工清理命令全部替换
+
 ### 2026-08-12 · 无头坐标可移植性**已验证** + 两个真机撞出的修复
 - **✅ 关键结论(用户 mac 实测 + 本机 Linux 对照)**:`mac 有头 = mac 无头 = Linux 无头 = 1280x813`,
   元素 bounds `diff` 零差异。**像素坐标跨模式、跨平台可移植——「本地录、CI 回放」成立**。

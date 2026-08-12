@@ -19,6 +19,10 @@
   → 落库建包 → 写 .tks → `tke run` **5/5 步、退出码 0**；标注截图/log.json/page xml 齐全，
   **无头下中文渲染正常**。测试 lib 36/36 + CLI 契约 11/11
 
+- **`tke -d web control close` 省略包名 = 销毁会话**（浏览器+chromedriver+会话文件+孤儿收割）——
+  用户反馈「不想每次记 `rm -f $TMPDIR/tke/web/*.json` + `pkill Chrome`」。web 分支本就忽略这个
+  参数,只是 CLI 强制要填个没意义的值;移动端省略则明确报错。文档里的手工清理命令已全部替换
+
 ## 没做完
 
 - **`tke harness` 的完整无头探索没验**——需要 `[ai]` key，这台机没有任何凭据。

@@ -78,7 +78,9 @@ pub enum ControlCommands {
     },
     /// 关闭应用: control close <包名>
     Close {
-        package: String,
+        /// 要关闭的应用包名 / BundleID。**web 可省略**——web 的"关闭"就是销毁浏览器会话
+        /// （连同 chromedriver 进程与会话文件一起清掉），包名对它没有意义。
+        package: Option<String>,
     },
     /// 按键事件: control key KEYCODE_ENTER
     Key {
@@ -92,7 +94,7 @@ pub enum ControlCommands {
 }
 
 /// 把 CLI 参数转换为 ControlAction
-fn to_action(cmd: ControlCommands) -> Result<ControlAction> {
+fn to_action(cmd: ControlCommands, device: &str) -> Result<ControlAction> {
     Ok(match cmd {
         ControlCommands::Click { point } => {
             let (p, _) = parse_point(&point)?;
@@ -134,7 +136,19 @@ fn to_action(cmd: ControlCommands) -> Result<ControlAction> {
             package,
             activity: activity.unwrap_or_default(),
         },
-        ControlCommands::Close { package } => ControlAction::Close { package },
+        ControlCommands::Close { package } => ControlAction::Close {
+            // web: 省略包名 = 销毁会话（Controller 的 web 分支本就忽略这个参数）
+            // 移动端: 没有包名无从下手,明确报错而不是拿空串去 force-stop
+            package: package.unwrap_or_else(|| {
+                if matches!(tke::Platform::from_device(Some(device)), tke::Platform::Web) {
+                    String::new()
+                } else {
+                    JsonOutput::error(
+                        "control close 需要包名: control close <包名/BundleID>（web 可省略）",
+                    )
+                }
+            }),
+        },
         ControlCommands::Key { code } => ControlAction::Key { code },
         ControlCommands::Switch { target } => ControlAction::Switch { target },
     })
@@ -146,7 +160,7 @@ pub async fn handle(cmd: ControlCommands, params: std::sync::Arc<tke::Params>) -
     let device = device_id
         .unwrap_or_else(|| JsonOutput::error("control 必须指定设备: -d/--device <设备ID>"));
 
-    let action = to_action(cmd).unwrap_or_else(|e| JsonOutput::error(e.to_string()));
+    let action = to_action(cmd, &device).unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
     let control = Control::new(device)
         .unwrap_or_else(|e| JsonOutput::error(e.to_string()));

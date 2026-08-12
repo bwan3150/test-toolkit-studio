@@ -159,3 +159,21 @@ fn headless_off_is_accepted() {
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("不存在"), "应走到 run(参数被接受):{}", s);
 }
+
+/// web 的 `control close` 可省略包名(= 销毁浏览器会话)
+/// 省得让人记 `rm -f $TMPDIR/tke/web/*.json` + `pkill Chrome` 这种命令
+#[test]
+fn web_control_close_allows_omitting_package() {
+    let o = tke().args(["-d", "web", "control", "close"]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(o.status.success(), "web control close 应可省略包名:{}", s);
+}
+
+/// 非 web 平台省略包名 → 明确报错(不拿空串去 force-stop)
+#[test]
+fn nonweb_control_close_requires_package() {
+    let o = tke().args(["-d", "emulator-5554", "control", "close"]).output().unwrap();
+    assert!(!o.status.success(), "移动端省略包名应失败");
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("包名"), "报错应点明需要包名:{}", s);
+}
