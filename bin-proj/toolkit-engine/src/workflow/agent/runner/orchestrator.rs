@@ -35,7 +35,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                     "script_name": { "type": "string", "description": "可选：给产出的 .tks 起的文件名（落到当前工作目录、目录内自动去重）。不给则按 goal 取名。一次对话可产多个不同脚本。" },
                     "make_test": { "type": "boolean", "description": "要产出可回放、可验证的**测试脚本**时设 true（开每步自动断言+完成把关，之后可 replay_tks/resume_explore）；一般任务/不需校验留 false（默认，更轻、脚本只有设备动作）" },
                     "read_full": { "type": "boolean", "description": "任务是读**长内容**（整页 policy 等）时设 true：到达目标后滚动逐屏收集全文。截图/找元素留 false（默认，不乱滚）" },
-                    "ask_mode": { "type": "string", "enum": ["ask", "auto"], "description": "探索中遇到拿不准的问题怎么办：ask（默认）=转给用户（参谋会先生成候选选项，用户可选可输入）；auto=完全托管（参谋以全局视角代答，绝不打扰用户）。用户表达过\"全自动跑/别问我/托管\"就传 auto" }
+                    "ask_mode": { "type": "string", "enum": ["ask", "auto"], "description": "探索中遇到拿不准的问题怎么办：ask（默认）=转给用户（参谋会先生成候选选项，用户可选可输入）；auto=完全托管（参谋以全局视角代答，绝不打扰用户）。用户表达过\"全自动跑/别问我/托管\"就传 auto" },
+                    "device": { "type": "string", "description": "在哪台设备/平台上执行。不传=沿用当前默认设备。任务涉及多台时（如「在后台改配置，去手机看是否下发」）必须逐次指定；**不确定用哪台就先 list_devices，仍拿不准就 ask_user 问，别猜**——打到错误的设备上可能有真实副作用" }
                 },
                 "required": ["goal"]
             }),
@@ -47,7 +48,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                 "type": "object",
                 "properties": {
                     "goal": { "type": "string", "description": "要到达的状态/页面（如\"回到应用首页\"\"处于已登录状态并停在登录页\"）" },
-                    "note": { "type": "string", "description": "可选：路径提示/所需信息（账号密码等）" }
+                    "note": { "type": "string", "description": "可选：路径提示/所需信息（账号密码等）" },
+                    "device": { "type": "string", "description": "在哪台设备/平台上执行。不传=沿用当前默认设备。任务涉及多台时（如「在后台改配置，去手机看是否下发」）必须逐次指定；**不确定用哪台就先 list_devices，仍拿不准就 ask_user 问，别猜**——打到错误的设备上可能有真实副作用" },
                 },
                 "required": ["goal"]
             }),
@@ -59,7 +61,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
-                    "goal": { "type": "string", "description": "这条脚本要达成的目标（判断回放是否到位）" }
+                    "goal": { "type": "string", "description": "这条脚本要达成的目标（判断回放是否到位）" },
+                    "device": { "type": "string", "description": "在哪台设备/平台上执行。不传=沿用当前默认设备。任务涉及多台时（如「在后台改配置，去手机看是否下发」）必须逐次指定；**不确定用哪台就先 list_devices，仍拿不准就 ask_user 问，别猜**——打到错误的设备上可能有真实副作用" },
                 },
                 "required": ["path", "goal"]
             }),
@@ -73,7 +76,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                     "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
                     "goal": { "type": "string", "description": "这条脚本要达成的目标" },
                     "keep_steps": { "type": "integer", "description": "保留脚本前几步（通常= replay_tks 报告的失败步-1；全跑通但终点不符=全部步数）" },
-                    "note": { "type": "string", "description": "给续探 explorer 的失败上下文+指导：哪步为什么失败、用户给的纠偏（如\"先重新登录\"）——它看不到你的对话，全靠这里" }
+                    "note": { "type": "string", "description": "给续探 explorer 的失败上下文+指导：哪步为什么失败、用户给的纠偏（如\"先重新登录\"）——它看不到你的对话，全靠这里" },
+                    "device": { "type": "string", "description": "在哪台设备/平台上执行。不传=沿用当前默认设备。任务涉及多台时（如「在后台改配置，去手机看是否下发」）必须逐次指定；**不确定用哪台就先 list_devices，仍拿不准就 ask_user 问，别猜**——打到错误的设备上可能有真实副作用" },
                 },
                 "required": ["path", "goal", "keep_steps"]
             }),
@@ -85,7 +89,8 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "工作区里 .tks 脚本的相对路径" },
-                    "goal": { "type": "string", "description": "这条脚本要达成的目标" }
+                    "goal": { "type": "string", "description": "这条脚本要达成的目标" },
+                    "device": { "type": "string", "description": "在哪台设备/平台上执行。不传=沿用当前默认设备。任务涉及多台时（如「在后台改配置，去手机看是否下发」）必须逐次指定；**不确定用哪台就先 list_devices，仍拿不准就 ask_user 问，别猜**——打到错误的设备上可能有真实副作用" },
                 },
                 "required": ["path", "goal"]
             }),
@@ -196,6 +201,11 @@ fn orch_tools(prompts: &PromptSet) -> Vec<LlmTool> {
                 },
                 "required": ["question"]
             }),
+        ),
+        LlmTool::new(
+            "list_devices",
+            desc("list_devices"),
+            json!({ "type": "object", "properties": {} }),
         ),
         LlmTool::new(
             "finish",
@@ -310,6 +320,22 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                     }
                 }
                 for call in calls {
+                    // 工具级设备（ADR-0011）：这一次调用跑在哪台上。
+                    // 不传则沿用默认（-d / 向导选的）——单设备场景照旧省事。
+                    let scoped_opts;
+                    let opts = match call
+                        .arguments
+                        .get("device")
+                        .and_then(|v| v.as_str())
+                        .map(str::trim)
+                        .filter(|d| !d.is_empty())
+                    {
+                        Some(d) => {
+                            scoped_opts = opts.with_device(d);
+                            &scoped_opts
+                        }
+                        None => opts,
+                    };
                     match call.name.as_str() {
                         // —— 探索：驱动设备 + 把 .tks 写进工作区(AI 命名、可多个) + 元素打包成 .tklib ——
                         "explore" => {
@@ -609,6 +635,10 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                                 if ans.trim().is_empty() { "（用户未回答）".to_string() } else { ans },
                             );
                         }
+                        // —— 有哪些设备可用：按语义选设备的前提（ADR-0011）——
+                        "list_devices" => {
+                            sess.tool_result(call.call_id, list_devices_text(opts));
+                        }
                         "finish" => {
                             let reason = arg_str(&call.arguments, "reason");
                             let reason = if reason.trim().is_empty() { "会话结束".to_string() } else { reason };
@@ -718,6 +748,29 @@ fn parse_todos(args: &serde_json::Value) -> Vec<TodoItem> {
 fn emit_orch(ui: &dyn Frontend, sess: &LlmSession, text: &str) {
     let (pt, ct) = sess.last_usage();
     ui.emit(UiEvent::Assistant { text: text.to_string(), tokens: Tokens::new(pt, ct) });
+}
+
+/// 列出可用设备，给编排官按语义挑（ADR-0011）。
+/// Android 能真正枚举；web 恒可用；iOS 要 UDID、枚举代价大（go-ios 需隧道就绪），只作说明。
+fn list_devices_text(opts: &AgentRunOptions) -> String {
+    let mut out = String::new();
+    match crate::drivers::AdbDriver::new(None).map(|a| a.get_devices().unwrap_or_default()) {
+        Ok(list) if !list.is_empty() => {
+            out.push_str("Android（-d <序列号>）：\n");
+            for d in list {
+                out.push_str(&format!("  - {}\n", d));
+            }
+        }
+        Ok(_) => out.push_str("Android：adb 可用，但没有已连接设备\n"),
+        Err(_) => out.push_str("Android：adb 不可用（未安装或不在 tke 同目录）\n"),
+    }
+    out.push_str("Web（-d web）：可用\n");
+    out.push_str("iOS（-d <UDID>）：需要用户提供 UDID——这里枚举不了\n");
+    match opts.effective_device() {
+        Some(d) => out.push_str(&format!("\n当前默认设备：{}（工具不传 device 就用它）", d)),
+        None => out.push_str("\n当前没有默认设备：调设备类工具时必须显式传 device，拿不准就问用户"),
+    }
+    out
 }
 
 /// 收束整场会话的返回值：有跑过就返回最近一次结果；一条都没跑给兜底结果。

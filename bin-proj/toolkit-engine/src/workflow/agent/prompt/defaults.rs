@@ -58,6 +58,7 @@ pub fn default_tool_description_role(role: &str, name: &str) -> &'static str {
 fn default_orchestrator_tool_description(name: &str) -> &'static str {
     match name {
         "explore" => include_str!("builtin/tools/orchestrator/explore.md"),
+        "list_devices" => include_str!("builtin/tools/orchestrator/list_devices.md"),
         "replay_tks" => include_str!("builtin/tools/orchestrator/replay_tks.md"),
         "resume_explore" => include_str!("builtin/tools/orchestrator/resume_explore.md"),
         "navigate" => include_str!("builtin/tools/orchestrator/navigate.md"),

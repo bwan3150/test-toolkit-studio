@@ -32,6 +32,32 @@ pub struct AgentRunOptions {
     pub params: Arc<Params>,
 }
 
+impl AgentRunOptions {
+    /// 工具级设备覆盖（ADR-0011）：返回一个把 device/platform 换成指定设备的副本。
+    ///
+    /// 设备不再是"启动时选定、整场不变"的会话级属性——编排官每次调设备类工具时按任务语义
+    /// 指定跑在哪台上（"在 A 手机改设置，再去 B 手机看"）。平台按该设备重新推断，
+    /// 否则会拿着上一台的平台去操作新设备。
+    pub fn with_device(&self, device: &str) -> Self {
+        Self {
+            case: self.case.clone(),
+            script_dir: self.script_dir.clone(),
+            ai: self.ai.clone(),
+            prompt: self.prompt.clone(),
+            ocr: self.ocr.clone(),
+            verify: self.verify,
+            platform: Some(crate::models::Platform::from_device(Some(device))),
+            device: Some(device.to_string()),
+            params: self.params.clone(),
+        }
+    }
+
+    /// 当前生效的设备（工具未指定时的默认）：显式覆盖 > `-d` > 空
+    pub fn effective_device(&self) -> Option<String> {
+        self.device.clone().or_else(|| self.params.device())
+    }
+}
+
 /// AgentResult 里附带的自检结果（仅 --verify 时有意义）
 #[derive(Default)]
 pub struct VerifyReport {

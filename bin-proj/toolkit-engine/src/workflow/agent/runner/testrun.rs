@@ -126,6 +126,14 @@ impl TestRun {
         let case = goal; // 目标即用例（统一）
         // 设备/平台优先级：显式覆盖（向导/--platform/-d）> params.device() > 设备推断
         let device = opts.device.clone().or_else(|| opts.params.device()).unwrap_or_default();
+        // 设备是硬前提：没有就明确报错（ADR-0011）。此前会落成空串、被当 Android 处理，
+        // 只得到一句莫名其妙的「adb 缺失」——现在直接告诉 AI 该怎么办。
+        if device.trim().is_empty() {
+            return Err(crate::TkeError::InvalidArgument(
+                "未指定设备：先用 list_devices 看有哪些可用，再在工具参数里传 device；拿不准就 ask_user 问用户"
+                    .to_string(),
+            ));
+        }
         let platform = opts.platform.unwrap_or_else(|| Platform::from_device(Some(&device)));
 
         // —— 运行中间文件目录：落到 cache（--cache 或系统临时目录）；与脚本/交付文件分开、不展示给用户 ——

@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-12
-Last-Commit: 221715b5
+Last-Commit: 77c54ab8
 ---
 
 # 当前状态
@@ -24,7 +24,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | web 无头（无头服务器/docker CI） | ✅ **坐标可移植性已验证** | mac有头=mac无头=Linux无头=1280x813,bounds 零差异。会话模式失配已修(P-18) |
 | App 侧（handlers/frontend） | ⏸ 冻结 | healed 字段等新 NDJSON 待接 |
 | skill（给 AI 设备操控+证据） | ✅ 原型可用,**本机实测通过** | **ADR-0010**。定位已由用户纠正:**只做一次性检查+留证据,不产 .tks/.tklib、不回放**。原型 `skill/ui-check/` |
-| 跨设备/跨平台测试 | 🟡 flow 侧已通,harness 侧未做 | flow per-script device ✅ / 重试断言 ✅ / **ADR-0011 harness 侧待实现**;动态值传递未做(Q-7) |
+| 跨设备/跨平台测试 | ✅ 已实现,**AI 侧真机未验** | ADR-0011 全套:flow per-script device / 重试断言 / 设备成为工具参数 + list_devices;动态值传递未做(Q-7) |
 
 ## 本次会话不要碰
 

@@ -154,12 +154,8 @@ pub async fn handle(
     // script_dir 已不再决定产物落点（.tks 落工作区）；保留字段兼容，给个工作区兜底值。
     let script_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
-    // 操作目标兜底校验：既没设备也没平台时无法确定操作什么（web 需 --platform web 或 -d web）
-    if dev_override.is_none() && params.device().is_none() && platform.is_none() {
-        JsonOutput::error(
-            "需要指定操作目标：-d/--device <设备ID>，或 --platform web（终端下无参启动可用向导选择）",
-        );
-    }
+    // 没有默认设备**不再报错**（ADR-0011）：编排官会先 list_devices、按任务语义选，
+    // 拿不准就 ask_user 问用户。设备类工具真的没设备可用时会拿到明确报错并纠正。
 
     // setup 选好的参数（探索开始前发一次）：设备/平台展示一行；模型/供应商/推理由 TUI
     // 存起来供 /model 查询，不再灌进消息流（此前的"配置 · 模型 …"整行已移除）
@@ -167,7 +163,7 @@ pub async fn handle(
         device: dev_override
             .clone()
             .or_else(|| params.device())
-            .unwrap_or_else(|| "(web)".to_string()),
+            .unwrap_or_else(|| "未定（由 AI 按任务选）".to_string()),
         platform: platform.map(|p| p.name().to_string()).unwrap_or_else(|| "(推断)".to_string()),
         model: merged_ai.model.clone().unwrap_or_else(|| "默认（按供应商）".to_string()),
         provider: merged_ai.provider.clone().unwrap_or_else(|| "anthropic（默认）".to_string()),
@@ -271,6 +267,8 @@ async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<Set
         Android(String),
         Ios,
         Web,
+        /// 不在这里定：设备由编排官按任务语义选（ADR-0011），跨设备任务必须走这条
+        Defer,
     }
     let mut opts: Vec<String> = Vec::new();
     let mut kinds: Vec<Kind> = Vec::new();
@@ -283,11 +281,15 @@ async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<Set
     kinds.push(Kind::Ios);
     opts.push("Web\tChrome".to_string());
     kinds.push(Kind::Web);
+    // 跨设备/跨平台任务在这里选哪一台都是错的——交给编排官按任务语义决定
+    opts.push("由 AI 决定\t按任务描述选设备（跨设备任务选这个；不确定时它会问你）".to_string());
+    kinds.push(Kind::Defer);
 
     let idx = ui.await_choice("选择设备".to_string(), opts).await?;
     let (device, platform): (Option<String>, Option<Platform>) = match &kinds[idx] {
         Kind::Android(id) => (Some(id.clone()), Some(Platform::Android)),
         Kind::Web => (Some("web".to_string()), Some(Platform::Web)),
+        Kind::Defer => (None, None),
         Kind::Ios => {
             let id = ui.await_answer(0, "输入设备 ID（iOS UDID / wda:..）".to_string()).await?;
             let id = id.trim().to_string();
