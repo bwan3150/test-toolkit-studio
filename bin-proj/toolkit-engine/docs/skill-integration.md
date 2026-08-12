@@ -1,6 +1,7 @@
 # tke 作为 skill 融入 coding agent 工作流（设计稿）
 
-> 状态:**设计中,未实现**。契约部分见 [`adr/0009-headless-task-mode.md`](adr/0009-headless-task-mode.md)（待拍板）。
+> 状态:**契约已定,实现未开始**。契约见 [`adr/0009-headless-task-mode.md`](adr/0009-headless-task-mode.md)
+> （2026-08-12 拍板生效,headless 命名定为 `tke task`）。
 > 第一版范围:**Web + Android**（iOS 暂缓,WDA 环境成本拖慢首版）。
 
 ## 1. 要解决的问题
@@ -150,6 +151,8 @@ AI 配置走 `-c <config.toml>` 的 `[ai]` 段(敏感 key 别上命令行)。
 
 ## 8. 未决
 
-- headless 模式命名:`tke task` vs `tke harness --headless`(前者更清晰,后者少一条顶层命令)。
+- ~~headless 命名~~ ✅ 定为 **`tke task`**（2026-08-12 拍板,理由见 ADR-0009 决策段）
 - 探索产物的 commit 时机:skill 自动落盘 + 建议,还是必须调用方显式确认?
 - Android 上 `entry` 的表达(package/activity vs deeplink),以及冷启动净化策略。
+- `tke task` 与 `harness` 的代码复用边界:外壳换掉后,orchestrator 的工具集要不要裁剪
+  (headless 下 `ask_user` 语义变成"终止并回传",`suggest_next` 是否还有意义)。

@@ -1,7 +1,7 @@
 # ADR-0009: headless 一次性任务模式——把"对话层"外包给调用方 agent
 
-- **状态**: 提案（待用户拍板；本 ADR 只定契约，未实现）
-- **日期**: 2026-08-12
+- **状态**: 生效（2026-08-12 用户拍板；**契约已定，实现未开始**）
+- **日期**: 2026-08-12（提案 → 同日拍板，命名定为 `tke task`）
 - **关联**: INV-3 / INV-9 / INV-12, ADR-0002（REPL 形态）, ADR-0006（run 语义分界）, PITFALLS P-10
 - **驱动场景**: 把 tke 做成 Claude Code 等 coding agent 可调用的 skill（见 `../skill-integration.md`）
 
@@ -21,8 +21,10 @@ tke 现在有三个前端（TUI / Plain / Json），但**没有一个是"非交�
 
 ## 决策
 
-新增**第四种形态:headless 一次性任务模式**（`tke task`,与 `harness` 并列;共用 orchestrator
-与全部工具,只换外壳）。契约四条:
+新增**第四种形态:headless 一次性任务模式**,命名 **`tke task`**（用户拍板;与 `harness`
+并列的顶层命令,而非 `harness --headless` 的旗标——两者的出口语义与 `ask_user` 行为不同,
+做成同一命令的旗标会让"这次调用到底会不会阻塞问人"取决于一个 flag,顶层命令更诚实）。
+共用 orchestrator 与全部工具,只换外壳。契约四条:
 
 1. **一次性**:读任务输入 → 跑 → 写结构化报告 → 退出。无 REPL,无常驻。
 2. **五态出口**,写进报告 `outcome` 并映射退出码:

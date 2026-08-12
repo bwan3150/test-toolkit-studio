@@ -23,6 +23,10 @@
 → 判断（续探 / navigate 复位 / 问用户）→ resume_explore → replay_tks 验证。
 工具是原语，决策在对话层。
 
+**延伸（ADR-0009，2026-08-12 拍板）**：「对话层」指的是与用户对话的那一层，**不限定必须是 tke 自己的 REPL**。
+`tke task`（headless）被外部 agent 调用时，调用方就是对话层——所以 headless 遇到决策点必须
+**结构化回传**（`outcome: needs_decision`），不是自行决定。**headless 一旦开始自行决策，即违反本条**。
+
 ## INV-4 tke run 纯回放不改脚本资产
 
 `tke run` 的 AI 辅助驾驶（自愈/分诊/对齐）**不写 .tks / .tklib**——修正只落解包临时副本，
