@@ -34,6 +34,13 @@
   向导「由 AI 决定」+ 无设备不再拒绝启动 + 无设备调用给明确纠正指引 + 编排官提示词
   (不确定就问**绝不猜**、跨设备=多次 explore + flow.toml、别把多设备塞进一个 .tks)
 
+- **skill 一键安装**:`skill/install.sh`(curl|bash 装齐 skill+tke+驱动+Chrome,
+  `--profile web|android|ios|all`,幂等,自动体检且**不完整时非 0 退出**)+
+  `skill/publish.sh`(打包成 S3 约定布局)。**配对好的 chromedriver+Chrome 放同一批**是
+  自建分发源最实在的好处。本地 http server 模拟 S3 全流程实测通过,含用装出来的 tke 实跑一次
+- **skill 补完备**:`reference/tke-commands.md` + `reference/tks-syntax.md`(AI 按需读),
+  主文件补安卓 `app focus/list` 拿包名(此前完全没提,安卓场景会卡死)
+
 ## 没做完
 
 - **ADR-0011 harness 侧的 AI 行为真机未验**(本机无 `[ai]` key):

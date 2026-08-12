@@ -4,7 +4,54 @@
 
 分发物只有两样：**这个 skill 目录** + **tke 二进制及其同目录依赖**。不需要 tke 的源码。
 
-## 1. 装 skill 文件
+---
+
+## 一行安装（推荐）
+
+```bash
+curl -fsSL https://<你的CDN>/tke/install.sh | bash
+```
+
+它会按平台自动下载 skill 文件、tke、对应驱动、Chrome for Testing，最后自动跑体检。
+**环境不完整时会明确告诉你缺什么并以非 0 退出**，不会装完就说"好了"。
+
+```bash
+# 只装网页相关（不要安卓/iOS 工具，快很多）
+curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --profile web
+
+# 装到用户级（所有项目共用），默认是当前项目的 .claude/skills
+curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --user
+```
+
+`--profile web|android|ios|all`；`TKE_HOME` 可改 tke 落点（默认 `~/.tke/bin`）。
+
+### 怎么把分发源建起来（维护者）
+
+```bash
+./publish.sh --with-chrome            # 打包到 dist/（不加 --with-chrome 则不含 600MB 的 Chrome）
+aws s3 sync dist/ s3://<bucket>/tke/ --acl public-read
+```
+
+布局是约定好的，`install.sh` 按这个取：
+
+```
+<BASE_URL>/
+├── install.sh
+├── VERSION                      # 这批的 tke / chromedriver 版本，便于排查
+├── skill/ui-check.tar.gz
+├── bin/<platform>/{tke,chromedriver,adb,aapt,go-ios}.gz
+└── chrome/<chrome-mac-arm64|chrome-linux64|chrome-win64>.zip
+```
+
+**把配对好的 chromedriver 与 Chrome 放同一批**，使用者就不必再去查版本对应关系——
+这是自建分发源相比"各自去 Google 下载"最实在的好处。
+改 `install.sh` 顶部的 `DEFAULT_BASE_URL` 指向你的地址，使用者就不用带 `--base-url` 了。
+
+---
+
+## 手动安装
+
+### 1. 装 skill 文件
 
 ```bash
 # 项目级（推荐：跟着仓库走，团队 clone 即得）
@@ -27,7 +74,7 @@ cp -r ui-check ~/.claude/skills/
     └── tks-syntax.md           # 操作指令语法（AI 按需读）
 ```
 
-## 2. 装 tke 二进制
+### 2. 装 tke 二进制
 
 **`tke` 必须在 PATH 里**，而且它的**同目录**要有对应的驱动——tke 只在自己所在目录找外部工具，
 不搜 PATH（这是为了保证 chromedriver 与 Chrome 版本配对）。
@@ -66,7 +113,7 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # macOS 必须清�
 > **不能放 `~/Documents`/`~/Desktop`/`~/Downloads`**（TCC 保护目录会让进程卡死且无报错）；
 > 首次启动要等 30-60 秒（Gatekeeper 扫 600MB 包），之后秒开。
 
-## 3. 验证
+### 3. 验证
 
 ```bash
 bash .claude/skills/ui-check/scripts/check-env.sh
@@ -75,7 +122,7 @@ bash .claude/skills/ui-check/scripts/check-env.sh
 它会逐项告诉你 tke、chromedriver、Chrome、安卓设备的状态，以及当前会跑有头还是无头。
 只要至少有一个可操作目标就算通过。
 
-## 4. 用
+## 用起来
 
 在 Claude Code 里正常提需求即可，比如：
 
