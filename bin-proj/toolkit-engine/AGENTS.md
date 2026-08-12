@@ -1,8 +1,58 @@
 # AGENTS.md — toolkit-engine (tke)
 
-给在本仓库工作的任何 AI agent / 协作者的共享上下文。**刻意粗粒度**（模块级一句话职责），
-描述漂移时改这里一处即可；逐文件细节以各文件头注释为准，不在这里重复（细粒度地图必然滞后，
+给在本仓库工作的任何 AI agent / 协作者的入口：**协议 + 路由 + 共享上下文**。
+知识刻意粗粒度（模块级一句话职责），逐文件细节以各文件头注释为准（细粒度地图必然滞后，
 教训见 docs/codebase-map.md）。
+
+---
+
+## ⛔ 开始之前（按顺序）
+
+1. 读 `docs/state/STATE.md`（进度/不要碰什么）+ `docs/state/HANDOFF.md`（上个会话埋的坑）
+2. 跑 `git log --oneline -10` 与 STATE 的 `Last-Commit` 比对——**对不上就停下来问人**，
+   不要自行推断上个会话做了什么、不要重新实现"看起来缺失"的东西
+3. 扫一眼 `docs/PITFALLS.md` 的标题；改到相关区域再细读对应条目
+4. 动会碰 `docs/INVARIANTS.md` 任何一条的东西 → 先写 ADR、经用户拍板
+
+## ⛔ 结束之前（缺一不可）
+
+- [ ] `cargo test --no-default-features --lib` 通过
+- [ ] 追加 `CHANGELOG.md`（不重写已有条目；pre-push 会强制）
+- [ ] 覆写 `docs/state/STATE.md`（含 Last-Commit）与 `HANDOFF.md`
+- [ ] 踩了新坑 → 追加 `docs/PITFALLS.md`；做了架构决策 → 新增 `docs/adr/NNNN-*.md`
+- [ ] 改动过守卫脚本 → 先造一个故意违规的现场验证它真的会红（P-12）
+- [ ] 改动未真机验证的，在 STATE/CHANGELOG 标注「待真机验」——真机验证由用户执行，
+      这是本项目的审核机制：**push ≠ 完成，用户真机确认才算数**
+
+## 路由表
+
+| 你要做的事 | 动手前必读 |
+|---|---|
+| 改修复/自愈/回放 | INV-1/3/4 + ADR-0001/0006 + `runner/tksops.rs` 头注释 |
+| 加/改 agent 角色 | INV-1/2/5 + ADR-0005（oneshot）+ 本文「agent 拓扑」 |
+| 改提示词 | INV-5（不泄题）+ `prompt/builtin/`（改完 check-prompts 会查登记） |
+| 改定位/感知 | INV-8（不用提示词打补丁）+ P-11 |
+| 改 TUI/前端输出 | ADR-0007 + P-01 + INV-9（失败可见） |
+| 改元素包/脚本资产 | INV-4/6/7 + ADR-0003/0004 |
+| 改守卫脚本 | P-12（先造违规验证） |
+| 写 fake 测试 | 本文「测试」节 + P-06（改版页换 class） |
+| 不确定某设计为何如此 | `docs/adr/` 倒序翻 + `docs/PITFALLS.md` |
+| 不知道下一步做什么 | `docs/ROADMAP.md` + `docs/state/STATE.md`（优先级问用户） |
+
+## 命令
+
+| 目的 | 命令 |
+|---|---|
+| 编译检查 | `cargo check --no-default-features` |
+| 全量测试（push 前必过） | `cargo test --no-default-features --lib` |
+| 产二进制（真机验证用） | `./build-mac.sh`（**禁 cargo build 产二进制**，P-02） |
+| 挂守卫 hook（一次） | `./scripts/install-hooks.sh` |
+| 手动跑守卫 | `./scripts/check-{prompts,changelog,state,linecount}.sh` |
+
+提交规范：沿用现状——`type(tke): 一句话——为什么`，正文写清动机与代价；
+commit message 是本项目最重要的变更叙事（CHANGELOG 只是索引）。
+
+---
 
 ## 模块表（src/，自底向上）
 
