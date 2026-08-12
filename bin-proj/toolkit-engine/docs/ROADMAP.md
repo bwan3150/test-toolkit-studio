@@ -13,6 +13,9 @@
 - **探索质量债**（Q-2）:web 小图标落点、滚动查找策略、平台化工具/提示词
 - ~~skill 集成 阶段0~~ ✅ **原型已落地并实测通过**(2026-08-12,ADR-0010:借调用方 AI)。
   下一步候选:平台自包含(Q-6)、护栏命令化(若实测脚本质量不行)、Android 端跑通、intent 契约
+- **跨设备/跨平台测试**:flow per-script device ✅ 已落地;
+  **ADR-0011(设备降为工具级参数,AI 按语义选)待拍板**;
+  还缺重试断言与跨设备数据传递(Q-7)
 - ~~Linux 构建脚本缺口~~ ✅ 已补 `build-linux.sh`（2026-08-12,带依赖预检 + `--no-ocr` CI 模式）
 - **App 侧接入**:handlers 消费新 NDJSON（healed/对齐输出）——等用户解冻
 - 文档债:docs/tke-cli-manual.md 整体过时重写;codebase-map.md 废弃或重生成
