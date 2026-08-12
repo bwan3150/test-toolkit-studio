@@ -89,8 +89,13 @@ impl WebDriver {
             .arg("--verbose")
             .arg(format!("--log-path={}", log_path.to_string_lossy()))
             .env_clear();
-        // 只保留必要的环境变量
-        for key in ["PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG"] {
+        // 只保留必要的环境变量。
+        // DISPLAY/WAYLAND_DISPLAY/XAUTHORITY 必须留：Linux **有头**模式下 Chrome 靠它们连图形栈，
+        // 清掉会直接起不开（mac/win 不看这些，留着无害；无头模式下有没有都不影响）。
+        for key in [
+            "PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG",
+            "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
+        ] {
             if let Ok(v) = std::env::var(key) {
                 cmd.env(key, v);
             }
@@ -132,16 +137,32 @@ impl WebDriver {
             Self::profile_prefix(device_id).to_string_lossy(),
             chrono::Local::now().format("%H%M%S")
         );
-        let mut chrome_options = serde_json::json!({
-            "args": [
-                "--window-size=1280,900",
-                "--force-device-scale-factor=1",
-                "--disable-infobars",
-                "--no-first-run",
-                "--no-default-browser-check",
-                format!("--user-data-dir={}", profile_dir)
-            ]
-        });
+        let mut args: Vec<String> = vec![
+            "--window-size=1280,900".to_string(),
+            "--force-device-scale-factor=1".to_string(),
+            "--disable-infobars".to_string(),
+            "--no-first-run".to_string(),
+            "--no-default-browser-check".to_string(),
+            format!("--user-data-dir={}", profile_dir),
+        ];
+
+        // 无头（无头服务器 / docker / CI）：默认 Auto 按环境探测，可用 --headless on/off 强制。
+        // 用新版 headless（`=new`）——它跑的是完整浏览器渲染路径，与有头一致；旧版
+        // (`--headless` 老实现) 是另一套精简渲染，截图会和有头对不上。
+        // **窗口尺寸/缩放因子照旧固定**：脚本里的像素坐标要在有头录、无头回放之间可移植。
+        if crate::utils::params::web_headless().resolve() {
+            args.push("--headless=new".to_string());
+            args.push("--disable-gpu".to_string());
+        }
+
+        // 容器 / root 下 Chrome 的沙箱起不来，且 /dev/shm 默认只有 64MB 会让渲染进程崩。
+        // 只在真的处于容器或 root 时加——普通桌面环境保留沙箱（安全）。
+        if in_container_or_root() {
+            args.push("--no-sandbox".to_string());
+            args.push("--disable-dev-shm-usage".to_string());
+        }
+
+        let mut chrome_options = serde_json::json!({ "args": args });
         if let Some(cft) = Self::find_chrome_binary(&exe_dir) {
             chrome_options["binary"] = serde_json::json!(cft.to_string_lossy());
         }
@@ -198,14 +219,56 @@ impl WebDriver {
     /// 顺序: tke 同目录 → ~/Library/Application Support/tke/；找不到则交给
     /// chromedriver 用系统 Chrome（存在版本不配对风险）
     fn find_chrome_binary(exe_dir: &std::path::Path) -> Option<PathBuf> {
-        const MAC_APP_PATH: &str =
-            "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
+        // 相对路径按 **Chrome for Testing 官方 zip 解压后的原样结构**约定：
+        // 把官方包（或自建 S3 镜像里的同名包）整个解压到搜索根下即可，不必改名。
+        //   mac:   chrome-mac-arm64/ | chrome-mac-x64/  → .app/Contents/MacOS/...
+        //   linux: chrome-linux64/chrome
+        //   win:   chrome-win64/chrome.exe
+        #[cfg(target_os = "macos")]
+        const REL: &[&str] = &[
+            "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+            "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        ];
+        #[cfg(target_os = "windows")]
+        const REL: &[&str] = &["chrome-win64/chrome.exe", "chrome-win32/chrome.exe"];
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        const REL: &[&str] = &["chrome-linux64/chrome", "chrome-linux/chrome"];
 
-        let mut candidates = vec![exe_dir.join(MAC_APP_PATH)];
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(home.join("Library/Application Support/tke").join(MAC_APP_PATH));
+        // 搜索根：tke 同目录（生产打包）→ 用户数据目录（开发机/CI 推荐，避开 macOS TCC 保护目录，
+        // 见 setup-notes「Chrome for Testing 的三个坑」）。
+        // data_dir(): mac=~/Library/Application Support、linux=~/.local/share、win=%APPDATA%
+        let mut roots = vec![exe_dir.to_path_buf()];
+        if let Some(d) = dirs::data_dir() {
+            roots.push(d.join("tke"));
         }
 
-        candidates.into_iter().find(|p| p.exists())
+        roots
+            .iter()
+            .flat_map(|root| REL.iter().map(move |rel| root.join(rel)))
+            .find(|p| p.exists())
     }
+}
+
+/// 是否处于容器内或以 root 运行——Chrome 沙箱在这两种情况下起不来。
+/// docker: `/.dockerenv`；podman: `/run/.containerenv`。
+fn in_container_or_root() -> bool {
+    #[cfg(unix)]
+    {
+        // Safety: getuid 无副作用、永远成功
+        let is_root = unsafe { libc_getuid() } == 0;
+        is_root
+            || std::path::Path::new("/.dockerenv").exists()
+            || std::path::Path::new("/run/.containerenv").exists()
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+// 取当前 uid。本项目没有 libc 依赖，只为这一个调用引入不划算，直接声明该符号。
+#[cfg(unix)]
+extern "C" {
+    #[link_name = "getuid"]
+    fn libc_getuid() -> u32;
 }

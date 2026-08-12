@@ -109,3 +109,53 @@ fn run_unknown_extension_fails_clearly() {
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("无法识别") || s.contains(".tks"), "应说清支持的类型:{}", s);
 }
+
+/// --headless 出现在全局参数表里
+#[test]
+fn help_lists_headless() {
+    let o = tke().arg("--help").output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("headless"), "帮助应含 --headless(全局参数表):{}", s);
+}
+
+/// --headless 裸旗标**不能吞掉后面的子命令**
+/// (回归 --copilot 同类坑:num_args=0..=1 的可选值参数容易把子命令名当成值吃掉。
+///  若被吃掉,这里会报"无法识别的 headless 值 run"而不是"文件不存在")
+#[test]
+fn headless_bare_flag_does_not_swallow_subcommand() {
+    let o = tke()
+        .args(["--headless", "run", "/nonexistent/x.tks"])
+        .output()
+        .unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(!o.status.success(), "不存在的脚本应失败");
+    assert!(
+        s.contains("不存在"),
+        "应走到 run 并报文件不存在(说明 run 没被当成 --headless 的值):{}",
+        s
+    );
+}
+
+/// --headless 带无法识别的值 → 明确报错,不静默兜底成 auto(INV-9)
+#[test]
+fn headless_invalid_value_fails_clearly() {
+    let o = tke()
+        .args(["--headless=bogus", "run", "/nonexistent/x.tks"])
+        .output()
+        .unwrap();
+    assert!(!o.status.success(), "无法识别的 headless 值应失败");
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("headless"), "报错应点名 headless:{}", s);
+    assert!(s.contains("auto") && s.contains("off"), "报错应给出可用值:{}", s);
+}
+
+/// --headless=off 可被接受(强制有头;此处只验参数装配,不真起浏览器)
+#[test]
+fn headless_off_is_accepted() {
+    let o = tke()
+        .args(["--headless=off", "run", "/nonexistent/x.tks"])
+        .output()
+        .unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("不存在"), "应走到 run(参数被接受):{}", s);
+}

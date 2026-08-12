@@ -66,6 +66,67 @@ pub fn ocr_url() -> String {
 /// 在线 OCR 服务默认地址
 const DEFAULT_OCR_URL: &str = "https://ocr.test-toolkit.app/ocr";
 
+/// web 无头模式（三态）。**无头与否是环境属性**（有没有桌面），所以默认 Auto 自动探测——
+/// 无头服务器 / docker / CI 里不必每次传参；有桌面的机器上照常有头（能看见浏览器在动）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeadlessMode {
+    /// 自动：无桌面（Linux 无 DISPLAY/WAYLAND_DISPLAY）→ 无头；其余 → 有头
+    Auto,
+    /// 强制无头（有桌面的机器上跑 CI）
+    On,
+    /// 强制有头（无桌面时会明确失败，而不是悄悄换模式——见 INV-9）
+    Off,
+}
+
+impl HeadlessMode {
+    /// 解析配置/CLI 文本；无法识别返回 None（调用方报错，不静默兜底）
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "auto" => Some(Self::Auto),
+            "on" | "true" | "yes" | "1" => Some(Self::On),
+            "off" | "false" | "no" | "0" => Some(Self::Off),
+            _ => None,
+        }
+    }
+
+    /// 定案：本次是否走无头
+    pub fn resolve(self) -> bool {
+        match self {
+            Self::On => true,
+            Self::Off => false,
+            Self::Auto => !desktop_available(),
+        }
+    }
+}
+
+/// 当前环境有没有可用桌面。
+/// macOS/Windows 恒为真（图形栈随系统，不看环境变量）；
+/// Linux/BSD 看 X11 或 Wayland 的环境变量——两个都没有就是无头服务器 / docker。
+pub fn desktop_available() -> bool {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        true
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
+    }
+}
+
+/// 进程级 web 无头设置：main 启动时设一次，web 驱动深处查询（同 OCR_URL 的理由——
+/// 不为一个开关穿透 Controller/Driver 多层构造器）
+static WEB_HEADLESS: OnceLock<HeadlessMode> = OnceLock::new();
+
+/// 设置无头模式（仅 main 启动时调用一次）
+pub fn set_web_headless(mode: HeadlessMode) {
+    let _ = WEB_HEADLESS.set(mode);
+}
+
+/// 查询无头模式（未设置则 Auto）
+pub fn web_headless() -> HeadlessMode {
+    WEB_HEADLESS.get().copied().unwrap_or(HeadlessMode::Auto)
+}
+
 /// 统一参数表（解析一次，后续查表取参）
 #[derive(Debug, Clone)]
 pub struct Params {
@@ -93,6 +154,8 @@ pub struct Params {
     /// AI 辅助驾驶（run/flow 回放的定位自愈）：CLI --copilot > config copilot > 默认 true。
     /// 开启且配置了 [ai] 时，回放中元素定位失败会让 AI 按当前页面修正并回写元素包。
     pub copilot: bool,
+    /// web 无头模式：CLI --headless > config headless > 默认 Auto（按环境探测）
+    pub headless: HeadlessMode,
     /// harness 各环节次数上限
     pub harness: HarnessLimits,
     /// AI 配置
@@ -112,6 +175,7 @@ impl Params {
         cli_current_dir: Option<PathBuf>,
         json: bool,
         cli_copilot: Option<bool>,
+        cli_headless: Option<String>,
         config: TkeConfig,
     ) -> Self {
         Self {
@@ -126,6 +190,17 @@ impl Params {
             ocr: config.ocr,
             verify: config.verify.unwrap_or(false),
             copilot: cli_copilot.or(config.copilot).unwrap_or(true),
+            // 无法识别的值直接报错退出，**不静默兜底成 auto**——否则用户以为强制了无头，
+            // 实际却在按环境探测，出问题极难排查（INV-9 的精神）
+            headless: match cli_headless.or(config.headless) {
+                Some(s) => HeadlessMode::parse(&s).unwrap_or_else(|| {
+                    crate::JsonOutput::error(format!(
+                        "无法识别的 headless 值「{}」（可用: auto / on / off）",
+                        s
+                    ))
+                }),
+                None => HeadlessMode::Auto,
+            },
             harness: HarnessLimits::from_config(&config.harness),
             ai: config.ai,
             knowledge: config.knowledge,
@@ -184,5 +259,43 @@ impl Params {
         self.current_dir
             .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn headless_parse_accepts_common_spellings() {
+        assert_eq!(HeadlessMode::parse("auto"), Some(HeadlessMode::Auto));
+        assert_eq!(HeadlessMode::parse("AUTO"), Some(HeadlessMode::Auto));
+        assert_eq!(HeadlessMode::parse(" on "), Some(HeadlessMode::On));
+        assert_eq!(HeadlessMode::parse("true"), Some(HeadlessMode::On));
+        assert_eq!(HeadlessMode::parse("1"), Some(HeadlessMode::On));
+        assert_eq!(HeadlessMode::parse("off"), Some(HeadlessMode::Off));
+        assert_eq!(HeadlessMode::parse("false"), Some(HeadlessMode::Off));
+        assert_eq!(HeadlessMode::parse("0"), Some(HeadlessMode::Off));
+    }
+
+    /// 无法识别一律 None——调用方据此报错，不许静默兜底成 auto（INV-9 的精神）
+    #[test]
+    fn headless_parse_rejects_unknown() {
+        assert_eq!(HeadlessMode::parse("yes-please"), None);
+        assert_eq!(HeadlessMode::parse(""), None);
+        assert_eq!(HeadlessMode::parse("headless"), None);
+    }
+
+    /// 强制两态与环境无关（有桌面的机器上也能强制无头跑 CI，反之亦然）
+    #[test]
+    fn headless_forced_modes_ignore_environment() {
+        assert!(HeadlessMode::On.resolve());
+        assert!(!HeadlessMode::Off.resolve());
+    }
+
+    /// Auto 完全由「有没有桌面」决定
+    #[test]
+    fn headless_auto_follows_desktop_availability() {
+        assert_eq!(HeadlessMode::Auto.resolve(), !desktop_available());
     }
 }

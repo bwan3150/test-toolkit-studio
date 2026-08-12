@@ -60,8 +60,19 @@ pub async fn handle(
                     .cache_root()
                     .join("tklib-unpack")
                     .join(format!("{}-elemadd-{}", stem, std::process::id()));
-                let json = tke::utils::tklib::unpack(&lib, &dest)
-                    .unwrap_or_else(|e| JsonOutput::error(format!("解包元素包失败 {}: {}", lib.display(), e)));
+                // 包不存在 = 这是该脚本的**第一个元素**，建新包（两件套总得有人起头）。
+                // 此前只有 harness finalize 会造包，直接用原子命令攒两件套时第一步必失败。
+                let json = if lib.exists() {
+                    tke::utils::tklib::unpack(&lib, &dest).unwrap_or_else(|e| {
+                        JsonOutput::error(format!("解包元素包失败 {}: {}", lib.display(), e))
+                    })
+                } else {
+                    std::fs::create_dir_all(&dest).unwrap_or_else(|e| {
+                        JsonOutput::error(format!("创建元素包工作目录失败 {}: {}", dest.display(), e))
+                    });
+                    // 不预先写空 element.json：add_element 自己会建（同裸 json 首次落库的路径）
+                    dest.join("element.json")
+                };
                 (json, Some(lib.clone()))
             } else {
                 (lib.clone(), None)

@@ -33,6 +33,9 @@ pub struct TkeConfig {
     /// 回元素包——后续回放直接命中，无须 AI 再介入。默认开启；需配置 [ai] 才真正生效。
     /// CLI --copilot true/false 优先于此。
     pub copilot: Option<bool>,
+    /// web 无头模式：auto（默认，按有没有桌面自动判断）/ on（强制无头）/ off（强制有头）。
+    /// 无头服务器、docker、CI 里不必配——auto 就会走无头。CLI --headless 优先于此。
+    pub headless: Option<String>,
     /// AI 配置（tke harness 探索测试用）：[ai] 段
     #[serde(default)]
     pub ai: AiConfig,

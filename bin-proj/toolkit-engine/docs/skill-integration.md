@@ -1,7 +1,9 @@
 # tke 作为 skill 融入 coding agent 工作流（设计稿）
 
-> 状态:**契约已定,实现未开始**。契约见 [`adr/0009-headless-task-mode.md`](adr/0009-headless-task-mode.md)
-> （2026-08-12 拍板生效,headless 命名定为 `tke task`）。
+> 状态:**原型已落地并实测通过**（2026-08-12）。方向见 [`adr/0010-skill-borrows-caller-ai.md`](adr/0010-skill-borrows-caller-ai.md)
+> ——**skill 借调用方的 AI**,tke 不带 AI、不需要 API key。
+> 可分发原型在 [`../skill/ui-test/`](../skill/ui-test/)。
+> ~~ADR-0009 的 `tke task`~~ 已取消（被 ADR-0010 取代）。
 > 第一版范围:**Web + Android**（iOS 暂缓,WDA 环境成本拖慢首版）。
 
 ## 1. 要解决的问题
@@ -22,13 +24,14 @@ tke 提供的是**外部证据**:一台真机或真浏览器上,这个流程走�
 | 动作 | 何时 | 成本 | 需要 |
 |---|---|---|---|
 | **verify** | 已有 `<feature>.tks` 两件套 | 秒级,无 LLM | 设备/浏览器 |
-| **explore** | 没有脚本,或功能是全新的 | 分钟级,数万 token | 设备 + `[ai]` 配置 |
+| **explore** | 没有脚本,或功能是全新的 | 分钟级,token 花在调用方 | 设备（**不需要 `[ai]`**） |
 
 **默认策略写死在 skill 里:先找脚本 → 有就 verify → 没有才 explore → 探索产物落进
 `tests/ui/` 并建议 commit。** 若只暴露一个入口,调用方每次都会去烧 AI 探索。
 
-verify 走现成的 `tke run`(已合规:NDJSON + 退出码 + 定位自愈 + 起始态对齐,ADR-0006),
-explore 需要 ADR-0009 的 headless 模式。
+**两者都只用现成命令**:verify=`tke run`(NDJSON + 退出码 + 标注截图产物);
+explore=调用方 AI 驱动 `fetch`/`control`/`element add` 原子命令,tke 侧零新增(ADR-0010)。
+注意 `--copilot` 定位自愈需要 `[ai]`,skill 场景下不可用——回放失败直接报错,交调用方判断。
 
 ## 3. 意图契约（intent）
 
@@ -56,62 +59,43 @@ budget: {max_rounds: 20, timeout_s: 600}
 > 但**绝不可**把这里的示例内容写进 `prompt/builtin/*.md`——那是提示词,写死即泄题。
 > 实现时最容易踩的就是这一步("顺手加个例子让 AI 好懂")。
 
-## 4. 报告契约（report）
+## 4. 证据与产物（实测结构）
 
-一次调用写一个 JSON。**硬软证据分字段是这份 schema 的核心约束**(ADR-0009 决策 4):
-若合并成单个 `success`,调用方会把 AI 的乐观判断当绿灯汇报给用户,这是本方案最危险的失效模式。
+不需要专门的报告 schema——调用方 AI 直接读命令输出和产物目录。`tke run --log <dir>` 产出:
 
-```jsonc
-{
-  "schema_version": 1,
-  "task":   { "goal": "...", "platform": "web", "device": "..." },
-  "outcome": "passed | failed | needs_decision | blocked | error",
-
-  "evidence": {
-    "replay":    { "ran": true, "steps_total": 12, "steps_passed": 12,
-                   "assertions": [ /* 回放器真实执行的断言步 —— 硬证据 */ ] },
-    "agent_judgement": { "reached_goal": true, "basis": "...",
-                         "page_contract_hit_rate": 0.8 /* 软证据:LLM 判断 */ }
-  },
-
-  "failure": {                    // outcome=failed 时
-    "step": 5, "line": "点击 {提交按钮}", "error": "...",
-    "screenshot": "<path>", "page_elements": "<path>",
-    "triage": "app_issue | script_stale | wrong_page | path_changed | unknown"
-  },
-  "needs_decision": {             // outcome=needs_decision 时
-    "question": "...", "options": ["..."], "context": "...", "screenshot": "<path>"
-  },
-  "blocked_by": [ "..." ],        // outcome=blocked 时:未满足的前提(登录态等)
-
-  "artifacts": { "tks": "<path>", "tklib": "<path>", "conversation": "<path>" },
-  "warnings": [ /* INV-9:被跳过的增强、失败的质量闸门,必须可见 */ ],
-  "usage": { "rounds": 8, "tokens": 41000, "duration_ms": 213000 }
-}
+```
+<log>/<脚本名>_<时间戳>/
+├── log.json              每步:命令/成败/error/耗时/截图与页面文件名
+├── screenshots/step_NNN.png   标注截图:顶部横幅(操作+成败) + 元素框(红) + 点击点(蓝圈白心) + 滑动轨迹
+└── page/step_NNN.xml     每步页面结构
 ```
 
-`triage` 直接复用 `tke run` 辅助驾驶的分诊层(ADR-0006)。这对调用方是**最有行动价值的字段**:
-`app_issue` → 回去改代码;`script_stale` → 触发续探修复脚本。
-顺带一提,这个 skill 场景恰好能逼出 OPEN_QUESTIONS 的 **Q-1**(分诊层 2-5 真机质量未知)——
-coding agent 天天改页面,是天然的"改版"现场发生器。
+**证据分级仍然成立,只是变简单了**:退出码 0 + 断言步通过 = **硬证据**（回放器真实执行）;
+调用方 AI 自己"觉得走通了"= 软证据,不作数。skill 把结束条件定死在硬证据上。
+
+`triage`（`app_issue` / `script_stale` / …）现由调用方 AI 依据 log.json + 截图判断,
+SKILL.md 里给了分诊表。tke 侧 ADR-0006 的分诊层仍服务于 `tke run --copilot`（需 `[ai]`）。
 
 ## 5. skill 形态与安装
 
+可分发原型在本仓库 [`../skill/ui-test/`](../skill/ui-test/),使用者复制到自己项目的
+`.claude/skills/` 下即可:
+
 ```
 <项目>/.claude/skills/ui-test/
-├── SKILL.md                 # 触发条件 + 策略(先 verify 后 explore) + 职责边界
-├── scripts/check-env.sh     # 前置体检
-├── scripts/verify.sh        # 包 tke run
-├── scripts/explore.sh       # 包 tke task(阶段1后)
-└── reference/{intent,report}-schema.md
+├── SKILL.md                 # 主循环 + 先verify后explore + .tks 语法 + 护栏 + 红线
+└── scripts/check-env.sh     # 前置体检
 ```
+
+没有 verify.sh / explore.sh——**流程写在 SKILL.md 里由调用方 AI 执行**,包一层脚本反而挡住它。
 
 放**项目内** `.claude/skills/`(而非 `~/.claude/skills/`):UI 脚本资产本就该跟代码同仓,
 团队 clone 即得,skill 与它驱动的 `tests/ui/*.tks` 一起演进。
 
-**前置体检**(`check-env.sh`)查四件事,不满足就明确报出来,别让调用方撞进去猜:
-`tke` 在不在 PATH / `[ai]` 配没配(explore 才需要) / 设备就绪(Web: chrome+chromedriver;
-Android: `adb devices` 有货) / `tests/ui/` 在不在。
+**前置体检**(`check-env.sh`)不满足就明确报出来,别让调用方撞进去猜:
+`tke` 在不在 PATH / **chromedriver 是否与 tke 同目录**(ToolManager 只搜同目录,不回退 PATH)/
+Chrome for Testing 在不在(按官方 zip 原样结构找)/ 当前会走有头还是无头 / `tests/ui/` 在不在。
+**不查 `[ai]`——skill 模式不需要**。
 
 **安装 tke 本身**:按平台跑 `./build-linux.sh` / `./build-mac.sh` / `build-win.bat` 产二进制
 (禁 `cargo build`,P-02),产物落 `bin/<platform>/`,放进 PATH;
@@ -126,17 +110,18 @@ AI 配置走 `-c <config.toml>` 的 `[ai]` 段(敏感 key 别上命令行)。
 这类脚本在 CI 产物上会与本地行为不一致,必须用完整构建跑。选 `--no-ocr` 前先确认
 目标用例不吃 OCR 通道。
 
-## 6. 分阶段路线
+## 6. 进度
 
-| 阶段 | 内容 | tke 改动 |
+| 阶段 | 内容 | 状态 |
 |---|---|---|
-| **0** | 纯 skill 包装现有 `tke run`;脚本先用交互式 `tke harness` 手工产 | 零 |
-| **1** | `tke task` headless 一次性模式 + 报告 schema + 五态退出码(ADR-0009) | 主要工程量 |
-| **2** | `--intent <yaml>` 意图契约接入 | 中等 |
-| **3** | MCP server 化(中途双向交互) | 暂不做,触发条件见 ADR-0009 |
+| 0 | skill 原型（`skill/ui-test/`）+ 本机无头全链路实测 | ✅ 2026-08-12 |
+| 1 | ~~`tke task` headless~~ | ❌ 取消（ADR-0010：不需要内层 AI） |
+| 2 | intent 意图契约（结构化输入替代自由文本） | 待定 |
+| 3 | 护栏命令化（把 asserter/页面契约做成必须调用的子命令） | 待定,触发条件见 ADR-0010 |
 
-阶段 0 的意义是**在接口定死之前拿到真实使用反馈**——契约一旦发布,改起来贵。
-且符合本项目"push ≠ 完成,用户真机确认才算数"的审核机制。
+**实测结论（Linux/amd64 无头）**：装 Chrome for Testing + chromedriver → 无头启动/采集/操作 →
+`element add` 落库建包 → 写 .tks → `tke run` 5/5 步通过。标注截图、log.json、page xml 齐全,
+无头下中文渲染正常。撞出两个真缺口:tklib 建包（已修,P-17）、平台自包含（Q-6,待定）。
 
 ## 7. 红线与已知风险
 
@@ -151,8 +136,11 @@ AI 配置走 `-c <config.toml>` 的 `[ai]` 段(敏感 key 别上命令行)。
 
 ## 8. 未决
 
-- ~~headless 命名~~ ✅ 定为 **`tke task`**（2026-08-12 拍板,理由见 ADR-0009 决策段）
+- ~~headless 命名~~ ❌ 整个 `tke task` 已取消（ADR-0010）
+- **平台自包含**(Q-6):`.tks` 不记平台,`tke run foo.tks` 不带 `-d` 按 Android 推断 →
+  web 脚本报「adb 缺失」。tklib 的 meta.json 已存 platform,要不要让 run 据此兜底?
+- **护栏会不会退化**:asserter/supervisor/页面契约现在只是 SKILL.md 里的两条要求。
+  若实测脚本质量不行,出路是把护栏做成必须调用的子命令(**不是把提示词写更长**,ADR-0010)。
 - 探索产物的 commit 时机:skill 自动落盘 + 建议,还是必须调用方显式确认?
 - Android 上 `entry` 的表达(package/activity vs deeplink),以及冷启动净化策略。
-- `tke task` 与 `harness` 的代码复用边界:外壳换掉后,orchestrator 的工具集要不要裁剪
-  (headless 下 `ask_user` 语义变成"终止并回传",`suggest_next` 是否还有意义)。
+- intent 契约(第3节)是否还需要——调用方 AI 自己就有上下文,结构化 intent 的边际收益待观察。

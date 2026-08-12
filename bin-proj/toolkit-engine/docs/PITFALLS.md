@@ -86,3 +86,35 @@
 **现象**：刚探索完就回放,从终态"闭眼开跑"越修越卡。
 **根因**：探索结束设备停在完成页,脚本却假设从起始页开始。
 **规则**：回放前对齐起始态（现由 `tke run` 起始态对齐 / 编排官 navigate 承担）；轻模式脚本也要落标志（5ea793cd 修过 gate bug）。
+
+## P-15 env_clear 清掉 DISPLAY → Linux 有头模式 Chrome 起不来
+
+`web/infra.rs` 拉起 chromedriver 时 `env_clear()` 只保留 PATH/HOME/USER/LOGNAME/TMPDIR/LANG
+（为治终端模拟器注入环境导致 Chrome 崩溃——Ghostty 下的 `Mach rendezvous failed` / `BUS_ADRALN`，
+见 setup-notes）。mac/win 不看这些变量所以一直没暴露，但 **Linux 有头模式下
+Chrome 靠 DISPLAY/WAYLAND_DISPLAY/XAUTHORITY 连图形栈**，被清掉就直接起不来。
+已把这三个加进保留列表（无头模式下有没有都不影响）。
+
+**教训**:环境变量白名单是平台相关的——在一个平台上"够用"的白名单，换平台就是缺失。
+
+## P-16 `num_args = 0..=1` 的可选值参数会吞掉后面的子命令
+
+`--copilot` 踩过一次,`--headless` 又踩一次:clap 里 `num_args = 0..=1` 的参数,
+`tke --headless run x.tks` 会把 **`run` 当成 `--headless` 的值**吃掉,子命令就没了。
+解法:加 `require_equals = true`(强制 `--headless=on` 形式)+ `value_parser` 白名单。
+裸 `--headless` 仍可用(走 `default_missing_value`)。
+
+**这类坑只有黑盒 CLI 契约测试逮得到**(单测测不到 clap 装配层)——
+`tests/cli.rs` 已有回归用例 `headless_bare_flag_does_not_swallow_subcommand`。
+
+## P-17 能力只在一条路径上完整——`element add --lib foo.tklib` 建不了新包
+
+`.tklib` 此前**只有 harness finalize 会创建**。改用原子命令直接攒两件套时（skill 模式，
+ADR-0010），第一次 `tke element add --lib foo.tklib` 必然失败:「打不开元素包…No such file」——
+因为包还不存在,而落库路径只会解包、不会建包。裸 `element.json` 反倒一直支持首次自建。
+
+已修:包不存在 → 跳过解包,直接落库再打包（走与裸 json 首次落库同一条路）。
+
+**教训**:一个能力"能用"往往只是**在主路径上能用**。新增调用路径（本例:原子命令替代
+AI 编排）会立刻暴露那些藏在编排层里的隐含前置。**这类缺口只有真正跑一遍才会现形**——
+本条就是 skill 原型实测第一步撞出来的。

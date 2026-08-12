@@ -27,11 +27,22 @@ macOS 对这些目录有隐私保护（TCC）。Chrome.app 有自己的 bundle �
 永久挂起无任何报错**。普通单文件二进制（chromedriver/adb）继承 shell 权限，
 不受影响。
 
-tke 查找 Chrome 的顺序：
-1. `<tke 同目录>/chrome-mac-arm64/Google Chrome for Testing.app`（生产打包用，
-   前提是 bin 不在保护目录下）
-2. `~/Library/Application Support/tke/chrome-mac-arm64/...`（开发机推荐，当前使用）
+tke 查找 Chrome 的顺序（2026-08-12 起**跨平台**，此前只认 mac-arm64）：
+
+**搜索根**（依次）：
+1. `<tke 同目录>/`（生产打包用，前提是 bin 不在 TCC 保护目录下）
+2. 用户数据目录 `<data_dir>/tke/`（开发机/CI 推荐）——
+   mac `~/Library/Application Support`、Linux `~/.local/share`、Windows `%APPDATA%`
 3. 都找不到 → chromedriver 自己找系统 Chrome（版本可能不配对，慎用）
+
+**相对路径按 Chrome for Testing 官方 zip 解压后的原样结构**，把官方包（或自建 S3 镜像里的
+同名包）整个解压到搜索根下即可，**不必改名**：
+
+| 平台 | 相对路径 |
+|---|---|
+| macOS | `chrome-mac-arm64/` 或 `chrome-mac-x64/` → `Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing` |
+| Linux | `chrome-linux64/chrome` |
+| Windows | `chrome-win64/chrome.exe` |
 
 ### 2. 版本必须与 chromedriver 配对
 
@@ -93,6 +104,34 @@ xcodebuild -project WebDriverAgent.xcodeproj \
 - **selfIdentity.plist**：go-ios 的隧道配对身份文件（密钥对），它默认写到
   进程 cwd——tke 已把 go-ios 的 cwd 固定为 `$TMPDIR/tke/ios/`。如果在项目目录
   里看到这个文件，是旧版本留下的，删掉即可（会自动重新配对生成）。
+
+## 无头 / CI / docker（2026-08-12 新增，**真机未验**）
+
+```bash
+tke ...                 # auto（默认）：有桌面→有头；无桌面→无头
+tke --headless ...      # 等价 --headless=on，强制无头（有桌面的机器上跑 CI）
+tke --headless=off ...  # 强制有头
+```
+
+**必须用等号形式**（`--headless=on`）——裸 `--headless` 也可以，但 `--headless on` 不行：
+`on` 会被当成子命令位置（见 PITFALLS P-16）。配置文件里是 `headless = "auto"|"on"|"off"`。
+
+- **auto 的判据**：mac/win 恒有桌面；Linux 看 `DISPLAY` / `WAYLAND_DISPLAY`，两个都没有 → 无头。
+- **无头用 `--headless=new`**（不是老实现）：新版走完整浏览器渲染路径，与有头一致；
+  老 `--headless` 是另一套精简渲染，截图会和有头对不上。
+- **容器 / root 自动加** `--no-sandbox --disable-dev-shm-usage`（探测 `/.dockerenv`、
+  `/run/.containerenv`、uid==0）。普通桌面环境保留沙箱。
+- **窗口尺寸/缩放因子照旧固定**（`--window-size=1280,900 --force-device-scale-factor=1`），
+  无头下同样生效——这是脚本像素坐标可移植的前提。
+
+### ⚠️ 还没验证的两件事（用这套东西之前先确认）
+
+1. **有头录的脚本，无头回放，像素坐标是否一致？** 固定窗口尺寸+缩放因子大幅降低了风险，
+   但无头下滚动条占位、字体可用性仍可能让布局偏移。**这决定"本地录、CI 回放"成不成立**，
+   必须实测。
+2. **docker 镜像里的系统依赖**：Chrome 需要 libnss3/libatk/libgbm/libasound2 等一堆 `.so`，
+   精简镜像没有；**中文页面还需要中文字体**（缺了整页豆腐块，元素位置全变）。
+   这部分下载器解决不了，得靠 Dockerfile 装。
 
 ## ⚠️ 其他实测踩过的坑
 

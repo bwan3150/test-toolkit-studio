@@ -62,6 +62,20 @@ struct Cli {
     #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true")]
     copilot: Option<bool>,
 
+    /// web 无头模式：auto（默认，无桌面自动走无头）/ on（强制无头）/ off（强制有头）。
+    /// 无头服务器、docker、CI 里无需指定——auto 会自动判断。裸 `--headless` 等价 `--headless=on`。
+    /// **必须用等号形式**（require_equals）：否则 `tke --headless run x.tks` 里的 `run`
+    /// 会被当成本参数的值吃掉，子命令就没了（--copilot 踩过同类坑，见 tests/cli.rs 回归）
+    #[arg(
+        long,
+        global = true,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "on",
+        value_parser = ["auto", "on", "off"]
+    )]
+    headless: Option<String>,
+
     /// 输出 DEBUG 级别日志
     #[arg(short, long, global = true)]
     verbose: bool,
@@ -187,9 +201,11 @@ async fn main() -> tke::Result<()> {
     };
 
     // 参数层：CLI + config 解析一次，形成统一参数表（Arc 共享，编排层各模块持有并查表）
-    let params = Arc::new(tke::Params::resolve(cli.device, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, cli.copilot, config));
+    let params = Arc::new(tke::Params::resolve(cli.device, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, cli.copilot, cli.headless, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
+    // 进程级设置 web 无头模式（web 驱动建会话时查询）
+    tke::utils::params::set_web_headless(params.headless);
     // 安装进程级 Ctrl+C 中断监听：run/steps/harness 各阶段（含 ScriptRunner 逐步回放）统一查中断、及时停
     tke::utils::interrupt::install();
 
