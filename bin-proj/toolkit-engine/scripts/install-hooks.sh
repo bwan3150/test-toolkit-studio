@@ -33,6 +33,8 @@ S="bin-proj/toolkit-engine/scripts"
 bash "$S/check-changelog.sh" || exit 1
 ( cd bin-proj/toolkit-engine && cargo test --no-default-features --lib --quiet ) || {
   echo "❌ 测试未通过,拒绝 push"; exit 1; }
+( cd bin-proj/toolkit-engine && cargo test --no-default-features --test cli --quiet ) || {
+  echo "❌ CLI 契约测试未通过,拒绝 push"; exit 1; }
 HOOK
 
 chmod +x "$HOOKS/pre-commit" "$HOOKS/pre-push"

@@ -2,7 +2,7 @@
 
 给在本仓库工作的任何 AI agent / 协作者的入口：**协议 + 路由 + 共享上下文**。
 知识刻意粗粒度（模块级一句话职责），逐文件细节以各文件头注释为准（细粒度地图必然滞后，
-教训见 docs/codebase-map.md）。
+教训见 docs/archive/codebase-map.md）。文档导航见 docs/README.md。
 
 ---
 
@@ -44,7 +44,9 @@
 | 目的 | 命令 |
 |---|---|
 | 编译检查 | `cargo check --no-default-features` |
-| 全量测试（push 前必过） | `cargo test --no-default-features --lib` |
+| 单测+无设备集成（push 前必过） | `cargo test --no-default-features --lib` |
+| 黑盒 CLI 契约测试 | `cargo test --no-default-features --test cli`（秒级） |
+| 真机 e2e 冒烟（需设备,手动） | `./tests/e2e/smoke.sh <case.tks> [device]` |
 | 产二进制（真机验证用） | `./build-mac.sh`（**禁 cargo build 产二进制**，P-02） |
 | 挂守卫 hook（一次） | `./scripts/install-hooks.sh` |
 | 手动跑守卫 | `./scripts/check-{prompts,changelog,state,linecount}.sh` |
@@ -123,11 +125,15 @@ cache、element_path 指过去，recognizer/元素工具/回放器对 tklib 无�
 - **agent 行为**（何时断言、何时 finish、探索策略）改 `prompt/builtin/*.md`；把关/护栏逻辑改 `runner/`。
 - **错误分类**：可重试（元素没找到、断言失败、LLM 限流/5xx/超时）vs 终止（设备连接断、配置错、用户取消）。LLM 层自动重试在 `provider/session.rs`；修复流程只重试"测试层面"失败。
 
-## 测试（能在低层表达就放低层）
+## 测试（能在低层表达就放低层，三层放置见 ADR-0008）
 
 ```bash
-cargo test --no-default-features --lib     # 单测 + 无设备集成（秒级，CI 可跑）
+cargo test --no-default-features --lib        # ① 单测 + 无设备集成（#[cfg(test)] 就地放 src 内）
+cargo test --no-default-features --test cli   # ② 黑盒 CLI 契约（tests/cli.rs，spawn 真二进制）
+./tests/e2e/smoke.sh <case.tks> [device]      # ③ 真机 e2e（tests/e2e/，需设备，手动跑）
 ```
+
+**单测不要搬进 tests/**——它们要访问 crate 私有项（ADR-0008）。CLI 参数/输出协议类问题只有 ② 测得到。
 
 - **FakeLlm**：`LlmSession::new_fake(system, tools, turns)` 直接注入；深层自建会话的子 agent
   （asserter/supervisor/doctor…）用 `AiConfig{provider:"fake", model:<scope>}` +
@@ -146,4 +152,4 @@ cargo test --no-default-features --lib     # 单测 + 无设备集成（秒级�
 - **teardown（关浏览器/退 App）是收尾不是测试内容**：终点校验要在收尾前完成，收尾会销毁校验证据。
 - **不许静默吞错**：质量闸门（supervisor/asserter/marker/desc 生成）失败必须 emit Warn——供应商抖动时把关体系"悄悄下线"极难排查。
 - **文件落点**：运行中间产物走 `params.cache_root()`；AI 交付文件必须经 `resolve_in_workspace`（工作区沙箱，拒绝绝对路径/`..`）。
-- `docs/codebase-map.md` 是旧的逐文件细粒度地图，多处滞后——**模块职责以本文件为准**。
+- `docs/archive/` 是停止维护的旧文档（含旧细粒度地图）——**模块职责以本文件为准**。

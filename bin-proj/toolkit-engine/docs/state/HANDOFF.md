@@ -5,8 +5,12 @@
 
 ## 做完了
 
-- 治理体系落地:INVARIANTS(12条) / PITFALLS(14条,存量搬运) / ADR 0001-0007 补录 /
+- 治理体系落地:INVARIANTS(12条) / PITFALLS(14条,存量搬运) / ADR 0001-0008 补录 /
   state 三件套 / ROADMAP / CHANGELOG / 守卫脚本 + git hook / AGENTS.md 改造为路由+协议入口
+- tests/ 落地:cli.rs 黑盒契约(7条,含 --copilot 裸旗标回归) + e2e/smoke.sh 真机冒烟;
+  测试三层放置 ADR-0008(单测就地放,别搬)
+- docs 整理:tke-flow.md 更新到当前架构;codebase-map/refactor-plan/tke-overview 归档;
+  docs/README.md 导航
 
 ## 没做完
 

@@ -26,7 +26,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 ## 本次会话不要碰
 
 - App/website 侧（用户明确:先只做 tke）
-- `docs/codebase-map.md` 旧细粒度地图（已滞后,模块职责以 AGENTS.md 为准）
+- `docs/archive/` 归档文档（已停止维护,模块职责以 AGENTS.md 为准）
 - 医生复活类方案——读 ADR-0001 再想
 
 ## 环境
