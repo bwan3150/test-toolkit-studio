@@ -117,6 +117,23 @@ impl FlowRunner {
             return Err(TkeError::InvalidArgument("flow 中没有任何脚本".to_string()));
         }
 
+        // 设备必须有着落：要么全局 -d，要么该项自带 device。
+        // 不校验的话没设备的那一项会被当成 Android，web 用例只得到一句「adb 缺失」。
+        if self.params.device().is_none() {
+            let missing: Vec<&str> = def
+                .scripts
+                .iter()
+                .filter(|s| s.device().is_none())
+                .map(|s| s.path())
+                .collect();
+            if !missing.is_empty() {
+                return Err(TkeError::InvalidArgument(format!(
+                    "这些脚本没有设备可用：{}。给 flow 加全局 -d/--device，或在对应项写 {{ path = \"…\", device = \"…\" }}",
+                    missing.join("、")
+                )));
+            }
+        }
+
         let flow_name = def.name.clone().unwrap_or_else(|| {
             flow_path
                 .file_stem()

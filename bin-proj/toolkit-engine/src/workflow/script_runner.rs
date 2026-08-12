@@ -204,8 +204,20 @@ impl ScriptRunner {
             //   会把"目标没找到（页面/文字不对）"伪装成"页面无响应"，诱导医生删掉这条导航。
             //   给它足够预算，让它要么真找到、要么干净返回「滚 N 次仍未出现 X」的明确错。
             //   等待命令自带超时参数，也放宽到不被外层夹掉。
+            // 自带时长参数的命令（重试断言 `断言 [x, 存在, 30s]`、`等待 [30s]`）：
+            // 外层预算必须 ≥ 它自己的时长 + 余量，否则会被掐死在半路（P-08 的同一类坑）。
+            let self_budget_secs = |params: &[crate::TksParam]| -> u64 {
+                params
+                    .iter()
+                    .find_map(|p| match p {
+                        crate::TksParam::Duration(ms) => Some((*ms as u64).div_ceil(1000)),
+                        _ => None,
+                    })
+                    .unwrap_or(0)
+            };
             let step_timeout_secs: u64 = match step.command {
                 TksCommand::ScrollFind => 75,
+                TksCommand::Assert | TksCommand::Wait => self_budget_secs(&step.params) + 20,
                 // AI 辅助驾驶在场：元素定位失败第 3 次会触发一次 LLM 挑选（oneshot 最多两问），
                 // 20s 会把自愈掐死在半路——放宽到 60s。代价是真死页面要多等 40s 才判失败。
                 _ if self.healer.is_some() => 60,

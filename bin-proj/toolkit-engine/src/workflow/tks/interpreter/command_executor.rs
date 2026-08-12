@@ -402,12 +402,44 @@ impl<'a> CommandExecutor<'a> {
         }
     }
 
-    /// 断言操作
+    /// 断言操作。
+    ///
+    /// 第三个参数（可选）是**最长等待时间**：`断言 [{提示}, 存在, 10s]` —— 在这段时间内
+    /// 反复采集页面重判，一成立就通过。用于等异步结果（后台下发、跨设备同步、请求返回）——
+    /// 固定 `等待 [Ns]` 快了假失败、慢了浪费，轮询才是对的。
+    /// 不给这个参数则行为不变：采一次、判一次。
     pub async fn execute_assert(&mut self, params: &[TksParam]) -> Result<()> {
         if params.len() < 2 {
             return Err(TkeError::InvalidArgument("断言命令需要目标和条件".to_string()));
         }
 
+        // 最长等待（第三参数）；没有就是 0 = 只判一次
+        let wait_ms: u64 = params
+            .iter()
+            .skip(2)
+            .find_map(|p| match p {
+                TksParam::Duration(ms) => Some(*ms as u64),
+                _ => None,
+            })
+            .unwrap_or(0);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
+        loop {
+            match self.assert_once(params).await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    // 超时到点、或用户中断 → 把最后一次的失败原因原样抛出
+                    if std::time::Instant::now() >= deadline || crate::utils::interrupt::aborted() {
+                        return Err(e);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+    }
+
+    /// 采一次页面、判一次断言（execute_assert 的单次形态）
+    async fn assert_once(&mut self, params: &[TksParam]) -> Result<()> {
         // 刷新UI状态
         self.controller.capture_ui_state(self.workarea).await?;
         self.trace.captured = true;

@@ -57,6 +57,16 @@ pub async fn handle(
             tke::workflow::script_runner::validate_script_path(&path)
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
+            // 回放**必须显式指定设备**：.tks 不记平台，不给 -d 会被当成 Android，
+            // web 用例只会得到一句莫名其妙的「adb 缺失」（用户实测踩过）。
+            // 放在脚本校验之后：文件不存在/缺元素包是更基础的问题，先报那个。
+            // flow(.toml) 不在此校验——每项可自带 device，由 FlowRunner 逐项检查。
+            if params.device().is_none() {
+                JsonOutput::error(
+                    "tke run 必须指定设备: -d/--device <设备ID>（web / Android 序列号 / iOS UDID）",
+                );
+            }
+
             // AI 辅助驾驶 · 起始态对齐：无启动步的脚本开跑前把设备带回起始页（防止"从
             // 当前页面闭眼开跑"）。已在起始页/有启动步/无参照 → 零成本跳过；导航后仍
             // 不在起始页 → 不开跑（在错误页面上回放可能产生副作用），报告说清前提

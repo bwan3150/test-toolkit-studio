@@ -50,7 +50,8 @@ fn run_without_tklib_reports_missing_pack() {
     let d = tmp("no-tklib");
     let tks = d.join("case.tks");
     std::fs::write(&tks, "步骤:\n点击 [{某按钮}]\n").unwrap();
-    let o = tke().args(["run", tks.to_str().unwrap()]).output().unwrap();
+    // 带 -d：设备现在是 run 的硬前提，不给会先报缺设备、盖住这里要测的缺包契约
+    let o = tke().args(["-d", "web", "run", tks.to_str().unwrap()]).output().unwrap();
     assert!(!o.status.success(), "缺元素包应失败");
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("元素包") || s.contains("tklib"), "应报缺元素包:{}", s);
@@ -62,7 +63,7 @@ fn copilot_bare_flag_accepted() {
     let d = tmp("copilot-bare");
     let tks = d.join("case.tks");
     std::fs::write(&tks, "步骤:\n点击 [{某按钮}]\n").unwrap();
-    let o = tke().args(["run", tks.to_str().unwrap(), "--copilot"]).output().unwrap();
+    let o = tke().args(["-d", "web", "run", tks.to_str().unwrap(), "--copilot"]).output().unwrap();
     let s = format!("{}{}", stdout(&o), stderr(&o));
     // 裸旗标不该报参数错;应走到业务层报缺元素包
     assert!(!s.contains("a value is required"), "--copilot 裸旗标不该要求带值:{}", s);
@@ -176,4 +177,16 @@ fn nonweb_control_close_requires_package() {
     assert!(!o.status.success(), "移动端省略包名应失败");
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("包名"), "报错应点明需要包名:{}", s);
+}
+
+/// `tke run <.tks>` 必须显式给设备(.tks 不记平台,不给会被当 Android 报「adb 缺失」)
+#[test]
+fn run_requires_device() {
+    let d = tmp("need-device");
+    let tks = d.join("case.tks");
+    std::fs::write(&tks, "步骤:\n返回\n").unwrap();
+    let o = tke().args(["run", tks.to_str().unwrap()]).output().unwrap();
+    assert!(!o.status.success(), "不给设备应失败");
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("设备"), "报错应点名设备:{}", s);
 }

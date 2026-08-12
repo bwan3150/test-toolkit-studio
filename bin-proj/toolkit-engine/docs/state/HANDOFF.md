@@ -10,7 +10,7 @@
 - **`build-linux.sh`**（依赖预检 + `--no-ocr` CI 模式），两条路径实测通过
 - **ADR-0010 生效（用户拍板）**：**skill 借调用方的 AI**——tke 退回成设备操作原语 + 证据产出器。
   `tke task`（ADR-0009）取消，该 ADR 标为已被取代（一行代码没写过）。harness 内置 AI 保留
-- **skill 原型 `skill/ui-test/`**（SKILL.md + check-env.sh），可复制到使用者项目的 `.claude/skills/`
+- **skill 原型 `skill/ui-check/`**（SKILL.md + check-env.sh），可复制到使用者项目的 `.claude/skills/`
 - **fix**：`element add --lib foo.tklib` 包不存在时建新包（P-17，skill 实测第一步撞出来的）
 - **fix（用户 mac 实测撞出的两个）**：①会话跨命令复用致 `--headless` 静默失效——`SessionInfo`
   增记 `headless`，模式不符则销毁重建 + 明确报错（P-18）②`--platform web` 不连带定 device
@@ -23,8 +23,18 @@
   用户反馈「不想每次记 `rm -f $TMPDIR/tke/web/*.json` + `pkill Chrome`」。web 分支本就忽略这个
   参数,只是 CLI 强制要填个没意义的值;移动端省略则明确报错。文档里的手工清理命令已全部替换
 
+- **skill 定位纠正 + 重写**（用户指出我把 harness 的目标错塞进了 skill）:
+  `skill/ui-test/` → `skill/ui-check/`,去掉 verify/explore、两件套、回放验证。
+  **skill 只做「设备操控+查看能力交给调用方 AI + 留证据」**。
+  证据落盘零改动就有:`tke steps '点击 [{x, y}]' --log <dir>`(用坐标,不需元素库)
+- **跨设备**:flow per-script device ✅ / `tke run` 必填 `-d` ✅ / **重试断言** ✅
+  `断言 [{提示}, 存在, 10s]`;步超时对自带时长的命令放宽(`等待 [30s]` 此前会被 20s 掐死)
+
 ## 没做完
 
+- **ADR-0011 的 harness 侧没做**:设备降为工具参数、`list_devices`、AI 按语义选设备、
+  不确定问用户。用户已拍板方向(harness 不必填设备,因为编排官会问),但代码没动——
+  要改 orchestrator 工具定义 + 提示词 + 装配层
 - **`tke harness` 的完整无头探索没验**——需要 `[ai]` key，这台机没有任何凭据。
   用户 mac 上 harness **有头跑通**（2 轮出两件套）,无头版待他重跑。
   harness 与 run/原子命令共用同一条 `WebDriver::start_new_session`,驱动层无头已验
