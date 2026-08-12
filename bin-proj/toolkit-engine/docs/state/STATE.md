@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-12
-Last-Commit: 00a7ee6d
+Last-Commit: f5d3acfe
 ---
 
 # 当前状态
@@ -21,7 +21,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | TUI 手写 inline | ✅ 定稿 | ADR-0007 |
 | tke run 辅助驾驶（对齐+自愈+分诊） | 🟡 对齐链真机通过;分诊层2-5 真机未逼出 | ADR-0006 |
 | 无设备测试层（FakeLlm/FakeDriver） | ✅ 36/36 + CLI 契约 11/11 | 秒级 CI 回归 |
-| web 无头（无头服务器/docker CI） | ✅ 本机无头全链路通过 | `--headless=auto\|on\|off`;修了 Chrome 定位 mac 硬编码 + DISPLAY 被清。**有头/无头坐标对照待 mac 验** |
+| web 无头（无头服务器/docker CI） | ✅ **坐标可移植性已验证** | mac有头=mac无头=Linux无头=1280x813,bounds 零差异。会话模式失配已修(P-18) |
 | App 侧（handlers/frontend） | ⏸ 冻结 | healed 字段等新 NDJSON 待接 |
 | skill 集成（被 coding agent 调用） | ✅ 原型可用,**本机实测通过** | **ADR-0010**:借调用方 AI,tke 不带 AI。原型 `skill/ui-test/`;`tke task` 已取消 |
 

@@ -27,6 +27,11 @@ struct SessionInfo {
     port: u16,
     session_id: String,
     driver_pid: u32,
+    /// 该会话是以无头还是有头建的。**必须记**：`--headless` 只在建会话时起作用，
+    /// 而会话跨命令复用——不记就会出现「加了 --headless=on 却沿用旧的有头会话、
+    /// 参数静默不生效」（违反 INV-9）。缺省 false 兼容旧会话文件。
+    #[serde(default)]
+    headless: bool,
 }
 
 /// 活动连接 (chromedriver 地址 + 会话ID)
@@ -58,6 +63,18 @@ impl WebDriver {
 
         // 尝试复用持久化的会话
         if let Some(info) = Self::load_session(&self.device_id) {
+            let want_headless = crate::utils::params::web_headless().resolve();
+            if info.headless != want_headless {
+                // 模式不符：**不能复用**，否则 --headless 静默失效（INV-9）。
+                // 销毁旧会话，让调用方经 launch 重建；说清原因，别让人以为参数没用。
+                let (had, want) = (mode_name(info.headless), mode_name(want_headless));
+                eprintln!("现有 web 会话是{had}模式、本次要求{want}模式 → 销毁重建（{want}会话需重新 launch）");
+                drop(guard);
+                let _ = self.close_session();
+                return Err(TkeError::DeviceError(format!(
+                    "已销毁{had}模式的旧会话；请重新执行 启动 [URL] / control launch <URL> 以建立{want}会话"
+                )));
+            }
             let base = format!("http://127.0.0.1:{}", info.port);
             if Self::session_alive(&base, &info.session_id) {
                 let conn = Conn { base, session_id: info.session_id };
@@ -542,4 +559,9 @@ return false;
             network: None,
         })
     }
+}
+
+/// 无头/有头的中文名（会话模式不符时的提示用）
+fn mode_name(headless: bool) -> &'static str {
+    if headless { "无头" } else { "有头" }
 }

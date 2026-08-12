@@ -129,7 +129,16 @@ pub async fn handle(
     // 都不在这里问、也不再需要 --scripts。
     let (case_text, dev_override, platform): (String, Option<String>, Option<Platform>) =
         if let Some(tc) = args.testcase.clone() {
-            (load_case(&tc), None, args.platform.map(|p| p.to_platform()))
+            let platform = args.platform.map(|p| p.to_platform());
+            // `--platform web` 要连带把设备定成 "web"：web 是唯一「设备 id 就是平台名」的端，
+            // 不补的话 device 留 None → 下游按 Android 推断 → 报「adb 缺失」。
+            // （交互式向导选 Web 时本就会设成 "web"，这里是把两条路径拉齐。）
+            let dev = match platform {
+                Some(Platform::Web) => Some("web".to_string()),
+                // iOS 的 UDID / Android 的序列号推不出来,保持 None（走 -d 或默认设备）
+                _ => None,
+            };
+            (load_case(&tc), dev, platform)
         } else if !params.json && std::io::stdin().is_terminal() {
             match interactive_setup(frontend.as_ref(), &merged_ai).await {
                 Some(s) => (String::new(), s.device, s.platform),

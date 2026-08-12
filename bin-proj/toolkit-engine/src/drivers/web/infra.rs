@@ -150,7 +150,8 @@ impl WebDriver {
         // 用新版 headless（`=new`）——它跑的是完整浏览器渲染路径，与有头一致；旧版
         // (`--headless` 老实现) 是另一套精简渲染，截图会和有头对不上。
         // **窗口尺寸/缩放因子照旧固定**：脚本里的像素坐标要在有头录、无头回放之间可移植。
-        if crate::utils::params::web_headless().resolve() {
+        let headless = crate::utils::params::web_headless().resolve();
+        if headless {
             args.push("--headless=new".to_string());
             args.push("--disable-gpu".to_string());
         }
@@ -206,7 +207,7 @@ impl WebDriver {
             .to_string();
 
         // 持久化会话信息
-        let info = SessionInfo { port, session_id: session_id.clone(), driver_pid };
+        let info = SessionInfo { port, session_id: session_id.clone(), driver_pid, headless };
         let _ = std::fs::write(
             Self::session_file(device_id),
             serde_json::to_string(&info).unwrap_or_default(),

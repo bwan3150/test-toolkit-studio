@@ -105,7 +105,7 @@ xcodebuild -project WebDriverAgent.xcodeproj \
   进程 cwd——tke 已把 go-ios 的 cwd 固定为 `$TMPDIR/tke/ios/`。如果在项目目录
   里看到这个文件，是旧版本留下的，删掉即可（会自动重新配对生成）。
 
-## 无头 / CI / docker（2026-08-12 新增，**真机未验**）
+## 无头 / CI / docker（2026-08-12，**坐标可移植性已实测验证**）
 
 ```bash
 tke ...                 # auto（默认）：有桌面→有头；无桌面→无头
@@ -124,12 +124,17 @@ tke --headless=off ...  # 强制有头
 - **窗口尺寸/缩放因子照旧固定**（`--window-size=1280,900 --force-device-scale-factor=1`），
   无头下同样生效——这是脚本像素坐标可移植的前提。
 
-### ⚠️ 还没验证的两件事（用这套东西之前先确认）
+### ✅ 坐标可移植性：已验证（2026-08-12）
 
-1. **有头录的脚本，无头回放，像素坐标是否一致？** 固定窗口尺寸+缩放因子大幅降低了风险，
-   但无头下滚动条占位、字体可用性仍可能让布局偏移。**这决定"本地录、CI 回放"成不成立**，
-   必须实测。
-2. **docker 镜像里的系统依赖**：Chrome 需要 libnss3/libatk/libgbm/libasound2 等一堆 `.so`，
+**mac 有头 = mac 无头 = Linux 无头 = 1280x813**，元素 bounds `diff` 零差异。
+（1280x813 = window-size 1280x900 减去 87px 浏览器 UI 高度，`headless=new` 会模拟真实窗口装饰。）
+**结论：像素坐标跨模式、跨平台可移植，"本地录、CI 回放"成立。**
+
+> ⚠️ 做这类对照时**必须先销毁会话**：`rm -f $TMPDIR/tke/web/*.json` + `pkill -f "Google Chrome for Testing"`。
+> 否则第二条命令会复用第一个会话，得到"两种模式一致"的**假阳性**（P-18，已修：模式不符会销毁重建）。
+
+### ⚠️ 还没验证的
+1. **docker 镜像里的系统依赖**：Chrome 需要 libnss3/libatk/libgbm/libasound2 等一堆 `.so`，
    精简镜像没有；**中文页面还需要中文字体**（缺了整页豆腐块，元素位置全变）。
    这部分下载器解决不了，得靠 Dockerfile 装。
 
@@ -139,7 +144,8 @@ tke --headless=off ...  # 强制有头
   （30-60 秒），之后秒开。tke 会话创建超时已设 90s 兜底。
 - **某些终端模拟器下 Chrome 启动崩溃**（如 Ghostty：`Mach rendezvous failed` /
   `BUS_ADRALN`）：终端注入的进程上下文被 Chrome 继承导致。tke 拉起 chromedriver
-  时已做环境清洗（env_clear 只保留 PATH/HOME/USER/TMPDIR/LANG）+ 脱离终端进程组。
+  时已做环境清洗（env_clear 白名单）+ 脱离终端进程组。**白名单含 DISPLAY/WAYLAND_DISPLAY/
+  XAUTHORITY**——Linux 有头模式 Chrome 靠它们连图形栈，早期漏了导致起不来（P-15）。
 - **直通 adb 时全局 -d 必须放在 adb 之前**：`tke -d <serial> adb shell ...` ✓；
   `tke adb -d <serial> ...` ✗（-d 会被透传给 adb 本身，语义完全不同）。
 - **渲染确定性**：web 会话固定 `--window-size=1280,900` +
