@@ -23,7 +23,8 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写
 ## 第 0 步：环境体检
 
 ```bash
-bash <此skill目录>/scripts/check-env.sh
+bash .claude/skills/ui-check/scripts/check-env.sh        # 项目级安装
+# 或 bash ~/.claude/skills/ui-check/scripts/check-env.sh  # 用户级安装
 ```
 
 不通过就告诉用户缺什么，别硬跑。
@@ -37,6 +38,13 @@ bash <此skill目录>/scripts/check-env.sh
 | 浏览器 | `-d web` |
 | 安卓 | `-d <序列号>`（`adb devices` 查） |
 | iOS | `-d <UDID>` |
+
+**安卓要启动 App 得知道包名 + Activity，不知道就查、别猜**：
+
+```bash
+tke -d <序列号> app focus     # 当前前台应用的包名和 Activity ← 最快
+tke -d <序列号> app list      # 设备上所有第三方应用
+```
 
 **任务涉及多个设备时**（比如"在后台改配置，去手机上看有没有下发"），按语义分别指定；
 **不确定用哪台就问用户**，别猜——打到错误的设备上可能有真实副作用。
@@ -53,6 +61,7 @@ tke -d web fetch --interactive
 元素中心点 = `((x1+x2)/2, (y1+y2)/2)`，就是你要点的坐标。
 
 需要看视觉状态时才截图（`tke -d web refresh`，路径在它的输出里）。**每步都读图会让 token 爆掉。**
+图标没有文字、元素表里认不出来时：`tke -d web fetch --ocr offline` 用 OCR 补可读文字。
 
 ### 2. 操作——**用 `steps` 而不是 `control`，因为它会留证据**
 
@@ -114,3 +123,12 @@ web 会话跨命令复用，不关的话下次检查会从上次的页面开始�
 ## 并发
 
 同时检查多个功能时，每次传独立的 `--cache <dir>`，否则共享工作区会互相覆盖。
+
+## 需要更多时（同目录，按需读）
+
+- **`reference/tke-commands.md`** — tke 完整命令速查：元素采集/OCR、安卓应用与文件系统、
+  设备信息、原生工具直通、排查日志在哪
+- **`reference/tks-syntax.md`** — `steps` 指令的完整语法：全部指令、参数写法、
+  滑动/滚动/长按/悬停/按键、重试断言
+
+上面主流程覆盖绝大多数检查；碰到"这个操作怎么写""包名从哪来""日志在哪看"时再翻这两份。

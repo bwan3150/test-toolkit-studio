@@ -1,0 +1,101 @@
+# ui-check skill —— 安装说明（给人读的）
+
+让 Claude Code 能亲手操作真实浏览器 / 安卓 / iOS，验证刚写完的功能，并留下带标注的截图证据。
+
+分发物只有两样：**这个 skill 目录** + **tke 二进制及其同目录依赖**。不需要 tke 的源码。
+
+## 1. 装 skill 文件
+
+```bash
+# 项目级（推荐：跟着仓库走，团队 clone 即得）
+mkdir -p <你的项目>/.claude/skills
+cp -r ui-check <你的项目>/.claude/skills/
+
+# 或用户级（所有项目都能用）
+mkdir -p ~/.claude/skills
+cp -r ui-check ~/.claude/skills/
+```
+
+装完目录长这样：
+
+```
+.claude/skills/ui-check/
+├── SKILL.md                    # 主文件，Claude Code 自动读
+├── scripts/check-env.sh        # 环境体检
+└── reference/
+    ├── tke-commands.md         # tke 命令速查（AI 按需读）
+    └── tks-syntax.md           # 操作指令语法（AI 按需读）
+```
+
+## 2. 装 tke 二进制
+
+**`tke` 必须在 PATH 里**，而且它的**同目录**要有对应的驱动——tke 只在自己所在目录找外部工具，
+不搜 PATH（这是为了保证 chromedriver 与 Chrome 版本配对）。
+
+```bash
+# 从本仓库构建
+./bin-proj/toolkit-engine/build-mac.sh      # 或 build-linux.sh / build-win.bat
+export PATH="<仓库>/bin/darwin-arm64:$PATH"  # 按平台改目录名；写进 ~/.zshrc 持久化
+```
+
+同目录需要的东西，按你要测什么准备：
+
+| 要测 | 需要 |
+|---|---|
+| 浏览器 | `chromedriver`（与 tke 同目录）+ Chrome for Testing（见下） |
+| 安卓 | `adb`（与 tke 同目录） |
+| iOS | `go-ios`（与 tke 同目录）+ 设备上装好 WebDriverAgent |
+
+**Chrome for Testing** 放用户数据目录，按官方 zip 原样结构解压（**版本必须与 chromedriver 一致**）：
+
+| 平台 | 位置 |
+|---|---|
+| macOS | `~/Library/Application Support/tke/chrome-mac-arm64/` |
+| Linux | `~/.local/share/tke/chrome-linux64/` |
+| Windows | `%APPDATA%\tke\chrome-win64\` |
+
+```bash
+V=$(chromedriver --version | awk '{print $2}')   # 取你现有 chromedriver 的版本
+cd ~/Library/Application\ Support/tke            # macOS 为例
+curl -sSLO https://storage.googleapis.com/chrome-for-testing-public/$V/mac-arm64/chrome-mac-arm64.zip
+unzip -q -o chrome-mac-arm64.zip && rm chrome-mac-arm64.zip
+xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # macOS 必须清隔离属性
+```
+
+> macOS 三个坑：**必须用 curl 下载**（浏览器下载会打 quarantine 标记）；
+> **不能放 `~/Documents`/`~/Desktop`/`~/Downloads`**（TCC 保护目录会让进程卡死且无报错）；
+> 首次启动要等 30-60 秒（Gatekeeper 扫 600MB 包），之后秒开。
+
+## 3. 验证
+
+```bash
+bash .claude/skills/ui-check/scripts/check-env.sh
+```
+
+它会逐项告诉你 tke、chromedriver、Chrome、安卓设备的状态，以及当前会跑有头还是无头。
+只要至少有一个可操作目标就算通过。
+
+## 4. 用
+
+在 Claude Code 里正常提需求即可，比如：
+
+- "我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存"
+- "验证一下这个功能在手机上能不能用"
+
+它会自己走：体检 → 看页面 → 操作（带证据）→ 判断 → 报结论 + 证据目录。
+
+证据落在 `.tke-check/steps_<时间戳>/`（截图序列 + 页面结构 + log.json）。
+**建议把 `.tke-check/` 加进 `.gitignore`**——它是本次检查的证据，不是要提交的资产。
+
+## 常见问题
+
+**报「adb 缺失」但我测的是网页** → 忘了带 `-d web`。tke 是无状态 CLI，不带 `-d` 默认按安卓处理。
+
+**加了 `--headless=on` 但还是弹出了浏览器窗口** → 上一个会话是有头的、被复用了。
+先 `tke -d web control close` 销毁会话再跑（新版会拦住并提示）。
+
+**想在无头服务器 / CI 里跑** → 无桌面时自动走无头，不用传参。docker 镜像里还需要
+Chrome 的系统库（libnss3/libatk/libgbm/libasound2 等）和**中文字体**（缺了整页豆腐块）。
+
+**这个 skill 会不会生成测试脚本？** 不会，也不该会。它只做一次性检查 + 留证据。
+要产出未来可复用的回放脚本，那是 `tke harness` 的事（自带 AI，需要配 `[ai]` 的 API key）。
