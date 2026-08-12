@@ -52,7 +52,7 @@ studio/
   - 主进程：使用 `logger.log()`, `logger.error()` 等（定义在 main.js，同时输出到控制台和 Sentry）
   - 不要直接使用 `console.log()`
 - 编辑 bin-proj 子项目后需运行对应构建脚本重新构建，不要使用 `cargo build`：
-  - `./bin-proj/toolkit-engine/build-mac.sh`
+  - `./bin-proj/toolkit-engine/build-mac.sh`（Linux 用 `build-linux.sh`，CI 加 `--no-ocr --quiet`）
   - `./bin-proj/tester-ai/build-mac.sh`
   - `./bin-proj/scrcpy-server/build-mac.sh`
   - `./bin-proj/opencv-matcher/build-mac.sh`

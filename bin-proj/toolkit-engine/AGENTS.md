@@ -47,7 +47,8 @@
 | 单测+无设备集成（push 前必过） | `cargo test --no-default-features --lib` |
 | 黑盒 CLI 契约测试 | `cargo test --no-default-features --test cli`（秒级） |
 | 真机 e2e 冒烟（需设备,手动） | `./tests/e2e/smoke.sh <case.tks> [device]` |
-| 产二进制（真机验证用） | `./build-mac.sh`（**禁 cargo build 产二进制**，P-02） |
+| 产二进制（真机验证用） | `./build-mac.sh` / `./build-linux.sh` / `build-win.bat`（**禁 cargo build 产二进制**，P-02） |
+| Linux/CI 快速产二进制 | `./build-linux.sh --no-ocr --quiet`（跳过 tesseract，省大量编译时间） |
 | 挂守卫 hook（一次） | `./scripts/install-hooks.sh` |
 | 手动跑守卫 | `./scripts/check-{prompts,changelog,state,linecount}.sh` |
 

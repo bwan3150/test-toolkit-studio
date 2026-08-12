@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-12
-Last-Commit: 7c4138c9
+Last-Commit: aedd2201
 ---
 
 # 当前状态
@@ -22,6 +22,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | tke run 辅助驾驶（对齐+自愈+分诊） | 🟡 对齐链真机通过;分诊层2-5 真机未逼出 | ADR-0006 |
 | 无设备测试层（FakeLlm/FakeDriver） | ✅ 32/32 | 秒级 CI 回归 |
 | App 侧（handlers/frontend） | ⏸ 冻结 | healed 字段等新 NDJSON 待接 |
+| skill 集成（被 coding agent 调用） | 📝 只有设计稿 | `docs/skill-integration.md` + ADR-0009 **提案待拍板**,零代码 |
 
 ## 本次会话不要碰
 
