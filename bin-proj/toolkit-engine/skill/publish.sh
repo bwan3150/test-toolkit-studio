@@ -58,13 +58,13 @@ tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/ui-check.tar.
 echo "   ✅ skill/ui-check.tar.gz"
 
 # —— 二进制 ——（逐个 gzip，install.sh 按名字取；缺的跳过）
-# libc++.so 是 Linux 版 aapt 的运行时依赖（aapt 的 RUNPATH 含 $ORIGIN，放同目录即可加载）
+# libc++.so 是 Linux 版 aapt 的运行时依赖（aapt 的 RUNPATH 含 ${ORIGIN}，放同目录即可加载）
 for name in tke chromedriver adb aapt libc++.so go-ios; do
     if [ -f "$SRC/$name" ]; then
         gzip -c "$SRC/$name" > "$OUT/bin/$PLATFORM/$name.gz"
         echo "   ✅ bin/$PLATFORM/$name.gz  ($(du -h "$OUT/bin/$PLATFORM/$name.gz" | cut -f1))"
     else
-        echo "   -- $name 不在 $SRC，跳过"
+        echo "   -- $name 不在 ${SRC}，跳过"
     fi
 done
 

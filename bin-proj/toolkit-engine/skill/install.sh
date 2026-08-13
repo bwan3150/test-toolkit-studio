@@ -193,7 +193,7 @@ else
     LINE="export PATH=\"$TKE_HOME:\$PATH\""
     if [ -n "$RC" ] && ! grep -qF "$TKE_HOME" "$RC" 2>/dev/null; then
         echo "$LINE" >> "$RC"
-        echo "-- 已把 tke 加进 PATH（写入 $RC）"
+        echo "-- 已把 tke 加进 PATH（写入 ${RC}）"
         echo "   当前终端请先执行：$LINE"
     else
         echo "-- 请把 tke 加进 PATH："

@@ -154,3 +154,18 @@ web 会话存 `$TMPDIR/tke/web/<设备>.json` 跨命令复用,而 `--headless` *
 在这里不可用（我就是这么被 ① 骗过一次——只看状态码 206 就以为文件在）。
 
 真正的下载路径是 `/sl/preview/<mount>/<key>`，不是 `/<mount>/<key>`（后者是 SPA 页面）。
+
+## P-20 shell 变量名紧跟中文 → macOS bash 3.2 上 unbound variable
+
+`echo "... 不在 $SRC，跳过"` 在 Linux/新版 bash 下正常，但 **macOS 自带 bash 3.2**
+会把后面的中文字节当成变量名的一部分，去找一个叫 `SRC，` 的变量 →
+`unbound variable`（脚本又开了 `set -u`，直接崩）。
+
+用户在 mac 上跑 `publish.sh` 撞到，我在 Linux 上 **`LC_ALL=C` 都复现不出来**——
+这是 bash 版本差异，不是 locale。
+
+**规则：写给多平台用的 shell 脚本，变量后面只要跟着非 ASCII 字符，一律写 `${VAR}`。**
+自查：`grep -rnP '\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F{]' --include='*.sh' .`
+
+同类历史：用户此前修过 `$pkg（600MB+，慢）` → `${pkg}`（commit 1d4d5e92）——
+**同一个坑在同一个脚本里犯了两次**，所以这次全项目扫了一遍。

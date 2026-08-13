@@ -30,7 +30,7 @@ for arg in "$@"; do
             exit 0
             ;;
         *)
-            echo "未知参数: $arg（可用: --no-ocr / --quiet / --help）" >&2
+            echo "未知参数: ${arg}（可用: --no-ocr / --quiet / --help）" >&2
             exit 2
             ;;
     esac
@@ -45,7 +45,7 @@ say "==============================="
 # —— 平台校验 ——
 OS=$(uname)
 if [ "$OS" != "Linux" ]; then
-    echo "Error: 本脚本只用于 Linux，当前是 $OS（macOS 用 ./build-mac.sh，Windows 用 build-win.bat）" >&2
+    echo "Error: 本脚本只用于 Linux，当前是 ${OS}（macOS 用 ./build-mac.sh，Windows 用 build-win.bat）" >&2
     exit 1
 fi
 

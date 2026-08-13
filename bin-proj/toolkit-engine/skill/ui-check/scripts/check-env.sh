@@ -37,7 +37,7 @@ if [ -x "$TKE_DIR/chromedriver" ] || [ -x "$TKE_DIR/chromedriver.exe" ]; then
         echo "     版本要与 chromedriver 配对：https://googlechromelabs.github.io/chrome-for-testing/"
     fi
 else
-    echo "  ❌ chromedriver 不在 tke 同目录（$TKE_DIR）——tke 只在这里找，不搜 PATH"
+    echo "  ❌ chromedriver 不在 tke 同目录（${TKE_DIR}）——tke 只在这里找，不搜 PATH"
 fi
 
 echo "== 安卓（-d <序列号>）=="
@@ -66,14 +66,14 @@ REMOTE_VER="$(curl -fsSL --max-time 3 "$TKE_BASE_URL/VERSION?t=$$" 2>/dev/null |
 case "$REMOTE_VER" in
     tke\ *)
         if [ "$REMOTE_VER" = "$LOCAL_VER" ]; then
-            echo "  ✅ $LOCAL_VER（已是分发源上的版本）"
+            echo "  ✅ ${LOCAL_VER}（已是分发源上的版本）"
         else
             echo "  ⬆️  本地 $LOCAL_VER ／ 分发源 $REMOTE_VER"
             echo "     更新：curl -fsSL $TKE_BASE_URL/install.sh | bash"
         fi
         ;;
     *)
-        echo "  ℹ️  $LOCAL_VER（没连上分发源，跳过版本检查）"
+        echo "  ℹ️  ${LOCAL_VER}（没连上分发源，跳过版本检查）"
         ;;
 esac
 
