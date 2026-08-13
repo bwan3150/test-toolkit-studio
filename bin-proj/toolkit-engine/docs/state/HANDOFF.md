@@ -38,7 +38,7 @@
   `--profile web|android|ios|all`,幂等,自动体检且**不完整时非 0 退出**)+
   `skill/publish.sh`(打包成 S3 约定布局)。**配对好的 chromedriver+Chrome 放同一批**是
   自建分发源最实在的好处。本地 http server 模拟 S3 全流程实测通过,含用装出来的 tke 实跑一次
-- **skill 补完备**:`reference/tke-commands.md` + `reference/tks-syntax.md`(AI 按需读),
+- **skill 补完备**:`reference/tke-commands.md` + `reference/steps-syntax.md` + `reference/pitfalls.md`(AI 按需读),
   主文件补安卓 `app focus/list` 拿包名(此前完全没提,安卓场景会卡死)
 
 - **分发已上线**(2026-08-13):资源在 Toolkit Cloud,下载根

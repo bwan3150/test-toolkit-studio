@@ -69,10 +69,14 @@ cp -r ui-check ~/.claude/skills/
 .claude/skills/ui-check/
 ├── SKILL.md                    # 主文件，Claude Code 自动读
 ├── scripts/check-env.sh        # 环境体检
-└── reference/
-    ├── tke-commands.md         # tke 命令速查（AI 按需读）
-    └── tks-syntax.md           # 操作指令语法（AI 按需读）
+└── reference/                  # 以下 AI 按需读
+    ├── pitfalls.md             # 踩坑册：会导致「假结论」的坑，新踩的往里加
+    ├── tke-commands.md         # tke 命令速查
+    └── steps-syntax.md         # 操作指令语法
 ```
+
+**踩坑册是要长期养的那份**——主文件保持精干（怎么做），坑册收「为什么会得出错结论」，
+每次实测踩到新坑就往里加一条，不要去撑大 SKILL.md。
 
 ### 2. 装 tke 二进制
 
@@ -124,10 +128,23 @@ bash .claude/skills/ui-check/scripts/check-env.sh
 
 ## 用起来
 
-在 Claude Code 里正常提需求即可，比如：
+**两种触发方式：**
+
+**① 直接提需求**（推荐）——Claude Code 读 SKILL.md 的 `description` 自动判断该不该用：
 
 - "我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存"
 - "验证一下这个功能在手机上能不能用"
+- "在平台上建个智能场景，去手机 App 里看能不能正常查看和使用"
+
+**② 斜杠命令显式调用**——输入 `/ui-check`，后面可以直接跟任务：
+
+```
+/ui-check 在 https://platform.example.com 建个场景「夜间回家」，去手机上确认能查看和使用
+```
+
+斜杠名 = 目录名 = frontmatter 里的 `name`（三者一致才认得出）。
+用户级装在 `~/.claude/skills/ui-check/` 就全局可用；项目级装在仓库的 `.claude/skills/` 下，
+**跟着仓库走**，团队其他人 clone 下来就有（推荐团队项目用这种）。
 
 它会自己走：体检 → 看页面 → 操作（带证据）→ 判断 → 报结论 + 证据目录。
 
