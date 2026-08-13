@@ -34,4 +34,5 @@
 | [`setup-notes.md`](setup-notes.md) | 环境搭建/部署/换机的坑 |
 | [`driver-mapping.md`](driver-mapping.md) | 原子指令在三端驱动的底层映射对照 |
 | [`skill-integration.md`](skill-integration.md) | tke 作为 skill 融入 coding agent 工作流的**早期设计稿**。⚠️ 其中的 `tke task` 方案已被 **ADR-0010** 推翻（skill 借调用方的 AI，不内置）；实际落地物是 `skill/tke-ui-test/` + `skill/install.sh` |
+| [`ci-publishing.md`](ci-publishing.md) | **GitHub Actions 发布**：改 tke/skill 跑 Publish TKE，换 Chrome/驱动跑 Publish TKE Deps；含各家下载源的实测结构 |
 | [`publishing-to-toolkit-cloud.md`](publishing-to-toolkit-cloud.md) | 打包 skill 分发包并用 curl 一次性上传到 Toolkit Cloud 的操作手册 |

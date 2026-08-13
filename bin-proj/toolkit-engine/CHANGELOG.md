@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · GitHub Actions 发布流水线
+- **feat** `tke-publish.yml`(常用):四平台构建 tke(darwin-arm64/darwin-amd64/linux-amd64/windows-amd64)+ 打包 skill + 刷新 VERSION,一键发到分发源。开关:`targets` 选平台、`ocr`(online 默认/full 含离线 tesseract/none)、**`skill_only`** 只改文档时一分钟发完、`dry_run` 验流程
+- **feat** `tke-deps.yml`(低频):抓 Chrome for Testing + chromedriver + adb + aapt/libc++.so + go-ios。**driver 与 Chrome 从同一份官方清单的同一版本取**——版本必然配对,这是自建分发源最实在的价值
+- **重要** **上传顺序:VERSION 最后传**。它的 build 戳是破 CDN 缓存的键,先传的话使用者拿新键去取还没传完的文件(P-19)。传完还会**从分发源真取一遍复验是 gzip 而不是 HTML**
+- **fix(不跑就发现不了)** go-ios 的 zip **三个平台三种结构**:linux 里是 `ios-amd64`+`ios-arm64` **两个架构**,mac 是单个 `ios`,win 是 `ios.exe`。原写法 `find -o | head -1` 取目录遍历顺序,**在双架构包上会选错架构**;已改成按架构名优先级逐个找
+- **验证** 三段下载逻辑**全部从 YAML 里抽出来本地实跑**:android(adb/aapt/libc++.so 三件到位)、ios(三平台各拿对架构,linux 那个确认是 x86-64)、chrome+driver(Stable 152.0.7977.42,driver 解压后版本一致、chrome zip 解压即 `chrome-linux64/` 结构)。**CI 脚本不本地跑一遍等于没写**
+- **docs** `docs/ci-publishing.md`:两个 workflow 怎么用、Secret 怎么配、各家下载源的实测结构
+
 ### 2026-08-13 · 全流程报告:一次检查一份,不再是一堆碎报告
 - **fix(设计缺陷)** AI 做一次检查要调很多次 `tke steps`(看页面→操作→再看→再操作),每次留下一个 `steps_<时间戳>/` 和一份独立 report.html。**人要审核时面对十几份碎报告,根本没法读**(用户提)
 - **feat** `steps` 每批跑完**自动重建**父目录的 `report.html`:所有批次按时间接成一条时间线,每批带批次头(序号/设备/时刻/步数/跳回单批链接)。**AI 什么都不用做**
