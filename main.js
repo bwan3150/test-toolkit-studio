@@ -71,10 +71,10 @@ const { registerDatabaseHandlers, closeAllDatabases } = require('./handlers/data
 // 属性管理模块 - 用户配置数据管理
 const { registerDeviceConfigHandlers } = require('./handlers/property-manage/device-config-handlers');
 
-// API 代理模块 - 与外部 API 服务交互
-const { registerAuthHandlers, initializeSentryUser } = require('./handlers/api-proxy/toolkit-gateway');
-const { registerBugAnalysisProxyHandlers } = require('./handlers/api-proxy/bug-analysis');
-const { registerReleaseNotesHandlers } = require('./handlers/api-proxy/release-notes-handler');
+// 后端服务模块 - 与远端服务器 API 交互
+const { registerAuthHandlers, initializeSentryUser } = require('./backend/auth');
+const { registerBugAnalysisProxyHandlers } = require('./backend/bug-analysis');
+const { registerReleaseNotesHandlers } = require('./backend/release-notes');
 
 // 自动更新模块
 const { initAutoUpdater, registerUpdateHandlers } = require('./handlers/updater/auto-updater');
@@ -185,7 +185,7 @@ function createWindow() {
   );
 
   // 加载主页面
-  mainWindow.loadFile('renderer/html/index.html');
+  mainWindow.loadFile('frontend/html/index.html');
 
   // 监听窗口关闭事件
   mainWindow.on('closed', () => {

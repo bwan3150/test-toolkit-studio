@@ -3,25 +3,23 @@ node_modules/
 # Build outputs
 dist/
 out/
-toolkit-engine/target/
-tester-ai/target/
-scrcpy-server/target/
-resources/darwin/
-resources/win32/
-resources/linux/
+bin-proj/toolkit-engine/target/
+bin-proj/tester-ai/target/
+bin-proj/scrcpy-server/target/
+bin/
 
 # TKS Language Support (VSCode 扩展)
-tks-language-support/node_modules/
-tks-language-support/*.vsix
-tks-language-support/.vscode-test/
+docs/tks-language-support/node_modules/
+docs/tks-language-support/*.vsix
+docs/tks-language-support/.vscode-test/
 
 # Python (opencv-matcher)
-opencv-matcher/.venv/
-opencv-matcher/build/
-opencv-matcher/dist/
-opencv-matcher/*.spec
-opencv-matcher/.python-version
-opencv-matcher/_version.py
+bin-proj/opencv-matcher/.venv/
+bin-proj/opencv-matcher/build/
+bin-proj/opencv-matcher/dist/
+bin-proj/opencv-matcher/*.spec
+bin-proj/opencv-matcher/.python-version
+bin-proj/opencv-matcher/_version.py
 __pycache__/
 *.py[cod]
 *$py.class

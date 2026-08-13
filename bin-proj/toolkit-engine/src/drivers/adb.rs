@@ -1,0 +1,430 @@
+// AdbDriver - Android 设备驱动（adb）
+
+use crate::{Result, TkeError, DeviceInfo, ToolManager};
+use crate::utils::Workarea;
+use std::path::PathBuf;
+use std::process::Command;
+
+pub struct AdbDriver {
+    device_id: Option<String>,
+    adb_path: PathBuf,
+}
+
+impl AdbDriver {
+    pub fn new(device_id: Option<String>) -> Result<Self> {
+        // adb 与其它直通工具一样，由 ToolManager 统一在 tke 同目录定位
+        let adb_path = ToolManager::resolve("adb")?;
+        Ok(Self {
+            device_id,
+            adb_path,
+        })
+    }
+    
+    // 设置目标设备
+    pub fn set_device(&mut self, device_id: Option<String>) {
+        self.device_id = device_id;
+    }
+    
+    // 获取连接的设备列表
+    pub fn get_devices(&self) -> Result<Vec<String>> {
+        let output = Command::new(&self.adb_path)
+            .arg("devices")
+            .output()
+            .map_err(|e| TkeError::AdbError(format!("执行adb devices失败: {}", e)))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let devices: Vec<String> = stdout
+            .lines()
+            .skip(1)  // 跳过"List of devices attached"
+            .filter_map(|line| {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[1] == "device" {
+                    Some(parts[0].to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(devices)
+    }
+
+    // 采集设备截图和UI XML到工作区
+    pub async fn capture_ui_state(&self, workarea: &Workarea) -> Result<()> {
+        // 获取截图
+        self.capture_screenshot(&workarea.screenshot_path()).await?;
+
+        // 获取UI树
+        self.capture_ui_tree(&workarea.ui_tree_path()).await?;
+
+        Ok(())
+    }
+
+    // 仅采集UI XML到工作区 (不截图)
+    pub async fn capture_xml_only(&self, workarea: &Workarea) -> Result<()> {
+        self.capture_ui_tree(&workarea.ui_tree_path()).await?;
+
+        Ok(())
+    }
+
+    // 获取截图
+    async fn capture_screenshot(&self, output_path: &PathBuf) -> Result<()> {
+        let temp_path = "/sdcard/screenshot.png";
+        
+        // 在设备上截图
+        self.run_adb_command(&["shell", "screencap", "-p", temp_path])?;
+        
+        // 拉取截图到本地
+        self.run_adb_command(&[
+            "pull",
+            temp_path,
+            output_path.to_str().ok_or_else(|| TkeError::InvalidArgument("无效的输出路径".to_string()))?
+        ])?;
+        
+        // 删除设备上的临时文件
+        self.run_adb_command(&["shell", "rm", temp_path])?;
+
+        Ok(())
+    }
+    
+    // 获取UI树
+    async fn capture_ui_tree(&self, output_path: &PathBuf) -> Result<()> {
+        let temp_path = "/sdcard/ui_dump.xml";
+
+        // 在设备上dump UI：uiautomator 等 UI idle，动画页面会挂——收紧超时、失败重试一次
+        // （第二次动画往往正好停在间隙）；两次都不行就报错，交上层"未能采集"可见降级。
+        if let Err(first) = self.run_adb_command_with_timeout(&["shell", "uiautomator", "dump", temp_path], UI_DUMP_TIMEOUT_SECS) {
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+            self.run_adb_command_with_timeout(&["shell", "uiautomator", "dump", temp_path], UI_DUMP_TIMEOUT_SECS)
+                .map_err(|_| first)?;
+        }
+        
+        // 拉取XML到本地
+        self.run_adb_command(&[
+            "pull",
+            temp_path,
+            output_path.to_str().ok_or_else(|| TkeError::InvalidArgument("无效的输出路径".to_string()))?
+        ])?;
+        
+        // 删除设备上的临时文件
+        self.run_adb_command(&["shell", "rm", temp_path])?;
+
+        Ok(())
+    }
+    
+    // 获取UI XML内容作为字符串
+    pub async fn get_ui_xml(&self) -> Result<String> {
+        let temp_path = "/sdcard/ui_dump.xml";
+        
+        // 在设备上dump UI - 忽略输出，因为有些设备会返回非标准输出
+        let _dump_output = self.run_adb_command_output(&["shell", "uiautomator", "dump", temp_path])?;
+        
+        // 等待一下让文件写入完成
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
+        // 读取XML内容
+        let xml_content = self.run_adb_command_output(&["shell", "cat", temp_path])?;
+        
+        // 删除设备上的临时文件（忽略错误）
+        let _ = self.run_adb_command(&["shell", "rm", temp_path]);
+
+        Ok(xml_content)
+    }
+
+    // 指令2: 转发ADB基础指令
+
+    // 点击坐标
+    pub fn tap(&self, x: i32, y: i32) -> Result<()> {
+        self.run_adb_command(&["shell", "input", "tap", &x.to_string(), &y.to_string()])?;
+        Ok(())
+    }
+
+    // 悬停：移动端无"鼠标悬停"概念，不支持（hover 为 web 独有）
+    pub fn hover(&self, _x: i32, _y: i32) -> Result<()> {
+        Err(TkeError::InvalidArgument("Android 不支持悬停(hover 为 web 独有)".to_string()))
+    }
+
+    // 滑动
+    pub fn swipe(&self, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<()> {
+        self.run_adb_command(&[
+            "shell", "input", "swipe",
+            &x1.to_string(), &y1.to_string(),
+            &x2.to_string(), &y2.to_string(),
+            &duration_ms.to_string()
+        ])?;
+        Ok(())
+    }
+
+    // 长按
+    pub fn press(&self, x: i32, y: i32, duration_ms: u32) -> Result<()> {
+        // 使用swipe模拟长按
+        self.swipe(x, y, x, y, duration_ms)?;
+        Ok(())
+    }
+
+    // 输入文本
+    pub fn input_text(&self, text: &str) -> Result<()> {
+        // 保存当前输入法
+        let current_ime = self.get_current_ime().unwrap_or_default();
+
+        // 判断文本类型并切换输入法
+        if self.is_chinese_text(text) {
+            // 需要中文输入法 - 切换到中文输入法
+            self.switch_to_chinese_ime()?;
+        } else {
+            // 需要英文输入法 - 切换到英文输入法（或关闭中文输入法）
+            self.switch_to_english_ime()?;
+        }
+
+        // 等待输入法切换完成
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        // 转义特殊字符
+        let escaped = text
+            .replace("\"", "\\\"")
+            .replace("'", "\\'")
+            .replace(" ", "%s");
+
+        self.run_adb_command(&["shell", "input", "text", &escaped])?;
+
+        // 恢复原来的输入法
+        if !current_ime.is_empty() && !current_ime.contains("not found") {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let _ = self.run_adb_command(&["shell", "ime", "set", &current_ime]);
+        }
+
+        // 不隐藏键盘 - 让后续操作（如点击按钮）自然隐藏，避免在某些页面触发返回
+
+        Ok(())
+    }
+
+    // 获取当前输入法
+    fn get_current_ime(&self) -> Result<String> {
+        let output = self.run_adb_command_output(&["shell", "settings", "get", "secure", "default_input_method"])?;
+        Ok(output.trim().to_string())
+    }
+
+    // 判断文本是否包含中文
+    fn is_chinese_text(&self, text: &str) -> bool {
+        text.chars().any(|c| {
+            // 判断字符是否在中文 Unicode 范围内
+            matches!(c, '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' | '\u{20000}'..='\u{2A6DF}')
+        })
+    }
+
+    // 切换到英文输入法
+    fn switch_to_english_ime(&self) -> Result<()> {
+        // 获取设备上可用的输入法列表
+        let ime_list = self.run_adb_command_output(&["shell", "ime", "list", "-s"]).unwrap_or_default();
+
+        // 优先使用 Appium Unicode IME（最可靠，专门用于自动化测试）
+        if ime_list.contains("io.appium.settings/.UnicodeIME") {
+            if self.run_adb_command(&["shell", "ime", "set", "io.appium.settings/.UnicodeIME"]).is_ok() {
+                return Ok(());
+            }
+        }
+
+        // 尝试切换到 Google 输入法（支持英文）
+        let english_imes = [
+            "com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME",
+            "com.android.inputmethod.latin/.LatinIME",
+            "com.android.inputmethod/.LatinIME",
+        ];
+
+        for ime in &english_imes {
+            if ime_list.contains(ime) {
+                if self.run_adb_command(&["shell", "ime", "set", ime]).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // 切换到中文输入法
+    fn switch_to_chinese_ime(&self) -> Result<()> {
+        // 获取设备上可用的输入法列表
+        let ime_list = self.run_adb_command_output(&["shell", "ime", "list", "-s"]).unwrap_or_default();
+
+        // 尝试切换到中文输入法，按优先级尝试
+        let chinese_imes = [
+            "com.netease.nie.yosemite/.ime.ImeService",  // 网易输入法
+            "com.google.android.inputmethod.pinyin/.PinyinIME",  // Google 拼音
+            "com.sohu.inputmethod.sogou/.SogouIME",  // 搜狗
+            "com.baidu.input/.ImeService",  // 百度
+            "com.iflytek.inputmethod/.FlyIME",  // 讯飞
+        ];
+
+        for ime in &chinese_imes {
+            if ime_list.contains(ime) {
+                if self.run_adb_command(&["shell", "ime", "set", ime]).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    // 按键事件
+    pub fn key_event(&self, key_code: &str) -> Result<()> {
+        self.run_adb_command(&["shell", "input", "keyevent", key_code])?;
+        Ok(())
+    }
+
+    // 返回键
+    pub fn back(&self) -> Result<()> {
+        self.key_event("KEYCODE_BACK")
+    }
+
+    // 回到主屏
+    pub fn home(&self) -> Result<()> {
+        self.key_event("KEYCODE_HOME")
+    }
+
+    // 启动应用
+    pub fn launch_app(&self, package: &str, activity: &str) -> Result<()> {
+        let component = format!("{}/{}", package, activity);
+        self.run_adb_command(&["shell", "am", "start", "-n", &component])?;
+        Ok(())
+    }
+
+    // 停止应用
+    pub fn stop_app(&self, package: &str) -> Result<()> {
+        self.run_adb_command(&["shell", "am", "force-stop", package])?;
+        Ok(())
+    }
+    
+    // 清理输入框
+    pub fn clear_input(&self) -> Result<()> {
+        // 简单粗暴的方法：向前删除20次，向后删除20次
+        // 这样无论光标在哪个位置都能清空内容
+
+        // 向前删除 20 次 (KEYCODE_DEL = 向前删除，相当于 Backspace)
+        for _ in 0..20 {
+            self.key_event("KEYCODE_DEL")?;
+        }
+
+        // 向后删除 20 次 (KEYCODE_FORWARD_DEL = 向后删除，相当于 Delete)
+        for _ in 0..20 {
+            self.key_event("KEYCODE_FORWARD_DEL")?;
+        }
+
+        Ok(())
+    }
+    
+    // 隐藏键盘
+    pub fn hide_keyboard(&self) -> Result<()> {
+        // 尝试返回键隐藏键盘
+        self.key_event("KEYCODE_BACK")?;
+        Ok(())
+    }
+    
+    // 获取设备信息
+    pub fn get_device_info(&self) -> Result<DeviceInfo> {
+        let model = self.get_device_prop("ro.product.model")?;
+        let manufacturer = self.get_device_prop("ro.product.manufacturer")?;
+        let android_version = self.get_device_prop("ro.build.version.release")?;
+        
+        // 获取屏幕尺寸
+        let size_output = self.run_adb_command_output(&["shell", "wm", "size"])?;
+        let (width, height) = self.parse_screen_size(&size_output);
+        
+        Ok(DeviceInfo {
+            id: self.device_id.clone().unwrap_or_default(),
+            model: Some(model),
+            manufacturer: Some(manufacturer),
+            android_version: Some(android_version),
+            screen_width: width,
+            screen_height: height,
+            hardware: None,
+            battery: None,
+            network: None,
+        })
+    }
+    
+    // 获取设备属性
+    fn get_device_prop(&self, prop: &str) -> Result<String> {
+        let output = self.run_adb_command_output(&["shell", "getprop", prop])?;
+        Ok(output.trim().to_string())
+    }
+    
+    // 解析屏幕尺寸
+    fn parse_screen_size(&self, output: &str) -> (u32, u32) {
+        // 输出格式: "Physical size: 1080x1920"
+        if let Some(pos) = output.find(": ") {
+            let size_str = &output[pos + 2..];
+            if let Some(x_pos) = size_str.find('x') {
+                let width = size_str[..x_pos].trim().parse().unwrap_or(1080);
+                let height = size_str[x_pos + 1..].trim().parse().unwrap_or(1920);
+                return (width, height);
+            }
+        }
+        (1080, 1920)  // 默认值
+    }
+    
+    // 执行ADB命令
+    fn run_adb_command(&self, args: &[&str]) -> Result<()> {
+        self.run_adb_command_with_timeout(args, DEFAULT_ADB_TIMEOUT_SECS)?;
+        Ok(())
+    }
+
+    /// 带超时执行 adb 命令（超时即杀进程）。
+    /// adb 没有任何自带超时——`uiautomator dump` 会等 UI idle，在持续动画的页面上能**无限挂**
+    /// （真机实测：设备列表页轮播动画直接把首屏采集挂死），同步调用还会把 tokio 工作线程一起
+    /// 堵住（TUI 卡死、Esc 无响应）。所有 adb 调用一律经此兜底。
+    fn run_adb_command_with_timeout(&self, args: &[&str], timeout_secs: u64) -> Result<String> {
+        use std::process::Stdio;
+        let mut cmd = Command::new(&self.adb_path);
+        if let Some(ref device_id) = self.device_id {
+            cmd.arg("-s").arg(device_id);
+        }
+        cmd.args(args);
+        let what = format!("adb {}", args.join(" "));
+
+        let mut child = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| TkeError::AdbError(format!("执行ADB命令失败: {}", e)))?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    let output = child
+                        .wait_with_output()
+                        .map_err(|e| TkeError::AdbError(format!("读取ADB输出失败: {}", e)))?;
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
+                    }
+                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                }
+                Ok(None) => {
+                    if std::time::Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(TkeError::AdbError(format!(
+                            "「{}」超过 {}s 无响应，已强制终止（uiautomator dump 常因页面持续动画等不到 idle）",
+                            what, timeout_secs
+                        )));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(e) => return Err(TkeError::AdbError(format!("等待ADB命令失败: {}", e))),
+            }
+        }
+    }
+    
+    // 执行ADB命令并获取输出
+    fn run_adb_command_output(&self, args: &[&str]) -> Result<String> {
+        self.run_adb_command_with_timeout(args, DEFAULT_ADB_TIMEOUT_SECS)
+    }
+}
+
+/// adb 命令默认超时（秒）：正常命令毫秒级返回，20s 只作"永不挂死"的兜底
+const DEFAULT_ADB_TIMEOUT_SECS: u64 = 20;
+
+/// uiautomator dump 专用超时（秒）：它等 UI idle、是最常见的挂死点，收得更紧（超时后上层重试一次）
+const UI_DUMP_TIMEOUT_SECS: u64 = 12;

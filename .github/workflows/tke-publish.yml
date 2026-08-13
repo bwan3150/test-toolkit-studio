@@ -1,0 +1,224 @@
+# 构建 tke 三平台二进制 + 打包 skill，发布到 Toolkit Cloud 分发源。
+#
+# 这是**常用**的那个：tke 和 skill 会频繁改，改完跑一次这里，使用者
+# `curl … install.sh | bash` 或 `tke fix` 就能拿到新的。
+# 驱动/Chrome 那些几乎不变的东西在另一个 workflow（tke-deps.yml），按需手动跑。
+#
+# 需要的仓库 Secret：
+#   TKC_TOKEN  —— Toolkit Cloud 的上传凭证（Settings → Secrets → Actions）
+
+name: Publish TKE
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: '构建哪些平台'
+        type: choice
+        default: 'all'
+        options: ['all', 'darwin-arm64', 'darwin-amd64', 'linux-amd64', 'windows-amd64']
+      ocr:
+        description: 'OCR 能力：online=在线(快,推荐) / full=在线+离线tesseract(慢很多) / none=不带'
+        type: choice
+        default: 'online'
+        options: ['online', 'full', 'none']
+      skill_only:
+        description: '只发 skill 与 install.sh，不构建二进制（改文档时用，一分钟就完）'
+        type: boolean
+        default: false
+      dry_run:
+        description: '只构建打包，不上传（验证 workflow 本身）'
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # 分发源根：与 install.sh / tke fix 里的默认值保持一致
+  TKC_TARGET: 'tookit-engine-resource:tke/'
+  ENGINE_DIR: bin-proj/toolkit-engine
+
+jobs:
+  build:
+    if: ${{ !inputs.skill_only }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            runner: macos-14        # Apple Silicon
+          - platform: darwin-amd64
+            runner: macos-13        # Intel
+          - platform: linux-amd64
+            runner: ubuntu-22.04    # 用 22.04 而非 latest：glibc 更老 = 兼容更多用户机器
+          - platform: windows-amd64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 只构建选中的平台（choice 传 all 时全建）
+      - name: 是否构建本平台
+        id: gate
+        shell: bash
+        run: |
+          if [ "${{ inputs.targets }}" = "all" ] || [ "${{ inputs.targets }}" = "${{ matrix.platform }}" ]; then
+            echo "go=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=0" >> "$GITHUB_OUTPUT"
+            echo "跳过 ${{ matrix.platform }}"
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.gate.outputs.go == '1'
+
+      - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.go == '1'
+        with:
+          workspaces: ${{ env.ENGINE_DIR }}
+          key: ${{ matrix.platform }}-${{ inputs.ocr }}
+
+      # 离线 OCR 要从源码编译 tesseract + leptonica，得先有 cmake/pkg-config
+      - name: 装离线 OCR 的构建依赖
+        if: steps.gate.outputs.go == '1' && inputs.ocr == 'full' && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake pkg-config
+
+      - name: 构建 tke
+        if: steps.gate.outputs.go == '1'
+        shell: bash
+        working-directory: ${{ env.ENGINE_DIR }}
+        run: |
+          set -euo pipefail
+          # 版本号由 build.rs 从环境变量读（各 build 脚本平时干的事，这里直接给）
+          BUILD_VERSION="$(node -p "require('../../package.json').version" 2>/dev/null \
+            || grep -m1 '"version"' ../../package.json | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
+          export BUILD_VERSION
+          echo "版本 $BUILD_VERSION / OCR ${{ inputs.ocr }}"
+
+          case "${{ inputs.ocr }}" in
+            full)   FLAGS="" ;;                                          # 默认特性 = 在线 + 离线
+            online) FLAGS="--no-default-features --features ocr-online" ;;
+            none)   FLAGS="--no-default-features" ;;
+          esac
+          cargo build --release $FLAGS
+
+      # gz 单文件，与分发布局 bin/<platform>/<name>.gz 一致（install.sh 与 tke fix 都按这个取）
+      - name: 打包
+        if: steps.gate.outputs.go == '1'
+        shell: bash
+        working-directory: ${{ env.ENGINE_DIR }}
+        run: |
+          set -euo pipefail
+          BIN=target/release/tke
+          [ "${{ runner.os }}" = "Windows" ] && BIN=target/release/tke.exe
+          # 产物跑不起来就是构建失败，别让它悄悄进分发源
+          "$BIN" --version
+          mkdir -p out/bin/${{ matrix.platform }}
+          gzip -c "$BIN" > out/bin/${{ matrix.platform }}/tke.gz
+          ls -lh out/bin/${{ matrix.platform }}/
+
+      - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.go == '1'
+        with:
+          name: tke-${{ matrix.platform }}
+          path: ${{ env.ENGINE_DIR }}/out/bin/${{ matrix.platform }}/tke.gz
+          retention-days: 3
+
+  publish:
+    needs: [build]
+    # skill_only 时 build 被跳过，这里仍要跑
+    if: ${{ always() && !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 收集二进制
+        if: ${{ !inputs.skill_only }}
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: tke-*
+
+      - name: 组装分发目录
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/skill dist/bin
+
+          # skill 文件：与平台无关，一份就够
+          tar --exclude=".DS_Store" -czf dist/skill/tke-ui-test.tar.gz \
+              -C "${ENGINE_DIR}/skill" tke-ui-test
+          cp "${ENGINE_DIR}/skill/install.sh" dist/install.sh
+
+          # 二进制：artifacts/tke-<platform>/tke.gz → dist/bin/<platform>/tke.gz
+          if [ -d artifacts ]; then
+            for d in artifacts/tke-*; do
+              [ -d "$d" ] || continue
+              p="${d#artifacts/tke-}"
+              mkdir -p "dist/bin/$p"
+              cp "$d/tke.gz" "dist/bin/$p/tke.gz"
+            done
+          fi
+
+          # VERSION：第一行是 tke 版本（体检拿它比对），build 戳是**破 CDN 缓存的键**
+          # （Cloudflare 缓存 4h 且不认 no-cache，只有变化的查询参数能破，见 P-19）
+          VER="$(grep -m1 '"version"' package.json | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
+          {
+            echo "tke $VER"
+            echo "ocr: ${{ inputs.ocr }}"
+            echo "build: $(date -u +%Y%m%d-%H%M%S)"
+          } > dist/VERSION
+
+          echo "== 待上传 =="
+          find dist -type f | sort
+          cat dist/VERSION
+
+      - name: 上传到 Toolkit Cloud
+        if: ${{ !inputs.dry_run }}
+        env:
+          TKC_TOKEN: ${{ secrets.TKC_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TKC_TOKEN:-}" ]; then
+            echo "❌ 没有配 TKC_TOKEN（Settings → Secrets and variables → Actions）" >&2
+            exit 1
+          fi
+          up() {
+            # 源目录带尾斜杠 = 只传其内容；写成 `.` 会让 key 里混进 ./ 而 502（P-21）
+            curl -fsSL https://cloud.test-toolkit.app/script/upload.sh \
+              | bash -s -- "$@" "${TKC_TARGET}"
+          }
+
+          # 顺序有讲究：**VERSION 必须最后传**。它是破缓存的键，先传的话使用者会拿到
+          # 新键去取还没上传完的文件。
+          [ -d dist/bin ] && up dist/bin
+          up dist/skill dist/install.sh
+          up dist/VERSION
+
+      - name: 复验分发源
+        if: ${{ !inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke
+          # 带随机参数破缓存,否则可能读到 4 小时前的旧 VERSION
+          REMOTE="$(curl -fsSL --max-time 30 "$BASE/VERSION?t=$RANDOM$RANDOM")"
+          echo "$REMOTE"
+          # 平台对不存在的路径回落 200 + HTML（SPA 兜底），所以要验内容而不是状态码（P-19）
+          case "$REMOTE" in
+            tke\ *) echo "✅ VERSION 已生效" ;;
+            *) echo "❌ 取回的不是 VERSION，多半没传上去" >&2; exit 1 ;;
+          esac
+
+          BUILD_KEY="$(printf '%s' "$REMOTE" | sed -n 's/^build: *//p' | head -1)"
+          for f in $(cd dist && find bin skill -type f 2>/dev/null); do
+            url="$BASE/$f?b=$BUILD_KEY"
+            head2="$(curl -fsSL --max-time 120 "$url" | head -c2 | od -An -tx1 | tr -d ' \n')"
+            if [ "$head2" = "1f8b" ]; then
+              echo "  ✅ $f"
+            else
+              echo "  ❌ $f 取回的不是 gzip（装到网页了？）" >&2
+              exit 1
+            fi
+          done
+          echo "使用者侧：curl -fsSL $BASE/install.sh | bash"

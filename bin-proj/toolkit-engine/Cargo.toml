@@ -1,0 +1,71 @@
+[package]
+name = "tke"
+version = "0.0.0"
+edition = "2021"
+authors = ["Eric Wang"]
+description = "Toolkit Engine - CLI tool for automated testing"
+
+[dependencies]
+# CLI框架
+clap = { version = "4.5", features = ["derive"] }
+# 异步运行时
+tokio = { version = "1.40", features = ["full"] }
+# 错误处理
+anyhow = "1.0"
+thiserror = "1.0"
+# 序列化/反序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+# XML解析
+quick-xml = "0.36"
+# 图像处理
+image = "0.25"
+imageproc = "0.25"
+# 截图标注文字渲染
+ab_glyph = "0.2"
+# TOML 解析 (flow 定义 / --config)
+toml = "0.8"
+# WebDriver HTTP 客户端 (同步, 避免 tokio 运行时冲突)
+ureq = { version = "2", features = ["json"] }
+# 并行处理
+rayon = "1.10"
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# 路径处理
+dirs = "5.0"
+# 正则表达式
+regex = "1.10"
+# 进程执行
+which = "6.0"
+# 时间处理
+chrono = { version = "0.4", features = ["serde"] }
+# .tklib 脚本元素包(zip 容器,stored 不压缩——png 已压缩)
+# deflate 必须开：Chrome for Testing 官方 zip 是 deflate 压的，
+# 只留 stored 会在解压时报 "Compression method not supported"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# gzip 解压：tke fix 从分发源取的二进制是 .gz。纯 Rust、编译快，
+# 比依赖系统 gunzip 稳（Windows 上没有）
+flate2 = "1"
+# SQLite数据库
+rusqlite = { version = "0.31", features = ["bundled"] }
+# OCR相关
+tesseract-rs = { version = "0.1.20", features = ["build-tesseract"], optional = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
+base64 = "0.22"
+# AI 通用客户端：统一接口对接 openai/anthropic/gemini/deepseek/doubao/qwen
+# （doubao/qwen 走 OpenAI 兼容端点，经 base_url 指定）
+genai = "0.6"
+# 终端 TUI（harness 交互式前端）：ratatui 渲染 + crossterm 终端控制/键盘事件
+ratatui = "0.29"
+crossterm = "0.28"
+# trait 内 async 方法（Frontend 前端抽象用）
+async-trait = "0.1"
+
+[features]
+# 默认启用在线和离线 OCR
+default = ["ocr-online", "ocr-offline"]
+# 在线 OCR 功能
+ocr-online = ["reqwest"]
+# 离线 OCR 功能（Tesseract）
+ocr-offline = ["tesseract-rs"]

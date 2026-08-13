@@ -36,13 +36,13 @@ function registerWindowHandlers(mainWindow) {
 
   // 导航到主应用
   ipcMain.handle('navigate-to-app', async () => {
-    mainWindow.loadFile('renderer/html/index.html');
+    mainWindow.loadFile('frontend/html/index.html');
     return { success: true };
   });
 
   // 导航到登录页
   ipcMain.handle('navigate-to-login', async () => {
-    mainWindow.loadFile('renderer/html/login.html');
+    mainWindow.loadFile('frontend/html/login.html');
     return { success: true };
   });
 

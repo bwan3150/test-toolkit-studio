@@ -976,11 +976,9 @@ function getTkePath(app) {
   const tkeBinaryName = platform === 'win32' ? 'tke.exe' : 'tke';
   
   if (app.isPackaged) {
-    // 生产模式：process.resourcesPath/[platform]/toolkit-engine/tke
-    return path.join(process.resourcesPath, platform, 'toolkit-engine', tkeBinaryName);
+    return path.join(process.resourcesPath, platform, tkeBinaryName);
   } else {
-    // 开发模式：resources/[platform]/toolkit-engine/tke
-    return path.join(app.getAppPath(), 'resources', platform, 'toolkit-engine', tkeBinaryName);
+    return path.join(app.getAppPath(), 'bin', platform, tkeBinaryName);
   }
 }
 

@@ -58,8 +58,9 @@
       "package-lock.json",
       "build/**/*",
       "assets/**/*",
-      "renderer/**/*",
+      "frontend/**/*",
       "handlers/**/*",
+      "backend/**/*",
       "!**/.DS_Store",
       "!**/Thumbs.db",
       "!**/*.log",
@@ -94,20 +95,10 @@
           ]
         }
       ],
-      "asarUnpack": [
-        "resources/darwin/**/*"
-      ],
       "extraResources": [
         {
-          "from": "resources/darwin",
+          "from": "bin/darwin",
           "to": "darwin",
-          "filter": [
-            "**/*"
-          ]
-        },
-        {
-          "from": "resources/public",
-          "to": "public",
           "filter": [
             "**/*"
           ]
@@ -117,20 +108,10 @@
     "win": {
       "target": "nsis",
       "icon": "assets/logo/icon.ico",
-      "asarUnpack": [
-        "resources/win32/**/*"
-      ],
       "extraResources": [
         {
-          "from": "resources/win32",
+          "from": "bin/win32",
           "to": "win32",
-          "filter": [
-            "**/*"
-          ]
-        },
-        {
-          "from": "resources/public",
-          "to": "public",
           "filter": [
             "**/*"
           ]
@@ -140,20 +121,10 @@
     "linux": {
       "target": "AppImage",
       "icon": "assets/logo/toolkit_logo.png",
-      "asarUnpack": [
-        "resources/linux/**/*"
-      ],
       "extraResources": [
         {
-          "from": "resources/linux",
+          "from": "bin/linux",
           "to": "linux",
-          "filter": [
-            "**/*"
-          ]
-        },
-        {
-          "from": "resources/public",
-          "to": "public",
           "filter": [
             "**/*"
           ]

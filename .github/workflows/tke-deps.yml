@@ -1,0 +1,190 @@
+# 把 tke 的运行依赖（Chrome for Testing / chromedriver / adb / aapt / go-ios）
+# 抓到 Toolkit Cloud 分发源，供 `install.sh` 与 `tke fix` 取用。
+#
+# 这是**低频**的那个：这些东西几乎不变，换版本时手动跑一次就行。
+# 平时改 tke 或 skill 走 tke-publish.yml。
+#
+# 自建分发源最实在的价值就在这里：**chromedriver 与 Chrome 从同一份官方清单取，
+# 版本必然配对**，使用者不必再自己去查对应关系（版本不配对是这套东西最常见的坑）。
+#
+# 需要的仓库 Secret：TKC_TOKEN
+
+name: Publish TKE Deps
+
+on:
+  workflow_dispatch:
+    inputs:
+      what:
+        description: '发什么'
+        type: choice
+        default: 'all'
+        options: ['all', 'chrome+driver', 'android', 'ios']
+      chrome_channel:
+        description: 'Chrome for Testing 通道（版本由官方清单决定，driver 自动配对）'
+        type: choice
+        default: 'Stable'
+        options: ['Stable', 'Beta']
+      platforms:
+        description: '哪些平台（逗号分隔；留空=全部）'
+        default: 'darwin-arm64,darwin-amd64,linux-amd64,windows-amd64'
+      dry_run:
+        description: '只下载校验，不上传'
+        type: boolean
+        default: false
+
+env:
+  TKC_TARGET: 'tookit-engine-resource:tke/'
+
+jobs:
+  deps:
+    runs-on: ubuntu-latest   # 全部是下载转存，不需要在目标平台上跑
+    steps:
+      - name: 抓取并转存
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/chrome dist/bin
+          WHAT="${{ inputs.what }}"
+          PLATS="${{ inputs.platforms }}"
+          [ -z "$PLATS" ] && PLATS="darwin-arm64,darwin-amd64,linux-amd64,windows-amd64"
+
+          # 我们的平台名 → 官方各家的平台名
+          # cft: Chrome for Testing 清单里的名字；pt: Android platform-tools;
+          # bt: build-tools; ios: go-ios 的资产名
+          cft_of() { case "$1" in
+            darwin-arm64) echo mac-arm64 ;; darwin-amd64) echo mac-x64 ;;
+            linux-amd64) echo linux64 ;;    windows-amd64) echo win64 ;;
+          esac; }
+          pt_of() { case "$1" in
+            darwin-*) echo darwin ;; linux-*) echo linux ;; windows-*) echo windows ;;
+          esac; }
+          bt_of() { case "$1" in
+            darwin-*) echo macosx ;; linux-*) echo linux ;; windows-*) echo windows ;;
+          esac; }
+          ios_of() { case "$1" in
+            darwin-*) echo mac ;; linux-*) echo linux ;; windows-*) echo win ;;
+          esac; }
+
+          # 下载 + 验文件头：分发/下载源出错时经常回一个 HTML 错误页，
+          # 只看 curl 退出码会把网页当二进制转存上去（同 P-19）
+          fetch() {
+            local url="$1" out="$2" magic="$3"
+            curl -fsSL --retry 3 --max-time 900 "$url" -o "$out"
+            local head2
+            head2="$(head -c2 "$out" | od -An -c | tr -d ' \n')"
+            case "$magic:$head2" in
+              zip:PK) : ;;
+              *) echo "❌ $url 下到的不是 $magic：$head2" >&2; rm -f "$out"; return 1 ;;
+            esac
+          }
+
+          # ── Chrome for Testing + 配对的 chromedriver ──
+          if [ "$WHAT" = "all" ] || [ "$WHAT" = "chrome+driver" ]; then
+            curl -fsSL --max-time 60 \
+              https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json \
+              -o cft.json
+            CH="${{ inputs.chrome_channel }}"
+            CH_VER="$(python3 -c "import json;print(json.load(open('cft.json'))['channels']['$CH']['version'])")"
+            echo "== Chrome for Testing ${{ inputs.chrome_channel }} $CH_VER =="
+
+            for p in ${PLATS//,/ }; do
+              cft="$(cft_of "$p")"
+              [ -z "$cft" ] && continue
+
+              # 两个 URL 从同一份清单的同一个版本里取 —— 配对靠这个保证
+              for kind in chrome chromedriver; do
+                # 单行写法：YAML 的 `run: |` 块里顶格的行会把块截断，多行 python 不能内嵌
+                url="$(python3 -c "import json;d=json.load(open('cft.json'))['channels']['$CH']['downloads']['$kind'];print(next(x['url'] for x in d if x['platform']=='$cft'))")"
+                fetch "$url" "$kind-$cft.zip" zip
+              done
+
+              # Chrome：官方 zip 解压出来就是 chrome-<plat>/ 结构，正是我们的约定，
+              # 直接转存，不重新打包（install.sh 与 tke fix 都按原样解压）
+              mv "chrome-$cft.zip" "dist/chrome/chrome-$cft.zip"
+
+              # chromedriver：分发布局是单文件 gz，要从 zip 里取出来
+              unzip -qo "chromedriver-$cft.zip" -d cd-tmp
+              drv="$(find cd-tmp -type f -name 'chromedriver*' | head -1)"
+              mkdir -p "dist/bin/$p"
+              gzip -c "$drv" > "dist/bin/$p/chromedriver.gz"
+              rm -rf cd-tmp "chromedriver-$cft.zip"
+              echo "  ✅ $p chrome + chromedriver $CH_VER"
+            done
+            echo "$CH_VER" > chrome_version.txt
+          fi
+
+          # ── 安卓：adb（platform-tools）+ aapt & libc++.so（build-tools）──
+          if [ "$WHAT" = "all" ] || [ "$WHAT" = "android" ]; then
+            for p in ${PLATS//,/ }; do
+              pt="$(pt_of "$p")"; bt="$(bt_of "$p")"
+              mkdir -p "dist/bin/$p"
+
+              fetch "https://dl.google.com/android/repository/platform-tools-latest-$pt.zip" "pt-$p.zip" zip
+              unzip -qo "pt-$p.zip" -d "pt-$p"
+              adb="$(find "pt-$p" -maxdepth 2 -type f \( -name adb -o -name adb.exe \) | head -1)"
+              gzip -c "$adb" > "dist/bin/$p/adb.gz"
+
+              # aapt 在 build-tools 里（不在 platform-tools）。Linux 版 aapt 单独跑不了——
+              # 缺 libc++.so，但它的 RUNPATH 含 $ORIGIN，与 tke 同目录就能加载，所以一起带上。
+              if fetch "https://dl.google.com/android/repository/build-tools_r34-$bt.zip" "bt-$p.zip" zip; then
+                unzip -qo "bt-$p.zip" -d "bt-$p"
+                for n in aapt aapt.exe libc++.so; do
+                  f="$(find "bt-$p" -maxdepth 3 -type f -name "$n" | head -1)"
+                  [ -n "$f" ] && gzip -c "$f" > "dist/bin/$p/${n}.gz" && echo "  ✅ $p $n"
+                done
+              else
+                echo "  ⚠️  $p build-tools 取不到，aapt 跳过（不影响 adb）"
+              fi
+              rm -rf "pt-$p" "bt-$p" "pt-$p.zip" "bt-$p.zip"
+              echo "  ✅ $p adb"
+            done
+          fi
+
+          # ── iOS：go-ios ──
+          if [ "$WHAT" = "all" ] || [ "$WHAT" = "ios" ]; then
+            for p in ${PLATS//,/ }; do
+              ios="$(ios_of "$p")"
+              mkdir -p "dist/bin/$p"
+              if fetch "https://github.com/danielpaulus/go-ios/releases/latest/download/go-ios-$ios.zip" "gi-$p.zip" zip; then
+                unzip -qo "gi-$p.zip" -d "gi-$p"
+                # 三个平台三种结构（实测）：linux 的 zip 里是 ios-amd64 + ios-arm64
+                # **两个架构**，mac 是单个 ios，win 是 ios.exe。
+                # 必须**按优先级逐个找**——`find -o | head -1` 取的是目录遍历顺序，
+                # 在 linux 那个双架构包上会选错架构。
+                arch="${p##*-}"
+                f=""
+                for cand in "ios-$arch" ios ios.exe; do
+                  f="$(find "gi-$p" -type f -name "$cand" | head -1)"
+                  [ -n "$f" ] && break
+                done
+                if [ -n "$f" ]; then
+                  gzip -c "$f" > "dist/bin/$p/go-ios.gz"
+                  echo "  ✅ $p go-ios ($(basename "$f"))"
+                else
+                  echo "  ⚠️  $p go-ios 包里没找到可用二进制（结构变了？）" >&2
+                fi
+              fi
+              rm -rf "gi-$p" "gi-$p.zip"
+            done
+          fi
+
+          echo "== 待上传 =="
+          find dist -type f -printf '%s\t%p\n' | sort -k2
+
+      - name: 上传到 Toolkit Cloud
+        if: ${{ !inputs.dry_run }}
+        env:
+          TKC_TOKEN: ${{ secrets.TKC_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TKC_TOKEN:-}" ]; then
+            echo "❌ 没有配 TKC_TOKEN" >&2; exit 1
+          fi
+          # 源目录带尾斜杠 = 只传其内容；写 `.` 会让 key 混进 ./ 而 502（P-21）
+          up() { curl -fsSL https://cloud.test-toolkit.app/script/upload.sh | bash -s -- "$@" "${TKC_TARGET}"; }
+          [ -d dist/bin ] && up dist/bin
+          [ -n "$(ls -A dist/chrome 2>/dev/null)" ] && up dist/chrome
+          echo
+          echo "⚠️  依赖已更新，但 VERSION 没动 —— 使用者的 CDN 缓存最长 4 小时后才会看到新驱动。"
+          echo "    要立刻生效，去跑一次 Publish TKE（它会刷新 VERSION 里的 build 戳）。"
