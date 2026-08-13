@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # 把 skill 与二进制打包成 install.sh 期望的分发布局，输出到 dist/，然后同步到 S3/CDN。
 #
-#   ./publish.sh                      # 打包当前平台的二进制 + skill
+#   ./publish.sh                      # 日常：只打 tke + skill + install.sh + VERSION
+#   ./publish.sh --with-drivers       # 连驱动一起打（adb/chromedriver/aapt/go-ios，换版本时才要）
+#   ./publish.sh --with-chrome        # 连 Chrome for Testing 一起打（几百 MB，很慢）
+#   ./publish.sh --full               # = --with-drivers --with-chrome
 #   ./publish.sh --out /tmp/dist      # 指定输出目录
-#   ./publish.sh --with-chrome        # 连 Chrome for Testing 一起打（600MB+，慢）
+#
+# 默认不打驱动/Chrome：它们几乎不变，云上已有的不会因为没重传而消失，
+# 每次都传纯属浪费时间和带宽。换驱动版本时再显式带上。
 #
 # 产出布局（install.sh 按这个约定去取）：
 #   dist/
@@ -21,11 +26,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_BIN="$(cd "$SCRIPT_DIR/../../.." && pwd)/bin"     # <studio>/bin
 OUT="$SCRIPT_DIR/dist"
 WITH_CHROME=0
+WITH_DRIVERS=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --out) OUT="${2:?}"; shift 2 ;;
         --with-chrome) WITH_CHROME=1; shift ;;
+        --with-drivers) WITH_DRIVERS=1; shift ;;
+        --full) WITH_DRIVERS=1; WITH_CHROME=1; shift ;;
         -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "未知参数: $1" >&2; exit 2 ;;
     esac
@@ -58,8 +66,11 @@ tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/ui-check.tar.
 echo "   ✅ skill/ui-check.tar.gz"
 
 # —— 二进制 ——（逐个 gzip，install.sh 按名字取；缺的跳过）
+# 默认只打 tke —— 驱动几乎不变，云上已有的不会因为没重传而消失。
 # libc++.so 是 Linux 版 aapt 的运行时依赖（aapt 的 RUNPATH 含 ${ORIGIN}，放同目录即可加载）
-for name in tke chromedriver adb aapt libc++.so go-ios; do
+BINS="tke"
+[ "$WITH_DRIVERS" = "1" ] && BINS="tke chromedriver adb aapt libc++.so go-ios"
+for name in $BINS; do
     if [ -f "$SRC/$name" ]; then
         gzip -c "$SRC/$name" > "$OUT/bin/$PLATFORM/$name.gz"
         echo "   ✅ bin/$PLATFORM/$name.gz  ($(du -h "$OUT/bin/$PLATFORM/$name.gz" | cut -f1))"
@@ -85,6 +96,7 @@ if [ "$WITH_CHROME" = "1" ]; then
 else
     echo "   -- Chrome 未打包（要打加 --with-chrome）"
 fi
+[ "$WITH_DRIVERS" = "1" ] || echo "   -- 驱动未打包（要打加 --with-drivers；换驱动版本时才需要）"
 
 # —— 版本留痕：让人能看出这批是什么 ——
 "$SRC/tke" --version > "$OUT/VERSION" 2>/dev/null || echo "unknown" > "$OUT/VERSION"
