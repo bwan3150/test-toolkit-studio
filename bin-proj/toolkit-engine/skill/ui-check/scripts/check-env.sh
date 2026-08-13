@@ -55,6 +55,28 @@ else
     echo "  ⚠️  没有 adb（不做安卓检查就无所谓）"
 fi
 
+echo "== 版本 =="
+# 跟分发源比一下版本,免得 skill 一直用着旧 tke。
+# 3 秒超时、失败静默——离线/内网照常能用,不为这个卡住检查。
+# 注意:存储平台对不存在的路径回落 200 + HTML,所以必须验内容长得像不像版本号,不能只看状态码。
+TKE_BASE_URL="${TKE_BASE_URL:-https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke}"
+LOCAL_VER="$(tke --version 2>/dev/null | head -1)"
+# 带随机参数：Cloudflare 缓存 4h 且不认 no-cache 请求头，不破缓存就永远看到旧版本号
+REMOTE_VER="$(curl -fsSL --max-time 3 "$TKE_BASE_URL/VERSION?t=$$" 2>/dev/null | head -1)"
+case "$REMOTE_VER" in
+    tke\ *)
+        if [ "$REMOTE_VER" = "$LOCAL_VER" ]; then
+            echo "  ✅ $LOCAL_VER（已是分发源上的版本）"
+        else
+            echo "  ⬆️  本地 $LOCAL_VER ／ 分发源 $REMOTE_VER"
+            echo "     更新：curl -fsSL $TKE_BASE_URL/install.sh | bash"
+        fi
+        ;;
+    *)
+        echo "  ℹ️  $LOCAL_VER（没连上分发源，跳过版本检查）"
+        ;;
+esac
+
 echo "== 运行模式 =="
 if [ "$(uname)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     echo "  ℹ️  无桌面 → 浏览器自动走无头"

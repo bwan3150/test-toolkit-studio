@@ -41,6 +41,12 @@
 - **skill 补完备**:`reference/tke-commands.md` + `reference/tks-syntax.md`(AI 按需读),
   主文件补安卓 `app focus/list` 拿包名(此前完全没提,安卓场景会卡死)
 
+- **分发已上线**(2026-08-13):资源在 Toolkit Cloud,下载根
+  `https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke`。
+  mac+linux 两平台二进制、两平台 Chrome 全齐。一行安装端到端验通(含用装出来的 tke 实跑检查)。
+  **两个坑记 P-19**:SPA 兜底 200(不验文件头就装到网页)、Cloudflare 缓存 4h 不认 no-cache
+  (靠 VERSION 里的 build 戳做 `?b=` 缓存键破解)
+
 ## 没做完
 
 - **ADR-0011 harness 侧的 AI 行为真机未验**(本机无 `[ai]` key):

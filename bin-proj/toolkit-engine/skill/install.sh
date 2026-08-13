@@ -13,7 +13,7 @@
 
 set -uo pipefail
 
-DEFAULT_BASE_URL="https://dl.test-toolkit.app/tke"   # ← 换成你的 S3 / CDN 地址
+DEFAULT_BASE_URL="https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke"
 BASE_URL="${TKE_BASE_URL:-$DEFAULT_BASE_URL}"
 TKE_HOME="${TKE_HOME:-$HOME/.tke/bin}"
 PROFILE="all"
@@ -62,14 +62,48 @@ need unzip
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# 下载到指定路径；404 等失败返回非 0（不写出半个文件）
-fetch() {
-    local url="$1" out="$2"
-    curl -fsSL --retry 2 --max-time 900 "$url" -o "$out"
+# 文件头校验：**存储平台对不存在的路径会回落 200 + 一段 HTML**（SPA 兜底），
+# 所以 curl 的 -f 完全拦不住——不验内容就会把网页当成二进制装进去。
+magic_ok() {
+    local f="$1" kind="$2"
+    [ -s "$f" ] || return 1
+    case "$kind" in
+        gz)   [ "$(head -c2 "$f" | od -An -tx1 | tr -d ' \n')" = "1f8b" ] ;;
+        zip)  [ "$(head -c2 "$f")" = "PK" ] ;;
+        json) head -c1 "$f" | grep -q '{' ;;
+        *)    return 0 ;;
+    esac
 }
+
+# 下载 + 按类型验内容；不合格一律当失败（并删掉半成品）
+fetch() {
+    local url="$1" out="$2" kind="${3:-any}"
+    curl -fsSL --retry 2 --max-time 900 "$url" -o "$out" || { rm -f "$out"; return 1; }
+    if ! magic_ok "$out" "$kind"; then
+        rm -f "$out"
+        return 1
+    fi
+    return 0
+}
+
+# —— 缓存键 ——
+# 分发走 Cloudflare：max-age 4h，且**不认 Cache-Control: no-cache 请求头**，
+# 唯一可靠的破缓存手段是变化的查询参数。
+# 先用随机数取一次 VERSION（它必须是最新的），再用里面的 build 戳作为后续所有下载的键：
+# 发布过新版 → 戳变 → 自然拿到新文件；没发新版 → 戳不变 → 照常命中 CDN 缓存。
+CACHE_BUST="?t=$$-$(od -An -N4 -tu4 </dev/urandom 2>/dev/null | tr -d ' ' || echo 0)"
+REMOTE_VERSION="$(curl -fsSL --max-time 20 "$BASE_URL/VERSION$CACHE_BUST" 2>/dev/null)"
+BUILD_KEY="$(printf '%s' "$REMOTE_VERSION" | sed -n 's/^build: *//p' | head -1)"
+if [ -n "$BUILD_KEY" ]; then
+    Q="?b=$BUILD_KEY"
+else
+    # 分发源没有 build 戳（老版本布局）→ 退回随机数，宁可不走缓存也不装到旧文件
+    Q="$CACHE_BUST"
+fi
 
 echo "== ui-check skill 安装 =="
 echo "   来源     $BASE_URL"
+[ -n "$REMOTE_VERSION" ] && echo "   版本     $(printf '%s' "$REMOTE_VERSION" | head -1)"
 echo "   平台     $PLATFORM"
 echo "   profile  $PROFILE"
 
@@ -82,12 +116,13 @@ fi
 mkdir -p "$SKILL_ROOT"
 echo
 echo "-- skill 文件 → $SKILL_ROOT/ui-check"
-if fetch "$BASE_URL/skill/ui-check.tar.gz" "$TMP/skill.tar.gz"; then
+if fetch "$BASE_URL/skill/ui-check.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
     rm -rf "$SKILL_ROOT/ui-check"
-    tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT"
+    tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT" || { echo "   ❌ skill 包解压失败" >&2; exit 1; }
     echo "   ✅ 已安装"
 else
-    echo "   ❌ 下载失败：$BASE_URL/skill/ui-check.tar.gz" >&2
+    echo "   ❌ 取不到 skill 包：$BASE_URL/skill/ui-check.tar.gz" >&2
+    echo "      （若返回的是网页而非文件，多半是这个路径还没上传）" >&2
     exit 1
 fi
 
@@ -100,9 +135,9 @@ echo "-- tke 及驱动 → $TKE_HOME"
 
 install_bin() {
     local name="$1" required="$2"
-    local url="$BASE_URL/bin/$PLATFORM/$name.gz"
-    if fetch "$url" "$TMP/$name.gz"; then
-        gunzip -f "$TMP/$name.gz"
+    local url="$BASE_URL/bin/$PLATFORM/$name.gz$Q"
+    if fetch "$url" "$TMP/$name.gz" gz; then
+        gunzip -f "$TMP/$name.gz" || { echo "   ❌ $name 解压失败（文件损坏？）" >&2; return 1; }
         # 先删后拷：覆盖运行中的二进制会 ETXTBSY(Linux) / 签名失配被杀(macOS)
         rm -f "$TKE_HOME/$name"
         mv "$TMP/$name" "$TKE_HOME/$name"
@@ -122,9 +157,9 @@ install_bin() {
 install_bin tke yes || exit 1
 case "$PROFILE" in
     web)     install_bin chromedriver yes || exit 1 ;;
-    android) install_bin adb yes || exit 1; install_bin aapt no ;;
+    android) install_bin adb yes || exit 1; install_bin aapt no; install_bin libc++.so no ;;
     ios)     install_bin go-ios yes || exit 1 ;;
-    all)     install_bin chromedriver no; install_bin adb no; install_bin aapt no; install_bin go-ios no ;;
+    all)     install_bin chromedriver no; install_bin adb no; install_bin aapt no; install_bin libc++.so no; install_bin go-ios no ;;
 esac
 
 # —— 3. Chrome for Testing（只有要测网页才需要）——
@@ -133,7 +168,7 @@ if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
     echo "-- Chrome for Testing → $CHROME_DIR/$CHROME_PKG"
     if [ -d "$CHROME_DIR/$CHROME_PKG" ]; then
         echo "   ✅ 已存在，跳过（要换版本先删掉这个目录）"
-    elif fetch "$BASE_URL/chrome/$CHROME_PKG.zip" "$TMP/chrome.zip"; then
+    elif fetch "$BASE_URL/chrome/$CHROME_PKG.zip$Q" "$TMP/chrome.zip" zip; then
         mkdir -p "$CHROME_DIR"
         unzip -q -o "$TMP/chrome.zip" -d "$CHROME_DIR"
         # macOS：清隔离属性，否则自动化下会卡在授权弹窗且无任何报错
