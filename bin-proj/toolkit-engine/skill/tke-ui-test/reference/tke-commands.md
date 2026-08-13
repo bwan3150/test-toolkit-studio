@@ -21,7 +21,7 @@ tke -d web refresh --crop 100,200,400,500 --out /tmp/x.png   # 剪裁某块区�
 **优先用 `steps --log`**（会留证据），`control` 只在不需要留痕时用：
 
 ```bash
-tke -d web steps '点击 [{640, 380}]' --log .tke-check/
+tke -d web steps '点击 [{640, 380}]' --log .tke-ui-test/
 tke -d web control click 640,380      # 等价操作，但什么都不留
 ```
 

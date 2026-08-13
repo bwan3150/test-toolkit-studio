@@ -148,8 +148,8 @@ bash .claude/skills/tke-ui-test/scripts/check-env.sh
 
 它会自己走：体检 → 看页面 → 操作（带证据）→ 判断 → 报结论 + 证据目录。
 
-证据落在 `.tke-check/steps_<时间戳>/`（截图序列 + 页面结构 + log.json）。
-**建议把 `.tke-check/` 加进 `.gitignore`**——它是本次检查的证据，不是要提交的资产。
+证据落在 `.tke-ui-test/steps_<时间戳>/`（截图序列 + 页面结构 + log.json）。
+**建议把 `.tke-ui-test/` 加进 `.gitignore`**——它是本次检查的证据，不是要提交的资产。
 
 ## 常见问题
 

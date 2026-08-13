@@ -83,7 +83,7 @@ tke -d web steps \
   '点击 [{640, 380}]' \
   '输入 [{603, 112}, "测试内容"]' \
   '等待 [1s]' \
-  --log .tke-check/
+  --log .tke-ui-test/
 ```
 
 然后 `tke -d web fetch` 看页面变成什么样，自己判断成没成。

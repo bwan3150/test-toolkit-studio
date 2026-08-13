@@ -66,10 +66,10 @@ tke -d web fetch --interactive
 ### 2. 操作——**用 `steps` 而不是 `control`，因为它会留证据**
 
 ```bash
-tke -d web steps '点击 [{640, 380}]' --log .tke-check/
+tke -d web steps '点击 [{640, 380}]' --log .tke-ui-test/
 ```
 
-`--log` 会把这批操作的**标注截图 + 页面结构 + 日志**落到 `.tke-check/steps_<时间戳>/`。
+`--log` 会把这批操作的**标注截图 + 页面结构 + 日志**落到 `.tke-ui-test/steps_<时间戳>/`。
 用 `control` 也能操作，但**什么都不会留下**，人就没法复核。
 
 **一次 `steps` 可以传多条指令**，推荐按"一个决策轮"批量执行——证据目录也更好看：
@@ -80,7 +80,7 @@ tke -d web steps \
   '输入 [{603, 112}, "测试内容"]' \
   '点击 [{927, 112}]' \
   '等待 [1s]' \
-  --log .tke-check/
+  --log .tke-ui-test/
 ```
 
 指令语法（`命令 [参数, 参数]`，无参命令写裸命令）：
@@ -112,7 +112,7 @@ tke 无状态、每条命令自带 `-d`，所以这本来就做得到——**难
 用这次专用的名字（带时间戳后缀），跟历史数据撞不上。
 
 ```bash
-tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log .tke-check/phone-before/
+tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log .tke-ui-test/phone-before/
 tke -d <序列号> fetch | grep -q "夜间回家-1430" && echo "⚠️ 起点就有同名的，换个名字"
 ```
 
@@ -135,19 +135,19 @@ done
 
 **④ 验"能用"不只是"能看到"**——点进详情、执行一次，再 `fetch` 确认状态真的变了（C-5）。
 
-**证据按设备分目录**：`--log .tke-check/web/` 与 `--log .tke-check/phone/`，
+**证据按设备分目录**：`--log .tke-ui-test/web/` 与 `--log .tke-ui-test/phone/`，
 交付时按"平台侧做了什么 → 手机侧看到什么"讲。
 
 ## 交付给用户
 
 1. **一句话结论**：功能能用 / 哪一步挂了 / 是什么原因
-2. **证据目录** `.tke-check/steps_<时间戳>/`：
+2. **证据目录** `.tke-ui-test/steps_<时间戳>/`：
    - `screenshots/step_NNN.png` — 每步标注截图（顶部横幅=操作+成败、元素框、点击点、滑动轨迹）
    - `page/step_NNN.xml` — 每步页面结构
    - `log.json` — 每步命令 / 成败 / 报错 / 耗时
 3. 发现的问题：**是产品 bug 就回去改代码**（这才是重点）；是你操作姿势不对就重来一次
 
-把 `.tke-check/` 加进 `.gitignore`——它是本次检查的证据，不是资产。
+把 `.tke-ui-test/` 加进 `.gitignore`——它是本次检查的证据，不是资产。
 
 ## 收尾
 
