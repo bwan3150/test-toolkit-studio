@@ -169,3 +169,19 @@ web 会话存 `$TMPDIR/tke/web/<设备>.json` 跨命令复用,而 `--headless` *
 
 同类历史：用户此前修过 `$pkg（600MB+，慢）` → `${pkg}`（commit 1d4d5e92）——
 **同一个坑在同一个脚本里犯了两次**，所以这次全项目扫了一遍。
+
+## P-21 (2026-08-13) 上传脚本的源写 `.` → 目标路径混进 `./` → 502
+
+**现象**：`curl … upload.sh | bash -s -- . mount:tke/` 全部文件 502 失败，报错里能看到
+目标 key 是 `tke/./bin/…`。
+
+**原因**：`.` 作为源时，相对路径原样拼进 key，平台不接受含 `./` 的 key。
+
+**做法**：源用**带尾斜杠的目录名**（`dist/` = 只传其内容），别用 `.`：
+```bash
+curl -fsSL .../upload.sh | bash -s -- dist/ tookit-engine-resource:tke/     # ✅
+curl -fsSL .../upload.sh | bash -s -- .     tookit-engine-resource:tke/     # ❌ 502
+```
+同族提醒：目录**不带**尾斜杠会把目录名本身也带上（`dist` → `tke/dist/…`），
+这在只想更新二进制时反而有用（`dist/bin` → `tke/bin/…`）。
+
