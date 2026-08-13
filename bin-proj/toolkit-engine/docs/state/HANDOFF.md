@@ -52,8 +52,15 @@
   新增 `tklib::read_meta()`(只读 meta,不解整包,全程 Option——读元信息失败不拦回放)。
   本机无头实测 2/2 步、退出码 0;lib 39/39 + CLI 契约 16/16
 
+- **CI 发布流水线**(2026-08-14):`.github/workflows/tke-publish.yml`(常用:四平台构建+skill+VERSION,
+  `skill_only` 只改文档时一分钟发完)与 `tke-deps.yml`(低频:Chrome/driver/adb/aapt/go-ios,
+  **driver 与 Chrome 同清单同版本必然配对**)。三段下载逻辑**从 YAML 抽出来本地实跑验过**。
+  ⚠️ **需要配仓库 Secret `TKC_TOKEN` 才能用**,且 workflow 本身**还没在 GitHub 上跑过一次**
+
 ## 没做完
 
+- **两个 workflow 没在 GitHub 上真跑过**:本地验的是下载/转存那部分逻辑,
+  runner 上的构建(尤其 Windows 的 `cargo build` 与 macOS 双架构)还没验证过
 - **ADR-0011 harness 侧的 AI 行为真机未验**(本机无 `[ai]` key):
   编排官会不会真的按语义选设备、拿不准时会不会问用户、跨设备会不会写 flow.toml——
   这些只有真跑才知道。代码与提示词都已就位
