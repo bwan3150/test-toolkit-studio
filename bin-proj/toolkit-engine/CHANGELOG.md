@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### 2026-08-13 · skill 默认装用户级 + 证据默认落 `~/.tke/logs`
+- **change** `install.sh` 默认 `--user`(`~/.claude/skills`,装一次所有项目通用),`--project` 才装进当前仓库。此前反过来——每换一个项目就得重装一次(用户提)
+- **change** 证据默认落 **`~/.tke/logs/<任务简称>/steps_<时间戳>/`**,不再往被检查的项目里写。它是一次性检查的过程产物,**不该混进人家仓库、也不该逼人加一条 `.gitignore`**。时间戳子目录 tke 自动建,AI 只给任务简称
+- **docs** 同时给 AI 留了改写口子:证据要跟 PR 走 / 工具链只能读项目内文件时,改用 `--log .tke-ui-test/`,**那时才提醒用户加 `.gitignore`**
+- **feat** `check-env.sh` 新增「证据落点」一段,直接报 `~/.tke/logs` 及已有几次记录——人找证据不用问 AI
+- **实测** `~` 展开正常、目录自动创建、体检计数正确;两个脚本 `bash -n` 过
+
 ### 2026-08-13 · skill 更名 ui-check → **tke-ui-test**（用户定名）
 - **breaking(分发)** 目录、frontmatter `name`、斜杠命令、分发包名全部改:`skill/tke-ui-test/`、`/tke-ui-test`、`skill/tke-ui-test.tar.gz`。**三者必须一致**才认得出
 - **fix** `install.sh` 装完自动清除旧的 `ui-check` 目录——不清的话两个 skill 同时在册、description 几乎一样,AI 会乱挑、用户也看不出该用哪个

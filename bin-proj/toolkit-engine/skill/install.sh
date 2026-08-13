@@ -2,7 +2,7 @@
 # tke-ui-test skill 一键安装器
 #
 #   curl -fsSL <BASE_URL>/install.sh | bash
-#   curl -fsSL <BASE_URL>/install.sh | bash -s -- --profile web --user
+#   curl -fsSL <BASE_URL>/install.sh | bash -s -- --profile web --project
 #
 # 干三件事：装 skill 文件 → 装 tke 及同目录驱动 → 装 Chrome for Testing（web profile）。
 # 全程幂等：重复跑只会覆盖同名文件，不会装重。
@@ -10,6 +10,9 @@
 # 环境变量：
 #   TKE_BASE_URL   分发根地址（默认见下方 DEFAULT_BASE_URL）
 #   TKE_HOME       tke 及驱动的落点（默认 ~/.tke/bin）
+#
+# skill 默认装用户级（~/.claude/skills，所有项目通用）；--project 装到当前项目
+# 的 .claude/skills（跟着仓库走，团队 clone 即得）。
 
 set -uo pipefail
 
@@ -17,7 +20,7 @@ DEFAULT_BASE_URL="https://cloud.test-toolkit.app/sl/preview/tookit-engine-resour
 BASE_URL="${TKE_BASE_URL:-$DEFAULT_BASE_URL}"
 TKE_HOME="${TKE_HOME:-$HOME/.tke/bin}"
 PROFILE="all"
-SCOPE="project"   # project=<当前目录>/.claude/skills ；user=~/.claude/skills
+SCOPE="user"      # user=~/.claude/skills(默认,所有项目通用) ；project=<当前目录>/.claude/skills
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -26,7 +29,7 @@ while [ $# -gt 0 ]; do
         --project) SCOPE="project"; shift ;;
         --base-url) BASE_URL="${2:-$BASE_URL}"; shift 2 ;;
         -h|--help)
-            sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *) echo "未知参数: $1（可用: --profile web|android|ios|all / --user / --project / --base-url）" >&2; exit 2 ;;
     esac

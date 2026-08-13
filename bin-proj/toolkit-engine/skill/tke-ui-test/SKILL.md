@@ -23,8 +23,8 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写
 ## 第 0 步：环境体检
 
 ```bash
-bash .claude/skills/tke-ui-test/scripts/check-env.sh        # 项目级安装
-# 或 bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh  # 用户级安装
+bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh        # 用户级安装（默认）
+# 或 bash .claude/skills/tke-ui-test/scripts/check-env.sh     # 项目级安装
 ```
 
 不通过就告诉用户缺什么，别硬跑。
@@ -66,10 +66,19 @@ tke -d web fetch --interactive
 ### 2. 操作——**用 `steps` 而不是 `control`，因为它会留证据**
 
 ```bash
-tke -d web steps '点击 [{640, 380}]' --log .tke-ui-test/
+tke -d web steps '点击 [{640, 380}]' --log ~/.tke/logs/<任务简称>/
 ```
 
-`--log` 会把这批操作的**标注截图 + 页面结构 + 日志**落到 `.tke-ui-test/steps_<时间戳>/`。
+`--log` 会把这批操作的**标注截图 + 页面结构 + 日志**落到
+`~/.tke/logs/<任务简称>/steps_<时间戳>/`（时间戳子目录由 tke 自动建，你不用管）。
+
+**证据默认落 `~/.tke/logs/`，别往用户项目里写**——它是一次性检查的过程产物，
+不该混进人家的仓库、也不该让人再去加一条 `.gitignore`。任务简称用能认出这次检查的词
+（`login-fix`、`scene-sync`），方便过后翻。
+
+> **什么时候该改到项目里**：证据要跟着 PR 走、要给同事在仓库里看，或者你的工具链只能
+> 读项目内的文件——这时用 `--log .tke-ui-test/`，并**提醒用户把它加进 `.gitignore`**。
+
 用 `control` 也能操作，但**什么都不会留下**，人就没法复核。
 
 **一次 `steps` 可以传多条指令**，推荐按"一个决策轮"批量执行——证据目录也更好看：
@@ -80,7 +89,7 @@ tke -d web steps \
   '输入 [{603, 112}, "测试内容"]' \
   '点击 [{927, 112}]' \
   '等待 [1s]' \
-  --log .tke-ui-test/
+  --log ~/.tke/logs/<任务简称>/
 ```
 
 指令语法（`命令 [参数, 参数]`，无参命令写裸命令）：
@@ -112,7 +121,7 @@ tke 无状态、每条命令自带 `-d`，所以这本来就做得到——**难
 用这次专用的名字（带时间戳后缀），跟历史数据撞不上。
 
 ```bash
-tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log .tke-ui-test/phone-before/
+tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log ~/.tke/logs/<任务简称>/phone-before/
 tke -d <序列号> fetch | grep -q "夜间回家-1430" && echo "⚠️ 起点就有同名的，换个名字"
 ```
 
@@ -135,19 +144,20 @@ done
 
 **④ 验"能用"不只是"能看到"**——点进详情、执行一次，再 `fetch` 确认状态真的变了（C-5）。
 
-**证据按设备分目录**：`--log .tke-ui-test/web/` 与 `--log .tke-ui-test/phone/`，
+**证据按设备分目录**：`--log ~/.tke/logs/<任务简称>/web/` 与 `.../phone/`，
 交付时按"平台侧做了什么 → 手机侧看到什么"讲。
 
 ## 交付给用户
 
 1. **一句话结论**：功能能用 / 哪一步挂了 / 是什么原因
-2. **证据目录** `.tke-ui-test/steps_<时间戳>/`：
+2. **证据目录**（给出**绝对路径**，用户才点得开）`~/.tke/logs/<任务简称>/steps_<时间戳>/`：
    - `screenshots/step_NNN.png` — 每步标注截图（顶部横幅=操作+成败、元素框、点击点、滑动轨迹）
    - `page/step_NNN.xml` — 每步页面结构
    - `log.json` — 每步命令 / 成败 / 报错 / 耗时
 3. 发现的问题：**是产品 bug 就回去改代码**（这才是重点）；是你操作姿势不对就重来一次
 
-把 `.tke-ui-test/` 加进 `.gitignore`——它是本次检查的证据，不是资产。
+证据默认在 `~/.tke/logs/` 下，不进用户仓库。**只有**你把 `--log` 改到了项目里
+（`.tke-ui-test/`），才需要提醒用户加 `.gitignore`。
 
 ## 收尾
 

@@ -19,11 +19,13 @@ curl -fsSL https://<你的CDN>/tke/install.sh | bash
 # 只装网页相关（不要安卓/iOS 工具，快很多）
 curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --profile web
 
-# 装到用户级（所有项目共用），默认是当前项目的 .claude/skills
-curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --user
+# 装到项目级（跟着仓库走，团队 clone 即得）；默认是用户级 ~/.claude/skills
+curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --project
 ```
 
 `--profile web|android|ios|all`；`TKE_HOME` 可改 tke 落点（默认 `~/.tke/bin`）。
+
+**默认装用户级**（`~/.claude/skills/`）——装一次，所有项目都能用。
 
 ### 怎么把分发源建起来（维护者）
 
@@ -54,19 +56,19 @@ aws s3 sync dist/ s3://<bucket>/tke/ --acl public-read
 ### 1. 装 skill 文件
 
 ```bash
-# 项目级（推荐：跟着仓库走，团队 clone 即得）
-mkdir -p <你的项目>/.claude/skills
-cp -r tke-ui-test <你的项目>/.claude/skills/
-
-# 或用户级（所有项目都能用）
+# 用户级（推荐：装一次，所有项目都能用）
 mkdir -p ~/.claude/skills
 cp -r tke-ui-test ~/.claude/skills/
+
+# 或项目级（跟着仓库走，团队 clone 即得）
+mkdir -p <你的项目>/.claude/skills
+cp -r tke-ui-test <你的项目>/.claude/skills/
 ```
 
 装完目录长这样：
 
 ```
-.claude/skills/tke-ui-test/
+~/.claude/skills/tke-ui-test/
 ├── SKILL.md                    # 主文件，Claude Code 自动读
 ├── scripts/check-env.sh        # 环境体检
 └── reference/                  # 以下 AI 按需读
@@ -120,7 +122,7 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # macOS 必须清�
 ### 3. 验证
 
 ```bash
-bash .claude/skills/tke-ui-test/scripts/check-env.sh
+bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh
 ```
 
 它会逐项告诉你 tke、chromedriver、Chrome、安卓设备的状态，以及当前会跑有头还是无头。
@@ -143,13 +145,16 @@ bash .claude/skills/tke-ui-test/scripts/check-env.sh
 ```
 
 斜杠名 = 目录名 = frontmatter 里的 `name`（三者一致才认得出）。
-用户级装在 `~/.claude/skills/tke-ui-test/` 就全局可用；项目级装在仓库的 `.claude/skills/` 下，
-**跟着仓库走**，团队其他人 clone 下来就有（推荐团队项目用这种）。
+默认装在 `~/.claude/skills/tke-ui-test/`（全局可用）；装到仓库的 `.claude/skills/` 下则
+**跟着仓库走**，团队其他人 clone 下来就有。
 
 它会自己走：体检 → 看页面 → 操作（带证据）→ 判断 → 报结论 + 证据目录。
 
-证据落在 `.tke-ui-test/steps_<时间戳>/`（截图序列 + 页面结构 + log.json）。
-**建议把 `.tke-ui-test/` 加进 `.gitignore`**——它是本次检查的证据，不是要提交的资产。
+证据落在 **`~/.tke/logs/<任务简称>/steps_<时间戳>/`**（截图序列 + 页面结构 + log.json）——
+默认写在用户目录，**不污染你的仓库**，也就不必再加 `.gitignore`。
+要让证据跟着 PR 走的话，可以让它改用 `--log .tke-ui-test/` 写进项目里（那时才需要 gitignore）。
+
+用完想清理：`rm -rf ~/.tke/logs`。
 
 ## 常见问题
 

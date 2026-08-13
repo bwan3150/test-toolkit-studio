@@ -77,6 +77,15 @@ case "$REMOTE_VER" in
         ;;
 esac
 
+echo "== 证据落点 =="
+# 默认落用户目录,不往被检查的项目里写(它是过程产物,不该混进人家仓库)
+LOG_ROOT="$HOME/.tke/logs"
+if [ -d "$LOG_ROOT" ]; then
+    echo "  ℹ️  ${LOG_ROOT}（已有 $(find "$LOG_ROOT" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ') 次检查的记录）"
+else
+    echo "  ℹ️  ${LOG_ROOT}（首次检查时自动创建）"
+fi
+
 echo "== 运行模式 =="
 if [ "$(uname)" = "Linux" ] && [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
     echo "  ℹ️  无桌面 → 浏览器自动走无头"
