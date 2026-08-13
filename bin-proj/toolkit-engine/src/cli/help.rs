@@ -37,6 +37,7 @@ pub fn build_help() -> String {
 {c}工作流{r}
   {g}run{r}          执行 .tks 单脚本 或 .toml flow {d}(多脚本顺序执行){r}
   {g}steps{r}        不落文件执行一串指令  {d}例: tke steps \"点击 [{{登录按钮}}]\" \"等待 [2s]\"{r}
+  {g}report{r}       汇总一次检查的全流程报告 {d}例: tke report ~/.tke/logs/登录检查/（steps 会自动重建，跨设备时手动跑）{r}
   {g}harness{r}      AI 探索测试并生成脚本  {d}例: tke harness 用例.md --scripts 目录/（文件名 AI 起·简写 harn）{r}
 
 {c}环境{r}

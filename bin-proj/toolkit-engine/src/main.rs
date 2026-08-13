@@ -124,6 +124,12 @@ enum Commands {
         args: HarnessArgs,
     },
 
+    /// [工作流] 把一次检查里散落的多批产物汇总成一份全流程报告: tke report <检查目录> [--embed]
+    Report {
+        #[command(flatten)]
+        args: ReportArgs,
+    },
+
     /// [环境] 补齐缺失的运行依赖（chromedriver / Chrome / adb / go-ios）——**唯一会联网下载的命令**
     Fix {
         #[command(flatten)]
@@ -273,6 +279,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Harness { args } => {
             workflow::harness::handle(args, params.clone()).await
+        }
+        Commands::Report { args } => {
+            report::handle(args).await
         }
         Commands::Fix { args } => {
             fix::handle(args).await

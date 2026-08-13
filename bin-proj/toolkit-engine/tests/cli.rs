@@ -270,3 +270,36 @@ fn help_lists_fix() {
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("fix"), "帮助应含 fix:{}", s);
 }
+
+/// `tke report` 汇总多批产物成一份全流程报告(一次检查会调很多次 steps,碎报告没法审)
+#[test]
+fn report_merges_batches_into_one() {
+    let d = tmp("session-report");
+    // 造两批:各带一个 log.json
+    for (name, t) in [("steps_a", "2026-08-13T10:00:00+10:00"), ("steps_b", "2026-08-13T10:05:00+10:00")] {
+        let bd = d.join(name);
+        std::fs::create_dir_all(&bd).unwrap();
+        let log = serde_json::json!({
+            "success": true, "case_id": "", "script_name": "steps",
+            "start_time": t, "end_time": t, "error": null,
+            "steps": [{"index":0,"command":"返回","success":true,"error":null,"duration_ms":10}],
+        });
+        std::fs::write(bd.join("log.json"), log.to_string()).unwrap();
+    }
+
+    let o = tke().args(["report", d.to_str().unwrap()]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(o.status.success(), "汇总应成功:{}", s);
+    let html = std::fs::read_to_string(d.join("report.html")).expect("应产出 report.html");
+    assert_eq!(html.matches(r#"class="batch""#).count(), 2, "两批都要进总报告");
+}
+
+/// 目录里没有任何检查记录 → 明确报错,不产出一份骗人的空报告
+#[test]
+fn report_empty_dir_fails_clearly() {
+    let d = tmp("session-empty");
+    let o = tke().args(["report", d.to_str().unwrap()]).output().unwrap();
+    assert!(!o.status.success());
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("没有找到"), "应说清目录里没有记录:{}", s);
+}

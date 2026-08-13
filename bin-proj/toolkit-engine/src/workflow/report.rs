@@ -31,6 +31,78 @@ pub fn write_report(run_dir: &Path, result: &ExecutionResult) -> Result<PathBuf>
     Ok(out)
 }
 
+// ── 全流程汇总 ─────────────────────────────────────────────────────────
+
+/// 一次检查里的一个批次（一次 `tke steps` 调用留下的产物）
+struct Batch {
+    dir: PathBuf,
+    /// 相对总报告的路径前缀，如 `steps_20260813-191740/` 或 `phone/steps_.../`
+    prefix: String,
+    result: ExecutionResult,
+}
+
+/// 递归找出 `root` 下所有批次（含 log.json 的目录），**按开始时间排序**。
+///
+/// 为什么递归：跨设备检查会分成 `web/` 与 `phone/` 两个子目录，汇总时按时间交错排开，
+/// 正好还原「在平台上做 → 去手机上验」的真实顺序。
+fn collect_batches(root: &Path, prefix: &str, depth: usize, out: &mut Vec<Batch>) {
+    if depth > 3 {
+        return; // 防止意外的深目录树把这里拖死
+    }
+    let Ok(entries) = std::fs::read_dir(root) else { return };
+    let mut dirs: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    dirs.sort();
+    for d in dirs {
+        let Some(name) = d.file_name().and_then(|n| n.to_str()) else { continue };
+        let child_prefix = format!("{}{}/", prefix, name);
+        let log = d.join("log.json");
+        if log.is_file() {
+            if let Some(result) = std::fs::read_to_string(&log)
+                .ok()
+                .and_then(|t| serde_json::from_str::<ExecutionResult>(&t).ok())
+            {
+                out.push(Batch { dir: d.clone(), prefix: child_prefix.clone(), result });
+                continue; // 批次目录内部不再往下找
+            }
+        }
+        collect_batches(&d, &child_prefix, depth + 1, out);
+    }
+}
+
+/// 把一个 log 根目录下的**所有批次**汇总成一份全流程报告 `<root>/report.html`。
+///
+/// 存在理由：AI 做一次检查要调很多次 `tke steps`（看页面→操作→再看→再操作），
+/// 每次都留下一个独立目录和独立报告。人要审核时面对的是十几份碎报告，**没法读**。
+/// 这份把它们按时间接成一条完整时间线。
+///
+/// `embed=false`（默认）图片走相对链接：重建快、文件小，报告和产物在同一棵树下照常显示。
+/// `embed=true` 内嵌成单文件，适合发给别人。
+pub fn write_session_report(root: &Path, embed: bool) -> Result<PathBuf> {
+    let mut batches = Vec::new();
+    collect_batches(root, "", 0, &mut batches);
+    if batches.is_empty() {
+        return Err(TkeError::InvalidArgument(format!(
+            "{} 下没有找到任何检查记录（该目录里应有 steps_*/log.json）",
+            root.display()
+        )));
+    }
+    batches.sort_by(|a, b| a.result.start_time.cmp(&b.result.start_time));
+
+    let html = render_session(&batches, embed);
+    let out = root.join("report.html");
+    std::fs::write(&out, html).map_err(TkeError::IoError)?;
+    Ok(out)
+}
+
+/// 静默重建总报告——`tke steps` 每批跑完后顺手调用，AI 不必记得收尾。
+/// 失败只 warn：证据本体已经落好了，汇总生不出来不该让整次运行失败。
+pub fn refresh_session_report(run_dir: &Path) {
+    let Some(root) = run_dir.parent() else { return };
+    if let Err(e) = write_session_report(root, false) {
+        tracing::debug!("全流程报告未更新: {}", e);
+    }
+}
+
 // ── 页面结构反查 ─────────────────────────────────────────────────────────
 
 /// 从页面结构里查到的一个元素（报告展开区显示）
@@ -141,12 +213,121 @@ fn page_before(run_dir: &Path, steps: &[StepResult], i: usize) -> Option<String>
 
 // ── 渲染 ─────────────────────────────────────────────────────────────────
 
-fn img_data_uri(run_dir: &Path, rel: &str) -> Option<String> {
-    let bytes = std::fs::read(run_dir.join(rel)).ok()?;
-    Some(format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
+/// 两份报告（单次 / 全流程）共用的样式——长得不一样会让人以为是两个工具出的
+const BASE_CSS: &str = r##"*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f6f6f7; --card:#fff; --border:#e5e5e7; --txt:#1c1c1e; --txt2:#48484a; --txt3:#8e8e93;
+  --ok:#1a7f37; --ok-bg:#f0fdf4; --ng:#b62324; --ng-bg:#fff0f0; --warn:#bf8600; --warn-bg:#fffbeb;
+  --acc:#5856d6; --acc-bg:#f0f0ff;
+  --mono:'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#1a1a1c;--card:#242426;--border:#38383a;--txt:#f2f2f7;--txt2:#c7c7cc;--txt3:#8e8e93;
+        --ok-bg:#132b18;--ng-bg:#2d1416;--warn-bg:#2b2410;--acc-bg:#1e1e35}
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',
+  'Microsoft YaHei',system-ui,sans-serif;background:var(--bg);color:var(--txt);
+  font-size:14px;line-height:1.6;padding:24px 16px 64px}
+.wrap{max-width:880px;margin:0 auto}
+header{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:18px 20px;margin-bottom:18px}
+.h-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}
+.badge{padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;flex-shrink:0}
+.b-ok{background:var(--ok);color:#fff} .b-ng{background:var(--ng);color:#fff}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{padding:3px 10px;border-radius:6px;font-size:12px;font-family:var(--mono);
+  background:var(--bg);border:1px solid var(--border);color:var(--txt2)}
+.chip b{color:var(--txt);font-weight:700}
+.c-ok b{color:var(--ok)} .c-ng b{color:var(--ng)} .c-warn b{color:var(--warn)}
+.meta{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
+  display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:12px}
+.m-row{display:contents}
+.m-k{color:var(--txt3);white-space:nowrap}
+.m-v{color:var(--txt2);font-family:var(--mono);word-break:break-all;font-size:11.5px}
+.files{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+.fbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:7px;
+  border:1px solid var(--border);background:var(--bg);color:var(--txt2);
+  font-size:12px;text-decoration:none;white-space:nowrap;transition:all .12s}
+.fbtn:hover{border-color:var(--acc);color:var(--acc);background:var(--acc-bg)}
+.fbtn svg{width:13px;height:13px;flex-shrink:0;opacity:.75}
+.err-top{margin-top:12px;padding:10px 12px;background:var(--ng-bg);border-radius:8px;
+  font-size:12px;color:var(--ng);font-family:var(--mono);white-space:pre-wrap;word-break:break-all}
+.step{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;margin-bottom:14px}
+.step.ng{border-color:var(--ng)}
+.s-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.s-num{font-family:var(--mono);font-size:11px;color:var(--txt3);flex-shrink:0}
+.s-mark{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:#fff}
+.m-ok{background:var(--ok)} .m-ng{background:var(--ng)}
+.s-cmd{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.s-dur{font-family:var(--mono);font-size:11px;color:var(--txt3);flex-shrink:0}
+.tgt{padding:8px 14px;background:var(--acc-bg);border-bottom:1px solid var(--border);font-size:12px}
+.tgt summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}
+.tgt summary::-webkit-details-marker{display:none}
+.tgt summary::before{content:'▸';color:var(--acc);font-size:10px;flex-shrink:0}
+.tgt[open] summary::before{content:'▾'}
+.t-src{font-family:var(--mono);font-size:10px;font-weight:700;color:#fff;background:var(--acc);
+  padding:1px 6px;border-radius:3px;flex-shrink:0}
+.t-lbl{font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-note{color:var(--txt3);font-size:11px;flex-shrink:0}
+.t-body{margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:2px 12px;
+  font-family:var(--mono);font-size:11px}
+.t-k{color:var(--txt3)} .t-v{color:var(--txt2);word-break:break-all}
+.say{padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--txt);
+  display:flex;gap:8px;align-items:baseline}
+.say::before{content:'“';color:var(--acc);font-size:20px;line-height:0.6;flex-shrink:0}
+.s-err{padding:10px 14px;background:var(--ng-bg);color:var(--ng);font-family:var(--mono);
+  font-size:11.5px;white-space:pre-wrap;word-break:break-all;border-bottom:1px solid var(--border)}
+.s-heal{padding:7px 14px;background:var(--warn-bg);color:var(--warn);font-size:11.5px;
+  border-bottom:1px solid var(--border)}
+.s-img{padding:14px;background:#141414;display:flex;justify-content:center}
+.s-img img{max-width:100%;height:auto;border-radius:6px;display:block}
+.s-foot{padding:6px 14px;font-size:11px;color:var(--txt3);font-family:var(--mono)}
+.s-foot a{color:var(--acc);text-decoration:none}
+"##;
+
+
+/// 图片怎么进报告：内嵌成 data URI，还是留一个相对链接。
+///
+/// 单次报告内嵌——它要能**单独发给同事**；全流程报告默认用相对链接——十几个批次几十张图
+/// 全内嵌会有几十 MB，而且每次追加都得把所有图重新编码一遍，慢得没道理。
+#[derive(Clone, Copy, PartialEq)]
+enum ImgMode {
+    Embed,
+    Link,
+}
+
+/// 渲染一份报告所需的上下文
+struct Ctx<'a> {
+    /// 这个 run 的产物目录（读图、读页面结构都从这里）
+    run_dir: &'a Path,
+    /// 相对 html 所在位置的前缀（全流程报告在父目录，要带上 `steps_xxx/`；单次报告为空）
+    prefix: &'a str,
+    img: ImgMode,
+}
+
+impl Ctx<'_> {
+    /// html 里引用某个产物时该写的路径
+    fn href(&self, rel: &str) -> String {
+        format!("{}{}", self.prefix, rel)
+    }
+
+    fn img_src(&self, rel: &str) -> Option<String> {
+        match self.img {
+            ImgMode::Link => std::fs::metadata(self.run_dir.join(rel))
+                .is_ok()
+                .then(|| self.href(rel)),
+            ImgMode::Embed => {
+                let bytes = std::fs::read(self.run_dir.join(rel)).ok()?;
+                Some(format!(
+                    "data:image/png;base64,{}",
+                    base64::engine::general_purpose::STANDARD.encode(bytes)
+                ))
+            }
+        }
+    }
 }
 
 fn esc(s: &str) -> String {
@@ -199,11 +380,12 @@ fn render(run_dir: &Path, r: &ExecutionResult) -> String {
     let healed = r.steps.iter().filter(|s| s.healed.is_some()).count();
     let plat = platform_tag(r.device.as_deref());
 
+    let ctx = Ctx { run_dir, prefix: "", img: ImgMode::Embed };
     let steps_html: String = r
         .steps
         .iter()
         .enumerate()
-        .map(|(i, s)| step_card(run_dir, r, i, s, plat))
+        .map(|(i, s)| step_card(&ctx, r, i, s, plat))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -248,78 +430,7 @@ fn render(run_dir: &Path, r: &ExecutionResult) -> String {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} · 检查报告</title>
 <style>
-*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
-:root{{
-  --bg:#f6f6f7; --card:#fff; --border:#e5e5e7; --txt:#1c1c1e; --txt2:#48484a; --txt3:#8e8e93;
-  --ok:#1a7f37; --ok-bg:#f0fdf4; --ng:#b62324; --ng-bg:#fff0f0; --warn:#bf8600; --warn-bg:#fffbeb;
-  --acc:#5856d6; --acc-bg:#f0f0ff;
-  --mono:'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
-}}
-@media (prefers-color-scheme:dark){{
-  :root{{--bg:#1a1a1c;--card:#242426;--border:#38383a;--txt:#f2f2f7;--txt2:#c7c7cc;--txt3:#8e8e93;
-        --ok-bg:#132b18;--ng-bg:#2d1416;--warn-bg:#2b2410;--acc-bg:#1e1e35}}
-}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB',
-  'Microsoft YaHei',system-ui,sans-serif;background:var(--bg);color:var(--txt);
-  font-size:14px;line-height:1.6;padding:24px 16px 64px}}
-.wrap{{max-width:880px;margin:0 auto}}
-header{{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:18px 20px;margin-bottom:18px}}
-.h-top{{display:flex;align-items:center;gap:12px;flex-wrap:wrap}}
-h1{{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}}
-.badge{{padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;flex-shrink:0}}
-.b-ok{{background:var(--ok);color:#fff}} .b-ng{{background:var(--ng);color:#fff}}
-.chips{{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}}
-.chip{{padding:3px 10px;border-radius:6px;font-size:12px;font-family:var(--mono);
-  background:var(--bg);border:1px solid var(--border);color:var(--txt2)}}
-.chip b{{color:var(--txt);font-weight:700}}
-.c-ok b{{color:var(--ok)}} .c-ng b{{color:var(--ng)}} .c-warn b{{color:var(--warn)}}
-.meta{{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
-  display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:12px}}
-.m-row{{display:contents}}
-.m-k{{color:var(--txt3);white-space:nowrap}}
-.m-v{{color:var(--txt2);font-family:var(--mono);word-break:break-all;font-size:11.5px}}
-.files{{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}}
-.fbtn{{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:7px;
-  border:1px solid var(--border);background:var(--bg);color:var(--txt2);
-  font-size:12px;text-decoration:none;white-space:nowrap;transition:all .12s}}
-.fbtn:hover{{border-color:var(--acc);color:var(--acc);background:var(--acc-bg)}}
-.fbtn svg{{width:13px;height:13px;flex-shrink:0;opacity:.75}}
-.err-top{{margin-top:12px;padding:10px 12px;background:var(--ng-bg);border-radius:8px;
-  font-size:12px;color:var(--ng);font-family:var(--mono);white-space:pre-wrap;word-break:break-all}}
-.step{{background:var(--card);border:1px solid var(--border);border-radius:10px;
-  overflow:hidden;margin-bottom:14px}}
-.step.ng{{border-color:var(--ng)}}
-.s-hd{{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}}
-.s-num{{font-family:var(--mono);font-size:11px;color:var(--txt3);flex-shrink:0}}
-.s-mark{{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;color:#fff}}
-.m-ok{{background:var(--ok)}} .m-ng{{background:var(--ng)}}
-.s-cmd{{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;word-break:break-all}}
-.s-dur{{font-family:var(--mono);font-size:11px;color:var(--txt3);flex-shrink:0}}
-.tgt{{padding:8px 14px;background:var(--acc-bg);border-bottom:1px solid var(--border);font-size:12px}}
-.tgt summary{{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}}
-.tgt summary::-webkit-details-marker{{display:none}}
-.tgt summary::before{{content:'▸';color:var(--acc);font-size:10px;flex-shrink:0}}
-.tgt[open] summary::before{{content:'▾'}}
-.t-src{{font-family:var(--mono);font-size:10px;font-weight:700;color:#fff;background:var(--acc);
-  padding:1px 6px;border-radius:3px;flex-shrink:0}}
-.t-lbl{{font-weight:600;color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
-.t-note{{color:var(--txt3);font-size:11px;flex-shrink:0}}
-.t-body{{margin-top:8px;display:grid;grid-template-columns:auto 1fr;gap:2px 12px;
-  font-family:var(--mono);font-size:11px}}
-.t-k{{color:var(--txt3)}} .t-v{{color:var(--txt2);word-break:break-all}}
-.say{{padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px;color:var(--txt);
-  display:flex;gap:8px;align-items:baseline}}
-.say::before{{content:'“';color:var(--acc);font-size:20px;line-height:0.6;flex-shrink:0}}
-.s-err{{padding:10px 14px;background:var(--ng-bg);color:var(--ng);font-family:var(--mono);
-  font-size:11.5px;white-space:pre-wrap;word-break:break-all;border-bottom:1px solid var(--border)}}
-.s-heal{{padding:7px 14px;background:var(--warn-bg);color:var(--warn);font-size:11.5px;
-  border-bottom:1px solid var(--border)}}
-.s-img{{padding:14px;background:#141414;display:flex;justify-content:center}}
-.s-img img{{max-width:100%;height:auto;border-radius:6px;display:block}}
-.s-foot{{padding:6px 14px;font-size:11px;color:var(--txt3);font-family:var(--mono)}}
-.s-foot a{{color:var(--acc);text-decoration:none}}
+{css}
 </style>
 </head>
 <body>
@@ -345,6 +456,7 @@ h1{{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}}
 </body>
 </html>"#,
         title = esc(&r.script_name),
+        css = BASE_CSS,
         badge_cls = if r.success { "b-ok" } else { "b-ng" },
         badge_txt = if r.success { "通过" } else { "失败" },
         passed = passed,
@@ -372,7 +484,7 @@ h1{{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}}
 
 /// 「点了什么」区块：坐标 → 从执行时的页面反查命中元素；元素名 → 直接标出走的是元素库
 fn target_block(
-    run_dir: &Path,
+    ctx: &Ctx,
     r: &ExecutionResult,
     i: usize,
     s: &StepResult,
@@ -405,7 +517,7 @@ fn target_block(
     let Some((x, y)) = coord_in(&s.command) else { return String::new() };
 
     // 坐标点击（skill 的主用法）：从**执行时**的页面反查这个点落在什么元素上
-    let Some(xml) = page_before(run_dir, &r.steps, i) else {
+    let Some(xml) = page_before(ctx.run_dir, &r.steps, i) else {
         return format!(
             r#"<div class="tgt"><summary><span class="t-src">坐标</span>
       <span class="t-note">({}, {}) · 无前置页面结构，查不到点中的元素</span></summary></div>"#,
@@ -459,8 +571,137 @@ fn target_block(
     )
 }
 
+/// 全流程报告：所有批次接成一条时间线
+fn render_session(batches: &[Batch], embed: bool) -> String {
+    let all_steps: usize = batches.iter().map(|b| b.result.steps.len()).sum();
+    let passed: usize = batches
+        .iter()
+        .map(|b| b.result.steps.iter().filter(|s| s.success).count())
+        .sum();
+    let failed = all_steps - passed;
+    let first = &batches[0].result;
+    let last = &batches[batches.len() - 1].result;
+    let all_ok = batches.iter().all(|b| b.result.success);
+
+    // 标题用任务目录名（`~/.tke/logs/<任务简称>/` 里那个简称），比脚本名更像"这次检查"
+    let title = batches[0]
+        .dir
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or(&first.script_name)
+        .to_string();
+
+    let mut body = String::new();
+    for (i, b) in batches.iter().enumerate() {
+        let plat = platform_tag(b.result.device.as_deref());
+        let ctx = Ctx {
+            run_dir: &b.dir,
+            prefix: &b.prefix,
+            img: if embed { ImgMode::Embed } else { ImgMode::Link },
+        };
+        let dev = b.result.device.clone().unwrap_or_else(|| "—".into());
+        body.push_str(&format!(
+            r#"<div class="batch">
+  <span class="b-no">{n}</span>
+  <span class="b-dev">{dev}</span>
+  <span class="b-time">{time}</span>
+  <span class="b-steps">{steps} 步</span>
+  <a class="b-link" href="{href}">单独看这一批</a>
+</div>"#,
+            n = i + 1,
+            dev = esc(&dev),
+            time = hhmmss(&b.result.start_time),
+            steps = b.result.steps.len(),
+            href = esc(&format!("{}report.html", b.prefix)),
+        ));
+        for (j, st) in b.result.steps.iter().enumerate() {
+            body.push_str(&step_card(&ctx, &b.result, j, st, plat));
+            body.push('\n');
+        }
+    }
+
+    // 设备去重（跨设备检查里这一行能一眼看出涉及了哪几台）
+    let mut devs: Vec<String> = batches
+        .iter()
+        .filter_map(|b| b.result.device.clone())
+        .collect();
+    devs.dedup();
+    devs.sort();
+    devs.dedup();
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} · 全流程检查报告</title>
+<style>{css}
+.batch{{display:flex;align-items:center;gap:10px;margin:26px 0 12px;padding:7px 12px;
+  background:var(--acc-bg);border-radius:8px;font-size:12px;color:var(--txt2)}}
+.b-no{{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+  border-radius:50%;background:var(--acc);color:#fff;font-size:11px;font-weight:700;flex-shrink:0}}
+.b-dev{{font-family:var(--mono);font-weight:600;color:var(--txt)}}
+.b-time,.b-steps{{font-family:var(--mono);color:var(--txt3)}}
+.b-link{{margin-left:auto;color:var(--acc);text-decoration:none;font-size:11px}}
+.b-link:hover{{text-decoration:underline}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="h-top">
+    <h1>{title}</h1>
+    <span class="badge {badge_cls}">{badge_txt}</span>
+  </div>
+  <div class="chips">
+    <span class="chip c-ok"><b>{passed}</b> 步通过</span>
+    {failed_chip}
+    <span class="chip">共 <b>{all_steps}</b> 步 / <b>{nb}</b> 批操作</span>
+    <span class="chip">耗时 <b>{dur}</b></span>
+  </div>
+  <div class="meta">
+    <div class="m-row"><span class="m-k">设备</span><span class="m-v">{devs}</span></div>
+    <div class="m-row"><span class="m-k">开始</span><span class="m-v">{start}</span></div>
+    <div class="m-row"><span class="m-k">结束</span><span class="m-v">{end}</span></div>
+    <div class="m-row"><span class="m-k">目录</span><span class="m-v">{dir}</span></div>
+  </div>
+  <div class="files">
+    <a class="fbtn" href="{file_dir}">打开检查目录</a>
+  </div>
+</header>
+{body}
+</div>
+</body>
+</html>"#,
+        title = esc(&title),
+        css = BASE_CSS,
+        badge_cls = if all_ok { "b-ok" } else { "b-ng" },
+        badge_txt = if all_ok { "通过" } else { "失败" },
+        passed = passed,
+        all_steps = all_steps,
+        nb = batches.len(),
+        failed_chip = if failed > 0 {
+            format!(r#"<span class="chip c-ng"><b>{}</b> 步失败</span>"#, failed)
+        } else {
+            String::new()
+        },
+        dur = ms_between(&first.start_time, &last.end_time).map(fmt_dur).unwrap_or_else(|| "—".into()),
+        devs = esc(&if devs.is_empty() { "—".to_string() } else { devs.join(" · ") }),
+        start = hhmmss(&first.start_time),
+        end = hhmmss(&last.end_time),
+        dir = esc(&batches[0].dir.parent().map(|p| p.display().to_string()).unwrap_or_default()),
+        file_dir = esc(&format!(
+            "file://{}",
+            batches[0].dir.parent().map(|p| p.display().to_string()).unwrap_or_default()
+        )),
+        body = body,
+    )
+}
+
 fn step_card(
-    run_dir: &Path,
+    ctx: &Ctx,
     r: &ExecutionResult,
     i: usize,
     s: &StepResult,
@@ -469,7 +710,7 @@ fn step_card(
     let img = s
         .screenshot
         .as_deref()
-        .and_then(|rel| img_data_uri(run_dir, rel))
+        .and_then(|rel| ctx.img_src(rel))
         .map(|uri| format!(r#"<div class="s-img"><img src="{}" alt="step"></div>"#, uri))
         .unwrap_or_default();
 
@@ -500,7 +741,7 @@ fn step_card(
             Some(n) if !n.trim().is_empty() => format!(r#"<div class="say">{}</div>"#, esc(n)),
             _ => String::new(),
         },
-        tgt = target_block(run_dir, r, i, s, plat),
+        tgt = target_block(ctx, r, i, s, plat),
         heal = match &s.healed {
             Some(name) => format!(
                 r#"<div class="s-heal">⚠ 元素「{}」按原定位没找到，由 AI 依当前页面找回（脚本定位可能该更新了）</div>"#,
@@ -513,12 +754,13 @@ fn step_card(
             _ => String::new(),
         },
         img = img,
-        foot = match (&s.xml, &s.screenshot) {
-            (Some(x), Some(p)) =>
-                format!(r#"<div class="s-foot"><a href="{0}">{0}</a> · <a href="{1}">{1}</a></div>"#, esc(x), esc(p)),
-            (Some(x), None) => format!(r#"<div class="s-foot"><a href="{0}">{0}</a></div>"#, esc(x)),
-            (None, Some(p)) => format!(r#"<div class="s-foot"><a href="{0}">{0}</a></div>"#, esc(p)),
-            _ => String::new(),
+        foot = {
+            let link = |rel: &String| format!(r#"<a href="{}">{}</a>"#, esc(&ctx.href(rel)), esc(rel));
+            match (&s.xml, &s.screenshot) {
+                (Some(x), Some(p)) => format!(r#"<div class="s-foot">{} · {}</div>"#, link(x), link(p)),
+                (Some(x), None) | (None, Some(x)) => format!(r#"<div class="s-foot">{}</div>"#, link(x)),
+                _ => String::new(),
+            }
         },
     )
 }
@@ -668,6 +910,65 @@ mod tests {
         let html = std::fs::read_to_string(write_report(&dir, &r).unwrap()).unwrap();
         assert!(html.contains("Example &amp; &lt;Domain&gt;"), "应还原后重新转义:{}", html);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 造一个批次目录（含 log.json）
+    fn mk_batch(root: &std::path::Path, name: &str, start: &str, cmds: &[&str]) {
+        let d = root.join(name);
+        std::fs::create_dir_all(&d).unwrap();
+        let steps: Vec<StepResult> = cmds
+            .iter()
+            .enumerate()
+            .map(|(i, c)| step(i, c, None))
+            .collect();
+        let mut r = mk_result(steps);
+        r.start_time = start.to_string();
+        r.end_time = start.to_string();
+        std::fs::write(d.join("log.json"), serde_json::to_string(&r).unwrap()).unwrap();
+    }
+
+    /// 全流程汇总：多批产物接成一条时间线（一次检查会调很多次 steps，碎报告没法审）
+    #[test]
+    fn session_report_merges_all_batches() {
+        let root = std::env::temp_dir().join(format!("tke-session-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        mk_batch(&root, "steps_20260813-100000", "2026-08-13T10:00:00+10:00", &["点击 [{1, 1}]"]);
+        mk_batch(&root, "steps_20260813-100500", "2026-08-13T10:05:00+10:00", &["返回", "等待 [1s]"]);
+
+        let out = write_session_report(&root, false).unwrap();
+        let html = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(out, root.join("report.html"));
+        assert_eq!(html.matches(r#"class="batch""#).count(), 2, "两批都要在");
+        assert!(html.contains("共 <b>3</b> 步"), "步数要跨批累计:{}", html);
+        assert!(html.contains("steps_20260813-100000/report.html"), "要能跳回单批报告");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// **按时间排序**，不是按目录名——跨设备时两个子目录交错，顺序错了就读不出因果
+    #[test]
+    fn session_report_orders_by_time_across_subdirs() {
+        let root = std::env::temp_dir().join(format!("tke-session-ord-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        // phone 的批次时间更早，但目录名排在 web 后面
+        mk_batch(&root.join("web"), "steps_b", "2026-08-13T10:05:00+10:00", &["点击 [{2, 2}]"]);
+        mk_batch(&root.join("phone"), "steps_a", "2026-08-13T10:00:00+10:00", &["返回"]);
+
+        let html = std::fs::read_to_string(write_session_report(&root, false).unwrap()).unwrap();
+        let phone_at = html.find("phone/steps_a").expect("应含 phone 批次");
+        let web_at = html.find("web/steps_b").expect("应含 web 批次");
+        assert!(phone_at < web_at, "时间早的要排前面(跨子目录也按时间)");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 空目录不该产出一份骗人的空报告
+    #[test]
+    fn session_report_refuses_empty_dir() {
+        let root = std::env::temp_dir().join(format!("tke-session-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        assert!(write_session_report(&root, false).is_err(), "没有记录就该报错");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// 失败信息必须出现（INV-9：失败要可见，不能只留个红叉）

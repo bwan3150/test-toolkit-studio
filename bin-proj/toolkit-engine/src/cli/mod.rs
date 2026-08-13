@@ -7,6 +7,9 @@ pub mod help;
 /// tke fix：补齐缺失的运行依赖（唯一会联网下载的命令）
 pub mod fix;
 
+/// tke report：把散落的多批检查汇总成一份全流程报告
+pub mod report;
+
 // ① 直通（统一处理所有外部二进制，含 adb -d 注入特例）
 pub mod passthrough;
 
@@ -23,4 +26,5 @@ pub mod tools;
 pub use atomic::{RefreshArgs, FetchArgs, RecognizeArgs, ControlCommands};
 pub use workflow::{RunArgs, StepsArgs, HarnessArgs};
 pub use fix::FixArgs;
+pub use report::ReportArgs;
 pub use tools::{FileCommands, AppCommands, DeviceCommands, ElementCommands};

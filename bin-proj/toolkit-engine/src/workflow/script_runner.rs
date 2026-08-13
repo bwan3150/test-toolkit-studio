@@ -331,6 +331,9 @@ impl ScriptRunner {
                 if let Err(e) = crate::workflow::report::write_report(&a.run_dir, &result) {
                     tracing::warn!("生成 report.html 失败: {}", e);
                 }
+                // 顺手把父目录的**全流程报告**重建一次：一次检查要调很多次 steps，
+                // 不汇总的话人面对的是十几份碎报告，没法审。AI 不必记得收尾。
+                crate::workflow::report::refresh_session_report(&a.run_dir);
                 p
             }
             None => String::new(),
