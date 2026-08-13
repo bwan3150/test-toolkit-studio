@@ -321,9 +321,16 @@ impl ScriptRunner {
         result.end_time = chrono::Local::now().to_rfc3339();
         result.launched_packages = interpreter.launched_packages.clone();
 
-        // 5. 写入完整运行日志（仅 --log 时）
+        // 5. 写入完整运行日志 + 人看的 HTML 报告（仅 --log 时）
         let log_path = match &artifacts {
-            Some(a) => a.write_log(&result)?.to_string_lossy().to_string(),
+            Some(a) => {
+                let p = a.write_log(&result)?.to_string_lossy().to_string();
+                // 报告生成失败不该让整次运行报错——证据本体(log.json/截图)已经落好了
+                if let Err(e) = crate::workflow::report::write_report(&a.run_dir, &result) {
+                    tracing::warn!("生成 report.html 失败: {}", e);
+                }
+                p
+            }
             None => String::new(),
         };
 
