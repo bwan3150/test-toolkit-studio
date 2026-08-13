@@ -1,7 +1,7 @@
 # 交接单
 
-**会话时间**: 2026-08-12（第三场，含用户 mac 侧实测回合）
-**产出 commit**: `affaadbf` → `00a7ee6d` → 本次未提交（skill + 无头 + 实测）
+**会话时间**: 2026-08-12 ~ 08-13（第三场，含用户 mac 侧实测回合 + 分发上线 + Q-6）
+**产出 commit**: `affaadbf` → `00a7ee6d` → … → `b902e281`
 
 ## 做完了
 
@@ -47,6 +47,11 @@
   **两个坑记 P-19**:SPA 兜底 200(不验文件头就装到网页)、Cloudflare 缓存 4h 不认 no-cache
   (靠 VERSION 里的 build 戳做 `?b=` 缓存键破解)
 
+- **两件套平台自包含（Q-6 关闭，2026-08-13）**:`tke run` 缺 `-d` 时读 `foo.tklib/meta.json`
+  的 platform 兜底(web 零参数回放 / android 走默认 adb 设备 / ios 仍需显式,报错回显录制 UDID)。
+  新增 `tklib::read_meta()`(只读 meta,不解整包,全程 Option——读元信息失败不拦回放)。
+  本机无头实测 2/2 步、退出码 0;lib 39/39 + CLI 契约 16/16
+
 ## 没做完
 
 - **ADR-0011 harness 侧的 AI 行为真机未验**(本机无 `[ai]` key):
@@ -61,9 +66,9 @@
 - ✅ **坐标可移植性已验证**（用户 mac 实测 + 本机对照）:mac有头=mac无头=Linux无头=**1280x813**,
   元素 bounds `diff` 零差异。「本地录、CI 回放」成立。
   ⚠️ 做这类对照**必须先销毁会话**,否则复用旧会话会给出假阳性（P-18）
-- **Q-6 平台自包含**：`.tks` 不记平台，`tke run foo.tks` 不带 `-d` 按 Android 推断 →
-  web 脚本报「adb 缺失」。skill 里已写死必须带 `-d web`，但 tklib 的 meta.json 其实已存
-  platform，「拷走即跑」还差这一口气
+- ✅ **Q-6 平台自包含已关闭**（2026-08-13）：缺 `-d` 时从同名 tklib 的 meta.json 读平台兜底。
+  教训值得记：**meta.json 的 platform 字段写了一个多月都"只写不读"**，注释里写着"给后续留
+  钩子"——而 INV-7 的最后一口气就差它。存下来的信息不消费，等于没存
 - **护栏退化是已知代价**（ADR-0010 写明）：asserter/supervisor/页面契约现在只是 SKILL.md 里的
   两条要求。若实测脚本质量不行，**出路是把护栏做成必须调用的子命令，不是把提示词写更长**
 - 环境已就绪可复现：Chrome 在 `~/.local/share/tke/chrome-linux64/`，chromedriver 在

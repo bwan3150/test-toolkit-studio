@@ -3,7 +3,8 @@
 // 设计（方案定稿 2026-07-03）：**没有共享元素库**。一个测试 = 两个文件，复制到别的机器即可跑：
 //   foo.tks     人读的脚本（纯文本，轻量）
 //   foo.tklib   元素包（zip 容器、stored 不压缩——png 本身已压缩）：
-//     ├── meta.json      录制平台/设备/tke 版本/创建时间（先只记录不消费，给跨分辨率适配留钩子）
+//     ├── meta.json      录制平台/设备/tke 版本/创建时间（platform 已被 `tke run` 消费作缺 -d 时的
+//                        平台兜底；其余字段仍只记录，给跨分辨率适配留钩子）
 //     ├── element.json   元素条目（结构/OCR 通道 + img 相对引用）
 //     └── img/*.png      图像模板（三级降级的兜底通道）
 //
@@ -18,7 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Result, TkeError};
 
-/// tklib 的元信息（打包时记录；当前只写不读，供人检查与后续版本/分辨率适配用）
+/// tklib 的元信息（打包时记录）。`platform` 是**两件套自包含平台**的依据——
+/// `tke run foo.tks` 不带 `-d` 时靠它判断该跑哪个平台（见 `read_meta`）。
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TklibMeta {
     /// 录制平台（android / ios / web）
@@ -111,6 +113,20 @@ pub fn pack(lib_json: &Path, out_tklib: &Path, meta: &TklibMeta) -> Result<()> {
     Ok(())
 }
 
+/// 只读 `meta.json`，不解整包（zip 随机存取，几百 KB 的图一张都不碰）。
+///
+/// 用途是**兜底推断**（如 `tke run` 缺 `-d` 时判断脚本录自哪个平台），所以一路 `Option`：
+/// 包不在 / 不是 zip / 没有 meta / 解析不出来 —— 都返回 None，让调用方走它原本的路径。
+/// 读元信息失败不该把回放拦下来。
+pub fn read_meta(tklib: &Path) -> Option<TklibMeta> {
+    let file = std::fs::File::open(tklib).ok()?;
+    let mut archive = zip::ZipArchive::new(file).ok()?;
+    let mut entry = archive.by_name("meta.json").ok()?;
+    let mut buf = String::new();
+    entry.read_to_string(&mut buf).ok()?;
+    serde_json::from_str(&buf).ok()
+}
+
 /// 解包到 `dest_dir`（自动建目录），返回解包后的 element.json 路径——把它当 element_path
 /// 传给下游（recognizer/工具/回放），下游对 tklib 无感知。
 pub fn unpack(tklib: &Path, dest_dir: &Path) -> Result<PathBuf> {
@@ -169,6 +185,27 @@ mod tests {
         assert_eq!(std::fs::read(dest.join("img/按钮@1_2.png")).unwrap(), b"fake-png-bytes");
         let meta: TklibMeta = serde_json::from_str(&std::fs::read_to_string(dest.join("meta.json")).unwrap()).unwrap();
         assert_eq!(meta.platform, "android");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// 只读 meta：读得出平台；坏包/不存在一律 None（兜底用途不能因读元信息失败而炸）
+    #[test]
+    fn read_meta_reads_platform_and_tolerates_garbage() {
+        let base = std::env::temp_dir().join(format!("tke-tklib-meta-{}", std::process::id()));
+        let src = base.join("src");
+        let _ = std::fs::create_dir_all(&src);
+        std::fs::write(src.join("element.json"), r#"{"elements":{}}"#).unwrap();
+
+        let pkg = base.join("case.tklib");
+        pack(&src.join("element.json"), &pkg, &TklibMeta::new("web", "web")).unwrap();
+        let meta = read_meta(&pkg).expect("应读得出 meta");
+        assert_eq!(meta.platform, "web");
+
+        assert!(read_meta(&base.join("不存在.tklib")).is_none(), "包不存在 → None");
+        let junk = base.join("junk.tklib");
+        std::fs::write(&junk, b"not a zip").unwrap();
+        assert!(read_meta(&junk).is_none(), "不是 zip → None");
+
         let _ = std::fs::remove_dir_all(&base);
     }
 

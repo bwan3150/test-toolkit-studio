@@ -23,6 +23,50 @@ fn healer_factory(params: &Arc<tke::Params>) -> Option<tke::workflow::script_run
     }))
 }
 
+/// 缺 `-d` 时，从同名 `.tklib` 的 meta.json 推断该跑哪个平台（Q-6：两件套自包含）。
+///
+/// 两件套的承诺是「拷到别的机器直接能跑」（INV-7），但 `.tks` 本身不记平台——而元素包
+/// 打包时早就记下了。这里把这口气补上：**平台**从包里读，**具体哪台设备**按平台各论：
+///   - web    设备无个体差异，`device="web"` 直接可用 → 真正的零参数回放
+///   - android 录制那台的序列号换机后必然失效，故只放行、不指定 → 走默认 adb 设备
+///             （连了多台仍会撞 adb 自己的「more than one device」，那才是该让用户选的时候）
+///   - ios    UDID 同样不可照搬，且 iOS 没有「默认设备」的说法 → 仍要求显式给，
+///            但把录制时的 UDID 附在报错里，方便对照
+///
+/// 推不出来（没有包 / 包里没 meta / 平台不认识）就报原来的缺设备错误。
+/// 提示一律走 stderr：stdout 是 NDJSON 事件流，不能污染。
+fn infer_device_from_pack(
+    params: &std::sync::Arc<tke::Params>,
+    tks: &std::path::Path,
+) -> std::sync::Arc<tke::Params> {
+    const MISSING: &str =
+        "tke run 必须指定设备: -d/--device <设备ID>（web / Android 序列号 / iOS UDID）";
+
+    let pack = tke::utils::tklib::tklib_path(tks);
+    let Some(meta) = tke::utils::tklib::read_meta(&pack) else {
+        JsonOutput::error(MISSING);
+    };
+
+    match meta.platform.as_str() {
+        "web" => {
+            eprintln!("ℹ 未指定设备，按元素包记录的平台回放：web");
+            std::sync::Arc::new(params.with_device(Some("web".to_string())))
+        }
+        "android" => {
+            eprintln!("ℹ 未指定设备，按元素包记录的平台回放：android（用默认 adb 设备）");
+            params.clone()
+        }
+        "ios" => JsonOutput::error(format!(
+            "{}。该脚本录自 iOS（元素包记录的 UDID: {}），iOS 必须显式指定设备",
+            MISSING, meta.device
+        )),
+        other => JsonOutput::error(format!(
+            "{}。元素包记录的平台「{}」无法识别",
+            MISSING, other
+        )),
+    }
+}
+
 /// Run 命令参数
 #[derive(clap::Args)]
 pub struct RunArgs {
@@ -57,15 +101,16 @@ pub async fn handle(
             tke::workflow::script_runner::validate_script_path(&path)
                 .unwrap_or_else(|e| JsonOutput::error(e.to_string()));
 
-            // 回放**必须显式指定设备**：.tks 不记平台，不给 -d 会被当成 Android，
-            // web 用例只会得到一句莫名其妙的「adb 缺失」（用户实测踩过）。
+            // 设备来源：显式 `-d` 优先；没给就从同名 .tklib 的 meta.json 兜底推断平台
+            // （两件套自包含，Q-6）。仍推不出来才报错——.tks 不记平台，不给 -d 会被当成
+            // Android，web 用例只会得到一句莫名其妙的「adb 缺失」（用户实测踩过）。
             // 放在脚本校验之后：文件不存在/缺元素包是更基础的问题，先报那个。
             // flow(.toml) 不在此校验——每项可自带 device，由 FlowRunner 逐项检查。
-            if params.device().is_none() {
-                JsonOutput::error(
-                    "tke run 必须指定设备: -d/--device <设备ID>（web / Android 序列号 / iOS UDID）",
-                );
-            }
+            let params = if params.device().is_none() {
+                infer_device_from_pack(&params, &path)
+            } else {
+                params
+            };
 
             // AI 辅助驾驶 · 起始态对齐：无启动步的脚本开跑前把设备带回起始页（防止"从
             // 当前页面闭眼开跑"）。已在起始页/有启动步/无参照 → 零成本跳过；导航后仍

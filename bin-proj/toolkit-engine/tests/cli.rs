@@ -179,7 +179,8 @@ fn nonweb_control_close_requires_package() {
     assert!(s.contains("包名"), "报错应点明需要包名:{}", s);
 }
 
-/// `tke run <.tks>` 必须显式给设备(.tks 不记平台,不给会被当 Android 报「adb 缺失」)
+/// `tke run <.tks>` 不给设备、又无从推断(没有同名元素包) → 明确报缺设备
+/// (.tks 不记平台,不给会被当 Android 报「adb 缺失」)
 #[test]
 fn run_requires_device() {
     let d = tmp("need-device");
@@ -189,4 +190,45 @@ fn run_requires_device() {
     assert!(!o.status.success(), "不给设备应失败");
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("设备"), "报错应点名设备:{}", s);
+}
+
+/// 造一个 `<dir>/<stem>.tks` + `<stem>.tklib` 两件套,元素包记录平台为 `platform`
+fn make_pack(dir: &std::path::Path, stem: &str, platform: &str, device: &str) -> PathBuf {
+    let lib_dir = dir.join("lib");
+    std::fs::create_dir_all(&lib_dir).unwrap();
+    let lib_json = lib_dir.join("element.json");
+    std::fs::write(&lib_json, r#"{"elements":{}}"#).unwrap();
+    let tks = dir.join(format!("{}.tks", stem));
+    std::fs::write(&tks, "步骤:\n返回\n").unwrap();
+    tke::utils::tklib::pack(
+        &lib_json,
+        &tke::utils::tklib::tklib_path(&tks),
+        &tke::utils::tklib::TklibMeta::new(platform, device),
+    )
+    .unwrap();
+    tks
+}
+
+/// 平台自包含(Q-6):缺 -d 时从同名元素包的 meta.json 读平台。
+/// iOS 用例——UDID 不可照搬,仍要求显式给,但报错要把录制时的 UDID 摆出来对照。
+#[test]
+fn run_infers_platform_from_pack_ios_still_needs_device() {
+    let d = tmp("infer-ios");
+    let tks = make_pack(&d, "case", "ios", "00008030-ABCD");
+    let o = tke().args(["run", tks.to_str().unwrap()]).output().unwrap();
+    assert!(!o.status.success(), "iOS 缺设备应失败");
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("iOS"), "应点明是 iOS 用例:{}", s);
+    assert!(s.contains("00008030-ABCD"), "应附上录制时的 UDID 便于对照:{}", s);
+}
+
+/// 元素包里的平台不认识 → 报错要说清是包里的值有问题,别只甩一句缺设备
+#[test]
+fn run_unknown_platform_in_pack_reports_clearly() {
+    let d = tmp("infer-bogus");
+    let tks = make_pack(&d, "case", "harmony", "x");
+    let o = tke().args(["run", tks.to_str().unwrap()]).output().unwrap();
+    assert!(!o.status.success());
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("harmony"), "应回显包里那个认不出的平台:{}", s);
 }

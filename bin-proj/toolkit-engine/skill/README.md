@@ -137,6 +137,7 @@ bash .claude/skills/ui-check/scripts/check-env.sh
 ## 常见问题
 
 **报「adb 缺失」但我测的是网页** → 忘了带 `-d web`。tke 是无状态 CLI，不带 `-d` 默认按安卓处理。
+（例外：`tke run foo.tks` 会先看同名 `foo.tklib` 里记的录制平台，web 用例可以不带 `-d`。）
 
 **加了 `--headless=on` 但还是弹出了浏览器窗口** → 上一个会话是有头的、被复用了。
 先 `tke -d web control close` 销毁会话再跑（新版会拦住并提示）。
