@@ -34,3 +34,4 @@
 | [`setup-notes.md`](setup-notes.md) | 环境搭建/部署/换机的坑 |
 | [`driver-mapping.md`](driver-mapping.md) | 原子指令在三端驱动的底层映射对照 |
 | [`skill-integration.md`](skill-integration.md) | tke 作为 skill 融入 coding agent 工作流（设计稿,未实现;契约见 ADR-0009） |
+| [`publishing-to-toolkit-cloud.md`](publishing-to-toolkit-cloud.md) | 打包 skill 分发包并用 curl 一次性上传到 Toolkit Cloud 的操作手册 |

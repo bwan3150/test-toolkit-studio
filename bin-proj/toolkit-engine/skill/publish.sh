@@ -75,7 +75,7 @@ echo "   ✅ install.sh"
 if [ "$WITH_CHROME" = "1" ]; then
     pkg=$(ls "$CHROME_DIR" 2>/dev/null | grep -E '^chrome-(mac|linux|win)' | head -1)
     if [ -n "$pkg" ]; then
-        echo "   .. 打包 $pkg（600MB+，慢）"
+        echo "   .. 打包 ${pkg}（600MB+，慢）"
         (cd "$CHROME_DIR" && zip -qr "$OUT/chrome/$pkg.zip" "$pkg")
         echo "   ✅ chrome/$pkg.zip ($(du -h "$OUT/chrome/$pkg.zip" | cut -f1))"
     else
