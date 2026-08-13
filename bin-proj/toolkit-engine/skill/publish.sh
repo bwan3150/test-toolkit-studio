@@ -100,7 +100,10 @@ fi
 
 # —— 版本留痕：让人能看出这批是什么 ——
 "$SRC/tke" --version > "$OUT/VERSION" 2>/dev/null || echo "unknown" > "$OUT/VERSION"
-[ -x "$SRC/chromedriver" ] && "$SRC/chromedriver" --version >> "$OUT/VERSION" 2>/dev/null
+# 驱动版本要标平台:两个平台的 chromedriver 未必同版本,而 VERSION 是全站一份、
+# 谁后传谁覆盖——不标平台的话,mac 用户会看到 linux 那批的驱动版本,反过来也一样。
+# (install.sh 只消费第一行的 tke 版本和 build 戳,这行纯给人看)
+[ -x "$SRC/chromedriver" ] && echo "[${PLATFORM}] $("$SRC/chromedriver" --version 2>/dev/null)" >> "$OUT/VERSION"
 # build 戳 = 下载缓存键。分发走 Cloudflare(max-age 4h,且不认 no-cache 请求头),
 # 只有**变化的查询参数**能破缓存——所以每次发布换一个戳,新版本自然绕过旧缓存,
 # 同版本则照常命中 CDN。没有它的话:传了新文件,使用者 4 小时内下到的还是旧的。
