@@ -13,7 +13,7 @@
 # 产出布局（install.sh 按这个约定去取）：
 #   dist/
 #   ├── install.sh
-#   ├── skill/ui-check.tar.gz
+#   ├── skill/tke-ui-test.tar.gz
 #   ├── bin/<platform>/{tke,chromedriver,adb,aapt,go-ios}.gz
 #   └── chrome/<chrome-mac-arm64|chrome-linux64|...>.zip
 #
@@ -62,8 +62,8 @@ echo "   平台   $PLATFORM"
 echo "   输出   $OUT"
 
 # —— skill 文件 ——（只收 AI 和使用者要的，不含 dist/ 与打包脚本自身）
-tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/ui-check.tar.gz" -C "$SCRIPT_DIR" ui-check
-echo "   ✅ skill/ui-check.tar.gz"
+tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/tke-ui-test.tar.gz" -C "$SCRIPT_DIR" tke-ui-test
+echo "   ✅ skill/tke-ui-test.tar.gz"
 
 # —— 二进制 ——（逐个 gzip，install.sh 按名字取；缺的跳过）
 # 默认只打 tke —— 驱动几乎不变，云上已有的不会因为没重传而消失。

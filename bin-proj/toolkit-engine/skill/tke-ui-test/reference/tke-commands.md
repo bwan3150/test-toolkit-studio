@@ -1,4 +1,4 @@
-# tke 命令速查（ui-check 用得上的部分）
+# tke 命令速查（tke-ui-test 用得上的部分）
 
 全局参数：`-d <设备>` 必带；`--log <dir>` 留证据；`--cache <dir>` 并发隔离；
 `--headless=on|off` 强制无头/有头（**必须带等号**）。

@@ -33,5 +33,5 @@
 | [`tke-flow.md`](tke-flow.md) | 当前流程速览(mermaid 图) |
 | [`setup-notes.md`](setup-notes.md) | 环境搭建/部署/换机的坑 |
 | [`driver-mapping.md`](driver-mapping.md) | 原子指令在三端驱动的底层映射对照 |
-| [`skill-integration.md`](skill-integration.md) | tke 作为 skill 融入 coding agent 工作流的**早期设计稿**。⚠️ 其中的 `tke task` 方案已被 **ADR-0010** 推翻（skill 借调用方的 AI，不内置）；实际落地物是 `skill/ui-check/` + `skill/install.sh` |
+| [`skill-integration.md`](skill-integration.md) | tke 作为 skill 融入 coding agent 工作流的**早期设计稿**。⚠️ 其中的 `tke task` 方案已被 **ADR-0010** 推翻（skill 借调用方的 AI，不内置）；实际落地物是 `skill/tke-ui-test/` + `skill/install.sh` |
 | [`publishing-to-toolkit-cloud.md`](publishing-to-toolkit-cloud.md) | 打包 skill 分发包并用 curl 一次性上传到 Toolkit Cloud 的操作手册 |

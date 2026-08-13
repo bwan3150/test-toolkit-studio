@@ -10,7 +10,7 @@
 - **`build-linux.sh`**（依赖预检 + `--no-ocr` CI 模式），两条路径实测通过
 - **ADR-0010 生效（用户拍板）**：**skill 借调用方的 AI**——tke 退回成设备操作原语 + 证据产出器。
   `tke task`（ADR-0009）取消，该 ADR 标为已被取代（一行代码没写过）。harness 内置 AI 保留
-- **skill 原型 `skill/ui-check/`**（SKILL.md + check-env.sh），可复制到使用者项目的 `.claude/skills/`
+- **skill 原型 `skill/tke-ui-test/`**（SKILL.md + check-env.sh），可复制到使用者项目的 `.claude/skills/`
 - **fix**：`element add --lib foo.tklib` 包不存在时建新包（P-17，skill 实测第一步撞出来的）
 - **fix（用户 mac 实测撞出的两个）**：①会话跨命令复用致 `--headless` 静默失效——`SessionInfo`
   增记 `headless`，模式不符则销毁重建 + 明确报错（P-18）②`--platform web` 不连带定 device
@@ -24,7 +24,7 @@
   参数,只是 CLI 强制要填个没意义的值;移动端省略则明确报错。文档里的手工清理命令已全部替换
 
 - **skill 定位纠正 + 重写**（用户指出我把 harness 的目标错塞进了 skill）:
-  `skill/ui-test/` → `skill/ui-check/`,去掉 verify/explore、两件套、回放验证。
+  `skill/ui-test/` → `ui-check/` → **`tke-ui-test/`**(08-13 用户定名),去掉 verify/explore、两件套、回放验证。
   **skill 只做「设备操控+查看能力交给调用方 AI + 留证据」**。
   证据落盘零改动就有:`tke steps '点击 [{x, y}]' --log <dir>`(用坐标,不需元素库)
 - **跨设备**:flow per-script device ✅ / `tke run` 必填 `-d` ✅ / **重试断言** ✅

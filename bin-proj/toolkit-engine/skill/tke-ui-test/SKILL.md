@@ -1,5 +1,5 @@
 ---
-name: ui-check
+name: tke-ui-test
 description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写完或刚修完的功能到底能不能用，并留下带标注的截图序列供人复核。当你改完 UI 代码想确认真的跑得通、或用户说"验证一下这个功能"、"这个页面能用吗"时使用。补的是单测和 API 测试覆盖不到的真实链路。
 ---
 
@@ -23,8 +23,8 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写
 ## 第 0 步：环境体检
 
 ```bash
-bash .claude/skills/ui-check/scripts/check-env.sh        # 项目级安装
-# 或 bash ~/.claude/skills/ui-check/scripts/check-env.sh  # 用户级安装
+bash .claude/skills/tke-ui-test/scripts/check-env.sh        # 项目级安装
+# 或 bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh  # 用户级安装
 ```
 
 不通过就告诉用户缺什么，别硬跑。

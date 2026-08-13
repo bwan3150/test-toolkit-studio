@@ -1,4 +1,4 @@
-# ui-check skill —— 安装说明（给人读的）
+# tke-ui-test skill —— 安装说明（给人读的）
 
 让 Claude Code 能亲手操作真实浏览器 / 安卓 / iOS，验证刚写完的功能，并留下带标注的截图证据。
 
@@ -38,7 +38,7 @@ aws s3 sync dist/ s3://<bucket>/tke/ --acl public-read
 <BASE_URL>/
 ├── install.sh
 ├── VERSION                      # 这批的 tke / chromedriver 版本，便于排查
-├── skill/ui-check.tar.gz
+├── skill/tke-ui-test.tar.gz
 ├── bin/<platform>/{tke,chromedriver,adb,aapt,go-ios}.gz
 └── chrome/<chrome-mac-arm64|chrome-linux64|chrome-win64>.zip
 ```
@@ -56,17 +56,17 @@ aws s3 sync dist/ s3://<bucket>/tke/ --acl public-read
 ```bash
 # 项目级（推荐：跟着仓库走，团队 clone 即得）
 mkdir -p <你的项目>/.claude/skills
-cp -r ui-check <你的项目>/.claude/skills/
+cp -r tke-ui-test <你的项目>/.claude/skills/
 
 # 或用户级（所有项目都能用）
 mkdir -p ~/.claude/skills
-cp -r ui-check ~/.claude/skills/
+cp -r tke-ui-test ~/.claude/skills/
 ```
 
 装完目录长这样：
 
 ```
-.claude/skills/ui-check/
+.claude/skills/tke-ui-test/
 ├── SKILL.md                    # 主文件，Claude Code 自动读
 ├── scripts/check-env.sh        # 环境体检
 └── reference/                  # 以下 AI 按需读
@@ -120,7 +120,7 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # macOS 必须清�
 ### 3. 验证
 
 ```bash
-bash .claude/skills/ui-check/scripts/check-env.sh
+bash .claude/skills/tke-ui-test/scripts/check-env.sh
 ```
 
 它会逐项告诉你 tke、chromedriver、Chrome、安卓设备的状态，以及当前会跑有头还是无头。
@@ -136,14 +136,14 @@ bash .claude/skills/ui-check/scripts/check-env.sh
 - "验证一下这个功能在手机上能不能用"
 - "在平台上建个智能场景，去手机 App 里看能不能正常查看和使用"
 
-**② 斜杠命令显式调用**——输入 `/ui-check`，后面可以直接跟任务：
+**② 斜杠命令显式调用**——输入 `/tke-ui-test`，后面可以直接跟任务：
 
 ```
-/ui-check 在 https://platform.example.com 建个场景「夜间回家」，去手机上确认能查看和使用
+/tke-ui-test 在 https://platform.example.com 建个场景「夜间回家」，去手机上确认能查看和使用
 ```
 
 斜杠名 = 目录名 = frontmatter 里的 `name`（三者一致才认得出）。
-用户级装在 `~/.claude/skills/ui-check/` 就全局可用；项目级装在仓库的 `.claude/skills/` 下，
+用户级装在 `~/.claude/skills/tke-ui-test/` 就全局可用；项目级装在仓库的 `.claude/skills/` 下，
 **跟着仓库走**，团队其他人 clone 下来就有（推荐团队项目用这种）。
 
 它会自己走：体检 → 看页面 → 操作（带证据）→ 判断 → 报结论 + 证据目录。

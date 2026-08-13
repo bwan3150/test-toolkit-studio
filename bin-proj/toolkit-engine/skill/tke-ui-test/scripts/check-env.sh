@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ui-check skill 前置体检：缺什么直接说清楚，别让调用方撞进去猜。
+# tke-ui-test skill 前置体检：缺什么直接说清楚，别让调用方撞进去猜。
 # 退出码：0=至少有一个目标可操作；1=tke 本身不可用。
 
 set -uo pipefail

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ui-check skill 一键安装器
+# tke-ui-test skill 一键安装器
 #
 #   curl -fsSL <BASE_URL>/install.sh | bash
 #   curl -fsSL <BASE_URL>/install.sh | bash -s -- --profile web --user
@@ -101,7 +101,7 @@ else
     Q="$CACHE_BUST"
 fi
 
-echo "== ui-check skill 安装 =="
+echo "== tke-ui-test skill 安装 =="
 echo "   来源     $BASE_URL"
 [ -n "$REMOTE_VERSION" ] && echo "   版本     $(printf '%s' "$REMOTE_VERSION" | head -1)"
 echo "   平台     $PLATFORM"
@@ -115,13 +115,19 @@ else
 fi
 mkdir -p "$SKILL_ROOT"
 echo
-echo "-- skill 文件 → $SKILL_ROOT/ui-check"
-if fetch "$BASE_URL/skill/ui-check.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
-    rm -rf "$SKILL_ROOT/ui-check"
+echo "-- skill 文件 → $SKILL_ROOT/tke-ui-test"
+if fetch "$BASE_URL/skill/tke-ui-test.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
+    rm -rf "$SKILL_ROOT/tke-ui-test"
     tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT" || { echo "   ❌ skill 包解压失败" >&2; exit 1; }
     echo "   ✅ 已安装"
+    # 旧名 ui-check 的残留：不清掉的话两个 skill 同时在册,description 几乎一样,
+    # AI 会在两者间乱挑,用户也看不出该用哪个。改名是 2026-08-13。
+    if [ -d "${SKILL_ROOT}/ui-check" ]; then
+        rm -rf "${SKILL_ROOT}/ui-check"
+        echo "   🧹 已清除旧版 ui-check（本 skill 已更名为 tke-ui-test）"
+    fi
 else
-    echo "   ❌ 取不到 skill 包：$BASE_URL/skill/ui-check.tar.gz" >&2
+    echo "   ❌ 取不到 skill 包：$BASE_URL/skill/tke-ui-test.tar.gz" >&2
     echo "      （若返回的是网页而非文件，多半是这个路径还没上传）" >&2
     exit 1
 fi
@@ -205,8 +211,8 @@ fi
 echo
 export PATH="$TKE_HOME:$PATH"
 HEALTH=0
-if [ -x "$SKILL_ROOT/ui-check/scripts/check-env.sh" ]; then
-    bash "$SKILL_ROOT/ui-check/scripts/check-env.sh" || HEALTH=1
+if [ -x "$SKILL_ROOT/tke-ui-test/scripts/check-env.sh" ]; then
+    bash "$SKILL_ROOT/tke-ui-test/scripts/check-env.sh" || HEALTH=1
 fi
 
 echo
@@ -216,6 +222,6 @@ if [ "$HEALTH" = "0" ]; then
 else
     echo "⚠️  文件都装好了，但**环境还不完整**（见上面 ❌）——现在还跑不了检查。"
     echo "   补齐缺的那几项后，重跑体检确认："
-    echo "   bash $SKILL_ROOT/ui-check/scripts/check-env.sh"
+    echo "   bash $SKILL_ROOT/tke-ui-test/scripts/check-env.sh"
     exit 1
 fi

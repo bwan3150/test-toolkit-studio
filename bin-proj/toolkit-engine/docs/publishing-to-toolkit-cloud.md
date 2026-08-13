@@ -1,6 +1,6 @@
 # 发布 tke skill 到 Toolkit Cloud
 
-> 把 `ui-check` skill 的一键安装分发包（skill + tke 及驱动 + Chrome for Testing）
+> 把 `tke-ui-test` skill 的一键安装分发包（skill + tke 及驱动 + Chrome for Testing）
 > 打包并上传到自建存储平台 Toolkit Cloud，供用户 `curl … | bash` 一行安装。
 > 打包脚本见 [`../skill/publish.sh`](../skill/publish.sh)，安装脚本见 [`../skill/install.sh`](../skill/install.sh)。
 
@@ -12,7 +12,7 @@
 <存储根>/tke/
 ├── install.sh                        # 用户入口脚本
 ├── VERSION                           # 版本留痕（tke / chromedriver 版本）
-├── skill/ui-check.tar.gz             # skill 本体，跟平台无关
+├── skill/tke-ui-test.tar.gz             # skill 本体，跟平台无关
 ├── bin/<platform>/                   # 平台名 = darwin-arm64 / darwin-amd64 / linux-arm64 / linux-amd64
 │   └── {tke,chromedriver,adb,aapt,go-ios}.gz   # 每个二进制单独 gzip（不是 tar）
 └── chrome/
@@ -21,7 +21,7 @@
 
 要点：
 - **二进制是单文件 gzip**（`tke.gz`），**Chrome 是整个目录 zip**，两者别搞混。
-- ⚠️ **`install.sh` / `VERSION` / `skill/ui-check.tar.gz` 三个别漏传**——它们不在 `bin/`、
+- ⚠️ **`install.sh` / `VERSION` / `skill/tke-ui-test.tar.gz` 三个别漏传**——它们不在 `bin/`、
   `chrome/` 里，是另外三个顶层文件。漏了的话使用者根本装不上（见下面「SPA 兜底」）。
 - bin 平台名用 `amd64`，Chrome 包名用 `x64`（`chrome-mac-x64`）——命名不一致，别统一。
 - **chromedriver 与 chrome 必须同批、版本配对**，否则网页检查跑不起来。别单独更新其中一个。
@@ -70,7 +70,7 @@ https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke
 
 ```bash
 BASE=https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke
-for f in VERSION install.sh skill/ui-check.tar.gz bin/linux-amd64/tke.gz chrome/chrome-linux64.zip; do
+for f in VERSION install.sh skill/tke-ui-test.tar.gz bin/linux-amd64/tke.gz chrome/chrome-linux64.zip; do
   printf '%-34s %s\n' "$f" "$(curl -fsSL --max-time 60 "$BASE/$f?t=$$" | head -c2 | od -An -c | tr -s ' ')"
 done
 # 期望：VERSION → t k ；install.sh → # ! ；*.gz → 037 213 ；*.zip → P K

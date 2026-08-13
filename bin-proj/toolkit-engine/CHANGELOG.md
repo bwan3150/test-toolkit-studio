@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### 2026-08-13 · skill 更名 ui-check → **tke-ui-test**（用户定名）
+- **breaking(分发)** 目录、frontmatter `name`、斜杠命令、分发包名全部改:`skill/tke-ui-test/`、`/tke-ui-test`、`skill/tke-ui-test.tar.gz`。**三者必须一致**才认得出
+- **fix** `install.sh` 装完自动清除旧的 `ui-check` 目录——不清的话两个 skill 同时在册、description 几乎一样,AI 会乱挑、用户也看不出该用哪个
+- **注意** 云上 `skill/ui-check.tar.gz` 是旧路径,下次 publish 会传新名;**老包不会自动消失**,需要时手动删
+- **实测** 三个脚本 `bash -n` 过;本机重装 + 体检全绿(tke 0.7.3-beta / chromedriver 151 / Chrome 就位)
+
 ### 2026-08-13 · skill 拆出踩坑册 + 澄清「不产 .tks」
 - **docs** 新增 `reference/pitfalls.md`(C-1~C-10):**专收"会得出假结论"的坑**——不是跑不起来,是跑起来了结论是错的。主文件只留"怎么做",坑册收"为什么会错",**新踩的坑往坑册加、不再撑大 SKILL.md**(用户提)。SKILL.md 214 → 173 行
 - **docs** `reference/tks-syntax.md` → **`steps-syntax.md`**:旧名暗示"要写 .tks",而这个 skill **只把指令当 `steps` 的命令行参数用**,不产脚本资产、不建元素库——产可回放脚本是 `tke harness` 的活,**两个东西**(用户强调)

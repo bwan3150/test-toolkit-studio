@@ -2,7 +2,7 @@
 
 > 状态:**原型已落地并实测通过**（2026-08-12）。方向见 [`adr/0010-skill-borrows-caller-ai.md`](adr/0010-skill-borrows-caller-ai.md)
 > ——**skill 借调用方的 AI**,tke 不带 AI、不需要 API key。
-> 可分发原型在 [`../skill/ui-check/`](../skill/ui-check/)。
+> 可分发原型在 [`../skill/tke-ui-test/`](../skill/tke-ui-test/)。
 > ~~ADR-0009 的 `tke task`~~ 已取消（被 ADR-0010 取代）。
 >
 > ⚠️ **定位已于 2026-08-12 由用户纠正**（本文早期版本把 harness 的目标错塞进了 skill）:
@@ -85,11 +85,11 @@ SKILL.md 里给了分诊表。tke 侧 ADR-0006 的分诊层仍服务于 `tke run
 
 ## 5. skill 形态与安装
 
-可分发原型在本仓库 [`../skill/ui-check/`](../skill/ui-check/),使用者复制到自己项目的
+可分发原型在本仓库 [`../skill/tke-ui-test/`](../skill/tke-ui-test/),使用者复制到自己项目的
 `.claude/skills/` 下即可:
 
 ```
-<项目>/.claude/skills/ui-check/
+<项目>/.claude/skills/tke-ui-test/
 ├── SKILL.md                 # 主循环 + 先verify后explore + .tks 语法 + 护栏 + 红线
 └── scripts/check-env.sh     # 前置体检
 ```
@@ -121,7 +121,7 @@ AI 配置走 `-c <config.toml>` 的 `[ai]` 段(敏感 key 别上命令行)。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 0 | skill 原型（`skill/ui-check/`）+ 本机无头全链路实测 | ✅ 2026-08-12 |
+| 0 | skill 原型（`skill/tke-ui-test/`）+ 本机无头全链路实测 | ✅ 2026-08-12 |
 | 1 | ~~`tke task` headless~~ | ❌ 取消（ADR-0010：不需要内层 AI） |
 | 2 | intent 意图契约（结构化输入替代自由文本） | 待定 |
 | 3 | 护栏命令化（把 asserter/页面契约做成必须调用的子命令） | 待定,触发条件见 ADR-0010 |
