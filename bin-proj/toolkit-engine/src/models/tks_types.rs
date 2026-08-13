@@ -80,6 +80,9 @@ pub struct TksStep {
     pub params: Vec<TksParam>,
     pub raw: String,
     pub line_number: usize,
+    /// 行内注释（`点击 [{1,2}] # 点开详情看是否跳转`）——写指令的人/AI 留下的**这一步在
+    /// 干什么**。原样带进执行结果与 HTML 报告：复核的人光看命令看不出意图，这句话就是意图。
+    pub note: Option<String>,
 }
 
 /// TKS脚本

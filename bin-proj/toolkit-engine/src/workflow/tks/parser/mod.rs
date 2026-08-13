@@ -15,6 +15,30 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// 切出行内注释：`点击 [{1,2}] # 点开详情看是否跳转` → (`点击 [{1,2}]`, `点开详情看是否跳转`)
+///
+/// **必须跟踪引号状态**——URL 的锚点（`启动 ["https://x/#/list"]`）和文本参数里的井号
+/// （`输入 [{1,2}, "话题#标签"]`）都是数据，不是注释。只有**引号外、且前面是空白或行首**
+/// 的 `#` 才当注释开头。
+fn split_inline_comment(line: &str) -> (&str, Option<String>) {
+    let b = line.as_bytes();
+    let mut in_quote = false;
+    for i in 0..b.len() {
+        match b[i] {
+            b'"' => in_quote = !in_quote,
+            b'#' if !in_quote && (i == 0 || b[i - 1].is_ascii_whitespace()) => {
+                let note = line[i + 1..].trim();
+                return (
+                    line[..i].trim_end(),
+                    (!note.is_empty()).then(|| note.to_string()),
+                );
+            }
+            _ => {}
+        }
+    }
+    (line, None)
+}
+
 /// 脚本解析器
 pub struct ScriptParser {
     command_map: HashMap<String, TksCommand>,
@@ -60,10 +84,11 @@ impl ScriptParser {
         let mut in_steps = false;
 
         for (line_num, line) in lines.iter().enumerate() {
-            let trimmed = line.trim();
+            // 行内注释切出来单独留着：它是「这一步在干什么」，要带进报告
+            let (trimmed, note) = split_inline_comment(line.trim());
 
-            // 跳过空行和注释
-            if trimmed.is_empty() || trimmed.starts_with('#') {
+            // 跳过空行和纯注释行
+            if trimmed.is_empty() {
                 continue;
             }
 
@@ -75,7 +100,8 @@ impl ScriptParser {
 
             // 只解析步骤部分的内容
             if in_steps {
-                if let Some(step) = self.parse_step(trimmed, line_num + 1) {
+                if let Some(mut step) = self.parse_step(trimmed, line_num + 1) {
+                    step.note = note;
                     script.steps.push(step);
                 }
             }
@@ -119,6 +145,7 @@ impl ScriptParser {
             params,
             raw: line.to_string(),
             line_number,
+            note: None,
         })
     }
 
@@ -132,5 +159,58 @@ impl ScriptParser {
 impl Default for ScriptParser {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod comment_tests {
+    use super::*;
+
+    /// 行内注释被切出来,命令部分不受影响
+    #[test]
+    fn splits_inline_comment() {
+        let (cmd, note) = split_inline_comment("点击 [{1, 2}] # 点开详情看是否跳转");
+        assert_eq!(cmd, "点击 [{1, 2}]");
+        assert_eq!(note.as_deref(), Some("点开详情看是否跳转"));
+    }
+
+    /// **引号内的 # 是数据不是注释**——URL 锚点、话题标签都靠这条不被切坏
+    #[test]
+    fn keeps_hash_inside_quotes() {
+        let (cmd, note) = split_inline_comment(r#"启动 ["https://x.com/#/list"]"#);
+        assert_eq!(cmd, r#"启动 ["https://x.com/#/list"]"#);
+        assert!(note.is_none(), "URL 锚点不是注释");
+
+        let (cmd, note) = split_inline_comment(r#"输入 [{1,2}, "话题#标签"] # 填个带井号的"#);
+        assert_eq!(cmd, r#"输入 [{1,2}, "话题#标签"]"#, "只切引号外那个");
+        assert_eq!(note.as_deref(), Some("填个带井号的"));
+    }
+
+    /// 紧贴着的 # 不算注释(如 `abc#def`),必须前面是空白——避免误切参数
+    #[test]
+    fn requires_whitespace_before_hash() {
+        let (cmd, note) = split_inline_comment("按键 [KEYCODE#1]");
+        assert_eq!(cmd, "按键 [KEYCODE#1]");
+        assert!(note.is_none());
+    }
+
+    /// 整行注释:命令部分为空
+    #[test]
+    fn whole_line_comment() {
+        let (cmd, note) = split_inline_comment("# 这一段在验证保存逻辑");
+        assert_eq!(cmd, "");
+        assert_eq!(note.as_deref(), Some("这一段在验证保存逻辑"));
+    }
+
+    /// 端到端:解析后 note 挂在对应的步骤上
+    #[test]
+    fn parser_attaches_note_to_step() {
+        let script = ScriptParser::new()
+            .parse("步骤:\n启动 [\"https://x\"] # 打开首页\n返回 # 退回去\n")
+            .unwrap();
+        assert_eq!(script.steps.len(), 2);
+        assert_eq!(script.steps[0].note.as_deref(), Some("打开首页"));
+        assert_eq!(script.steps[1].note.as_deref(), Some("退回去"));
+        assert_eq!(script.steps[0].raw, r#"启动 ["https://x"]"#, "raw 不该含注释");
     }
 }

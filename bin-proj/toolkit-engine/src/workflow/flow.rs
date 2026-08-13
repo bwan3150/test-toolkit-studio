@@ -240,6 +240,7 @@ impl FlowRunner {
                     script_path: Some(script_path.to_string_lossy().to_string()),
                     run_dir: None,
                     launched_packages: Vec::new(),
+                    device: item.device().map(String::from).or_else(|| self.params.device()),
                 });
             }
 

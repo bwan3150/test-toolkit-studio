@@ -454,7 +454,7 @@ fn swipe_end(from: Point, direction: &str, distance: i32) -> Point {
 
 /// 构造 TksStep 并序列化成 .tks 行（统一经 Phase 2 序列化器，保证可回放）
 fn line(command: TksCommand, params: Vec<TksParam>) -> String {
-    step_to_source(&TksStep { command, params, raw: String::new(), line_number: 0 })
+    step_to_source(&TksStep { command, params, raw: String::new(), line_number: 0, note: None })
 }
 
 /// `{元素名}`（auto 策略）参数

@@ -95,6 +95,7 @@ impl TksRunner {
                 screenshot: None,
                 xml: None,
                 healed: None,
+                note: None,
             }),
             Err(e) => Ok(StepResult {
                 index: 0,
@@ -106,6 +107,7 @@ impl TksRunner {
                 screenshot: None,
                 xml: None,
                 healed: None,
+                note: None,
             })
         }
     }

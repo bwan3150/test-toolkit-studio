@@ -169,6 +169,7 @@ impl ScriptRunner {
             script_path: Some(display_path.to_string()),
             run_dir: artifacts.as_ref().map(|_| run_dir_str.clone()),
             launched_packages: Vec::new(),
+            device: self.params.device(),
         };
 
         on_event(&RunEvent::RunStart {
@@ -291,6 +292,7 @@ impl ScriptRunner {
                 screenshot: screenshot.clone(),
                 xml: xml.clone(),
                 healed: healed.clone(),
+                note: step.note.clone(),
             };
 
             on_event(&RunEvent::StepEnd {

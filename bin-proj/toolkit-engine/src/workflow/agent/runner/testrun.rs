@@ -493,6 +493,7 @@ impl TestRun {
             script_path: Some(self.script_path.to_string_lossy().to_string()),
             run_dir: Some(self.run_dir.to_string_lossy().to_string()),
             launched_packages: Vec::new(),
+            device: Some(self.device.clone()),
         };
         let _ = self.artifacts.write_log(&exec_result);
 

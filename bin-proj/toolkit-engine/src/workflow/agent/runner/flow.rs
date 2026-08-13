@@ -772,6 +772,7 @@ pub async fn drive(
                                 screenshot,
                                 xml,
                                 healed: None,
+                                note: None,
                             });
                             lines.push(line.clone());
                             step_comments.push(comment.clone().unwrap_or_default());
