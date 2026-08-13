@@ -12,9 +12,9 @@
 #   ├── bin/<platform>/{tke,chromedriver,adb,aapt,go-ios}.gz
 #   └── chrome/<chrome-mac-arm64|chrome-linux64|...>.zip
 #
-# 上传（示例）：
-#   aws s3 sync dist/ s3://<bucket>/tke/ --acl public-read
-#   然后 install.sh 里的 DEFAULT_BASE_URL 指向 https://<cdn>/tke
+# 上传：
+#   export TKC_TOKEN=<token>
+#   curl -fsSL https://cloud.test-toolkit.app/script/upload.sh | bash -s -- dist/ tookit-engine-resource:tke/
 
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -99,6 +99,9 @@ echo
 # mac 上目录里常混进 .DS_Store,传上去是噪音
 find "$OUT" -name '.DS_Store' -delete 2>/dev/null
 
-echo "下一步："
-echo "  aws s3 sync $OUT/ s3://<bucket>/tke/ --acl public-read"
-echo "  用户侧：curl -fsSL https://<cdn>/tke/install.sh | bash"
+echo "下一步 —— 传到 Toolkit Cloud（VERSION 必须一起传，它是破 CDN 缓存的键）："
+echo "  export TKC_TOKEN=<你的token>"
+echo "  curl -fsSL https://cloud.test-toolkit.app/script/upload.sh \\"
+echo "    | bash -s -- $OUT/ tookit-engine-resource:tke/"
+echo
+echo "使用者侧：curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash"
