@@ -39,6 +39,9 @@ pub fn build_help() -> String {
   {g}steps{r}        不落文件执行一串指令  {d}例: tke steps \"点击 [{{登录按钮}}]\" \"等待 [2s]\"{r}
   {g}harness{r}      AI 探索测试并生成脚本  {d}例: tke harness 用例.md --scripts 目录/（文件名 AI 起·简写 harn）{r}
 
+{c}环境{r}
+  {g}fix{r}          补齐缺失的运行依赖 {d}(chromedriver/Chrome/adb/go-ios；唯一会联网下载的命令。--check 只看不下){r}
+
 {c}自有工具{r}
   {g}ocr{r}          图片文字识别 {d}(离线 / 在线){r}
   {g}file{r}         设备文件系统管理

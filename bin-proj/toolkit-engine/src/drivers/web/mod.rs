@@ -83,8 +83,17 @@ impl WebDriver {
             }
         }
 
+        // 先分清"还没启动"和"根本装不了"：chromedriver 都不在的话，让人去"先执行启动"
+        // 只会让他撞第二堵墙才看到真原因（实测踩过）
         Err(TkeError::DeviceError(
-            "无活动浏览器会话，请先执行 启动 [URL] 或 control launch <URL>".to_string(),
+            if crate::utils::deps::tool_present("chromedriver") {
+                "无活动浏览器会话，请先执行 启动 [URL] 或 control launch <URL>".to_string()
+            } else {
+                format!(
+                    "chromedriver 不在 tke 同目录，网页检查跑不了（tke 只在自己所在目录找工具，不搜 PATH——版本配对靠这个约束）。{}",
+                    crate::utils::deps::fix_hint("web")
+                )
+            },
         ))
     }
 

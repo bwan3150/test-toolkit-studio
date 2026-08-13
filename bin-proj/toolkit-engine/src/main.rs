@@ -124,6 +124,12 @@ enum Commands {
         args: HarnessArgs,
     },
 
+    /// [环境] 补齐缺失的运行依赖（chromedriver / Chrome / adb / go-ios）——**唯一会联网下载的命令**
+    Fix {
+        #[command(flatten)]
+        args: FixArgs,
+    },
+
     // ==================== ④ 自有工具 ====================
     /// [工具] OCR 图片文字识别
     Ocr {
@@ -267,6 +273,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Harness { args } => {
             workflow::harness::handle(args, params.clone()).await
+        }
+        Commands::Fix { args } => {
+            fix::handle(args).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {

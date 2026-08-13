@@ -27,7 +27,16 @@ bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh        # 用户级安装�
 # 或 bash .claude/skills/tke-ui-test/scripts/check-env.sh     # 项目级安装
 ```
 
-不通过就告诉用户缺什么，别硬跑。
+不通过就告诉用户缺什么，别硬跑。**缺依赖（chromedriver / Chrome / adb / go-ios）可以一条命令补齐**：
+
+```bash
+tke fix --check          # 只看缺什么，不下载
+tke fix --profile web    # 补网页那套（会问一句再下）
+tke fix -y --profile web # 不问直接下
+```
+
+`tke fix` 是**唯一会联网下载的命令**——别的命令缺东西只会报错指路，不会偷偷拖几百 MB。
+Chrome 有 600MB，下之前**跟用户说一声**。
 
 ## 设备怎么给
 

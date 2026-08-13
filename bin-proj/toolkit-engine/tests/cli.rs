@@ -232,3 +232,41 @@ fn run_unknown_platform_in_pack_reports_clearly() {
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("harmony"), "应回显包里那个认不出的平台:{}", s);
 }
+
+/// `tke fix --check` 只报告不下载(CI 靠它判断环境是否就绪)
+#[test]
+fn fix_check_reports_without_downloading() {
+    let d = tmp("fix-check");
+    // 拷一份 tke 到空目录：那里什么驱动都没有,必然报缺
+    let exe = std::path::PathBuf::from(env!("CARGO_BIN_EXE_tke"));
+    let mine = d.join("tke");
+    std::fs::copy(&exe, &mine).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&mine, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    let o = Command::new(&mine).args(["fix", "--check", "--profile", "android"]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("adb"), "应点名缺 adb:{}", s);
+    assert!(!o.status.success(), "缺东西时退出码要非 0,CI 才判得出");
+    assert!(s.contains("未下载") || s.contains("check"), "--check 应说明没下载:{}", s);
+}
+
+/// fix 的 profile 只认这四个值
+#[test]
+fn fix_rejects_unknown_profile() {
+    let o = tke().args(["fix", "--profile", "harmony"]).output().unwrap();
+    assert!(!o.status.success());
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("possible values") || s.contains("invalid"), "非法 profile 应被拒:{}", s);
+}
+
+/// 帮助里要有 fix(不然使用者不知道有这条命令)
+#[test]
+fn help_lists_fix() {
+    let o = tke().arg("--help").output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("fix"), "帮助应含 fix:{}", s);
+}

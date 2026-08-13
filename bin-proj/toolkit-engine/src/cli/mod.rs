@@ -4,6 +4,9 @@
 // --help 总览渲染
 pub mod help;
 
+/// tke fix：补齐缺失的运行依赖（唯一会联网下载的命令）
+pub mod fix;
+
 // ① 直通（统一处理所有外部二进制，含 adb -d 注入特例）
 pub mod passthrough;
 
@@ -19,4 +22,5 @@ pub mod tools;
 // 重新导出命令参数类型，方便 main.rs 使用
 pub use atomic::{RefreshArgs, FetchArgs, RecognizeArgs, ControlCommands};
 pub use workflow::{RunArgs, StepsArgs, HarnessArgs};
+pub use fix::FixArgs;
 pub use tools::{FileCommands, AppCommands, DeviceCommands, ElementCommands};

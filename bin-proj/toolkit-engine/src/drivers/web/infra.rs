@@ -195,8 +195,19 @@ impl WebDriver {
                         .unwrap_or_else(|| "未知错误".to_string()),
                     other => other.to_string(),
                 };
+                // 会话建不起来最常见的原因是**没有 Chrome for Testing**：chromedriver 只能
+                // 去找系统 Chrome，版本对不上就是这句干巴巴的 session not created。
+                // 光把 chromedriver 的原话抛出来，没人看得出缺的是浏览器本体。
+                let hint = if crate::utils::deps::chrome_for_testing_bin().is_none() {
+                    format!(
+                        "\n  ⚠ 没有找到 Chrome for Testing，chromedriver 只能去找系统 Chrome，版本多半对不上。\n    {}",
+                        crate::utils::deps::fix_hint("web")
+                    )
+                } else {
+                    String::new()
+                };
                 return Err(TkeError::DeviceError(format!(
-                    "创建浏览器会话失败: {} (日志: {})", detail, log_path.display()
+                    "创建浏览器会话失败: {} (日志: {}){}", detail, log_path.display(), hint
                 )));
             }
         };
@@ -220,32 +231,18 @@ impl WebDriver {
     /// 顺序: tke 同目录 → ~/Library/Application Support/tke/；找不到则交给
     /// chromedriver 用系统 Chrome（存在版本不配对风险）
     fn find_chrome_binary(exe_dir: &std::path::Path) -> Option<PathBuf> {
-        // 相对路径按 **Chrome for Testing 官方 zip 解压后的原样结构**约定：
-        // 把官方包（或自建 S3 镜像里的同名包）整个解压到搜索根下即可，不必改名。
-        //   mac:   chrome-mac-arm64/ | chrome-mac-x64/  → .app/Contents/MacOS/...
-        //   linux: chrome-linux64/chrome
-        //   win:   chrome-win64/chrome.exe
-        #[cfg(target_os = "macos")]
-        const REL: &[&str] = &[
-            "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-            "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-        ];
-        #[cfg(target_os = "windows")]
-        const REL: &[&str] = &["chrome-win64/chrome.exe", "chrome-win32/chrome.exe"];
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        const REL: &[&str] = &["chrome-linux64/chrome", "chrome-linux/chrome"];
-
-        // 搜索根：tke 同目录（生产打包）→ 用户数据目录（开发机/CI 推荐，避开 macOS TCC 保护目录，
-        // 见 setup-notes「Chrome for Testing 的三个坑」）。
-        // data_dir(): mac=~/Library/Application Support、linux=~/.local/share、win=%APPDATA%
+        // 路径定义在 utils::deps::CHROME_REL —— 与 `tke fix` 的检测**共用同一份**。
+        // 各写一套的话会出这种怪事：fix 说装好了，驱动却找不到。
+        // 搜索根：tke 同目录（生产打包）→ 用户数据目录（开发机/CI 推荐，避开 macOS TCC
+        // 保护目录，见 setup-notes「Chrome for Testing 的三个坑」）。
+        // 找不到则交给 chromedriver 用系统 Chrome（存在版本不配对风险，但不提前拦）。
         let mut roots = vec![exe_dir.to_path_buf()];
-        if let Some(d) = dirs::data_dir() {
-            roots.push(d.join("tke"));
+        if let Some(d) = crate::utils::deps::chrome_data_dir() {
+            roots.push(d);
         }
-
         roots
             .iter()
-            .flat_map(|root| REL.iter().map(move |rel| root.join(rel)))
+            .flat_map(|root| crate::utils::deps::CHROME_REL.iter().map(move |rel| root.join(rel)))
             .find(|p| p.exists())
     }
 }

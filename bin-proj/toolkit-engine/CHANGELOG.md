@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-13 · `tke fix`:一条命令补齐运行依赖(ADR-0012)
+- **feat** `tke fix` 从分发源补齐 chromedriver / Chrome for Testing / adb(+aapt+libc++.so) / go-ios。`--profile web|android|ios|all`、`--check` 只看不下(缺东西时**退出码非 0**,CI 可判)、`-y` 免确认、`--base-url` 换源
+- **decision** **下载只在这条命令里发生**,普通命令缺依赖只报错指路。一条 CLI 命令突然静默拖 600MB,在内网/离线/CI/按流量计费的机器上都是灾难,企业还有合规问题——**要不要下是使用者的决定**(用户拍板)
+- **fix(误导报错)** 缺 chromedriver 时先跑 `fetch` 会报「无活动浏览器会话,请先执行 启动」——**指错方向**,让人撞第二堵墙才看到真原因。现在先分清"还没启动"和"根本装不了"
+- **fix(误导报错)** 缺 Chrome 时只报 `session not created (日志: …)`,完全看不出缺的是浏览器本体。现在检测到没有 Chrome for Testing 就补一句说明 + `tke fix --profile web`
+- **fix(自己犯的假成功)** 第一版 Chrome 解压失败(zip 关了 deflate 特性),但**半个解压出来的目录留在那儿**,复验只看目录存在就报「✅ 补齐了」+ 退出码 0。判据已改成**可执行文件在不在**,且解压失败会清掉半成品。**一路在防的假成功,自己犯了**
+- **fix** `zip` crate 补 `deflate` 特性——Chrome 官方包是 deflate 压的,只留 stored 会报 "Compression method not supported"
+- **refactor** 新增 `utils::deps`:Chrome 路径(`CHROME_REL`)与工具探测**驱动层和 fix 共用一份**。各写一套会出这种怪事:fix 说装好了、驱动却找不到
+- **choice** 下载走 `curl` 子进程而非 Rust HTTP 客户端:reqwest 是 `ocr-online` 的可选依赖,CI 的 `--no-default-features` 构建里没有,而 fix 必须在任何构建下都能用;tke 本来就是"调外部工具"的架构
+- **fix** 手写的 `cli/help.rs` 又漏了新命令(P-16 同款),测试抓住
+- **实测** 空目录只放一个 tke → `tke fix -y --profile web` → chromedriver 20MB + Chrome 600MB 装齐 → **用装出来的环境真跑通一次网页检查**;android 那套也验了(含顺带的 aapt/libc++.so)、幂等、非交互不确认不下载
+- **测试** lib 54/54 + CLI 契约 19/19(新增 3 条)
+
 ### 2026-08-13 · 报告三连:点了什么 · AI 写的评语 · 相关文件按钮
 - **feat** **「点了什么」**:脚本里写的是 `点击 [{299, 242}]`,光看这行没人知道点的是啥。报告从**执行时的页面结构**反查该坐标命中的元素(取**最内层**那个),展开可看 class/text/resource-id/xpath/范围/可点击性,来源带平台前缀(web/android/ios)
 - **fix(会悄悄标错)** 反查必须用**上一步**的 xml——每步存的是**动作执行后**的页面(点完早跳走了),拿本步的查会把"点了什么"标成"点完到了哪"。专门加测试钉住

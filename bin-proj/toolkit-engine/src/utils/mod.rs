@@ -5,6 +5,7 @@ pub mod workarea;
 pub mod config;
 pub mod interrupt;
 pub mod params;
+pub mod deps;
 pub mod tklib;
 pub mod scroll;
 pub mod xml;
