@@ -25,9 +25,23 @@
 
 没配的话 workflow 会在上传那步明确报错退出，不会静默跳过。
 
-## 日常：发新版 tke / 改了 skill
+## 日常：**自动**发新版
 
-Actions → **Publish TKE** → Run workflow，几个开关：
+**main 上动了 tke 源码或 skill，push 之后自动发一版**，不用管。监听的路径：
+
+```
+bin-proj/toolkit-engine/src/**        Cargo.toml / Cargo.lock / build.rs
+bin-proj/toolkit-engine/skill/**      .github/workflows/tke-publish.yml
+```
+
+只改 `docs/` 或 Electron 那边不会触发——没必要为一篇文档等六个平台编译十几分钟。
+
+而且**只动 skill/ 时会跳过编译**：workflow 先比一次 `HEAD^..HEAD`，源码没变就直接发
+skill 与安装脚本，一分钟完事。改了 `src/` 才走六平台构建。
+
+## 手动：Actions → Publish TKE → Run workflow
+
+需要指定平台、换 OCR 档位、或者只想空跑验证时用，几个开关：
 
 - **targets**：默认 `all`（四个平台）。只改了某个平台的问题时可以单选
 - **ocr**：默认 `online`（快）。`full` 会连离线 tesseract 一起编，**慢很多**（从源码编译

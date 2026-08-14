@@ -10,6 +10,17 @@
 name: Publish TKE
 
 on:
+  # 自动：main 上动了 tke 源码或 skill 就发一版，使用者下次 install/tke fix 就能拿到。
+  # 只列真正影响产物的路径——改 docs/ 或 Electron 那边不该触发一轮六平台编译。
+  push:
+    branches: [main]
+    paths:
+      - 'bin-proj/toolkit-engine/src/**'
+      - 'bin-proj/toolkit-engine/Cargo.toml'
+      - 'bin-proj/toolkit-engine/Cargo.lock'
+      - 'bin-proj/toolkit-engine/build.rs'
+      - 'bin-proj/toolkit-engine/skill/**'
+      - '.github/workflows/tke-publish.yml'
   workflow_dispatch:
     inputs:
       targets:
@@ -33,13 +44,43 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # push 触发时 inputs 是空的，统一兜底（choice 的默认值只对手动触发生效）
+  TARGETS: ${{ inputs.targets || 'all' }}
+  OCR: ${{ inputs.ocr || 'online' }}
   # 分发源根：与 install.sh / tke fix 里的默认值保持一致
   TKC_TARGET: 'tookit-engine-resource:tke/'
   ENGINE_DIR: bin-proj/toolkit-engine
 
 jobs:
+  # 改了什么决定要不要编译：只动 skill/ 的话六个平台白编十几分钟没有意义
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.f.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2      # 要跟上一个提交比
+      - id: f
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            # 手动触发：听 skill_only 开关的
+            [ "${{ inputs.skill_only }}" = "true" ] && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 自动触发：源码/构建配置动了才编，只动 skill 文档就跳过编译直接发
+          if git diff --name-only HEAD^ HEAD | grep -qE '^bin-proj/toolkit-engine/(src/|Cargo\.|build\.rs)'; then
+            echo "code=1" >> "$GITHUB_OUTPUT"
+            echo "→ 源码有改动，六平台重新构建"
+          else
+            echo "code=0" >> "$GITHUB_OUTPUT"
+            echo "→ 只动了 skill/文档，跳过构建，直接发 skill"
+          fi
+
   build:
-    if: ${{ !inputs.skill_only }}
+    needs: [changes]
+    if: ${{ needs.changes.outputs.code == '1' }}
     strategy:
       fail-fast: false
       matrix:
@@ -69,7 +110,7 @@ jobs:
         id: gate
         shell: bash
         run: |
-          if [ "${{ inputs.targets }}" = "all" ] || [ "${{ inputs.targets }}" = "${{ matrix.platform }}" ]; then
+          if [ "${TARGETS}" = "all" ] || [ "${TARGETS}" = "${{ matrix.platform }}" ]; then
             echo "go=1" >> "$GITHUB_OUTPUT"
           else
             echo "go=0" >> "$GITHUB_OUTPUT"
@@ -83,11 +124,11 @@ jobs:
         if: steps.gate.outputs.go == '1'
         with:
           workspaces: ${{ env.ENGINE_DIR }}
-          key: ${{ matrix.platform }}-${{ inputs.ocr }}
+          key: ${{ matrix.platform }}-${{ env.OCR }}
 
       # 离线 OCR 要从源码编译 tesseract + leptonica，得先有 cmake/pkg-config
       - name: 装离线 OCR 的构建依赖
-        if: steps.gate.outputs.go == '1' && inputs.ocr == 'full' && runner.os == 'Linux'
+        if: steps.gate.outputs.go == '1' && env.OCR == 'full' && runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y cmake pkg-config
 
       - name: 构建 tke
@@ -100,9 +141,9 @@ jobs:
           BUILD_VERSION="$(node -p "require('../../package.json').version" 2>/dev/null \
             || grep -m1 '"version"' ../../package.json | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
           export BUILD_VERSION
-          echo "版本 $BUILD_VERSION / OCR ${{ inputs.ocr }}"
+          echo "版本 $BUILD_VERSION / OCR ${OCR}"
 
-          case "${{ inputs.ocr }}" in
+          case "${OCR}" in
             full)   FLAGS="" ;;                                          # 默认特性 = 在线 + 离线
             online) FLAGS="--no-default-features --features ocr-online" ;;
             none)   FLAGS="--no-default-features" ;;
@@ -145,15 +186,15 @@ jobs:
           retention-days: 3
 
   publish:
-    needs: [build]
-    # skill_only 时 build 被跳过，这里仍要跑
-    if: ${{ always() && !cancelled() && !failure() }}
+    needs: [changes, build]
+    # 只发 skill 时 build 是 skipped，这里仍要跑；build 真失败了才不发
+    if: ${{ always() && !cancelled() && needs.build.result != 'failure' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: 收集二进制
-        if: ${{ !inputs.skill_only }}
+        if: ${{ needs.changes.outputs.code == '1' }}
         uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -186,7 +227,7 @@ jobs:
           VER="$(grep -m1 '"version"' package.json | sed -E 's/.*"version": *"([^"]+)".*/\1/')"
           {
             echo "tke $VER"
-            echo "ocr: ${{ inputs.ocr }}"
+            echo "ocr: ${OCR}"
             echo "build: $(date -u +%Y%m%d-%H%M%S)"
           } > dist/VERSION
 
@@ -194,6 +235,7 @@ jobs:
           find dist -type f | sort
           cat dist/VERSION
 
+      # push 触发时 inputs 为空，`!inputs.dry_run` 求值为 true —— 自动发布正是想要的
       - name: 上传到 Toolkit Cloud
         if: ${{ !inputs.dry_run }}
         env:
