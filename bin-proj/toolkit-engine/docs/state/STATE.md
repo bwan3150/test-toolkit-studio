@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-13
-Last-Commit: 919adf36
+Last-Commit: 108530c5
 ---
 
 # 当前状态
@@ -25,7 +25,8 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | App 侧（handlers/frontend） | ⏸ 冻结 | healed 字段等新 NDJSON 待接 |
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
 | 跨设备/跨平台测试 | ✅ 已实现,**AI 侧真机未验** | ADR-0011 全套:flow per-script device / 重试断言 / 设备成为工具参数 + list_devices;动态值传递未做(Q-7) |
-| 分发源四平台齐备 | ✅ 依赖全 / ⏳ 二进制待 CI | 依赖(driver/Chrome/adb/aapt/go-ios)四平台已手工补齐,**一次性活不再动**;tke 二进制只有 mac-arm64+linux-amd64,darwin-amd64/windows 等 CI 跑 |
+| 宿主机能力门禁 | ✅ 本机实测 | iOS 只在 macOS 放行(门禁在 `Controller::new`,control/run/steps/harness 一处覆盖);留 `TKE_ALLOW_IOS=1` 逃生口——界线是产品决策不是技术极限 |
+| 分发源六平台齐备 | ✅ 依赖全 / ⏳ 二进制待 CI | 依赖六平台已手工补齐(linux-arm64 只有 go-ios、win32 没有 go-ios——上游就没有),**一次性活不再动**;tke 二进制只有 mac-arm64+linux-amd64,darwin-amd64/windows 等 CI 跑 |
 | 依赖补齐 `tke fix` | ✅ 本机端到端实测 | ADR-0012:唯一会联网下载的命令;普通命令缺依赖只报错指路。空目录只放 tke → fix → 跑通网页检查 |
 | 两件套自包含（拷走即跑） | ✅ 本机实测通过 | Q-6 关闭:缺 `-d` 时从 tklib 的 meta.json 读平台兜底(web 零参数回放/android 走默认设备/ios 仍需显式) |
 

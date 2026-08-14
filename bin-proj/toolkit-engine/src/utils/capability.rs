@@ -18,15 +18,18 @@ const ALLOW_IOS_ENV: &str = "TKE_ALLOW_IOS";
 /// 这台宿主机能不能驱动 `platform` 的设备；不能就返回一条**说清为什么、以及能做什么**的错误。
 pub fn check(platform: Platform) -> Result<()> {
     match platform {
-        Platform::Ios if !ios_supported() => Err(TkeError::InvalidArgument(format!(
-            "iOS 检查只能在 macOS 上做（当前是 {}）。\n\
-             　原因：设备上的 WebDriverAgent 必须先用 Xcode 装一次，而 Xcode 只有 macOS 有。\n\
-             　（运行期本身不需要 Xcode——go-ios 经 testmanagerd 拉起 WDA。所以如果这台设备\n\
-             　　已经在别处装好了 WDA，可以设 {}=1 放行，风险自负。）\n\
-             　这台机器可以做：网页（-d web）、安卓（-d <序列号>）",
-            os_label(),
-            ALLOW_IOS_ENV
-        ))),
+        Platform::Ios if !ios_supported() => {
+            // 用数组拼而不是 `\n\` 续行：续行符后面的缩进空白会原样进字符串，
+            // 用全角空格对齐还会引来编译器警告，写法本身就有歧义
+            let lines = [
+                format!("iOS 检查只能在 macOS 上做（当前是 {}）。", os_label()),
+                "  原因：设备上的 WebDriverAgent 必须先用 Xcode 装一次，而 Xcode 只有 macOS 有。".into(),
+                "  （运行期本身不需要 Xcode——go-ios 经 testmanagerd 拉起 WDA。所以如果这台设备".into(),
+                format!("    已经在别处装好了 WDA，可以设 {}=1 放行，风险自负。）", ALLOW_IOS_ENV),
+                "  这台机器可以做：网页（-d web）、安卓（-d <序列号>）".into(),
+            ];
+            Err(TkeError::InvalidArgument(lines.join("\n")))
+        }
         _ => Ok(()),
     }
 }
