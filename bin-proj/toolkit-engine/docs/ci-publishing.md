@@ -85,6 +85,33 @@ Actions → **Publish TKE Deps** → Run workflow：
 这样定是因为：源上按平台改名的话，取的那一端也得写平台分支，两处都要维护。
 （`tke fix` 早期版本漏了这一步，Windows 上会落成一个没有扩展名的 `adb`，根本执行不了。）
 
+## 六个平台，但不是每个都齐 —— 上游决定的，不是漏传
+
+| 平台 | tke | chromedriver / Chrome | adb / aapt | go-ios |
+|---|---|---|---|---|
+| darwin-arm64 | ✅ | ✅ | ✅ | ✅ |
+| darwin-amd64 | ✅ | ✅ | ✅ | ✅ |
+| linux-amd64 | ✅ | ✅ | ✅ | ✅ |
+| **linux-arm64** | ✅ | ❌ **上游没有** | ❌ **上游没有** | ✅ |
+| windows-amd64 | ✅ | ✅ | ✅ | ✅ |
+| **windows-386** | ✅ | ✅ | ✅ | ❌ **上游只出 64 位** |
+
+三条硬事实（都是实测出来的，不是猜的）：
+
+- **Chrome for Testing 只出 5 个平台**：`linux64` / `mac-arm64` / `mac-x64` / `win32` / `win64`。
+  `linux-arm64` 与 `win-arm64` 直连 404。
+- **Google 的 platform-tools 不出 arm64 Linux 版**（`linux_aarch64` / `linux-arm64` /
+  `linux_arm64` 三种命名全 404）。
+- **go-ios 的 Windows 包只有 64 位**（zip 里那个 `ios.exe` 是 PE32+ x86-64），
+  32 位 Windows 跑不了，所以 `windows-386` 目录里**有意不放** go-ios。
+
+`tke fix` 知道这些边界：在 arm64 Linux 上会直说"上游没有官方驱动，请
+`apt install chromium-driver adb` 并软链到 tke 同目录"，而不是让人对着下载失败反复试；
+32 位 Windows 上也不会去报"缺 go-ios"——报了也补不上。
+
+**windows-arm64 有意不做**：Windows on ARM 自带 x64 模拟，`windows-amd64` 那套直接能跑，
+而 Chrome for Testing 也没有 arm64 Windows 版，单出一份只会多一套要维护的东西。
+
 ## 分发源布局（install.sh 与 tke fix 都按这个取）
 
 ```

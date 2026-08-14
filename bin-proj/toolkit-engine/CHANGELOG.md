@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · 平台补到六个 + 摸清上游的三条边界
+- **feat** CI matrix 加 **linux-arm64**(`ubuntu-24.04-arm` runner)与 **windows-386**(`i686-pc-windows-msvc` 交叉编译),构建步骤支持 `--target`
+- **deps** 补齐 **win32 全套**(chromedriver + Chrome 152 + adb/aapt + 两个 DLL,都是 i386)与 **linux-arm64 的 go-ios**(ELF aarch64)
+- **fix(差点传错)** win32 的 go-ios 我一开始是从 amd64 直接拷的——**上游的 go-ios Windows 包只有 64 位**(PE32+ x86-64),32 位跑不了。逐个 `file` 验架构时抓出来,已移除
+- **事实(实测,非推断)** ①Chrome for Testing **只出 5 个平台**(linux64/mac-arm64/mac-x64/win32/win64),`linux-arm64` 与 `win-arm64` 直连 **404** ②Google 的 platform-tools **不出 arm64 Linux 版**(三种命名全 404) ③go-ios 的 Windows 包只有 64 位
+- **feat** `tke fix` 知道这些边界:arm64 Linux 上直说"上游没有官方驱动,请 `apt install chromium-driver adb` 再软链到 tke 同目录",而不是让人对着下载失败反复试;32 位 Windows 不再报"缺 go-ios"(报了也补不上)
+- **决定** **windows-arm64 有意不做**:Windows on ARM 自带 x64 模拟,windows-amd64 那套直接能跑;而 Chrome for Testing 也没有 arm64 Windows 版,单出一份只多一套要维护的东西
+
 ### 2026-08-14 · Windows 的 adb 还缺两个 DLL（用户提醒）
 - **fix(Windows 上 adb 直接起不来)** `adb.exe` **直接依赖 `AdbWinApi.dll`**,USB 还要 `AdbWinUsbApi.dll`(由前者**运行时加载,不在导入表里**)。我第一版只传了 adb.exe,Windows 上根本跑不起来——**跟 Linux 版 aapt 缺 libc++.so 是同一类问题**,是用户想起来问才发现的
 - **verify** 用 `objdump -p` 把四个 Windows 二进制的导入表都查了一遍:`aapt.exe` / `chromedriver.exe` / `ios.exe` **都自包含**(只用系统 UCRT 与系统 DLL),只有 adb 需要补。两个 DLL 已上传

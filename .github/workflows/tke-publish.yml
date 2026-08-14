@@ -16,7 +16,7 @@ on:
         description: '构建哪些平台'
         type: choice
         default: 'all'
-        options: ['all', 'darwin-arm64', 'darwin-amd64', 'linux-amd64', 'windows-amd64']
+        options: ['all', 'darwin-arm64', 'darwin-amd64', 'linux-amd64', 'linux-arm64', 'windows-amd64', 'windows-386']
       ocr:
         description: 'OCR 能力：online=在线(快,推荐) / full=在线+离线tesseract(慢很多) / none=不带'
         type: choice
@@ -50,8 +50,16 @@ jobs:
             runner: macos-13        # Intel
           - platform: linux-amd64
             runner: ubuntu-22.04    # 用 22.04 而非 latest：glibc 更老 = 兼容更多用户机器
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            # ⚠️ 这个平台**只有 tke 本身**：Chrome for Testing 与 Google 的 platform-tools
+            # 都不出 arm64 Linux 版（实测 404）。真实用途是 Apple Silicon 上的 Docker/CI，
+            # 那里得改用发行版自带的 chromium-driver / adb，`tke fix` 会照实说明
           - platform: windows-amd64
             runner: windows-latest
+          - platform: windows-386
+            runner: windows-latest
+            target: i686-pc-windows-msvc   # 32 位 Windows：runner 是 x64，靠 target 交叉编译
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -99,7 +107,15 @@ jobs:
             online) FLAGS="--no-default-features --features ocr-online" ;;
             none)   FLAGS="--no-default-features" ;;
           esac
-          cargo build --release $FLAGS
+
+          # 交叉编译目标（目前只有 windows-386 用）：产物落在 target/<triple>/release/
+          TARGET="${{ matrix.target }}"
+          if [ -n "$TARGET" ]; then
+            rustup target add "$TARGET"
+            cargo build --release $FLAGS --target "$TARGET"
+          else
+            cargo build --release $FLAGS
+          fi
 
       # gz 单文件，与分发布局 bin/<platform>/<name>.gz 一致（install.sh 与 tke fix 都按这个取）
       - name: 打包
@@ -108,9 +124,14 @@ jobs:
         working-directory: ${{ env.ENGINE_DIR }}
         run: |
           set -euo pipefail
-          BIN=target/release/tke
-          [ "${{ runner.os }}" = "Windows" ] && BIN=target/release/tke.exe
-          # 产物跑不起来就是构建失败，别让它悄悄进分发源
+          OUT=target/release
+          [ -n "${{ matrix.target }}" ] && OUT="target/${{ matrix.target }}/release"
+          BIN="$OUT/tke"
+          [ "${{ runner.os }}" = "Windows" ] && BIN="$OUT/tke.exe"
+
+          # 产物跑不起来就是构建失败，别让它悄悄进分发源。
+          # 交叉编译出来的东西在本 runner 上未必能执行（32 位在 x64 Windows 上可以，
+          # 所以这里仍然验；真跑不了的目标要跳过这一步而不是假装成功）
           "$BIN" --version
           mkdir -p out/bin/${{ matrix.platform }}
           gzip -c "$BIN" > out/bin/${{ matrix.platform }}/tke.gz

@@ -86,6 +86,26 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     }
     println!();
 
+    // 32 位 Windows：go-ios 上游只出 64 位
+    if !upstream_has_go_ios() && (args.profile == "ios" || args.profile == "all") {
+        println!("ℹ️  32 位 Windows 上做不了 iOS 检查：go-ios 上游只发布 64 位包。");
+        println!();
+    }
+
+    // arm64 Linux：浏览器与安卓那套驱动上游就没有官方包，下了也是白下
+    if !upstream_has_drivers() {
+        let need_drivers = missing.iter().any(|m| m.is_chrome || m.name != "go-ios");
+        if need_drivers {
+            println!("⚠️  arm64 Linux 上游没有官方驱动包（Chrome for Testing 与 Google 的");
+            println!("    platform-tools 都不出这个架构），分发源自然也没有。请改用发行版自带的：");
+            println!("      sudo apt install -y chromium chromium-driver adb");
+            println!("    再把 chromium-driver 的 chromedriver 软链到 tke 同目录（tke 只在那儿找）：");
+            println!("      ln -sf \"$(command -v chromedriver)\" \"{}/chromedriver\"", exe_dir.display());
+            println!("    go-ios 有 arm64 版，`tke fix --profile ios` 照常能补。");
+            println!();
+        }
+    }
+
     if args.check {
         // --check 只报告不下载：退出码非 0，CI 可以据此判断环境是否就绪
         println!("（--check 模式，未下载。去掉 --check 即可补齐）");
@@ -202,7 +222,8 @@ fn detect_missing(exe_dir: &Path, profile: &str) -> Vec<Missing> {
             });
         }
     }
-    if want_ios && !deps::present_in(exe_dir, "go-ios") {
+    // 上游没这个平台的包时不报"缺"——报了也补不上，只会让人反复试
+    if want_ios && upstream_has_go_ios() && !deps::present_in(exe_dir, "go-ios") {
         out.push(Missing {
             name: "go-ios",
             what: "连接 iOS 设备所需",
@@ -217,10 +238,28 @@ fn tke_dir() -> Result<PathBuf> {
     deps::tke_dir().ok_or_else(|| TkeError::InvalidArgument("无法获取 tke 所在目录".into()))
 }
 
+/// 这个平台的驱动上游有没有官方包。
+///
+/// **Chrome for Testing 只出 linux64 / mac-arm64 / mac-x64 / win32 / win64**，
+/// Google 的 platform-tools 也不出 arm64 Linux 版（实测全 404）。所以 arm64 Linux
+/// 上装不了我们分发的驱动——这不是分发源漏传，是上游根本没有。
+/// 与其让人对着"下载失败"猜，不如直说该怎么办。
+fn upstream_has_drivers() -> bool {
+    !(std::env::consts::OS == "linux" && std::env::consts::ARCH == "aarch64")
+}
+
+/// go-ios 有没有这个平台的官方包。
+/// 它的 Windows 发行包**只有 64 位**（zip 里那个 ios.exe 是 x86-64），
+/// 32 位 Windows 上跑不了——所以 windows-386 的分发目录里**有意不放** go-ios。
+fn upstream_has_go_ios() -> bool {
+    !(std::env::consts::OS == "windows" && std::env::consts::ARCH == "x86")
+}
+
 /// 分发源上的平台目录名，与 bin/<platform>/ 一致
 fn platform_tag() -> Result<String> {
     let arch = match std::env::consts::ARCH {
         "aarch64" => "arm64",
+        "x86" => "386",
         "x86_64" => "amd64",
         a => return Err(TkeError::InvalidArgument(format!("不支持的架构: {}", a))),
     };
