@@ -1,8 +1,15 @@
 # 把 tke 的运行依赖（Chrome for Testing / chromedriver / adb / aapt / go-ios）
 # 抓到 Toolkit Cloud 分发源，供 `install.sh` 与 `tke fix` 取用。
 #
-# 这是**低频**的那个：这些东西几乎不变，换版本时手动跑一次就行。
-# 平时改 tke 或 skill 走 tke-publish.yml。
+# ⚠️ **平时用不到这个。** 依赖是一次性的活——四个平台各备一份就完了，之后不再动。
+# 分发源上现有的那批是手工补齐的（2026-08-14），够用。
+#
+# 只有一种情况才跑它：**要整体升级 Chrome / chromedriver 版本**。
+# 升级时注意：`install.sh` 对**已存在的 Chrome 目录是跳过的**，所以老用户机器上会
+# 出现"driver 升了、Chrome 还是旧的"——版本不配对，浏览器起不来。真要升级得同时
+# 通知使用者删掉旧的 Chrome 目录再重装。
+#
+# 日常改 tke 或 skill 走 tke-publish.yml，那个才是常用的。
 #
 # 自建分发源最实在的价值就在这里：**chromedriver 与 Chrome 从同一份官方清单取，
 # 版本必然配对**，使用者不必再自己去查对应关系（版本不配对是这套东西最常见的坑）。
@@ -128,10 +135,15 @@ jobs:
               # 缺 libc++.so，但它的 RUNPATH 含 $ORIGIN，与 tke 同目录就能加载，所以一起带上。
               if fetch "https://dl.google.com/android/repository/build-tools_r34-$bt.zip" "bt-$p.zip" zip; then
                 unzip -qo "bt-$p.zip" -d "bt-$p"
-                for n in aapt aapt.exe libc++.so; do
+                # 分发源上**统一不带 .exe**（`aapt.gz`），落地时由 install.sh / tke fix
+                # 按平台补扩展名——源上一个平台一个名字的话，两边都要写平台分支
+                for n in aapt aapt.exe; do
                   f="$(find "bt-$p" -maxdepth 3 -type f -name "$n" | head -1)"
-                  [ -n "$f" ] && gzip -c "$f" > "dist/bin/$p/${n}.gz" && echo "  ✅ $p $n"
+                  [ -n "$f" ] && gzip -c "$f" > "dist/bin/$p/aapt.gz" && echo "  ✅ $p aapt ($n)" && break
                 done
+                # libc++.so 只有 Linux 版 aapt 需要（它的 RUNPATH 含 $ORIGIN）
+                f="$(find "bt-$p" -maxdepth 3 -type f -name 'libc++.so' | head -1)"
+                [ -n "$f" ] && gzip -c "$f" > "dist/bin/$p/libc++.so.gz" && echo "  ✅ $p libc++.so"
               else
                 echo "  ⚠️  $p build-tools 取不到，aapt 跳过（不影响 adb）"
               fi

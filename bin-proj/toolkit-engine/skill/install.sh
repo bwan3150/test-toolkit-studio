@@ -55,7 +55,12 @@ case "$OS" in
     Linux)  PLATFORM="linux-$ARCH_NAME"
             CHROME_PKG="chrome-linux64"
             CHROME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tke" ;;
-    *) echo "❌ 这个脚本只支持 macOS / Linux；Windows 请用 install.ps1" >&2; exit 1 ;;
+    *)
+        # Windows 还没有对应的安装脚本。可行路径：手工把 tke.exe 放进某个目录并加进
+        # PATH，然后 `tke fix` 补齐驱动（它是 Rust 写的，三平台都能跑）。
+        echo "❌ 这个脚本只支持 macOS / Linux。" >&2
+        echo "   Windows：先手工放好 tke.exe 并加进 PATH，再跑 \`tke fix\` 补齐依赖。" >&2
+        exit 1 ;;
 esac
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "❌ 缺少 $1，请先安装" >&2; exit 1; }; }

@@ -286,7 +286,14 @@ fn install_bin(
     dec.read_to_end(&mut bytes)
         .map_err(|e| TkeError::InvalidArgument(format!("解压失败：{}", e)))?;
 
-    let dest = exe_dir.join(name);
+    // 分发源上统一叫 `<name>.gz`（不带平台后缀），**落地时 Windows 要补回 `.exe`**——
+    // 否则落成一个没有扩展名的文件，Windows 上根本执行不了。
+    // （`libc++.so` 这类本身带点的不动它，那也只有 Linux 会用到）
+    let dest = if cfg!(windows) && !name.contains('.') {
+        exe_dir.join(format!("{}.exe", name))
+    } else {
+        exe_dir.join(name)
+    };
     // 先删后拷：覆盖正在运行的二进制会 ETXTBSY(Linux) / 签名失配被杀(macOS，P-02)
     let _ = std::fs::remove_file(&dest);
     std::fs::write(&dest, bytes).map_err(TkeError::IoError)?;

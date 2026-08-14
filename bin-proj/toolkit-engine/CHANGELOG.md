@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · 补齐四平台依赖 + 修 Windows 落地名
+- **fix(Windows 上必炸)** `tke fix` 下载的二进制**落地时没补 `.exe`**——分发源上统一叫 `adb.gz`,Windows 落成一个没有扩展名的 `adb`,**根本执行不了**。现按平台补回扩展名(`libc++.so` 这类本身带点的不动)
+- **deps** 手工补齐 **darwin-amd64 / windows-amd64** 两个空白平台:chromedriver + Chrome for Testing(Stable **152.0.7977.42**,driver 与 Chrome 同版本配对)+ adb + aapt + go-ios。逐个验过解压出来的架构:mac 是 Mach-O(chromedriver x86_64、其余 universal),win 是 PE32/PE32+(adb/aapt 是官方原样的 32 位)
+- **注意** 现有 darwin-arm64(149) / linux-amd64(151) **有意不动**——`install.sh` 对已存在的 Chrome 目录是跳过的,升 driver 不升 Chrome 会版本不配对起不来。各平台内部配对即可,跨平台不必一致
+- **docs** `install.sh` 里指向了一个**不存在的 `install.ps1`**,改成实话:Windows 手工放 tke.exe + `tke fix` 补依赖
+- **change** CI 定位按用户要求收窄:`tke-deps.yml` 降级为"要整体升 Chrome 版本时才跑",**CI 的日常职责只剩「tke/skill 改了能发新版」**
+
 ### 2026-08-14 · GitHub Actions 发布流水线
 - **feat** `tke-publish.yml`(常用):四平台构建 tke(darwin-arm64/darwin-amd64/linux-amd64/windows-amd64)+ 打包 skill + 刷新 VERSION,一键发到分发源。开关:`targets` 选平台、`ocr`(online 默认/full 含离线 tesseract/none)、**`skill_only`** 只改文档时一分钟发完、`dry_run` 验流程
 - **feat** `tke-deps.yml`(低频):抓 Chrome for Testing + chromedriver + adb + aapt/libc++.so + go-ios。**driver 与 Chrome 从同一份官方清单的同一版本取**——版本必然配对,这是自建分发源最实在的价值

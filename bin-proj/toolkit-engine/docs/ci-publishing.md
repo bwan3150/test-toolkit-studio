@@ -4,8 +4,16 @@
 
 | Workflow | 什么时候跑 | 干什么 |
 |---|---|---|
-| **Publish TKE** (`tke-publish.yml`) | 改了 tke 代码或 skill 文档 | 构建三平台二进制 + 打包 skill + 刷新 VERSION |
-| **Publish TKE Deps** (`tke-deps.yml`) | 换 Chrome/驱动版本时（很少） | 抓 Chrome for Testing / chromedriver / adb / aapt / go-ios |
+| **Publish TKE** (`tke-publish.yml`) | **日常**：改了 tke 代码或 skill 文档 | 构建四平台二进制 + 打包 skill + 刷新 VERSION |
+| **Publish TKE Deps** (`tke-deps.yml`) | **基本不用**：要整体升级 Chrome 版本时 | 抓 Chrome for Testing / chromedriver / adb / aapt / go-ios |
+
+> **依赖是一次性的活。** 四个平台各备一份就完了，之后不再动——现有那批是 2026-08-14
+> 手工补齐的（Chrome for Testing Stable 152.0.7977.42）。所以 CI 的日常职责只有一件事：
+> **tke 或 skill 改了，能发一个新版出去。**
+>
+> 真要升级 Chrome 版本时留意：`install.sh` 对**已存在的 Chrome 目录是跳过的**，
+> 老用户机器上会变成"driver 升了、Chrome 还是旧的"——版本不配对，浏览器起不来。
+> 得同时通知使用者删掉旧 Chrome 目录再重装。
 
 ## 一次性准备
 
@@ -68,6 +76,14 @@ Actions → **Publish TKE Deps** → Run workflow：
 
 最后一条是跑之前没料到的：光看 release 页面的资产名（`go-ios-linux.zip`）会以为里面是单个
 二进制。**CI 脚本不本地跑一遍就等于没写。**
+
+## 文件命名：分发源上一律不带 `.exe`
+
+`bin/windows-amd64/adb.gz` 解压出来的是 `adb.exe` 的内容，但**源上就叫 `adb.gz`**。
+落地时由 `install.sh` / `tke fix` 按平台补扩展名。
+
+这样定是因为：源上按平台改名的话，取的那一端也得写平台分支，两处都要维护。
+（`tke fix` 早期版本漏了这一步，Windows 上会落成一个没有扩展名的 `adb`，根本执行不了。）
 
 ## 分发源布局（install.sh 与 tke fix 都按这个取）
 
