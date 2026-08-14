@@ -263,3 +263,23 @@ $raw = (Invoke-WebRequest ... ).Content
 $text = if ($raw -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($raw) } else { [string]$raw }
 ```
 
+## P-26 (2026-08-14) 测试拷大文件进 /tmp 却不清理 → 跑几轮撑爆磁盘
+
+**现象**：`No space left on device`，构建和 push 全挂。查下来 `/tmp/tke-cli-test-*-fix-check`
+堆了一串，**每个 260MB**。
+
+**原因**：CLI 契约测试 `fix_check_reports_without_downloading` 要把 tke 二进制拷进临时目录
+才能验"空目录里跑 fix"，但**结尾没删**。而且断言失败会 panic，`remove_dir_all` 写在结尾
+也执行不到。
+
+**做法**：**先清理，再断言**——
+```rust
+let o = Command::new(&mine).args([...]).output().unwrap();
+let s = format!("{}{}", stdout(&o), stderr(&o));
+let _ = std::fs::remove_dir_all(&d);   // ← 放在断言前
+assert!(s.contains("adb"), ...);
+```
+（更稳的做法是用带 Drop 的临时目录守卫，但对单个测试来说这样够了。）
+
+**自查**：`du -sh /tmp/tke-* | sort -rh | head` —— 跑完测试不该有几十 MB 以上的残留。
+

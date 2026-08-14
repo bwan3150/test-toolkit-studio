@@ -249,6 +249,9 @@ fn fix_check_reports_without_downloading() {
 
     let o = Command::new(&mine).args(["fix", "--check", "--profile", "android"]).output().unwrap();
     let s = format!("{}{}", stdout(&o), stderr(&o));
+    // 先清理再断言：这个测试要拷一份 tke 进临时目录（几十 MB），
+    // 断言失败就 panic 的话目录会留下来——跑几轮就把 /tmp 撑爆（实际发生过）
+    let _ = std::fs::remove_dir_all(&d);
     assert!(s.contains("adb"), "应点名缺 adb:{}", s);
     assert!(!o.status.success(), "缺东西时退出码要非 0,CI 才判得出");
     assert!(s.contains("未下载") || s.contains("check"), "--check 应说明没下载:{}", s);
