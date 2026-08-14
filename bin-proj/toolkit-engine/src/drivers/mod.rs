@@ -69,7 +69,13 @@ impl Controller {
                 return Ok(Self { driver: Driver::Fake(FakeDriver::new(id.to_string())) });
             }
         }
-        let driver = match crate::Platform::from_device(device_id.as_deref()) {
+        // 宿主机能力门禁：注定跑不通的组合（如 Windows 上测 iOS）在这里就拦下并说清原因，
+        // 别让人撞进 go-ios 的底层报错里猜。这是所有设备操作的必经之路——
+        // control / run / steps / harness 全都从这儿走，一处覆盖。
+        let platform = crate::Platform::from_device(device_id.as_deref());
+        crate::utils::capability::check(platform)?;
+
+        let driver = match platform {
             crate::Platform::Web => Driver::Web(WebDriver::new(device_id.unwrap())?),
             crate::Platform::Ios => Driver::Wda(WdaDriver::new(device_id.unwrap())?),
             crate::Platform::Android => Driver::Adb(AdbDriver::new(device_id)?),

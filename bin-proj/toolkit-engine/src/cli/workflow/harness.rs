@@ -276,9 +276,12 @@ async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<Set
         opts.push(format!("Android\t{}", d));
         kinds.push(Kind::Android(d.clone()));
     }
-    // 无 Android 设备就不显示 Android 组；iOS / Web 始终在
-    opts.push("iOS\t输入设备 ID（UDID / wda:..）".to_string());
-    kinds.push(Kind::Ios);
+    // 无 Android 设备就不显示 Android 组；Web 始终在。
+    // iOS 只在 macOS 上列——别把选了必然失败的选项摆给用户
+    if tke::utils::capability::ios_supported() {
+        opts.push("iOS\t输入设备 ID（UDID / wda:..）".to_string());
+        kinds.push(Kind::Ios);
+    }
     opts.push("Web\tChrome".to_string());
     kinds.push(Kind::Web);
     // 跨设备/跨平台任务在这里选哪一台都是错的——交给编排官按任务语义决定

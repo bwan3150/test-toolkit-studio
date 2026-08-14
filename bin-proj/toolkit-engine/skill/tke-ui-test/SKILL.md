@@ -49,11 +49,15 @@ Chrome 有 600MB，下之前**跟用户说一声**。
 
 每条 tke 命令都要 `-d` 指定操作对象——**tke 是无状态 CLI，不带 `-d` 会默认按 Android 处理**：
 
-| 目标 | 参数 |
-|---|---|
-| 浏览器 | `-d web` |
-| 安卓 | `-d <序列号>`（`adb devices` 查） |
-| iOS | `-d <UDID>` |
+| 目标 | 参数 | 哪些机器能做 |
+|---|---|---|
+| 浏览器 | `-d web` | 都能 |
+| 安卓 | `-d <序列号>`（`adb devices` 查） | 都能 |
+| iOS | `-d <UDID>` | **只有 macOS** |
+
+**iOS 只能在 macOS 上做**——设备上的 WebDriverAgent 必须先用 Xcode 装一次，而 Xcode 只有
+mac 有。在 Windows/Linux 上碰 iOS 设备，tke 会直接拦下并说明，别把时间花在那儿。
+（`tke fix --check` 会告诉你这台机器能做什么。）
 
 **安卓要启动 App 得知道包名 + Activity，不知道就查、别猜**：
 

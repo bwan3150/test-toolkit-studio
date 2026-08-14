@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · 宿主机能力门禁:做不了的组合直接拦下并说清
+- **feat** 新增 `utils::capability`:**iOS 只在 macOS 放行**,Windows/Linux 上碰 iOS 设备直接拦下,报错说清**为什么**(设备上的 WDA 要用 Xcode 装一次,Xcode 只有 mac 有)、**这台机器能做什么**(web/安卓)、以及**逃生口**
+- **落点** 门禁放在 `Controller::new` —— 所有设备操作的**唯一必经之路**,`control`/`run`/`steps`/`harness` 一处覆盖,不会漏
+- **feat** 源头也不摆做不到的选项:`list_devices`(给编排官的)与交互式向导在非 mac 上**不列 iOS**——摆出来只会让人/AI 选一次、撞一次门禁、再回来重选
+- **feat** `tke fix` 在非 mac 上不报"缺 go-ios"(补上也用不了),并说明原因
+- **fix(误导措辞)** `tke fix --check --profile ios` 在 Linux 上原本显示"✅ ios 需要的依赖都在"——**这台机器压根做不了 iOS**,说"依赖都在"是骗人的。说明被 early return 跳过了,已提到列缺失之前,措辞改成"没有可补的依赖——这台机器做不了 iOS"
+- **留了逃生口 `TKE_ALLOW_IOS=1`**,因为**这条界线是产品决策不是技术极限**:go-ios 本身跨平台、运行期也不需要 Xcode(经 testmanagerd 拉起 WDA),真正卡住的是那次一次性安装。"WDA 已装好的设备接到 Linux CI"技术上是通的,不该被堵死
+- **docs** SKILL.md 的设备表加"哪些机器能做"一列;`tke fix --check` 会告诉你这台机器能做什么
+- **测试** 4 条新单测(web/android 恒放行、iOS 按宿主机分且报错要说清原因与替代、逃生口、可选平台列表);`profile_scopes_what_is_checked` 随行为变更改成按宿主机分支断言。lib 61/61 + CLI 21/21 + bin 3/3
+
 ### 2026-08-14 · Windows 这条路补通（同事主力平台）
 - **feat** **`install.ps1`**:Windows 一键安装器,与 install.sh 一一对应。此前 Windows 同事**根本装不上**——`install.sh` 是 bash,而那句"请用 install.ps1"指向的文件压根不存在
 - **feat** **体检并进 `tke fix --check`**:除了列缺失依赖,还报安卓设备/版本比对/证据落点/有头还是无头。**一份 Rust 实现三平台通用**——`check-env.sh` 是 bash,Windows 用户跑不了,而 Windows 恰恰是"同事跑完 Claude Code 要验一遍"的主力。SKILL.md 第 0 步已统一成这条

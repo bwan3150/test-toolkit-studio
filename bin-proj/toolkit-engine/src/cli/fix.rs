@@ -74,9 +74,27 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     println!();
 
     let missing = detect_missing(&exe_dir, &args.profile);
+    let wants_ios = args.profile == "ios" || args.profile == "all";
+    let ios_blocked = wants_ios && !tke::utils::capability::ios_supported();
+
+    // 这两条要在"缺不缺"之前说：不然 iOS 被门禁挡住时 missing 是空的，
+    // 只会看到一句"✅ 依赖都在"——而这台机器其实压根做不了 iOS
+    if ios_blocked {
+        println!("ℹ️  这台机器做不了 iOS 检查（只有 macOS 能——设备上的 WDA 要用 Xcode 装一次），");
+        println!("    所以不装 go-ios。网页与安卓照常。");
+        println!();
+    }
+    if wants_ios && !upstream_has_go_ios() {
+        println!("ℹ️  32 位 Windows 上做不了 iOS 检查：go-ios 上游只发布 64 位包。");
+        println!();
+    }
 
     if missing.is_empty() {
-        println!("✅ {} 需要的依赖都在。", args.profile);
+        if args.profile == "ios" && (ios_blocked || !upstream_has_go_ios()) {
+            println!("没有可补的依赖——这台机器做不了 iOS。");
+        } else {
+            println!("✅ {} 需要的依赖都在。", args.profile);
+        }
         if args.check {
             print_health(&exe_dir, &base_url);
         }
@@ -88,12 +106,6 @@ pub async fn handle(args: FixArgs) -> Result<()> {
         println!("   ❌ {:<14} {}（约 {}）", m.name, m.what, m.size);
     }
     println!();
-
-    // 32 位 Windows：go-ios 上游只出 64 位
-    if !upstream_has_go_ios() && (args.profile == "ios" || args.profile == "all") {
-        println!("ℹ️  32 位 Windows 上做不了 iOS 检查：go-ios 上游只发布 64 位包。");
-        println!();
-    }
 
     // arm64 Linux：浏览器与安卓那套驱动上游就没有官方包，下了也是白下
     if !upstream_has_drivers() {
@@ -297,7 +309,10 @@ fn detect_missing(exe_dir: &Path, profile: &str) -> Vec<Missing> {
         }
     }
     // 上游没这个平台的包时不报"缺"——报了也补不上，只会让人反复试
-    if want_ios && upstream_has_go_ios() && !deps::present_in(exe_dir, "go-ios") {
+    // 宿主机做不了 iOS 就不报"缺 go-ios"——补上也用不了（门禁在 Controller 那层）
+    if want_ios && tke::utils::capability::ios_supported() && upstream_has_go_ios()
+        && !deps::present_in(exe_dir, "go-ios")
+    {
         out.push(Missing {
             name: "go-ios",
             what: "连接 iOS 设备所需",
@@ -534,8 +549,13 @@ mod tests {
         assert!(names.contains(&"adb"), "android 应查 adb：{:?}", names);
         assert!(!names.contains(&"chromedriver"), "android 不该查 chromedriver：{:?}", names);
 
+        // iOS 这条按宿主机能力分：做不了的机器上不该报缺——补上也用不了（门禁在 Controller 层）
         let names: Vec<&str> = detect_missing(&empty, "ios").iter().map(|m| m.name).collect();
-        assert_eq!(names, vec!["go-ios"], "ios 只该查 go-ios");
+        if tke::utils::capability::ios_supported() {
+            assert_eq!(names, vec!["go-ios"], "支持 iOS 的机器上该查 go-ios");
+        } else {
+            assert!(names.is_empty(), "做不了 iOS 的机器不该报缺 go-ios：{:?}", names);
+        }
 
         let _ = std::fs::remove_dir_all(&empty);
     }

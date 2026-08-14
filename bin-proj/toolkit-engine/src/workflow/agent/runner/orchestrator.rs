@@ -765,7 +765,12 @@ fn list_devices_text(opts: &AgentRunOptions) -> String {
         Err(_) => out.push_str("Android：adb 不可用（未安装或不在 tke 同目录）\n"),
     }
     out.push_str("Web（-d web）：可用\n");
-    out.push_str("iOS（-d <UDID>）：需要用户提供 UDID——这里枚举不了\n");
+    // 非 macOS 上不列 iOS：摆出来只会让编排官试一次、撞一次门禁、再回来重选
+    if crate::utils::capability::ios_supported() {
+        out.push_str("iOS（-d <UDID>）：需要用户提供 UDID——这里枚举不了\n");
+    } else {
+        out.push_str("iOS：这台机器做不了（只有 macOS 能，设备上的 WDA 要 Xcode 装）\n");
+    }
     match opts.effective_device() {
         Some(d) => out.push_str(&format!("\n当前默认设备：{}（工具不传 device 就用它）", d)),
         None => out.push_str("\n当前没有默认设备：调设备类工具时必须显式传 device，拿不准就问用户"),
