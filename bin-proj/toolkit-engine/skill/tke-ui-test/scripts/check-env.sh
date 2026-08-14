@@ -63,6 +63,8 @@ echo "== 版本 =="
 TKE_BASE_URL="${TKE_BASE_URL:-https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke}"
 LOCAL_VER="$(tke --version 2>/dev/null | head -1)"
 # 带随机参数：Cloudflare 缓存 4h 且不认 no-cache 请求头，不破缓存就永远看到旧版本号
+# 注：这里 `| head -1` 安全，因为 VERSION 只有一百多字节、管道缓冲区装得下，curl 写完才退出。
+# **别把这个写法照抄到大文件上**——head 读够就关管道，curl 会拿到 EPIPE 并以退出码 23 失败（P-23）
 REMOTE_VER="$(curl -fsSL --max-time 3 "$TKE_BASE_URL/VERSION?t=$$" 2>/dev/null | head -1)"
 case "$REMOTE_VER" in
     tke\ *)

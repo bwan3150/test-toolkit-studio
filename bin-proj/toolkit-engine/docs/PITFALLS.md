@@ -202,3 +202,24 @@ curl -fsSL .../upload.sh | bash -s -- .     tookit-engine-resource:tke/     # �
 
 **顺带**：改了 workflow 自己（换 runner / target / 构建参数）却不触发重新构建，等于改了没验。
 `paths` 过滤器要包含 workflow 文件本身，"要不要编译"的判断里也要算上它。
+
+## P-23 (2026-08-14) `curl <大文件> | head` 必炸：EPIPE → 退出码 23
+
+**现象**：CI 的复验步骤报 `curl: (23) Failure writing output to destination`，整步失败。
+本地对同一个 URL 复现，一模一样。
+
+**原因**：`head -c2` 读够两字节就退出并关掉管道，curl 还在往里写 10MB，拿到 EPIPE 就以
+**退出码 23** 结束。小文件侥幸不炸（内容全进了管道缓冲区，curl 早写完了），所以这坑
+只在文件变大后才现形。
+
+**做法**：**下完再验**，别用管道截断：
+```bash
+tmp="$(mktemp)"
+curl -fsSL --max-time 300 "$url" -o "$tmp"
+head -c2 "$tmp" | od -An -tx1 | tr -d ' \n'
+```
+不能用 `curl -r 0-1` 只取头两字节绕过去——**这个分发平台不支持 Range，会回 520**（P-19）。
+
+**照抄提醒**：`curl … | head -1` 取 VERSION（一百多字节）是安全的，但那是因为文件小。
+换成任何大文件都会踩这个坑。
+

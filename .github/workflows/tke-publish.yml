@@ -302,15 +302,26 @@ jobs:
           esac
 
           BUILD_KEY="$(printf '%s' "$REMOTE" | sed -n 's/^build: *//p' | head -1)"
+          # ⚠️ 不能写成 `curl ... | head -c2`：head 读够就退出，curl 还在往管道写会拿到
+          # EPIPE、以退出码 23 失败（10MB 的 tke.gz 上必炸，小文件才侥幸躲过）。
+          # 也不能用 `curl -r 0-1` 只取头两字节——这个平台不支持 Range，会回 520（P-19）。
+          # 所以老老实实下完再验。
+          tmp="$(mktemp)"
           for f in $(cd dist && find bin skill -type f 2>/dev/null || true); do
             url="$BASE/$f?b=$BUILD_KEY"
-            head2="$(curl -fsSL --max-time 120 "$url" | head -c2 | od -An -tx1 | tr -d ' \n')"
+            if ! curl -fsSL --max-time 300 "$url" -o "$tmp"; then
+              echo "  ❌ $f 取不回来：$url" >&2
+              rm -f "$tmp"; exit 1
+            fi
+            head2="$(head -c2 "$tmp" | od -An -tx1 | tr -d ' \n')"
             if [ "$head2" = "1f8b" ]; then
-              echo "  ✅ $f"
+              echo "  ✅ $f ($(wc -c < "$tmp") 字节)"
             else
+              # 平台对不存在的路径回落 200 + HTML，只看状态码会把网页当成二进制（P-19）
               echo "  ❌ $f 取回的不是 gzip（装到网页了？）" >&2
-              exit 1
+              rm -f "$tmp"; exit 1
             fi
           done
+          rm -f "$tmp"
           echo "使用者侧（mac/Linux）：curl -fsSL $BASE/install.sh | bash"
           echo "使用者侧（Windows）：   irm $BASE/install.ps1 | iex"
