@@ -16,6 +16,38 @@
 
 set -uo pipefail
 
+# ── 外观 ──（管道执行时 stdout 仍是终端，所以 -t 1 判得准；重定向到文件时自动关掉颜色）
+if [ -t 1 ]; then
+    C_TITLE=$'\033[38;5;39m'; C_OK=$'\033[38;5;42m'; C_WARN=$'\033[38;5;214m'
+    C_ERR=$'\033[38;5;203m'; C_DIM=$'\033[38;5;245m'; C_B=$'\033[1m'; C_R=$'\033[0m'
+else
+    C_TITLE=; C_OK=; C_WARN=; C_ERR=; C_DIM=; C_B=; C_R=
+fi
+# 不用 emoji：等宽终端里对不齐，SSH/CI 日志里还常变成方块
+S_OK="${C_OK}✓${C_R}"; S_WARN="${C_WARN}!${C_R}"; S_ERR="${C_ERR}✗${C_R}"; S_DOT="${C_DIM}·${C_R}"
+
+banner() {
+    printf '%s' "$C_TITLE"
+    cat <<'LOGO'
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║  ████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗██╗████████╗  ║
+║  ╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██║ ██╔╝██║╚══██╔══╝  ║
+║     ██║   ██║   ██║██║   ██║██║     █████╔╝ ██║   ██║     ║
+║     ██║   ██║   ██║██║   ██║██║     ██╔═██╗ ██║   ██║     ║
+║     ██║   ╚██████╔╝╚██████╔╝███████╗██║  ██╗██║   ██║     ║
+║     ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝   ╚═╝     ║
+║                                                           ║
+║                    E   N   G   I   N   E                  ║
+╚═══════════════════════════════════════════════════════════╝
+LOGO
+    printf '%s' "$C_R"
+}
+# 分节标题用前缀标记而不是补横线到固定宽——中文占两格，shell 里算显示宽度
+# 既麻烦又不可靠（awk/wc 都要额外处理 UTF-8），前缀式永远对齐
+section() { printf '\n%s%s▸ %s%s\n' "$C_B" "$C_TITLE" "$1" "$C_R"; }
+kv()      { printf '  %s%-9s%s %s\n' "$C_DIM" "$1" "$C_R" "$2"; }
+
 DEFAULT_BASE_URL="https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke"
 BASE_URL="${TKE_BASE_URL:-$DEFAULT_BASE_URL}"
 TKE_HOME="${TKE_HOME:-$HOME/.tke/bin}"
@@ -109,11 +141,11 @@ else
     Q="$CACHE_BUST"
 fi
 
-echo "== tke-ui-test skill 安装 =="
-echo "   来源     $BASE_URL"
-[ -n "$REMOTE_VERSION" ] && echo "   版本     $(printf '%s' "$REMOTE_VERSION" | head -1)"
-echo "   平台     $PLATFORM"
-echo "   profile  $PROFILE"
+banner
+kv "版本" "$([ -n "$REMOTE_VERSION" ] && printf '%s' "$REMOTE_VERSION" | head -1 || echo '未知')"
+kv "平台" "$PLATFORM"
+kv "范围" "$PROFILE"
+kv "来源" "${C_DIM}${BASE_URL}${C_R}"
 
 # —— 1. skill 文件 ——
 if [ "$SCOPE" = "user" ]; then
@@ -122,21 +154,20 @@ else
     SKILL_ROOT="$PWD/.claude/skills"
 fi
 mkdir -p "$SKILL_ROOT"
-echo
-echo "-- skill 文件 → $SKILL_ROOT/tke-ui-test"
+section "skill 文件"
 if fetch "$BASE_URL/skill/tke-ui-test.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
     rm -rf "$SKILL_ROOT/tke-ui-test"
-    tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT" || { echo "   ❌ skill 包解压失败" >&2; exit 1; }
-    echo "   ✅ 已安装"
+    tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT" || { printf '  %s skill 包解压失败\n' "$S_ERR" >&2; exit 1; }
+    printf '  %s tke-ui-test %s→ %s%s\n' "$S_OK" "$C_DIM" "$SKILL_ROOT" "$C_R"
     # 旧名 ui-check 的残留：不清掉的话两个 skill 同时在册,description 几乎一样,
     # AI 会在两者间乱挑,用户也看不出该用哪个。改名是 2026-08-13。
     if [ -d "${SKILL_ROOT}/ui-check" ]; then
         rm -rf "${SKILL_ROOT}/ui-check"
-        echo "   🧹 已清除旧版 ui-check（本 skill 已更名为 tke-ui-test）"
+        printf '  %s 已清除旧版 ui-check（本 skill 已更名）\n' "$S_DOT"
     fi
 else
-    echo "   ❌ 取不到 skill 包：$BASE_URL/skill/tke-ui-test.tar.gz" >&2
-    echo "      （若返回的是网页而非文件，多半是这个路径还没上传）" >&2
+    printf '  %s 取不到 skill 包：%s\n' "$S_ERR" "$BASE_URL/skill/tke-ui-test.tar.gz" >&2
+    printf '    %s（若返回的是网页而非文件，多半是这个路径还没上传）%s\n' "$C_DIM" "$C_R" >&2
     exit 1
 fi
 
@@ -144,60 +175,63 @@ fi
 # 驱动必须与 tke 同目录：tke 只在自己所在目录找外部工具，不搜 PATH
 # （这样才能保证 chromedriver 与 Chrome 版本配对）
 mkdir -p "$TKE_HOME"
-echo
-echo "-- tke 及驱动 → $TKE_HOME"
+section "tke 及驱动"
 
 install_bin() {
     local name="$1" required="$2"
     local url="$BASE_URL/bin/$PLATFORM/$name.gz$Q"
     if fetch "$url" "$TMP/$name.gz" gz; then
-        gunzip -f "$TMP/$name.gz" || { echo "   ❌ $name 解压失败（文件损坏？）" >&2; return 1; }
+        gunzip -f "$TMP/$name.gz" || { printf '  %s %s 解压失败（文件损坏？）\n' "$S_ERR" "$name" >&2; return 1; }
         # 先删后拷：覆盖运行中的二进制会 ETXTBSY(Linux) / 签名失配被杀(macOS)
         rm -f "$TKE_HOME/$name"
         mv "$TMP/$name" "$TKE_HOME/$name"
         chmod +x "$TKE_HOME/$name"
         [ "$OS" = "Darwin" ] && xattr -d com.apple.quarantine "$TKE_HOME/$name" 2>/dev/null
-        echo "   ✅ $name"
+        printf '  %s %s\n' "$S_OK" "$name"
         return 0
     fi
     if [ "$required" = "yes" ]; then
-        echo "   ❌ $name 下载失败：$url" >&2
+        printf '  %s %s 下载失败：%s\n' "$S_ERR" "$name" "$url" >&2
         return 1
     fi
-    echo "   ⚠️  $name 跳过（$PROFILE 用不到或源上没有）"
+    printf '  %s %s %s(这个平台用不到)%s\n' "$S_DOT" "$name" "$C_DIM" "$C_R"
     return 0
 }
 
 install_bin tke yes || exit 1
 case "$PROFILE" in
     web)     install_bin chromedriver yes || exit 1 ;;
-    android) install_bin adb yes || exit 1; install_bin aapt no; install_bin libc++.so no ;;
+    android) install_bin adb yes || exit 1; install_bin aapt no
+             # libc++.so 只有 **Linux 版 aapt** 需要（其 RUNPATH 含 $ORIGIN）。
+             # 无条件装的话，mac/Windows 上会去请求一个根本不存在的文件、拿到 404
+             [ "$OS" = "Linux" ] && install_bin libc++.so no ;;
     ios)     install_bin go-ios yes || exit 1 ;;
-    all)     install_bin chromedriver no; install_bin adb no; install_bin aapt no; install_bin libc++.so no; install_bin go-ios no ;;
+    all)     install_bin chromedriver no; install_bin adb no; install_bin aapt no
+             [ "$OS" = "Linux" ] && install_bin libc++.so no
+             install_bin go-ios no ;;
 esac
 
 # —— 3. Chrome for Testing（只有要测网页才需要）——
 if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
-    echo
-    echo "-- Chrome for Testing → $CHROME_DIR/$CHROME_PKG"
+    section "Chrome for Testing"
     if [ -d "$CHROME_DIR/$CHROME_PKG" ]; then
-        echo "   ✅ 已存在，跳过（要换版本先删掉这个目录）"
+        printf '  %s %s %s已在 %s（换版本先删这个目录）%s\n' "$S_OK" "$CHROME_PKG" "$C_DIM" "$CHROME_DIR" "$C_R"
     elif fetch "$BASE_URL/chrome/$CHROME_PKG.zip$Q" "$TMP/chrome.zip" zip; then
         mkdir -p "$CHROME_DIR"
         unzip -q -o "$TMP/chrome.zip" -d "$CHROME_DIR"
         # macOS：清隔离属性，否则自动化下会卡在授权弹窗且无任何报错
         [ "$OS" = "Darwin" ] && xattr -cr "$CHROME_DIR/$CHROME_PKG" 2>/dev/null
-        echo "   ✅ 已安装"
+        printf '  %s %s %s→ %s%s\n' "$S_OK" "$CHROME_PKG" "$C_DIM" "$CHROME_DIR" "$C_R"
     else
-        echo "   ⚠️  下载失败，网页检查会用不了：$BASE_URL/chrome/$CHROME_PKG.zip"
-        echo "      也可手动装，见 skill 里的 README"
+        printf '  %s 下载失败，网页检查会用不了\n' "$S_WARN"
+        printf '    %s手动装的办法见 skill 里的 README%s\n' "$C_DIM" "$C_R"
     fi
 fi
 
 # —— 4. PATH ——
-echo
+section "PATH"
 if command -v tke >/dev/null 2>&1 && [ "$(command -v tke)" = "$TKE_HOME/tke" ]; then
-    echo "-- PATH 已就绪"
+    printf '  %s 已就绪\n' "$S_OK"
 else
     case "${SHELL:-}" in
         */zsh)  RC="$HOME/.zshrc" ;;
@@ -207,29 +241,30 @@ else
     LINE="export PATH=\"$TKE_HOME:\$PATH\""
     if [ -n "$RC" ] && ! grep -qF "$TKE_HOME" "$RC" 2>/dev/null; then
         echo "$LINE" >> "$RC"
-        echo "-- 已把 tke 加进 PATH（写入 ${RC}）"
-        echo "   当前终端请先执行：$LINE"
+        printf '  %s 已写入 %s\n' "$S_OK" "$RC"
+        printf '  %s 当前终端还没生效，先跑一次：%s\n' "$S_WARN" ""
+        printf '      %s%s%s\n' "$C_B" "$LINE" "$C_R"
     else
-        echo "-- 请把 tke 加进 PATH："
-        echo "   $LINE"
+        printf '  %s 请把 tke 加进 PATH：\n' "$S_WARN"
+        printf '      %s%s%s\n' "$C_B" "$LINE" "$C_R"
     fi
 fi
 
 # —— 5. 体检 ——（结论要如实反映，别装完就说"好了"）
-echo
+section "体检"
 export PATH="$TKE_HOME:$PATH"
 HEALTH=0
-if [ -x "$SKILL_ROOT/tke-ui-test/scripts/check-env.sh" ]; then
-    bash "$SKILL_ROOT/tke-ui-test/scripts/check-env.sh" || HEALTH=1
-fi
+"$TKE_HOME/tke" fix --check --profile "$PROFILE" || HEALTH=1
 
-echo
+printf '\n'
 if [ "$HEALTH" = "0" ]; then
-    echo "装好了。在 Claude Code 里直接提需求即可，例如："
-    echo "  「我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存」"
+    printf '  %s%s 装好了%s —— 在 Claude Code 里直接提需求即可：\n' "$C_B" "$C_OK" "$C_R"
+    printf '    %s「我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存」%s\n' "$C_DIM" "$C_R"
+    printf '    %s或显式调用 /tke-ui-test%s\n' "$C_DIM" "$C_R"
 else
-    echo "⚠️  文件都装好了，但**环境还不完整**（见上面 ❌）——现在还跑不了检查。"
-    echo "   补齐缺的那几项后，重跑体检确认："
-    echo "   bash $SKILL_ROOT/tke-ui-test/scripts/check-env.sh"
-    exit 1
+    # 如实反映：文件装好了不等于能用（INV-9）
+    printf '  %s%s 文件装好了，但环境还不完整%s —— 现在跑不了检查。\n' "$C_B" "$C_WARN" "$C_R"
+    printf '    补齐：%stke fix --profile %s%s\n' "$C_B" "$PROFILE" "$C_R"
 fi
+printf '  %s卸载：curl -fsSL %s/uninstall.sh | bash%s\n' "$C_DIM" "$BASE_URL" "$C_R"
+[ "$HEALTH" = "0" ] || exit 1

@@ -12,7 +12,7 @@
 #
 # 产出布局（install.sh 按这个约定去取）：
 #   dist/
-#   ├── install.sh
+#   ├── install.sh / install.ps1 / uninstall.sh / uninstall.ps1
 #   ├── skill/tke-ui-test.tar.gz
 #   ├── bin/<platform>/{tke,chromedriver,adb,aapt,go-ios}.gz
 #   └── chrome/<chrome-mac-arm64|chrome-linux64|...>.zip
@@ -79,10 +79,11 @@ for name in $BINS; do
     fi
 done
 
-# —— 安装脚本（两个平台各一份；Windows 跑不了 bash 那个）——
-cp "$SCRIPT_DIR/install.sh" "$OUT/install.sh"
-cp "$SCRIPT_DIR/install.ps1" "$OUT/install.ps1"
-echo "   ✅ install.sh + install.ps1"
+# —— 安装/卸载脚本（两个平台各一份；Windows 跑不了 bash 那些）——
+for f in install.sh install.ps1 uninstall.sh uninstall.ps1; do
+    cp "$SCRIPT_DIR/$f" "$OUT/$f"
+done
+echo "   ✅ install/uninstall × (sh + ps1)"
 
 # —— Chrome for Testing（可选，很大）——
 if [ "$WITH_CHROME" = "1" ]; then

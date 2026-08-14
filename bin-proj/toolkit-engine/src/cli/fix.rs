@@ -23,6 +23,23 @@ use std::process::Command;
 use tke::utils::deps;
 use tke::{Result, TkeError};
 
+// ── 外观 ──（与 install.sh / install.ps1 同一套：符号 + 颜色，**不用 emoji**——
+// 等宽终端里对不齐，SSH/CI 日志里还常变成方块）
+fn tty() -> bool {
+    std::io::IsTerminal::is_terminal(&std::io::stdout())
+}
+fn c(code: &str) -> String {
+    if tty() { format!("\x1b[{}m", code) } else { String::new() }
+}
+fn sym_ok() -> String { format!("{}✓{}", c("38;5;42"), c("0")) }
+fn sym_warn() -> String { format!("{}!{}", c("38;5;214"), c("0")) }
+fn sym_err() -> String { format!("{}✗{}", c("38;5;203"), c("0")) }
+fn sym_dot() -> String { format!("{}·{}", c("38;5;245"), c("0")) }
+fn dim(s: &str) -> String { format!("{}{}{}", c("38;5;245"), s, c("0")) }
+fn section(title: &str) {
+    println!("\n{}{}▸ {}{}", c("1"), c("38;5;39"), title, c("0"));
+}
+
 const DEFAULT_BASE_URL: &str = "https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke";
 
 /// Fix 命令参数
@@ -67,11 +84,10 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     let exe_dir = tke_dir()?;
     let platform = platform_tag()?;
 
-    println!("== tke fix ==");
-    println!("   平台     {}", platform);
-    println!("   落点     {}", exe_dir.display());
-    println!("   分发源   {}", base_url);
-    println!();
+    section("环境");
+    println!("  {} {}", dim("平台  "), platform);
+    println!("  {} {}", dim("落点  "), exe_dir.display());
+    println!("  {} {}", dim("分发源"), dim(&base_url));
 
     let missing = detect_missing(&exe_dir, &args.profile);
     let wants_ios = args.profile == "ios" || args.profile == "all";
@@ -80,20 +96,20 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     // 这两条要在"缺不缺"之前说：不然 iOS 被门禁挡住时 missing 是空的，
     // 只会看到一句"✅ 依赖都在"——而这台机器其实压根做不了 iOS
     if ios_blocked {
-        println!("ℹ️  这台机器做不了 iOS 检查（只有 macOS 能——设备上的 WDA 要用 Xcode 装一次），");
-        println!("    所以不装 go-ios。网页与安卓照常。");
         println!();
+        println!("  {} 这台机器做不了 iOS（只有 macOS 能——设备上的 WDA 要用 Xcode 装一次）", sym_dot());
+        println!("    {}", dim("所以不装 go-ios；网页与安卓照常"));
     }
     if wants_ios && !upstream_has_go_ios() {
-        println!("ℹ️  32 位 Windows 上做不了 iOS 检查：go-ios 上游只发布 64 位包。");
         println!();
+        println!("  {} 32 位 Windows 做不了 iOS：go-ios 上游只发布 64 位包", sym_dot());
     }
 
     if missing.is_empty() {
         if args.profile == "ios" && (ios_blocked || !upstream_has_go_ios()) {
-            println!("没有可补的依赖——这台机器做不了 iOS。");
+            println!("  {} 没有可补的依赖——这台机器做不了 iOS", sym_dot());
         } else {
-            println!("✅ {} 需要的依赖都在。", args.profile);
+            println!("  {} {} 需要的依赖都在", sym_ok(), args.profile);
         }
         if args.check {
             print_health(&exe_dir, &base_url);
@@ -101,11 +117,11 @@ pub async fn handle(args: FixArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("缺少 {} 项：", missing.len());
-    for m in &missing {
-        println!("   ❌ {:<14} {}（约 {}）", m.name, m.what, m.size);
-    }
     println!();
+    println!("  缺少 {} 项：", missing.len());
+    for m in &missing {
+        println!("  {} {:<16} {}{}", sym_err(), m.name, m.what, dim(&format!("（约 {}）", m.size)));
+    }
 
     // arm64 Linux：浏览器与安卓那套驱动上游就没有官方包，下了也是白下
     if !upstream_has_drivers() {
@@ -124,12 +140,12 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     if args.check {
         print_health(&exe_dir, &base_url);
         // --check 只报告不下载：退出码非 0，CI 可以据此判断环境是否就绪
-        println!("（--check 模式，未下载。去掉 --check 即可补齐）");
+        println!("\n  {}", dim("--check 模式，未下载；去掉 --check 即可补齐"));
         std::process::exit(1);
     }
 
-    if !args.yes && !confirm("要现在下载补齐吗？")? {
-        println!("已取消。需要时再跑 `tke fix`。");
+    if !args.yes && !confirm("  要现在下载补齐吗？")? {
+        println!("  {}", dim("已取消；需要时再跑 tke fix"));
         return Ok(());
     }
 
@@ -151,7 +167,7 @@ pub async fn handle(args: FixArgs) -> Result<()> {
 
     let mut failed = Vec::new();
     for m in &missing {
-        print!("-- {} ... ", m.name);
+        print!("  {} {} ... ", sym_dot(), m.name);
         use std::io::Write;
         let _ = std::io::stdout().flush();
 
@@ -161,9 +177,9 @@ pub async fn handle(args: FixArgs) -> Result<()> {
             install_bin(&base_url, &q, &tmp, &exe_dir, m.name, &platform)
         };
         match r {
-            Ok(()) => println!("✅"),
+            Ok(()) => println!("{}", sym_ok()),
             Err(e) => {
-                println!("❌ {}", e);
+                println!("{} {}", sym_err(), e);
                 failed.push(m.name);
             }
         }
@@ -174,13 +190,13 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     // 复验：以"现在还缺不缺"为准，而不是以"下载有没有报错"为准
     let still = detect_missing(&exe_dir, &args.profile);
     if still.is_empty() {
-        println!("✅ 补齐了。");
+        println!("  {} 补齐了", sym_ok());
         Ok(())
     } else {
         // 失败要可见（INV-9）：不能下完就说好了，得如实说还缺什么
-        println!("⚠️  还缺 {} 项：", still.len());
+        println!("  {} 还缺 {} 项：", sym_warn(), still.len());
         for m in &still {
-            println!("   ❌ {} —— {}", m.name, m.what);
+            println!("  {} {} —— {}", sym_err(), m.name, m.what);
         }
         if !failed.is_empty() {
             println!();
@@ -197,7 +213,7 @@ pub async fn handle(args: FixArgs) -> Result<()> {
 /// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
 /// 「同事跑完 Claude Code 要验一遍」的主力平台。
 fn print_health(exe_dir: &Path, base_url: &str) {
-    println!("== 环境 ==");
+    section("状况");
 
     // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
     if deps::present_in(exe_dir, "adb") {
@@ -216,12 +232,12 @@ fn print_health(exe_dir: &Path, base_url: &str) {
                     })
                     .collect();
                 if list.is_empty() {
-                    println!("   安卓设备   无（adb 可用但没连设备）");
+                    println!("  {} {}", dim("安卓设备"), dim("无（adb 可用但没连设备）"));
                 } else {
-                    println!("   安卓设备   {}", list.join(" · "));
+                    println!("  {} {}", dim("安卓设备"), list.join(" · "));
                 }
             }
-            Err(e) => println!("   安卓设备   adb 跑不起来：{}", e),
+            Err(e) => println!("  {} adb 跑不起来：{}", dim("安卓设备"), e),
         }
     }
 
@@ -234,10 +250,10 @@ fn print_health(exe_dir: &Path, base_url: &str) {
         // 只报"不一致"，不摆箭头暗示方向——本地可能是刚编出来的、比分发源还新，
         // 一个 ⬆️ 会让人以为该去更新
         Some(rv) if rv != local => {
-            println!("   版本       本地 {} ／ 分发源 {}（不一致）", local, rv);
+            println!("  {} 本地 {} ／ 分发源 {} {}", dim("版本    "), local, rv, sym_warn());
         }
-        Some(_) => println!("   版本       {}（与分发源一致）", local),
-        None => println!("   版本       {}（没连上分发源，跳过比对）", local),
+        Some(_) => println!("  {} {} {}", dim("版本    "), local, dim("（与分发源一致）")),
+        None => println!("  {} {} {}", dim("版本    "), local, dim("（没连上分发源）")),
     }
 
     // 证据落点：人找报告时不用回头问 AI
@@ -247,18 +263,17 @@ fn print_health(exe_dir: &Path, base_url: &str) {
             .map(|d| d.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).count())
             .unwrap_or(0);
         if n > 0 {
-            println!("   证据落点   {}（已有 {} 次检查）", logs.display(), n);
+            println!("  {} {} {}", dim("证据落点"), logs.display(), dim(&format!("（已有 {} 次检查）", n)));
         } else {
-            println!("   证据落点   {}（首次检查时自动创建）", logs.display());
+            println!("  {} {} {}", dim("证据落点"), logs.display(), dim("（首次检查时创建）"));
         }
     }
 
     if tke::utils::params::desktop_available() {
-        println!("   运行模式   有桌面 → 浏览器默认有头（要无头加 --headless=on，必须带等号）");
+        println!("  {} {}", dim("运行模式"), dim("有桌面 → 浏览器默认有头（要无头加 --headless=on）"));
     } else {
-        println!("   运行模式   无桌面 → 浏览器自动走无头");
+        println!("  {} {}", dim("运行模式"), dim("无桌面 → 浏览器自动走无头"));
     }
-    println!();
 }
 
 // ── 检测 ────────────────────────────────────────────────────────────────

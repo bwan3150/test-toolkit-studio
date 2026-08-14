@@ -40,6 +40,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # 不显进度条：管道执行时它会刷屏且拖慢下载
 
+# ── 外观 ──（与 install.sh 同一套；PowerShell 5.1 不认 $PSStyle，用原始转义序列）
+# ⚠️ 两个 PowerShell 标识符坑（实测踩过，见 uninstall.ps1 头注释）：
+#    变量名**不区分大小写**（别用与参数同名的）、变量名**可以含中文**（`${Ye}文字` 必须加花括号）
+$ES = [char]27
+$Cy = "$ES[38;5;39m"; $Gn = "$ES[38;5;42m"; $Ye = "$ES[38;5;214m"
+$Dm = "$ES[38;5;245m"; $Bd = "$ES[1m"; $Rs = "$ES[0m"
+$SOK = "$Gn✓$Rs"; $SWARN = "$Ye!$Rs"; $SDOT = "$Dm·$Rs"
+function Section([string]$Text) { Write-Host "`n$Bd$Cy▸ $Text$Rs" }
+function KV([string]$K, [string]$V) { Write-Host ("  $Dm{0,-6}$Rs {1}" -f $K, $V) }
+
 if (-not $BaseUrl) { $BaseUrl = 'https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke' }
 if (-not $TkeHome) { $TkeHome = Join-Path $env:USERPROFILE '.tke\bin' }
 
@@ -100,16 +110,33 @@ function Expand-Gzip {
 $nonce = [System.Guid]::NewGuid().ToString('N').Substring(0, 8)
 $remoteVersion = ''
 try {
-    $remoteVersion = (Invoke-WebRequest -Uri "$BaseUrl/VERSION?t=$nonce" -UseBasicParsing -TimeoutSec 30).Content
+    # .Content 可能是 byte[]（取决于响应头与 PowerShell 版本）——直接当字符串用会得到
+    # 一串 ASCII 码（实测显示成 "116"，那是 't'），build 戳也就解析不出来、缓存键失效
+    $raw = (Invoke-WebRequest -Uri "$BaseUrl/VERSION?t=$nonce" -UseBasicParsing -TimeoutSec 30).Content
+    $remoteVersion = if ($raw -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($raw) } else { [string]$raw }
 } catch { }
 $buildKey = ($remoteVersion -split "`n" | Where-Object { $_ -match '^build:' } | Select-Object -First 1) -replace '^build:\s*', ''
 $q = if ($buildKey) { "?b=$($buildKey.Trim())" } else { "?t=$nonce" }
 
-Write-Host "== tke-ui-test skill 安装 =="
-Write-Host "   来源     $BaseUrl"
-if ($remoteVersion) { Write-Host "   版本     $(($remoteVersion -split "`n")[0].Trim())" }
-Write-Host "   平台     $platform"
-Write-Host "   profile  $Profile"
+Write-Host $Cy -NoNewline
+@'
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║  ████████╗ ██████╗  ██████╗ ██╗     ██╗  ██╗██╗████████╗  ║
+║  ╚══██╔══╝██╔═══██╗██╔═══██╗██║     ██║ ██╔╝██║╚══██╔══╝  ║
+║     ██║   ██║   ██║██║   ██║██║     █████╔╝ ██║   ██║     ║
+║     ██║   ██║   ██║██║   ██║██║     ██╔═██╗ ██║   ██║     ║
+║     ██║   ╚██████╔╝╚██████╔╝███████╗██║  ██╗██║   ██║     ║
+║     ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝   ╚═╝     ║
+║                                                           ║
+║                    E   N   G   I   N   E                  ║
+╚═══════════════════════════════════════════════════════════╝
+'@ | Write-Host
+Write-Host $Rs -NoNewline
+KV '版本' $(if ($remoteVersion) { ($remoteVersion -split "`n")[0].Trim() } else { '未知' })
+KV '平台' $platform
+KV '范围' $Profile
+KV '来源' "$Dm$BaseUrl$Rs"
 
 $tmp = Join-Path $env:TEMP "tke-install-$nonce"
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
@@ -118,8 +145,7 @@ try {
     # ── 1. skill 文件 ──
     $skillRoot = if ($Project) { Join-Path (Get-Location) '.claude\skills' } else { Join-Path $env:USERPROFILE '.claude\skills' }
     New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
-    Write-Host ""
-    Write-Host "-- skill 文件 -> $skillRoot\tke-ui-test"
+    Section 'skill 文件' 
 
     $skillTgz = Join-Path $tmp 'skill.tar.gz'
     if (Get-File -Url "$BaseUrl/skill/tke-ui-test.tar.gz$q" -Out $skillTgz -Kind 'gz') {
@@ -127,12 +153,12 @@ try {
         # Windows 10 1803+ 自带 bsdtar，能直接解 .tar.gz
         tar -xzf $skillTgz -C $skillRoot
         if ($LASTEXITCODE -ne 0) { throw "skill 包解压失败（需要 Windows 10 1803+ 自带的 tar）" }
-        Write-Host "   OK 已安装"
+        Write-Host "  $SOK tke-ui-test $Dm-> $skillRoot$Rs"
         # 旧名残留：两个 skill 同时在册、description 几乎一样，AI 会乱挑
         $old = Join-Path $skillRoot 'ui-check'
         if (Test-Path $old) {
             Remove-Item $old -Recurse -Force
-            Write-Host "   已清除旧版 ui-check（本 skill 已更名为 tke-ui-test）"
+            Write-Host "  $SDOT 已清除旧版 ui-check（本 skill 已更名）"
         }
     } else {
         Write-Error "取不到 skill 包：$BaseUrl/skill/tke-ui-test.tar.gz`n（若返回的是网页而非文件，多半是这个路径还没上传）"
@@ -143,8 +169,7 @@ try {
     # 驱动必须与 tke 同目录：tke 只在自己所在目录找外部工具，不搜 PATH
     # （这样才能保证 chromedriver 与 Chrome 版本配对）
     New-Item -ItemType Directory -Path $TkeHome -Force | Out-Null
-    Write-Host ""
-    Write-Host "-- tke 及驱动 -> $TkeHome"
+    Section 'tke 及驱动' 
 
     function Install-Bin {
         param([string]$Name, [bool]$Required)
@@ -155,14 +180,14 @@ try {
             $dest = Join-Path $TkeHome $leaf
             Remove-Item $dest -Force -ErrorAction SilentlyContinue
             Expand-Gzip -In $gz -Out $dest
-            Write-Host "   OK $leaf"
+            Write-Host "  $SOK $leaf"
             return $true
         }
         if ($Required) {
             Write-Error "$Name 下载失败：$BaseUrl/bin/$platform/$Name.gz"
             exit 1
         }
-        Write-Host "   -- $Name 跳过（$Profile 用不到或源上没有）"
+        Write-Host "  $SDOT $Name $Dm(这个平台用不到)$Rs"
         return $false
     }
 
@@ -192,49 +217,52 @@ try {
     if ($Profile -eq 'web' -or $Profile -eq 'all') {
         $chromePkg = if ($arch -eq '386') { 'chrome-win32' } else { 'chrome-win64' }
         $chromeDir = Join-Path $env:APPDATA 'tke'
-        Write-Host ""
-        Write-Host "-- Chrome for Testing -> $chromeDir\$chromePkg"
+        Section 'Chrome for Testing' 
         if (Test-Path (Join-Path $chromeDir $chromePkg)) {
-            Write-Host "   OK 已存在，跳过（要换版本先删掉这个目录）"
+            Write-Host "  $SOK $chromePkg ${Dm}已在 $chromeDir（换版本先删这个目录）$Rs"
         } else {
             $zip = Join-Path $tmp 'chrome.zip'
             if (Get-File -Url "$BaseUrl/chrome/$chromePkg.zip$q" -Out $zip -Kind 'zip') {
                 New-Item -ItemType Directory -Path $chromeDir -Force | Out-Null
                 Expand-Archive -Path $zip -DestinationPath $chromeDir -Force
-                Write-Host "   OK 已安装"
+                Write-Host "  $SOK tke-ui-test $Dm-> $skillRoot$Rs"
             } else {
-                Write-Host "   !! 下载失败，网页检查会用不了：$BaseUrl/chrome/$chromePkg.zip"
+                Write-Host "  $SWARN 下载失败，网页检查会用不了"
             }
         }
     }
 
     # ── 4. PATH（用户级环境变量，新开的终端生效）──
-    Write-Host ""
+    Section 'PATH'
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -split ';' -contains $TkeHome) {
-        Write-Host "-- PATH 已就绪"
+        Write-Host "  $SOK 已就绪"
     } else {
         [Environment]::SetEnvironmentVariable('Path', "$userPath;$TkeHome", 'User')
-        Write-Host "-- 已把 tke 加进 PATH（用户级）"
-        Write-Host "   当前窗口请先执行： `$env:Path += ';$TkeHome'"
+        Write-Host "  $SOK 已写入用户级 PATH"
+        Write-Host "  $SWARN 当前窗口还没生效，先跑一次："
+        Write-Host "      $Bd`$env:Path += ';$TkeHome'$Rs"
     }
     $env:Path += ";$TkeHome"
 
     # ── 5. 体检 ──（结论要如实反映，别装完就说"好了"）
-    Write-Host ""
+    Section '体检'
     $tkeExe = Join-Path $TkeHome 'tke.exe'
     & $tkeExe fix --check --profile $Profile
     $health = $LASTEXITCODE
 
     Write-Host ""
     if ($health -eq 0) {
-        Write-Host "装好了。在 Claude Code 里直接提需求即可，例如："
-        Write-Host "  「我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存」"
+        Write-Host "  $Bd${Gn}装好了$Rs —— 在 Claude Code 里直接提需求即可："
+        Write-Host "    $Dm「我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存」$Rs"
+        Write-Host "    ${Dm}或显式调用 /tke-ui-test$Rs"
     } else {
-        Write-Host "环境还不完整（见上面）——现在还跑不了检查。"
-        Write-Host "  补齐： tke fix --profile $Profile"
-        exit 1
+        # 如实反映：文件装好了不等于能用（INV-9）
+        Write-Host "  $Bd${Ye}文件装好了，但环境还不完整$Rs —— 现在跑不了检查。"
+        Write-Host "    补齐：$Bd tke fix --profile $Profile$Rs"
     }
+    Write-Host "  ${Dm}卸载：irm $BaseUrl/uninstall.ps1 | iex$Rs"
+    if ($health -ne 0) { exit 1 }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -223,3 +223,43 @@ head -c2 "$tmp" | od -An -tx1 | tr -d ' \n'
 **照抄提醒**：`curl … | head -1` 取 VERSION（一百多字节）是安全的，但那是因为文件小。
 换成任何大文件都会踩这个坑。
 
+## P-24 (2026-08-14) PowerShell 的两个标识符坑（与 P-20 同族）
+
+写 install.ps1 / uninstall.ps1 时接连踩到，**都是"标识符边界"问题，与 bash 的 P-20 同一类**：
+
+**① 变量名不区分大小写。**
+```powershell
+function Section($t) { Write-Host "$B$T▸ $t$R" }   # $T(颜色) 被参数 $t 覆盖 → 标题打两遍
+param([switch]$Logs); $logs = "路径"                # 给 switch 赋字符串 → 调用时报类型转换失败
+```
+→ 颜色/工具变量用两字母以上（`$Cy` `$Dm` `$Rs`），且**别与参数同名**。
+
+**② 变量名可以包含中文。**
+```powershell
+"$Ye试运行：..."     # `$Ye试运行` 整个被当成变量名 → 那三个字直接消失
+"${Ye}试运行：..."   # 正确
+```
+→ 变量后面紧跟中文一律加花括号。**与 P-20（macOS bash 3.2 把中文吞进变量名）如出一辙。**
+
+**③ 函数名别长得像内置 cmdlet 的扩展。** `Remove-Item-Reported` 会让参数绑定错乱
+（实测报 SwitchParameter 转换失败）。改成 `RemovePath` 这种不带内置动词前缀的。
+
+**自查**：
+```bash
+grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[一-鿿]' *.ps1     # ② 会吞字的写法，应为 0
+```
+
+## P-25 (2026-08-14) `Invoke-WebRequest .Content` 可能是 byte[] 而不是字符串
+
+**现象**：install.ps1 里版本号显示成 `116` —— 那是 `'t'` 的 ASCII 码。
+
+**原因**：`.Content` 的类型取决于响应头与 PowerShell 版本；拿到 byte[] 时当字符串用，
+就会得到一串数字。**更坏的是** `build:` 戳也解析不出来，破 CDN 缓存的键悄悄失效（P-19），
+而表面上一切正常。
+
+**做法**：
+```powershell
+$raw = (Invoke-WebRequest ... ).Content
+$text = if ($raw -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($raw) } else { [string]$raw }
+```
+

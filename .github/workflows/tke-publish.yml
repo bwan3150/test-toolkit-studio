@@ -230,8 +230,10 @@ jobs:
           # skill 文件：与平台无关，一份就够
           tar --exclude=".DS_Store" -czf dist/skill/tke-ui-test.tar.gz \
               -C "${ENGINE_DIR}/skill" tke-ui-test
-          cp "${ENGINE_DIR}/skill/install.sh" dist/install.sh
-          cp "${ENGINE_DIR}/skill/install.ps1" dist/install.ps1   # Windows 装不了 bash 那个
+          # 四个脚本：装/卸 × bash/PowerShell（Windows 跑不了 bash 那些）
+          for f in install.sh install.ps1 uninstall.sh uninstall.ps1; do
+            cp "${ENGINE_DIR}/skill/$f" "dist/$f"
+          done
 
           # 二进制：artifacts/tke-<platform>/tke.gz → dist/bin/<platform>/tke.gz
           if [ -d artifacts ]; then
@@ -283,7 +285,7 @@ jobs:
           else
             echo "（本次没有二进制，只发 skill）"
           fi
-          up dist/skill dist/install.sh dist/install.ps1
+          up dist/skill dist/install.sh dist/install.ps1 dist/uninstall.sh dist/uninstall.ps1
           up dist/VERSION
 
       - name: 复验分发源

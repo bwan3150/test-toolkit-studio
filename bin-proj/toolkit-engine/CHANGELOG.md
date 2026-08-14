@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · 安装/卸载体验:LOGO + 配色 + 一行卸载
+- **feat** 安装器加 TOOLKIT ENGINE 的 ASCII LOGO,输出改成**符号 + 颜色**(`▸` 分节 / `✓` `!` `·`),**不用 emoji**——等宽终端里对不齐、SSH/CI 日志里常变方块。`tke fix` 的输出同步到同一套(用户反馈"CLI 输出也不好看")
+- **feat** **一行卸载**:`uninstall.sh` / `uninstall.ps1`。默认删 skill + tke/驱动 + PATH 行,**默认保留**检查记录(跑过的证据)与 Chrome(几百 MB);`--logs` / `--chrome` / `--all` 显式加。带 `--dry-run` 先看会删什么;改 rc 文件前先备份
+- **fix(用户发现)** macOS 上不该找 `libc++.so`——那是 **Linux 版 aapt** 的运行时依赖(RUNPATH 含 `$ORIGIN`)。无条件装会在 mac/Windows 上请求一个不存在的文件、拿到 404
+- **fix(PowerShell 两个标识符坑,P-24)** ①变量名**不区分大小写**:`$T`(颜色)被参数 `$t` 覆盖→标题打两遍;局部 `$logs` 覆盖 switch 参数 `$Logs`→赋值直接报类型错 ②变量名**可以含中文**:`$Ye试运行` 整个被当变量名、那三个字消失——**与 bash 的 P-20 如出一辙**。③函数名 `Remove-Item-Reported` 撞内置 `Remove-Item` 致参数绑定错乱
+- **fix(P-25)** `Invoke-WebRequest .Content` 可能是 **byte[]**:版本号显示成 `116`(那是 `'t'` 的 ASCII),更坏的是 `build:` 戳解析不出来、**破 CDN 缓存的键悄悄失效**而表面正常
+- **验证** 装了 pwsh 7.6.4 在本机真跑:install/uninstall 两个 ps1 语法通过 + 模拟 Windows 环境跑通(落地名正确补 `.exe`、DLL 保持原样);bash 版走完整安装→卸载闭环,试运行确认一个字节没删、logs 默认保留、rc 改前有备份
+
 ### 2026-08-14 · 宿主机能力门禁:做不了的组合直接拦下并说清
 - **feat** 新增 `utils::capability`:**iOS 只在 macOS 放行**,Windows/Linux 上碰 iOS 设备直接拦下,报错说清**为什么**(设备上的 WDA 要用 Xcode 装一次,Xcode 只有 mac 有)、**这台机器能做什么**(web/安卓)、以及**逃生口**
 - **落点** 门禁放在 `Controller::new` —— 所有设备操作的**唯一必经之路**,`control`/`run`/`steps`/`harness` 一处覆盖,不会漏
