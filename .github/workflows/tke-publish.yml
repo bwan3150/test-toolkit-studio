@@ -88,7 +88,12 @@ jobs:
           - platform: darwin-arm64
             runner: macos-14        # Apple Silicon
           - platform: darwin-amd64
-            runner: macos-13        # Intel
+            runner: macos-14
+            target: x86_64-apple-darwin
+            # ⚠️ 不能用 macos-13：GitHub 已**停止发布 Intel mac 镜像**（近百次 runner-images
+            # 发布里只剩 macos-14/15/26，全是 Apple Silicon），写 macos-13 会一直等不到
+            # runner、卡到超时。改在 arm64 上交叉编译——同一套 Apple SDK 与链接器，
+            # Rust 开箱即用
           - platform: linux-amd64
             runner: ubuntu-22.04    # 用 22.04 而非 latest：glibc 更老 = 兼容更多用户机器
           - platform: linux-arm64
@@ -170,10 +175,25 @@ jobs:
           BIN="$OUT/tke"
           [ "${{ runner.os }}" = "Windows" ] && BIN="$OUT/tke.exe"
 
-          # 产物跑不起来就是构建失败，别让它悄悄进分发源。
-          # 交叉编译出来的东西在本 runner 上未必能执行（32 位在 x64 Windows 上可以，
-          # 所以这里仍然验；真跑不了的目标要跳过这一步而不是假装成功）
-          "$BIN" --version
+          # 产物必须验，别让跑不起来的东西悄悄进分发源。
+          # 但交叉编译的产物在本 runner 上未必能执行（x86_64 产物在 arm64 mac 上要有
+          # Rosetta），所以分两档：能执行就执行（最强的验证），执行不了就退回验架构——
+          # 弱一些，但绝不是"跳过"。两样都失败才算构建失败。
+          if "$BIN" --version; then
+            echo "✅ 产物可执行"
+          else
+            echo "本 runner 执行不了该产物（交叉编译），退回验架构："
+            file "$BIN"
+            case "${{ matrix.platform }}:$(file -b "$BIN")" in
+              darwin-amd64:*x86_64*)      echo "✅ 架构正确 (x86_64)" ;;
+              darwin-arm64:*arm64*)       echo "✅ 架构正确 (arm64)" ;;
+              windows-386:*80386*|windows-386:*Intel\ i386*) echo "✅ 架构正确 (i386)" ;;
+              windows-amd64:*x86-64*)     echo "✅ 架构正确 (x86-64)" ;;
+              linux-arm64:*aarch64*)      echo "✅ 架构正确 (aarch64)" ;;
+              linux-amd64:*x86-64*)       echo "✅ 架构正确 (x86-64)" ;;
+              *) echo "❌ 产物既跑不起来、架构也对不上目标平台" >&2; exit 1 ;;
+            esac
+          fi
           mkdir -p out/bin/${{ matrix.platform }}
           gzip -c "$BIN" > out/bin/${{ matrix.platform }}/tke.gz
           ls -lh out/bin/${{ matrix.platform }}/

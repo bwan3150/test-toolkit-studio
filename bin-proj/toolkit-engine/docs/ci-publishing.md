@@ -78,6 +78,16 @@ Actions → **Publish TKE Deps** → Run workflow：
 跑完记得**再跑一次 Publish TKE**：依赖传上去了但 VERSION 没变，使用者的 CDN 缓存最长
 4 小时后才会看到新驱动。workflow 结尾会提醒这件事。
 
+## runner 的坑：**GitHub 已经没有免费的 Intel mac 了**
+
+`macos-13` 会一直等不到 runner、卡到超时——近百次 runner-images 发布里只剩
+macos-14/15/26，**全是 Apple Silicon**。所以 `darwin-amd64` 改成在 arm64 runner 上
+**交叉编译** `x86_64-apple-darwin`（同一套 Apple SDK 与链接器，Rust 开箱即用）。
+
+交叉编译的产物在本 runner 上未必能执行，所以产物验证分两档：**能执行就执行**（最强），
+执行不了就**退回验架构**（`file` 比对目标平台）。两样都失败才算构建失败——
+绝不是"跳过验证"。
+
 ## 各家下载源的结构（都是实测出来的，别照猜）
 
 | 来源 | 结构 |
