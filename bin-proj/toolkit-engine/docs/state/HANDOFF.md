@@ -57,8 +57,16 @@
   **driver 与 Chrome 同清单同版本必然配对**)。三段下载逻辑**从 YAML 抽出来本地实跑验过**。
   ⚠️ **需要配仓库 Secret `TKC_TOKEN` 才能用**,且 workflow 本身**还没在 GitHub 上跑过一次**
 
+- **Windows 这条路补通**(2026-08-14,用户说同事主力是 Windows):`install.ps1`(此前那句
+  "请用 install.ps1"指向的文件根本不存在)+ 体检并进 `tke fix --check`(一份 Rust 三平台通用,
+  替掉 bash 的 check-env.sh)+ SKILL.md/坑册补 PowerShell 片段。**装了 pwsh 7.6.4 在本机验过
+  语法与核心函数**,但**没有任何一台真 Windows 机器跑过**
+
 ## 没做完
 
+- ⚠️ **Windows 全链路没在真机验过**:install.ps1 的 Windows 专有部分(USERPROFILE/APPDATA
+  路径、用户级 PATH 环境变量、bsdtar 解 tar.gz、Expand-Archive)在 Linux 的 pwsh 上验不了。
+  **同事那边第一次装大概率会撞问题**,让他们把报错贴回来
 - **两个 workflow 没在 GitHub 上真跑过**:本地验的是下载/转存那部分逻辑,
   runner 上的构建(尤其 Windows 的 `cargo build` 与 macOS 双架构)还没验证过
 - **ADR-0011 harness 侧的 AI 行为真机未验**(本机无 `[ai]` key):
