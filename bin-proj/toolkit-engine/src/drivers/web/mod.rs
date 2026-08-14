@@ -419,6 +419,60 @@ impl WebDriver {
         ]))
     }
 
+    /// 选中 `<select>` 的某一项（web 独有）。
+    ///
+    /// **为什么不能靠点击**：原生下拉展开后，选项是浏览器自己画的，DOM 里依然不可见、
+    /// `getBoundingClientRect` 是 0 —— 点击路线在这儿根本走不通（用户实测撞到过，
+    /// 只好绕道 python 读页面）。所以直接走 DOM：定位到 select、设 value、派发
+    /// input/change 事件（不派发的话 React/Vue 这类框架收不到，界面不会更新）。
+    pub fn select_option(&self, x: i32, y: i32, label: &str) -> Result<String> {
+        let dpr = self.device_pixel_ratio()?;
+        let (cx0, cy0) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);
+        let (cx, cy) = self.center_into_viewport(cx0, cy0);
+
+        let js = r#"
+const [x, y, want] = arguments;
+// 从该点往上找最近的 <select>（点到的可能是它的子节点）
+let el = document.elementFromPoint(x, y);
+while (el && el.tagName !== 'SELECT') el = el.parentElement;
+if (!el) return { ok: false, err: '该位置不是下拉框' };
+const opts = Array.from(el.options || []);
+const norm = s => (s || '').trim();
+// 先精确匹配文字，再匹配 value，最后退回包含匹配
+let hit = opts.find(o => norm(o.text) === norm(want))
+       || opts.find(o => norm(o.value) === norm(want))
+       || opts.find(o => norm(o.text).includes(norm(want)));
+if (!hit) return { ok: false, err: '没有这个选项', has: opts.map(o => norm(o.text)) };
+el.value = hit.value;
+// 不派发事件的话，React/Vue 等框架感知不到这次变更
+el.dispatchEvent(new Event('input',  { bubbles: true }));
+el.dispatchEvent(new Event('change', { bubbles: true }));
+return { ok: true, picked: norm(hit.text) };
+"#;
+        let r = self.execute(js, serde_json::json!([cx, cy, label]))?;
+        if r["ok"].as_bool().unwrap_or(false) {
+            Ok(r["picked"].as_str().unwrap_or(label).to_string())
+        } else {
+            let has = r["has"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                })
+                .unwrap_or_default();
+            let mut msg = format!(
+                "选择失败：{}",
+                r["err"].as_str().unwrap_or("未知错误")
+            );
+            if !has.is_empty() {
+                msg.push_str(&format!("（这个下拉框只有：{}）", has));
+            }
+            Err(TkeError::DeviceError(msg))
+        }
+    }
+
     pub fn press(&self, x: i32, y: i32, duration_ms: u32) -> Result<()> {
         let dpr = self.device_pixel_ratio()?;
         let (cx, cy) = ((x as f64 / dpr) as i64, (y as f64 / dpr) as i64);

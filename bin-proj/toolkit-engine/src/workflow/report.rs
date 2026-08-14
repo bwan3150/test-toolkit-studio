@@ -593,6 +593,7 @@ fn render_session(batches: &[Batch], embed: bool) -> String {
         .to_string();
 
     let mut body = String::new();
+    let mut seq = 0usize;   // 跨批次连续编号
     for (i, b) in batches.iter().enumerate() {
         let plat = platform_tag(b.result.device.as_deref());
         let ctx = Ctx {
@@ -616,7 +617,8 @@ fn render_session(batches: &[Batch], embed: bool) -> String {
             href = esc(&format!("{}report.html", b.prefix)),
         ));
         for (j, st) in b.result.steps.iter().enumerate() {
-            body.push_str(&step_card(&ctx, &b.result, j, st, plat));
+            seq += 1;
+            body.push_str(&step_card_seq(&ctx, &b.result, j, st, plat, Some(seq)));
             body.push('\n');
         }
     }
@@ -700,12 +702,18 @@ fn render_session(batches: &[Batch], embed: bool) -> String {
     )
 }
 
-fn step_card(
+fn step_card(ctx: &Ctx, r: &ExecutionResult, i: usize, s: &StepResult, plat: &str) -> String {
+    step_card_seq(ctx, r, i, s, plat, None)
+}
+
+/// `seq` 给全流程报告用：跨批次连续编号。单批报告传 None，用步骤自己的序号。
+fn step_card_seq(
     ctx: &Ctx,
     r: &ExecutionResult,
     i: usize,
     s: &StepResult,
     plat: &str,
+    seq: Option<usize>,
 ) -> String {
     let img = s
         .screenshot
@@ -730,7 +738,7 @@ fn step_card(
   {foot}
 </div>"#,
         ng = if s.success { "" } else { "ng" },
-        num = s.index + 1,
+        num = seq.unwrap_or(s.index + 1),
         mcls = if s.success { "m-ok" } else { "m-ng" },
         mark = if s.success { "✓" } else { "✗" },
         cmd = esc(&s.command),
@@ -959,6 +967,26 @@ mod tests {
         let phone_at = html.find("phone/steps_a").expect("应含 phone 批次");
         let web_at = html.find("web/steps_b").expect("应含 web 批次");
         assert!(phone_at < web_at, "时间早的要排前面(跨子目录也按时间)");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 全流程报告的步骤要**跨批次连续编号**——每批各自从 1 开始的话，
+    /// 读起来像好几段互不相干的测试拼在一起（用户实测反馈）
+    #[test]
+    fn session_report_numbers_steps_continuously() {
+        let root = std::env::temp_dir().join(format!("tke-session-seq-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        mk_batch(&root, "steps_a", "2026-08-14T10:00:00+10:00", &["返回", "等待 [1s]"]);
+        mk_batch(&root, "steps_b", "2026-08-14T10:05:00+10:00", &["返回", "等待 [1s]"]);
+
+        let html = std::fs::read_to_string(write_session_report(&root, false).unwrap()).unwrap();
+        let nums: Vec<&str> = html
+            .split(r#"class="s-num">"#)
+            .skip(1)
+            .filter_map(|x| x.split('<').next())
+            .collect();
+        assert_eq!(nums, vec!["01", "02", "03", "04"], "四步应连续编号，而不是 01 02 01 02");
         let _ = std::fs::remove_dir_all(&root);
     }
 

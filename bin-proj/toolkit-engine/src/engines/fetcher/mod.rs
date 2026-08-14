@@ -164,6 +164,7 @@ impl Fetcher {
         // 有它就直接用、不再走下面那套按 text 生成的 xpath（会撞名）。
         let mut xpath_attr = None;
         let mut clickable = false;
+        let mut options: Option<Vec<String>> = None;
         let mut checkable = false;
         let mut checked = false;
         let mut focusable = false;
@@ -189,6 +190,17 @@ impl Fetcher {
                     "xpath" => if !value.is_empty() { xpath_attr = Some(value) },
                     "hint" | "hintText" => if !value.is_empty() { hint = Some(value) },
                     "clickable" => clickable = value == "true",
+                    // web 的 <select> 把可选项用 " | " 串在一个属性里带过来
+                    "options" => {
+                        let list: Vec<String> = value
+                            .split(" | ")
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
+                        if !list.is_empty() {
+                            options = Some(list);
+                        }
+                    }
                     "checkable" => checkable = value == "true",
                     "checked" => checked = value == "true",
                     "focusable" => focusable = value == "true",
@@ -218,6 +230,7 @@ impl Fetcher {
             selected,
             enabled,
             xpath: xpath_attr,  // web 自带唯一路径；为 None 时下面 generate_xpaths 兜底生成
+            options,
             z_index: None,  // 稍后计算
             parent_index,
             depth,

@@ -124,6 +124,16 @@ impl Controller {
         }
     }
 
+    /// 选中 `<select>` 的某一项（只有 web 有原生下拉；移动端的"下拉"多是普通列表，点就行）
+    pub fn select_option(&self, x: i32, y: i32, label: &str) -> Result<String> {
+        match &self.driver {
+            Driver::Web(d) => d.select_option(x, y, label),
+            _ => Err(crate::TkeError::InvalidArgument(
+                "「选择」是 web 独有指令：移动端的下拉通常是普通列表，直接用「点击」".into(),
+            )),
+        }
+    }
+
     pub fn swipe(&self, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<()> {
         match &self.driver {
             Driver::Adb(d) => d.swipe(x1, y1, x2, y2, duration_ms),

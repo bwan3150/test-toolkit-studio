@@ -22,6 +22,10 @@ pub struct UIElement {
     pub selected: bool,
     pub enabled: bool,
     pub xpath: Option<String>,
+    /// `<select>` 的可选项（web 独有）。闭合状态下 `<option>` 自身采不到，
+    /// 只能挂在 select 上带出来——没有它 AI 就不知道这个下拉框能选什么
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
     /// 用于前端渲染的z-index，基于元素面积计算
     #[serde(skip_serializing_if = "Option::is_none")]
     pub z_index: Option<usize>,

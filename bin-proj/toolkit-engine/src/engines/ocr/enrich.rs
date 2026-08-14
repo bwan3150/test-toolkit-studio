@@ -198,6 +198,7 @@ fn dist2(a: &Point, b: &Point) -> i64 {
 /// 由 OCR 文字区构造一个可点击伪元素
 fn ocr_element(index: usize, bounds: Bounds, text: &str) -> UIElement {
     UIElement {
+        options: None,   // OCR 造的伪元素没有 <select> 概念
         index,
         class_name: "OcrText".to_string(),
         bounds,

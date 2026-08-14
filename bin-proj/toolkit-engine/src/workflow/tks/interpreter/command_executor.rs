@@ -118,6 +118,25 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::Hover { point }).await.map(|_| ())
     }
 
+    /// 选择下拉项（web 独有）：`选择 [{下拉框}, "日间模式"]` 或 `选择 ["模式", "日间模式"]`
+    pub async fn execute_select(&mut self, params: &[TksParam]) -> Result<()> {
+        if params.len() < 2 {
+            return Err(TkeError::InvalidArgument(
+                "选择命令需要两个参数：目标下拉框 + 选项文字，如 选择 [{模式}, \"日间模式\"]".to_string(),
+            ));
+        }
+        let point = self.resolve_target(&params[0]).await?;
+        let label = match &params[1] {
+            TksParam::Text(t) => t.clone(),
+            other => return Err(TkeError::InvalidArgument(format!(
+                "选择的第二个参数要是选项文字（双引号），收到：{:?}", other
+            ))),
+        };
+        let picked = self.controller.select_option(point.x, point.y, &label)?;
+        tracing::info!("已选中「{}」", picked);
+        Ok(())
+    }
+
     /// 长按操作
     pub async fn execute_press(&mut self, params: &[TksParam]) -> Result<()> {
         if params.is_empty() {

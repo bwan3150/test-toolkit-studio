@@ -25,6 +25,8 @@ pub enum TksCommand {
     ScrollFind,       // 滚动查找（朝某方向滚动直到目标文字出现——可复现地"滚到目标可见"，替代固定距离盲滑）
     Key,              // 按键（enter/tab/escape/backspace 等硬键/特殊键）
     Hover,            // 悬停（web 独有：鼠标移到元素上触发 hover，展开悬停下拉/菜单，不点击）
+    Select,           // 选择（web 独有：选中 <select> 的某一项。原生下拉展开后选项由浏览器绘制、
+                      //       DOM 里不可见，点击路线走不通，只能走 DOM 设值 + 派发事件）
 }
 
 impl TksCommand {
@@ -38,6 +40,7 @@ impl TksCommand {
             "滑动" => Some(Self::Swipe),
             "定向滑动" => Some(Self::DirectionalSwipe),
             "输入" => Some(Self::Input),
+            "选择" => Some(Self::Select),
             "清理" => Some(Self::Clear),
             "隐藏键盘" => Some(Self::HideKeyboard),
             "返回" => Some(Self::Back),

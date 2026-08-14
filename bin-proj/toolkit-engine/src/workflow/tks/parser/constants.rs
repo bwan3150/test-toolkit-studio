@@ -10,6 +10,7 @@ pub fn create_command_map() -> HashMap<String, TksCommand> {
     map.insert("关闭".to_string(), TksCommand::Close);
     map.insert("点击".to_string(), TksCommand::Click);
     map.insert("悬停".to_string(), TksCommand::Hover);
+    map.insert("选择".to_string(), TksCommand::Select);
     map.insert("按压".to_string(), TksCommand::Press);
     map.insert("滑动".to_string(), TksCommand::Swipe);
     map.insert("定向滑动".to_string(), TksCommand::DirectionalSwipe);

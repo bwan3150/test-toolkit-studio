@@ -42,6 +42,17 @@ const walk = (el) => {
       if (!ownText && (child.tagName === 'INPUT' || child.tagName === 'TEXTAREA')) {
         ownText = (child.value || child.placeholder || '').slice(0, 120);
       }
+      // <select> 特判：文字全在子 <option> 里，只取直接文本节点会得到空；
+      // 而闭合状态下 option 的 getBoundingClientRect 是 0，走不到这一层就被可见性
+      // 过滤掉了 —— 结果是 AI 既看不到当前值、也不知道有哪些选项可选（实测撞过）。
+      // 所以这里把"当前值"当文本、把"全部选项"单列一个字段带出去。
+      let optionList = null;
+      if (child.tagName === 'SELECT') {
+        const opts = Array.from(child.options || []);
+        optionList = opts.map(o => (o.text || '').trim()).filter(Boolean).slice(0, 50);
+        const cur = child.selectedOptions && child.selectedOptions[0];
+        ownText = ((cur && cur.text) || '').trim().slice(0, 120);
+      }
       const clickable = ['A','BUTTON','SELECT'].includes(child.tagName) ||
         ['INPUT','TEXTAREA'].includes(child.tagName) ||
         child.onclick != null || style.cursor === 'pointer' ||
@@ -59,6 +70,7 @@ const walk = (el) => {
           text: ownText,
           xpath: xpathOf(child),
           clickable: clickable,
+          options: optionList,
           x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
           x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
         });
@@ -80,14 +92,31 @@ pub(super) fn dom_elements_to_xml(elements: &serde_json::Value) -> String {
 
     let mut xml = String::from("<?xml version='1.0' encoding='UTF-8'?>\n<hierarchy rotation=\"0\">\n");
     for e in list {
+        // <select> 的可选项：闭合状态下 option 自身不可见、采不到，只能挂在 select 上带出来。
+        // 没有它 AI 就不知道能选什么（用户实测撞到过：只好绕道 python 读页面）
+        let options = e["options"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            })
+            .unwrap_or_default();
+        let options_attr = if options.is_empty() {
+            String::new()
+        } else {
+            format!(" options=\"{}\"", escape_attr(&options))
+        };
         xml.push_str(&format!(
-            "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" xpath=\"{}\" clickable=\"{}\" enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
+            "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" xpath=\"{}\" clickable=\"{}\"{} enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
             escape_attr(e["tag"].as_str().unwrap_or("")),
             escape_attr(e["id"].as_str().unwrap_or("")),
             escape_attr(e["aria"].as_str().unwrap_or("")),
             escape_attr(e["text"].as_str().unwrap_or("")),
             escape_attr(e["xpath"].as_str().unwrap_or("")),
             e["clickable"].as_bool().unwrap_or(false),
+            options_attr,
             e["x1"].as_i64().unwrap_or(0),
             e["y1"].as_i64().unwrap_or(0),
             e["x2"].as_i64().unwrap_or(0),
