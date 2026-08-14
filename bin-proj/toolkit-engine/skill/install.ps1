@@ -133,10 +133,8 @@ Write-Host $Cy -NoNewline
 ╚═══════════════════════════════════════════════════════════╝
 '@ | Write-Host
 Write-Host $Rs -NoNewline
-KV '版本' $(if ($remoteVersion) { ($remoteVersion -split "`n")[0].Trim() } else { '未知' })
-KV '平台' $platform
-KV '范围' $Profile
-KV '来源' "$Dm$BaseUrl$Rs"
+$verLine = if ($remoteVersion) { ($remoteVersion -split "`n")[0].Trim() } else { 'tke' }
+Write-Host "  $Bd$verLine$Rs $Dm·$Rs $platform $Dm·$Rs $Profile"
 
 $tmp = Join-Path $env:TEMP "tke-install-$nonce"
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null
@@ -145,7 +143,7 @@ try {
     # ── 1. skill 文件 ──
     $skillRoot = if ($Project) { Join-Path (Get-Location) '.claude\skills' } else { Join-Path $env:USERPROFILE '.claude\skills' }
     New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
-    Section 'skill 文件' 
+    Section 'SKILL'
 
     $skillTgz = Join-Path $tmp 'skill.tar.gz'
     if (Get-File -Url "$BaseUrl/skill/tke-ui-test.tar.gz$q" -Out $skillTgz -Kind 'gz') {
@@ -153,7 +151,7 @@ try {
         # Windows 10 1803+ 自带 bsdtar，能直接解 .tar.gz
         tar -xzf $skillTgz -C $skillRoot
         if ($LASTEXITCODE -ne 0) { throw "skill 包解压失败（需要 Windows 10 1803+ 自带的 tar）" }
-        Write-Host "  $SOK tke-ui-test $Dm-> $skillRoot$Rs"
+        Write-Host "  $SOK $Dm$skillRoot\tke-ui-test$Rs"
         # 旧名残留：两个 skill 同时在册、description 几乎一样，AI 会乱挑
         $old = Join-Path $skillRoot 'ui-check'
         if (Test-Path $old) {
@@ -169,7 +167,7 @@ try {
     # 驱动必须与 tke 同目录：tke 只在自己所在目录找外部工具，不搜 PATH
     # （这样才能保证 chromedriver 与 Chrome 版本配对）
     New-Item -ItemType Directory -Path $TkeHome -Force | Out-Null
-    Section 'tke 及驱动' 
+    Section 'DEPENDENCY'
 
     function Install-Bin {
         param([string]$Name, [bool]$Required)
@@ -217,15 +215,19 @@ try {
     if ($Profile -eq 'web' -or $Profile -eq 'all') {
         $chromePkg = if ($arch -eq '386') { 'chrome-win32' } else { 'chrome-win64' }
         $chromeDir = Join-Path $env:APPDATA 'tke'
-        Section 'Chrome for Testing' 
+        
         if (Test-Path (Join-Path $chromeDir $chromePkg)) {
             Write-Host "  $SOK $chromePkg ${Dm}已在 $chromeDir（换版本先删这个目录）$Rs"
         } else {
             $zip = Join-Path $tmp 'chrome.zip'
-            if (Get-File -Url "$BaseUrl/chrome/$chromePkg.zip$q" -Out $zip -Kind 'zip') {
+            Write-Host "  $SDOT $chromePkg ${Dm}下载中（几百 MB）$Rs"
+            $ProgressPreference = 'Continue'      # 大文件才显进度条
+            $chromeOk = Get-File -Url "$BaseUrl/chrome/$chromePkg.zip$q" -Out $zip -Kind 'zip'
+            $ProgressPreference = 'SilentlyContinue'
+            if ($chromeOk) {
                 New-Item -ItemType Directory -Path $chromeDir -Force | Out-Null
                 Expand-Archive -Path $zip -DestinationPath $chromeDir -Force
-                Write-Host "  $SOK tke-ui-test $Dm-> $skillRoot$Rs"
+                Write-Host "  $SOK $Dm$skillRoot\tke-ui-test$Rs"
             } else {
                 Write-Host "  $SWARN 下载失败，网页检查会用不了"
             }
@@ -233,20 +235,16 @@ try {
     }
 
     # ── 4. PATH（用户级环境变量，新开的终端生效）──
-    Section 'PATH'
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -split ';' -contains $TkeHome) {
-        Write-Host "  $SOK 已就绪"
+        Write-Host "  $SOK PATH 已就绪"
     } else {
         [Environment]::SetEnvironmentVariable('Path', "$userPath;$TkeHome", 'User')
-        Write-Host "  $SOK 已写入用户级 PATH"
-        Write-Host "  $SWARN 当前窗口还没生效，先跑一次："
-        Write-Host "      $Bd`$env:Path += ';$TkeHome'$Rs"
+        Write-Host "  $SOK PATH 已写入用户级$Dm（新窗口生效）$Rs"
     }
     $env:Path += ";$TkeHome"
 
     # ── 5. 体检 ──（结论要如实反映，别装完就说"好了"）
-    Section '体检'
     $tkeExe = Join-Path $TkeHome 'tke.exe'
     & $tkeExe fix --check --profile $Profile
     $health = $LASTEXITCODE

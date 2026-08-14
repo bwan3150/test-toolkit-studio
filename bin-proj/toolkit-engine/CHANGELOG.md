@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · 安装/卸载输出精简(用户逐条反馈)
+- **change** 分节标题统一成**英文大写**:`SKILL` / `DEPENDENCY` / `DOCTOR` / `REMOVED`(不再用中文标题)
+- **change** 文案砍到最短:头部三项挤成一行(`tke 0.7.4-beta · darwin-arm64 · all`);Chrome 那句"已在 …（换版本先删这个目录）"删掉;PATH 两行并一行;结尾一句话 + 一行卸载命令
+- **change** `tke fix` 的「环境/状况」**两段并一段**——分两段会与安装器的分节套在一起、还把平台报了两遍;安装器也不再单开「体检」节
+- **change** 卸载**只报实际发生的事**:不存在的默默跳过(不再列"没有检查记录""没有安装 Chrome"),保留了什么压缩成结尾一句 `保留 logs(-Logs) · chrome(-Chrome)`
+- **change** 卸载器用回 **ENGINE** 的 LOGO(品牌只有一个,不另做 UNINSTALL 字样)
+- **feat** Chrome 下载**显示进度条**(几百 MB,静默会让人以为卡死);其余小文件仍静默。PowerShell 侧临时开 `$ProgressPreference`,只对大文件开——管道执行时它会刷屏
+- **fix** PowerShell 又扫出 4 处 `$变量中文`(P-24 那个坑),已全部加花括号;自查命令已在 PITFALLS
+
 ### 2026-08-14 · 安装/卸载体验:LOGO + 配色 + 一行卸载
 - **feat** 安装器加 TOOLKIT ENGINE 的 ASCII LOGO,输出改成**符号 + 颜色**(`▸` 分节 / `✓` `!` `·`),**不用 emoji**——等宽终端里对不齐、SSH/CI 日志里常变方块。`tke fix` 的输出同步到同一套(用户反馈"CLI 输出也不好看")
 - **feat** **一行卸载**:`uninstall.sh` / `uninstall.ps1`。默认删 skill + tke/驱动 + PATH 行,**默认保留**检查记录(跑过的证据)与 Chrome(几百 MB);`--logs` / `--chrome` / `--all` 显式加。带 `--dry-run` 先看会删什么;改 rc 文件前先备份

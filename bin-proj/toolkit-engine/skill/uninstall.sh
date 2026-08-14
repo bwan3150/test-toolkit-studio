@@ -55,19 +55,17 @@ cat <<'LOGO'
 ║     ██║   ╚██████╔╝╚██████╔╝███████╗██║  ██╗██║   ██║     ║
 ║     ╚═╝    ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝   ╚═╝     ║
 ║                                                           ║
-║                    U   N   I   N   S   T   A   L   L      ║
+║                    E   N   G   I   N   E                  ║
 ╚═══════════════════════════════════════════════════════════╝
 LOGO
 printf '%s' "$C_R"
-[ "$DRY" = 1 ] && printf '  %s%s试运行：只列出会删什么，不真删%s\n' "$C_B" "$C_WARN" "$C_R"
+
 
 # 删一个路径并报告（试运行只报告）
 rm_path() {
     local path="$1" label="$2"
-    if [ ! -e "$path" ]; then
-        printf '  %s %s %s(不存在)%s\n' "$S_DOT" "$label" "$C_DIM" "$C_R"
-        return
-    fi
+    # 不存在就默默跳过：列一堆"没有这个""没有那个"是噪音，不是信息
+    [ -e "$path" ] || return
     local size
     size="$(du -sh "$path" 2>/dev/null | cut -f1)"
     if [ "$DRY" = 1 ]; then
@@ -78,68 +76,48 @@ rm_path() {
     printf '  %s %s %s%s  %s%s\n' "$S_OK" "$label" "$C_DIM" "$path" "${size:-?}" "$C_R"
 }
 
-section "skill 文件"
+section "$([ "$DRY" = 1 ] && echo 'DRY RUN' || echo 'REMOVED')"
 # 用户级 + 当前项目级都清；旧名 ui-check 一并带走
 for root in "$HOME/.claude/skills" "$PWD/.claude/skills"; do
     for name in tke-ui-test ui-check; do
-        [ -e "$root/$name" ] && rm_path "$root/$name" "$name"
+        rm_path "$root/$name" "skill     "
     done
 done
+rm_path "$TKE_HOME" "dependency"
 
-section "tke 与驱动"
-rm_path "$TKE_HOME" "tke 及同目录驱动"
-
-section "PATH"
 # 只删我们加的那一行，别动用户 rc 文件里的其它内容
-CLEANED=0
 for RC in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
     [ -f "$RC" ] || continue
     grep -qF "$TKE_HOME" "$RC" 2>/dev/null || continue
     if [ "$DRY" = 1 ]; then
-        printf '  %s 会从 %s 删掉含 %s 的那行\n' "$S_WARN" "$RC" "$TKE_HOME"
-        CLEANED=1
+        printf '  %s path      %s%s%s\n' "$S_WARN" "$C_DIM" "$RC" "$C_R"
         continue
     fi
     # 先备份再改——动别人的 rc 文件要留退路
     cp "$RC" "${RC}.tke-backup"
     grep -vF "$TKE_HOME" "${RC}.tke-backup" > "$RC"
-    printf '  %s 已从 %s 移除 %s(备份 %s.tke-backup)%s\n' "$S_OK" "$RC" "$C_DIM" "$RC" "$C_R"
-    CLEANED=1
+    printf '  %s path      %s%s%s\n' "$S_OK" "$C_DIM" "$RC" "$C_R"
 done
-[ "$CLEANED" = 0 ] && printf '  %s 没有找到 tke 的 PATH 行\n' "$S_DOT"
 
-section "检查记录"
-if [ "$DEL_LOGS" = 1 ]; then
-    rm_path "$HOME/.tke/logs" "检查记录（截图/报告）"
-else
-    if [ -d "$HOME/.tke/logs" ]; then
-        printf '  %s 保留 %s%s%s\n' "$S_DOT" "$C_DIM" "$HOME/.tke/logs" "$C_R"
-        printf '    %s那是你跑过的证据；要删加 --logs%s\n' "$C_DIM" "$C_R"
-    else
-        printf '  %s 没有检查记录\n' "$S_DOT"
-    fi
-fi
-
-section "Chrome for Testing"
+[ "$DEL_LOGS" = 1 ] && rm_path "$HOME/.tke/logs" "logs      "
 if [ "$DEL_CHROME" = 1 ]; then
     for d in "$CHROME_DIR"/chrome-*; do
-        [ -e "$d" ] && rm_path "$d" "$(basename "$d")"
+        rm_path "$d" "chrome    "
     done
-    # 目录空了就一并收掉
-    rmdir "$CHROME_DIR" 2>/dev/null && printf '  %s 已清理 %s\n' "$S_OK" "$CHROME_DIR"
-else
-    if ls "$CHROME_DIR"/chrome-* >/dev/null 2>&1; then
-        printf '  %s 保留 %s%s%s\n' "$S_DOT" "$C_DIM" "$CHROME_DIR" "$C_R"
-        printf '    %s几百 MB，重装要重新下；要删加 --chrome 或 --all%s\n' "$C_DIM" "$C_R"
-    else
-        printf '  %s 没有安装 Chrome for Testing\n' "$S_DOT"
-    fi
+    rmdir "$CHROME_DIR" 2>/dev/null
+fi
+
+# 保留了什么只用一句话带过——没删的东西不值得各占一节
+KEPT=""
+[ "$DEL_LOGS" = 0 ] && [ -d "$HOME/.tke/logs" ] && KEPT="检查记录(--logs)"
+if [ "$DEL_CHROME" = 0 ] && ls "$CHROME_DIR"/chrome-* >/dev/null 2>&1; then
+    [ -n "$KEPT" ] && KEPT="$KEPT · Chrome(--chrome)" || KEPT="Chrome(--chrome)"
 fi
 
 printf '\n'
 if [ "$DRY" = 1 ]; then
-    printf '  %s%s 以上都没真删%s —— 去掉 --dry-run 才会动手\n' "$C_B" "$C_WARN" "$C_R"
+    printf '  %s%s试运行%s  以上都没真删，去掉 --dry-run 才动手\n' "$C_B" "$C_WARN" "$C_R"
 else
-    printf '  %s%s 卸载完成%s\n' "$C_B" "$C_OK" "$C_R"
-    printf '    %s当前终端的 PATH 还留着旧值，重开一个即可%s\n' "$C_DIM" "$C_R"
+    printf '  %s%s卸载完成%s  新终端生效\n' "$C_B" "$C_OK" "$C_R"
 fi
+[ -n "$KEPT" ] && printf '  %s保留  %s%s\n' "$C_DIM" "$KEPT" "$C_R"

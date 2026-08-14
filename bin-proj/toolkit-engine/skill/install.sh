@@ -116,9 +116,14 @@ magic_ok() {
 }
 
 # 下载 + 按类型验内容；不合格一律当失败（并删掉半成品）
+# 第 4 个参数给 "bar" 时显示进度条——Chrome 有几百 MB，静默下载会让人以为卡死了
 fetch() {
-    local url="$1" out="$2" kind="${3:-any}"
-    curl -fsSL --retry 2 --max-time 900 "$url" -o "$out" || { rm -f "$out"; return 1; }
+    local url="$1" out="$2" kind="${3:-any}" show="${4:-}"
+    if [ "$show" = "bar" ] && [ -t 1 ]; then
+        curl -fL# --retry 2 --max-time 1800 "$url" -o "$out" || { rm -f "$out"; return 1; }
+    else
+        curl -fsSL --retry 2 --max-time 900 "$url" -o "$out" || { rm -f "$out"; return 1; }
+    fi
     if ! magic_ok "$out" "$kind"; then
         rm -f "$out"
         return 1
@@ -142,10 +147,9 @@ else
 fi
 
 banner
-kv "版本" "$([ -n "$REMOTE_VERSION" ] && printf '%s' "$REMOTE_VERSION" | head -1 || echo '未知')"
-kv "平台" "$PLATFORM"
-kv "范围" "$PROFILE"
-kv "来源" "${C_DIM}${BASE_URL}${C_R}"
+printf '  %s%s%s %s·%s %s %s·%s %s\n' \
+    "$C_B" "$([ -n "$REMOTE_VERSION" ] && printf '%s' "$REMOTE_VERSION" | head -1 || echo 'tke')" "$C_R" \
+    "$C_DIM" "$C_R" "$PLATFORM" "$C_DIM" "$C_R" "$PROFILE"
 
 # —— 1. skill 文件 ——
 if [ "$SCOPE" = "user" ]; then
@@ -154,11 +158,11 @@ else
     SKILL_ROOT="$PWD/.claude/skills"
 fi
 mkdir -p "$SKILL_ROOT"
-section "skill 文件"
+section "SKILL"
 if fetch "$BASE_URL/skill/tke-ui-test.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
     rm -rf "$SKILL_ROOT/tke-ui-test"
     tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT" || { printf '  %s skill 包解压失败\n' "$S_ERR" >&2; exit 1; }
-    printf '  %s tke-ui-test %s→ %s%s\n' "$S_OK" "$C_DIM" "$SKILL_ROOT" "$C_R"
+    printf '  %s %s%s%s\n' "$S_OK" "$C_DIM" "$SKILL_ROOT/tke-ui-test" "$C_R"
     # 旧名 ui-check 的残留：不清掉的话两个 skill 同时在册,description 几乎一样,
     # AI 会在两者间乱挑,用户也看不出该用哪个。改名是 2026-08-13。
     if [ -d "${SKILL_ROOT}/ui-check" ]; then
@@ -175,7 +179,7 @@ fi
 # 驱动必须与 tke 同目录：tke 只在自己所在目录找外部工具，不搜 PATH
 # （这样才能保证 chromedriver 与 Chrome 版本配对）
 mkdir -p "$TKE_HOME"
-section "tke 及驱动"
+section "DEPENDENCY"
 
 install_bin() {
     local name="$1" required="$2"
@@ -213,25 +217,23 @@ esac
 
 # —— 3. Chrome for Testing（只有要测网页才需要）——
 if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
-    section "Chrome for Testing"
     if [ -d "$CHROME_DIR/$CHROME_PKG" ]; then
-        printf '  %s %s %s已在 %s（换版本先删这个目录）%s\n' "$S_OK" "$CHROME_PKG" "$C_DIM" "$CHROME_DIR" "$C_R"
-    elif fetch "$BASE_URL/chrome/$CHROME_PKG.zip$Q" "$TMP/chrome.zip" zip; then
+        printf '  %s %s\n' "$S_OK" "$CHROME_PKG"
+    elif printf '  %s %s %s下载中（几百 MB）%s\n' "$S_DOT" "$CHROME_PKG" "$C_DIM" "$C_R" && \
+         fetch "$BASE_URL/chrome/$CHROME_PKG.zip$Q" "$TMP/chrome.zip" zip bar; then
         mkdir -p "$CHROME_DIR"
         unzip -q -o "$TMP/chrome.zip" -d "$CHROME_DIR"
         # macOS：清隔离属性，否则自动化下会卡在授权弹窗且无任何报错
         [ "$OS" = "Darwin" ] && xattr -cr "$CHROME_DIR/$CHROME_PKG" 2>/dev/null
-        printf '  %s %s %s→ %s%s\n' "$S_OK" "$CHROME_PKG" "$C_DIM" "$CHROME_DIR" "$C_R"
+        printf '  %s %s\n' "$S_OK" "$CHROME_PKG"
     else
-        printf '  %s 下载失败，网页检查会用不了\n' "$S_WARN"
-        printf '    %s手动装的办法见 skill 里的 README%s\n' "$C_DIM" "$C_R"
+        printf '  %s %s 下载失败，网页检查会用不了\n' "$S_WARN" "$CHROME_PKG"
     fi
 fi
 
 # —— 4. PATH ——
-section "PATH"
 if command -v tke >/dev/null 2>&1 && [ "$(command -v tke)" = "$TKE_HOME/tke" ]; then
-    printf '  %s 已就绪\n' "$S_OK"
+    printf '  %s PATH 已就绪\n' "$S_OK"
 else
     case "${SHELL:-}" in
         */zsh)  RC="$HOME/.zshrc" ;;
@@ -241,30 +243,24 @@ else
     LINE="export PATH=\"$TKE_HOME:\$PATH\""
     if [ -n "$RC" ] && ! grep -qF "$TKE_HOME" "$RC" 2>/dev/null; then
         echo "$LINE" >> "$RC"
-        printf '  %s 已写入 %s\n' "$S_OK" "$RC"
-        printf '  %s 当前终端还没生效，先跑一次：%s\n' "$S_WARN" ""
-        printf '      %s%s%s\n' "$C_B" "$LINE" "$C_R"
+        printf '  %s PATH 已写入 %s%s%s（新终端生效）\n' "$S_OK" "$C_DIM" "$RC" "$C_R"
     else
-        printf '  %s 请把 tke 加进 PATH：\n' "$S_WARN"
-        printf '      %s%s%s\n' "$C_B" "$LINE" "$C_R"
+        printf '  %s 请自行加进 PATH：%s%s%s\n' "$S_WARN" "$C_B" "$LINE" "$C_R"
     fi
 fi
 
 # —— 5. 体检 ——（结论要如实反映，别装完就说"好了"）
-section "体检"
 export PATH="$TKE_HOME:$PATH"
 HEALTH=0
 "$TKE_HOME/tke" fix --check --profile "$PROFILE" || HEALTH=1
 
 printf '\n'
 if [ "$HEALTH" = "0" ]; then
-    printf '  %s%s 装好了%s —— 在 Claude Code 里直接提需求即可：\n' "$C_B" "$C_OK" "$C_R"
-    printf '    %s「我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存」%s\n' "$C_DIM" "$C_R"
-    printf '    %s或显式调用 /tke-ui-test%s\n' "$C_DIM" "$C_R"
+    printf '  %s%s装好了%s  在 Claude Code 里直接提需求，或 %s/tke-ui-test%s\n' \
+        "$C_B" "$C_OK" "$C_R" "$C_B" "$C_R"
 else
     # 如实反映：文件装好了不等于能用（INV-9）
-    printf '  %s%s 文件装好了，但环境还不完整%s —— 现在跑不了检查。\n' "$C_B" "$C_WARN" "$C_R"
-    printf '    补齐：%stke fix --profile %s%s\n' "$C_B" "$PROFILE" "$C_R"
+    printf '  %s%s环境还不完整%s  补齐：%stke fix%s\n' "$C_B" "$C_WARN" "$C_R" "$C_B" "$C_R"
 fi
-printf '  %s卸载：curl -fsSL %s/uninstall.sh | bash%s\n' "$C_DIM" "$BASE_URL" "$C_R"
+printf '  %s卸载  curl -fsSL %s/uninstall.sh | bash%s\n' "$C_DIM" "$BASE_URL" "$C_R"
 [ "$HEALTH" = "0" ] || exit 1

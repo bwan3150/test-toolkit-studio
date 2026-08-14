@@ -84,10 +84,9 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     let exe_dir = tke_dir()?;
     let platform = platform_tag()?;
 
-    section("环境");
-    println!("  {} {}", dim("平台  "), platform);
-    println!("  {} {}", dim("落点  "), exe_dir.display());
-    println!("  {} {}", dim("分发源"), dim(&base_url));
+    section("DOCTOR");
+    println!("  {} {}", dim("平台    "), platform);
+    println!("  {} {}", dim("落点    "), exe_dir.display());
 
     let missing = detect_missing(&exe_dir, &args.profile);
     let wants_ios = args.profile == "ios" || args.profile == "all";
@@ -213,7 +212,6 @@ pub async fn handle(args: FixArgs) -> Result<()> {
 /// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
 /// 「同事跑完 Claude Code 要验一遍」的主力平台。
 fn print_health(exe_dir: &Path, base_url: &str) {
-    section("状况");
 
     // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
     if deps::present_in(exe_dir, "adb") {
