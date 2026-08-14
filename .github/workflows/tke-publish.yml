@@ -70,7 +70,8 @@ jobs:
             exit 0
           fi
           # 自动触发：源码/构建配置动了才编，只动 skill 文档就跳过编译直接发
-          if git diff --name-only HEAD^ HEAD | grep -qE '^bin-proj/toolkit-engine/(src/|Cargo\.|build\.rs)'; then
+          # workflow 自己也算：改了 runner / target / 构建参数，不重编一次就等于没验
+          if git diff --name-only HEAD^ HEAD | grep -qE '^(bin-proj/toolkit-engine/(src/|Cargo\.|build\.rs)|\.github/workflows/tke-publish\.yml)'; then
             echo "code=1" >> "$GITHUB_OUTPUT"
             echo "→ 源码有改动，六平台重新构建"
           else
@@ -224,7 +225,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist/skill dist/bin
+          mkdir -p dist/skill
 
           # skill 文件：与平台无关，一份就够
           tar --exclude=".DS_Store" -czf dist/skill/tke-ui-test.tar.gz \
@@ -237,7 +238,7 @@ jobs:
             for d in artifacts/tke-*; do
               [ -d "$d" ] || continue
               p="${d#artifacts/tke-}"
-              mkdir -p "dist/bin/$p"
+              mkdir -p "dist/bin/$p"      # 有产物才建，空目录上传会报"没有匹配到任何文件"
               cp "$d/tke.gz" "dist/bin/$p/tke.gz"
             done
           fi
@@ -275,7 +276,13 @@ jobs:
 
           # 顺序有讲究：**VERSION 必须最后传**。它是破缓存的键，先传的话使用者会拿到
           # 新键去取还没上传完的文件。
-          [ -d dist/bin ] && up dist/bin
+          # 只发 skill 那种情况下没有 dist/bin，跳过它——但别写成 `[ -d x ] && up x`：
+          # set -e 下条件为假时整行返回 1，会把这一步judge成失败
+          if [ -n "$(ls -A dist/bin 2>/dev/null)" ]; then
+            up dist/bin
+          else
+            echo "（本次没有二进制，只发 skill）"
+          fi
           up dist/skill dist/install.sh dist/install.ps1
           up dist/VERSION
 
@@ -295,7 +302,7 @@ jobs:
           esac
 
           BUILD_KEY="$(printf '%s' "$REMOTE" | sed -n 's/^build: *//p' | head -1)"
-          for f in $(cd dist && find bin skill -type f 2>/dev/null); do
+          for f in $(cd dist && find bin skill -type f 2>/dev/null || true); do
             url="$BASE/$f?b=$BUILD_KEY"
             head2="$(curl -fsSL --max-time 120 "$url" | head -c2 | od -An -tx1 | tr -d ' \n')"
             if [ "$head2" = "1f8b" ]; then

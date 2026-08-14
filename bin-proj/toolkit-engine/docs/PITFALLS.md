@@ -185,3 +185,20 @@ curl -fsSL .../upload.sh | bash -s -- .     tookit-engine-resource:tke/     # �
 同族提醒：目录**不带**尾斜杠会把目录名本身也带上（`dist` → `tke/dist/…`），
 这在只想更新二进制时反而有用（`dist/bin` → `tke/bin/…`）。
 
+
+## P-22 (2026-08-14) CI 上传步骤对"空目录"和 `[ ] && cmd` 双重踩坑
+
+**现象**：只改了文档/workflow 的那次 CI，publish 步骤报 `✗ 没有匹配到任何要上传的文件`，
+退出码 1。构建其实是**按设计跳过的**（没动 `src/`），失败的是上传。
+
+**两个原因叠在一起**：
+
+1. `mkdir -p dist/skill dist/bin` **无条件创建**了 `dist/bin`，于是 `[ -d dist/bin ]` 恒为真，
+   对着一个**空目录**调上传工具 → 工具报"没有匹配到任何文件"并退出 1。
+   → 判据要用**里面有没有文件**：`[ -n "$(ls -A dir 2>/dev/null)" ]`
+2. `[ -d dist/bin ] && up dist/bin` 这种写法在 `set -euo pipefail` 下，**条件为假时整行返回 1，
+   直接终止整个 step**。即使修好判空，写法本身仍是雷。
+   → 用 `if ... fi`，别用 `&&` 短路当条件语句
+
+**顺带**：改了 workflow 自己（换 runner / target / 构建参数）却不触发重新构建，等于改了没验。
+`paths` 过滤器要包含 workflow 文件本身，"要不要编译"的判断里也要算上它。

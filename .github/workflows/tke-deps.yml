@@ -204,8 +204,9 @@ jobs:
           fi
           # 源目录带尾斜杠 = 只传其内容；写 `.` 会让 key 混进 ./ 而 502（P-21）
           up() { curl -fsSL https://cloud.test-toolkit.app/script/upload.sh | bash -s -- "$@" "${TKC_TARGET}"; }
-          [ -d dist/bin ] && up dist/bin
-          [ -n "$(ls -A dist/chrome 2>/dev/null)" ] && up dist/chrome
+          # 同样别用 `[ ... ] && cmd`：set -e 下条件为假会终止整步
+          if [ -n "$(ls -A dist/bin 2>/dev/null)" ]; then up dist/bin; fi
+          if [ -n "$(ls -A dist/chrome 2>/dev/null)" ]; then up dist/chrome; fi
           echo
           echo "⚠️  依赖已更新，但 VERSION 没动 —— 使用者的 CDN 缓存最长 4 小时后才会看到新驱动。"
           echo "    要立刻生效，去跑一次 Publish TKE（它会刷新 VERSION 里的 build 戳）。"
