@@ -110,26 +110,47 @@ impl<'a> TargetResolver<'a> {
         Err(e)
     }
 
-    /// 解析文本查找
+    /// 解析文本查找（**带隐式等待**，与元素定位同一套策略）
+    ///
+    /// 为什么必须有：文字定位是首选写法，如果找不到就立刻失败，调用方（AI）只能在每步后面
+    /// 撒 `等待 [1s]` 来兜底——实测一次检查 47 步里有 22 步是等待，**近一半时间花在死等上**。
+    /// 有了隐式等待就反过来了：**元素已经在就立刻返回**（不浪费一毫秒），没渲染完才等，
+    /// 而且能等够 6 秒（比死等 1 秒更可靠）。
     async fn resolve_text(&mut self, text: &str) -> Result<Point> {
-        // 刷新UI状态
-        if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
-            error!("刷新UI状态失败: {}", e);
-            return Err(e);
-        }
-        self.trace.captured = true;
+        const MAX_TRIES: usize = 12; // 最多 ~6s（12 × 500ms），与 resolve_element 保持一致
         self.trace.element_name = Some(text.to_string());
+        let mut last_err = None;
 
-        match self.recognizer.find_element_by_text(text) {
-            Ok((point, bounds)) => {
-                info!("找到文本元素 '{}' 位置: ({}, {})", text, point.x, point.y);
-                self.trace.bounds = Some(bounds);
-                Ok(point)
+        for attempt in 0..MAX_TRIES {
+            // 中断检查点：Ctrl+C 后不再耗完整轮重试
+            if crate::utils::interrupt::aborted() {
+                return Err(TkeError::DeviceError("已中断（用户 Ctrl+C）".to_string()));
             }
-            Err(e) => {
-                error!("查找文本元素 '{}' 失败: {}", text, e);
-                Err(e)
+            if let Err(e) = self.controller.capture_ui_state(self.workarea).await {
+                error!("刷新UI状态失败: {}", e);
+                return Err(e);
+            }
+            self.trace.captured = true;
+
+            match self.recognizer.find_element_by_text(text) {
+                Ok((point, bounds)) => {
+                    if attempt > 0 {
+                        info!("文本 '{}' 在第 {} 次重试后出现", text, attempt + 1);
+                    }
+                    info!("找到文本元素 '{}' 位置: ({}, {})", text, point.x, point.y);
+                    self.trace.bounds = Some(bounds);
+                    return Ok(point);
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt + 1 < MAX_TRIES {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    }
+                }
             }
         }
+        let e = last_err.unwrap();
+        error!("查找文本元素 '{}' 失败（重试 {} 次后）: {}", text, MAX_TRIES, e);
+        Err(e)
     }
 }

@@ -168,6 +168,10 @@ impl WebDriver {
     }
 
     /// 执行同步 JS，返回结果
+    /// 注入脚本并返回**已解包**的结果（WebDriver 把返回值裹在 `{"value": …}` 里，这里已经剥掉）。
+    /// ⚠️ 调用方直接 `v.as_str()` / `v.as_i64()`，**别再写 `v["value"]`**——多解一层会永远拿到
+    /// null，而且往往悄无声息地退化成兜底值（本文件里 wait_ready 与 center_into_viewport
+    /// 都栽在这上面，见 P-27）。
     fn execute(&self, script: &str, args: serde_json::Value) -> Result<serde_json::Value> {
         let resp = self.post("/execute/sync", serde_json::json!({
             "script": script,
@@ -317,7 +321,9 @@ impl WebDriver {
     fn wait_ready(&self) {
         for _ in 0..20 {
             match self.execute("return document.readyState;", serde_json::json!([])) {
-                Ok(v) if v["value"].as_str() == Some("complete") => break,
+                // execute 已解包，直接取值——写成 v["value"] 会永远读不到 complete，
+                // 于是每次点击都白等满 20×200ms（P-27）
+                Ok(v) if v.as_str() == Some("complete") => break,
                 Ok(_) => std::thread::sleep(std::time::Duration::from_millis(200)),
                 Err(_) => break, // 导航中/会话忙，退出轮询交由上层 settle 兜底
             }
@@ -396,8 +402,9 @@ impl WebDriver {
         // 默认视口兜底
         let (mut iw, mut ih) = (1280i64, 800i64);
         if let Ok(dims) = self.execute("return [window.innerWidth, window.innerHeight];", serde_json::json!([])) {
-            iw = dims["value"][0].as_i64().filter(|&v| v > 0).unwrap_or(iw);
-            ih = dims["value"][1].as_i64().filter(|&v| v > 0).unwrap_or(ih);
+            // 同上：execute 已解包，dims 本身就是那个数组
+            iw = dims[0].as_i64().filter(|&v| v > 0).unwrap_or(iw);
+            ih = dims[1].as_i64().filter(|&v| v > 0).unwrap_or(ih);
         }
         if cy < 0 || cy >= ih {
             let dy = cy - ih / 2;
