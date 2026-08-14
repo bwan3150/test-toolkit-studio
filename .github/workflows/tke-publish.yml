@@ -23,7 +23,7 @@ on:
         default: 'online'
         options: ['online', 'full', 'none']
       skill_only:
-        description: '只发 skill 与 install.sh，不构建二进制（改文档时用，一分钟就完）'
+        description: '只发 skill 与两个 install 脚本，不构建二进制（改文档时用，一分钟就完）'
         type: boolean
         default: false
       dry_run:
@@ -169,6 +169,7 @@ jobs:
           tar --exclude=".DS_Store" -czf dist/skill/tke-ui-test.tar.gz \
               -C "${ENGINE_DIR}/skill" tke-ui-test
           cp "${ENGINE_DIR}/skill/install.sh" dist/install.sh
+          cp "${ENGINE_DIR}/skill/install.ps1" dist/install.ps1   # Windows 装不了 bash 那个
 
           # 二进制：artifacts/tke-<platform>/tke.gz → dist/bin/<platform>/tke.gz
           if [ -d artifacts ]; then
@@ -213,7 +214,7 @@ jobs:
           # 顺序有讲究：**VERSION 必须最后传**。它是破缓存的键，先传的话使用者会拿到
           # 新键去取还没上传完的文件。
           [ -d dist/bin ] && up dist/bin
-          up dist/skill dist/install.sh
+          up dist/skill dist/install.sh dist/install.ps1
           up dist/VERSION
 
       - name: 复验分发源
@@ -242,4 +243,5 @@ jobs:
               exit 1
             fi
           done
-          echo "使用者侧：curl -fsSL $BASE/install.sh | bash"
+          echo "使用者侧（mac/Linux）：curl -fsSL $BASE/install.sh | bash"
+          echo "使用者侧（Windows）：   irm $BASE/install.ps1 | iex"

@@ -76,7 +76,10 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     let missing = detect_missing(&exe_dir, &args.profile);
 
     if missing.is_empty() {
-        println!("✅ {} 需要的依赖都在，不用补。", args.profile);
+        println!("✅ {} 需要的依赖都在。", args.profile);
+        if args.check {
+            print_health(&exe_dir, &base_url);
+        }
         return Ok(());
     }
 
@@ -107,6 +110,7 @@ pub async fn handle(args: FixArgs) -> Result<()> {
     }
 
     if args.check {
+        print_health(&exe_dir, &base_url);
         // --check 只报告不下载：退出码非 0，CI 可以据此判断环境是否就绪
         println!("（--check 模式，未下载。去掉 --check 即可补齐）");
         std::process::exit(1);
@@ -173,6 +177,76 @@ pub async fn handle(args: FixArgs) -> Result<()> {
         }
         std::process::exit(1);
     }
+}
+
+/// 依赖之外的环境状况——设备连没连、版本跟不跟得上、证据落哪儿、跑有头还是无头。
+///
+/// 放进 `tke fix --check` 而不是再写一个体检脚本：**一份 Rust 实现三平台通用**。
+/// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
+/// 「同事跑完 Claude Code 要验一遍」的主力平台。
+fn print_health(exe_dir: &Path, base_url: &str) {
+    println!("== 环境 ==");
+
+    // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
+    if deps::present_in(exe_dir, "adb") {
+        let adb = exe_dir.join(if cfg!(windows) { "adb.exe" } else { "adb" });
+        match Command::new(&adb).arg("devices").output() {
+            Ok(o) => {
+                let list: Vec<String> = String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .skip(1)
+                    .filter_map(|l| {
+                        let mut it = l.split_whitespace();
+                        match (it.next(), it.next()) {
+                            (Some(id), Some("device")) => Some(id.to_string()),
+                            _ => None,
+                        }
+                    })
+                    .collect();
+                if list.is_empty() {
+                    println!("   安卓设备   无（adb 可用但没连设备）");
+                } else {
+                    println!("   安卓设备   {}", list.join(" · "));
+                }
+            }
+            Err(e) => println!("   安卓设备   adb 跑不起来：{}", e),
+        }
+    }
+
+    // 版本：跟分发源比一下，免得一直用着旧 tke。取不到就静默跳过（离线/内网照常用）
+    let local = env!("BUILD_VERSION");
+    let remote = curl_text(&format!("{}/VERSION?t={}", base_url, std::process::id()))
+        .unwrap_or_default();
+    let remote_first = remote.lines().next().unwrap_or("").trim().to_string();
+    match remote_first.strip_prefix("tke ") {
+        // 只报"不一致"，不摆箭头暗示方向——本地可能是刚编出来的、比分发源还新，
+        // 一个 ⬆️ 会让人以为该去更新
+        Some(rv) if rv != local => {
+            println!("   版本       本地 {} ／ 分发源 {}（不一致）", local, rv);
+        }
+        Some(_) => println!("   版本       {}（与分发源一致）", local),
+        None => println!("   版本       {}（没连上分发源，跳过比对）", local),
+    }
+
+    // 证据落点：人找报告时不用回头问 AI
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        let logs = PathBuf::from(home).join(".tke").join("logs");
+        let n = std::fs::read_dir(&logs)
+            .map(|d| d.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).count())
+            .unwrap_or(0);
+        if n > 0 {
+            println!("   证据落点   {}（已有 {} 次检查）", logs.display(), n);
+        } else {
+            println!("   证据落点   {}（首次检查时自动创建）", logs.display());
+        }
+    }
+
+    if tke::utils::params::desktop_available() {
+        println!("   运行模式   有桌面 → 浏览器默认有头（要无头加 --headless=on，必须带等号）");
+    } else {
+        println!("   运行模式   无桌面 → 浏览器自动走无头");
+    }
+    println!();
 }
 
 // ── 检测 ────────────────────────────────────────────────────────────────

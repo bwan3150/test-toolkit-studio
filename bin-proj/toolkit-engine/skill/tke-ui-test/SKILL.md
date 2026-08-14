@@ -13,6 +13,11 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写
 
 **tke 不带 AI、不需要 API key。** 怎么走、走到哪算完，你自己判断。
 
+**三平台通用**：mac / Linux / Windows 上 tke 的命令完全一样。只有**外围的 shell 写法**
+要按当前系统来——本文档的片段默认是 bash，Windows 上照 PowerShell 的等价写法改
+（关键几处已给出两个版本）。路径同理：`~/.tke/logs/` 在 Windows 上是
+`$env:USERPROFILE\.tke\logs\`。
+
 ## 不要做的事
 
 - **不要生成 `.tks` 脚本资产、不要建元素库（`.tklib`）、不要做回放验证。** 那是 `tke harness`
@@ -23,9 +28,11 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写
 ## 第 0 步：环境体检
 
 ```bash
-bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh        # 用户级安装（默认）
-# 或 bash .claude/skills/tke-ui-test/scripts/check-env.sh     # 项目级安装
+tke fix --check
 ```
+
+三平台通用（Windows 也是这条）。它会报：缺什么依赖、连了哪些安卓设备、版本、
+证据落点、这台机会跑有头还是无头。
 
 不通过就告诉用户缺什么，别硬跑。**缺依赖（chromedriver / Chrome / adb / go-ios）可以一条命令补齐**：
 
@@ -175,6 +182,12 @@ tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log ~/.
 tke -d <序列号> fetch | grep -q "夜间回家-1430" && echo "⚠️ 起点就有同名的，换个名字"
 ```
 
+```powershell
+# Windows（PowerShell）
+tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log $env:USERPROFILE\.tke\logs\<任务简称>\phone-before\
+if (tke -d <序列号> fetch | Select-String -SimpleMatch "夜间回家-1430") { "⚠️ 起点就有同名的，换个名字" }
+```
+
 **② 在 A 上做**。平台要登录就**停下来让用户在那个浏览器窗口里自己登**（你不许代登），
 登完再继续——中途别 `control close`，会连登录态一起销毁（C-6）。
 
@@ -187,6 +200,16 @@ for i in $(seq 1 15); do
   sleep 2
 done
 [ "$found" = 1 ] && echo "✅ 出现了" || echo "❌ 等了 30 秒仍未出现"
+```
+
+```powershell
+# Windows（PowerShell）——同样要有超时，退出循环后同样必须判命中
+$found = $false
+foreach ($i in 1..15) {
+  if (tke -d <序列号> fetch | Select-String -SimpleMatch "夜间回家-1430") { $found = $true; break }
+  Start-Sleep -Seconds 2
+}
+if ($found) { "✅ 出现了" } else { "❌ 等了 30 秒仍未出现" }
 ```
 
 > **用全量 `fetch`，别加 `--interactive`**——要找的名字往往是不可点击的文本标签，

@@ -24,6 +24,10 @@ tke -d <设备> fetch | grep -q "夜间回家"        # ✅
 tke -d <设备> fetch --interactive | grep -q "夜间回家"   # ❌ 纯文本标签会被漏掉
 ```
 
+```powershell
+tke -d <设备> fetch | Select-String -SimpleMatch "夜间回家"        # ✅ Windows
+```
+
 ---
 
 ## C-2 没验起点 → 把旧数据当成功
@@ -53,6 +57,16 @@ for i in $(seq 1 15); do
   sleep 2
 done
 [ "$found" = 1 ] && echo "✅ 出现了" || echo "❌ 等了 30 秒仍未出现"
+```
+
+```powershell
+# Windows（PowerShell）
+$found = $false
+foreach ($i in 1..15) {
+  if (tke -d <设备> fetch | Select-String -SimpleMatch "夜间回家") { $found = $true; break }
+  Start-Sleep -Seconds 2
+}
+if ($found) { "✅ 出现了" } else { "❌ 等了 30 秒仍未出现" }
 ```
 
 ---

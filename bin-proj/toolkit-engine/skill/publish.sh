@@ -79,9 +79,10 @@ for name in $BINS; do
     fi
 done
 
-# —— install.sh 自身 ——
+# —— 安装脚本（两个平台各一份；Windows 跑不了 bash 那个）——
 cp "$SCRIPT_DIR/install.sh" "$OUT/install.sh"
-echo "   ✅ install.sh"
+cp "$SCRIPT_DIR/install.ps1" "$OUT/install.ps1"
+echo "   ✅ install.sh + install.ps1"
 
 # —— Chrome for Testing（可选，很大）——
 if [ "$WITH_CHROME" = "1" ]; then

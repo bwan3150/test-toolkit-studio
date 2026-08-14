@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · Windows 这条路补通（同事主力平台）
+- **feat** **`install.ps1`**:Windows 一键安装器,与 install.sh 一一对应。此前 Windows 同事**根本装不上**——`install.sh` 是 bash,而那句"请用 install.ps1"指向的文件压根不存在
+- **feat** **体检并进 `tke fix --check`**:除了列缺失依赖,还报安卓设备/版本比对/证据落点/有头还是无头。**一份 Rust 实现三平台通用**——`check-env.sh` 是 bash,Windows 用户跑不了,而 Windows 恰恰是"同事跑完 Claude Code 要验一遍"的主力。SKILL.md 第 0 步已统一成这条
+- **docs** SKILL.md 与坑册的 shell 片段**补 PowerShell 版本**(轮询、Select-String、`$env:USERPROFILE\.tke\logs\`):Windows 上 Claude Code 用 PowerShell,`grep -q` / `for i in $(seq)` 直接跑不了
+- **fix** CI 与 `publish.sh` 都只发 `install.sh`——`install.ps1` 不带上等于没做,已补
+- **验证** 本机装了 pwsh 7.6.4 专门验这个(没跑过的脚本等于没写,今天已吃过一次亏):语法解析通过 + 抽出核心函数真跑——文件头校验(真 gz 通过 / HTML 被拦下)、gzip 解压内容正确、build 戳解析、落地名补 `.exe` 的规则;`$Profile` 作为参数名(PowerShell 自动变量)实测在脚本作用域内可用。云上那份取回来再验一次语法
+- **change(措辞)** 版本比对不再摆 ⬆️ 箭头:本地可能是刚编的、比分发源还新,箭头会让人以为该更新。改成如实报"不一致"
+
 ### 2026-08-14 · 平台补到六个 + 摸清上游的三条边界
 - **feat** CI matrix 加 **linux-arm64**(`ubuntu-24.04-arm` runner)与 **windows-386**(`i686-pc-windows-msvc` 交叉编译),构建步骤支持 `--target`
 - **deps** 补齐 **win32 全套**(chromedriver + Chrome 152 + adb/aapt + 两个 DLL,都是 i386)与 **linux-arm64 的 go-ios**(ELF aarch64)

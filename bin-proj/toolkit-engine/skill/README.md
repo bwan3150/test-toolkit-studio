@@ -9,7 +9,16 @@
 ## 一行安装（推荐）
 
 ```bash
+# macOS / Linux
 curl -fsSL https://<你的CDN>/tke/install.sh | bash
+```
+
+```powershell
+# Windows（PowerShell）
+irm https://<你的CDN>/tke/install.ps1 | iex
+
+# 要带参数时先落地再跑：
+iwr https://<你的CDN>/tke/install.ps1 -OutFile install.ps1; .\install.ps1 -Profile web
 ```
 
 它会按平台自动下载 skill 文件、tke、对应驱动、Chrome for Testing，最后自动跑体检。
@@ -122,7 +131,7 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # macOS 必须清�
 ### 3. 验证
 
 ```bash
-bash ~/.claude/skills/tke-ui-test/scripts/check-env.sh
+tke fix --check      # 三平台通用
 ```
 
 它会逐项告诉你 tke、chromedriver、Chrome、安卓设备的状态，以及当前会跑有头还是无头。
