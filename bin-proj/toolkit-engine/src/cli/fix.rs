@@ -183,13 +183,24 @@ fn detect_missing(exe_dir: &Path, profile: &str) -> Vec<Missing> {
             });
         }
     }
-    if want_android && !deps::present_in(exe_dir, "adb") {
-        out.push(Missing {
-            name: "adb",
-            what: "连接安卓设备所需",
-            size: "10MB",
-            is_chrome: false,
-        });
+    if want_android {
+        if !deps::present_in(exe_dir, "adb") {
+            out.push(Missing {
+                name: "adb",
+                what: "连接安卓设备所需",
+                size: "10MB",
+                is_chrome: false,
+            });
+        } else if cfg!(windows) && !exe_dir.join("AdbWinApi.dll").is_file() {
+            // adb.exe 在、DLL 不在：一样跑不起来，而且报错很难懂
+            // （从别处拷 adb.exe 过来最容易出现这种半装状态）
+            out.push(Missing {
+                name: "AdbWinApi.dll",
+                what: "adb.exe 缺了它起不来",
+                size: "0.1MB",
+                is_chrome: false,
+            });
+        }
     }
     if want_ios && !deps::present_in(exe_dir, "go-ios") {
         out.push(Missing {
@@ -300,10 +311,18 @@ fn install_bin(
     set_exec(&dest);
     clear_quarantine(&dest);
 
-    // Linux 版 aapt 单独跑不了（缺 libc++.so），但它的 RUNPATH 含 $ORIGIN，
-    // 放同目录即可加载——补 adb 时顺手把这两个也带上，缺了不算失败
-    if name == "adb" && std::env::consts::OS == "linux" {
-        for extra in ["aapt", "libc++.so"] {
+    // adb 的**伴生文件按平台不同**，补 adb 时顺手带上（缺了不算失败）：
+    //   Linux   —— aapt 单独跑不了（缺 libc++.so），但其 RUNPATH 含 $ORIGIN，同目录即可加载
+    //   Windows —— adb.exe **直接依赖 AdbWinApi.dll**，USB 还要 AdbWinUsbApi.dll
+    //              （后者由前者在运行时加载，不在导入表里，但没有它连不上真机）。
+    //              这两个 DLL 不在的话 adb.exe 根本起不来。
+    if name == "adb" {
+        let extras: &[&str] = match std::env::consts::OS {
+            "linux" => &["aapt", "libc++.so"],
+            "windows" => &["aapt", "AdbWinApi.dll", "AdbWinUsbApi.dll"],
+            _ => &["aapt"],
+        };
+        for extra in extras {
             let _ = install_bin(base, q, tmp, exe_dir, extra, platform);
         }
     }

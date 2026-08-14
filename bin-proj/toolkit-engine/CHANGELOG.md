@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### 2026-08-14 · Windows 的 adb 还缺两个 DLL（用户提醒）
+- **fix(Windows 上 adb 直接起不来)** `adb.exe` **直接依赖 `AdbWinApi.dll`**,USB 还要 `AdbWinUsbApi.dll`(由前者**运行时加载,不在导入表里**)。我第一版只传了 adb.exe,Windows 上根本跑不起来——**跟 Linux 版 aapt 缺 libc++.so 是同一类问题**,是用户想起来问才发现的
+- **verify** 用 `objdump -p` 把四个 Windows 二进制的导入表都查了一遍:`aapt.exe` / `chromedriver.exe` / `ios.exe` **都自包含**(只用系统 UCRT 与系统 DLL),只有 adb 需要补。两个 DLL 已上传
+- **feat** `tke fix` 的**伴生文件按平台分**:Linux 带 `aapt`+`libc++.so`,Windows 带 `aapt`+两个 DLL,mac 带 `aapt`。另外「adb.exe 在但 DLL 不在」这种半装状态(从别处拷 adb 过来最容易出现)现在也会被检出并补齐
+
 ### 2026-08-14 · 补齐四平台依赖 + 修 Windows 落地名
 - **fix(Windows 上必炸)** `tke fix` 下载的二进制**落地时没补 `.exe`**——分发源上统一叫 `adb.gz`,Windows 落成一个没有扩展名的 `adb`,**根本执行不了**。现按平台补回扩展名(`libc++.so` 这类本身带点的不动)
 - **deps** 手工补齐 **darwin-amd64 / windows-amd64** 两个空白平台:chromedriver + Chrome for Testing(Stable **152.0.7977.42**,driver 与 Chrome 同版本配对)+ adb + aapt + go-ios。逐个验过解压出来的架构:mac 是 Mach-O(chromedriver x86_64、其余 universal),win 是 PE32/PE32+(adb/aapt 是官方原样的 32 位)

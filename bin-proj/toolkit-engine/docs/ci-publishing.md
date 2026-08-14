@@ -70,7 +70,7 @@ Actions → **Publish TKE Deps** → Run workflow：
 |---|---|
 | Chrome for Testing | 官方 zip 解压出来就是 `chrome-linux64/` 这种目录，**正是我们的约定**，直接转存不重新打包 |
 | chromedriver | zip 里是 `chromedriver-<plat>/chromedriver`，要取出来单独 gz |
-| platform-tools | `platform-tools/adb`；**aapt 不在这里** |
+| platform-tools | `platform-tools/adb`；**aapt 不在这里**。Windows 版还必须带上 `AdbWinApi.dll` + `AdbWinUsbApi.dll`——`adb.exe` 直接依赖前者，USB 靠后者（运行时加载，不在导入表里），少一个 adb 就起不来 |
 | build-tools | `aapt` 在这儿。Linux 版 aapt 单独跑不了（缺 `libc++.so`），但 RUNPATH 含 `$ORIGIN`，与 tke 同目录就能加载 → 两个一起带 |
 | go-ios | **三个平台三种结构**：linux 的 zip 里是 `ios-amd64` + `ios-arm64` **两个架构**，mac 是单个 `ios`，win 是 `ios.exe`。必须按架构名**优先级逐个找**——`find -o \| head -1` 取目录遍历顺序，在那个双架构包上会选错 |
 

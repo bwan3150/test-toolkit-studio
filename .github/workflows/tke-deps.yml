@@ -147,6 +147,15 @@ jobs:
               else
                 echo "  ⚠️  $p build-tools 取不到，aapt 跳过（不影响 adb）"
               fi
+              # Windows：adb.exe **直接依赖 AdbWinApi.dll**，USB 还要 AdbWinUsbApi.dll
+              # （后者由前者运行时加载，不在导入表里）。没有这两个 adb 根本起不来。
+              # 对照：aapt.exe / chromedriver.exe / ios.exe 都自包含，只用系统 DLL。
+              if [ "$pt" = "windows" ]; then
+                for d in AdbWinApi.dll AdbWinUsbApi.dll; do
+                  f="$(find "pt-$p" -maxdepth 2 -type f -name "$d" | head -1)"
+                  [ -n "$f" ] && gzip -c "$f" > "dist/bin/$p/$d.gz" && echo "  ✅ $p $d"
+                done
+              fi
               rm -rf "pt-$p" "bt-$p" "pt-$p.zip" "bt-$p.zip"
               echo "  ✅ $p adb"
             done
