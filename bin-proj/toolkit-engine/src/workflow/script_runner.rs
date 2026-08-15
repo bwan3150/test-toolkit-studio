@@ -5,7 +5,7 @@
 
 use crate::{Result, TkeError, ExecutionResult, StepResult, ScriptParser, ScriptInterpreter, Params, TksCommand};
 use crate::utils::Workarea;
-use super::{RunEvent, RunArtifacts};
+use super::{RunEvent, RunArtifacts, Layout};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -117,7 +117,8 @@ impl ScriptRunner {
             return Err(TkeError::ScriptParseError("没有可执行的有效指令".to_string()));
         }
 
-        self.run_script(script, "<steps>", "steps", log_root, on_event).await
+        // steps = 一次性检查：`--log` 指的就是任务目录，反复调用续写同一份证据
+        self.run_script_with(script, "<steps>", "steps", log_root, Layout::Task, on_event).await
     }
 
     /// 内部统一执行逻辑
@@ -129,10 +130,24 @@ impl ScriptRunner {
         log_root: Option<&Path>,
         on_event: &mut dyn FnMut(&RunEvent),
     ) -> Result<ExecutionResult> {
+        self.run_script_with(script, display_path, script_stem, log_root, Layout::Timestamped, on_event)
+            .await
+    }
+
+    /// 按指定产物布局执行（run/flow/harness 走 Timestamped，steps 走 Task）
+    async fn run_script_with(
+        &self,
+        script: crate::TksScript,
+        display_path: &str,
+        script_stem: &str,
+        log_root: Option<&Path>,
+        layout: Layout,
+        on_event: &mut dyn FnMut(&RunEvent),
+    ) -> Result<ExecutionResult> {
 
         // 产物目录（仅 --log 时创建）
         let artifacts = match log_root {
-            Some(root) => Some(RunArtifacts::create(root, script_stem)?),
+            Some(root) => Some(RunArtifacts::create_with(root, script_stem, layout)?),
             None => None,
         };
         let run_dir_str = artifacts
@@ -325,17 +340,27 @@ impl ScriptRunner {
 
         // 5. 写入完整运行日志 + 人看的 HTML 报告（仅 --log 时）
         let log_path = match &artifacts {
-            Some(a) => {
-                let p = a.write_log(&result)?.to_string_lossy().to_string();
-                // 报告生成失败不该让整次运行报错——证据本体(log.json/截图)已经落好了
-                if let Err(e) = crate::workflow::report::write_report(&a.run_dir, &result) {
-                    tracing::warn!("生成 report.html 失败: {}", e);
+            Some(a) => match layout {
+                // Task：把本批**追加**进任务的 log.json，再整份重建报告。
+                // 一个任务始终只有一份 report.html —— 人不必在十几份碎报告之间跳。
+                Layout::Task => {
+                    let p = a.append_task_log(&result)?.to_string_lossy().to_string();
+                    if let Err(e) = crate::workflow::report::write_task_report(&a.run_dir) {
+                        tracing::warn!("生成 report.html 失败: {}", e);
+                    }
+                    p
                 }
-                // 顺手把父目录的**全流程报告**重建一次：一次检查要调很多次 steps，
-                // 不汇总的话人面对的是十几份碎报告，没法审。AI 不必记得收尾。
-                crate::workflow::report::refresh_session_report(&a.run_dir);
-                p
-            }
+                Layout::Timestamped => {
+                    let p = a.write_log(&result)?.to_string_lossy().to_string();
+                    // 报告生成失败不该让整次运行报错——证据本体(log.json/截图)已经落好了
+                    if let Err(e) = crate::workflow::report::write_report(&a.run_dir, &result) {
+                        tracing::warn!("生成 report.html 失败: {}", e);
+                    }
+                    // 顺手把父目录的**全流程报告**重建一次（flow/harness 会分子目录跑多份）
+                    crate::workflow::report::refresh_session_report(&a.run_dir);
+                    p
+                }
+            },
             None => String::new(),
         };
 

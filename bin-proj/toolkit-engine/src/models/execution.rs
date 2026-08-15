@@ -2,6 +2,30 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 一个**任务**的累积日志（`tke steps` 的 Task 布局）：
+/// 一次检查要调很多次 steps，每次是一「批」。批次全部落在同一份 log.json 里，
+/// 报告据此接成一条连续时间线（步骤编号也跨批次连续）。
+/// 每批自带 `device`，所以跨设备检查**不需要按设备分目录**——顺序才是要还原的东西。
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct TaskLog {
+    pub batches: Vec<ExecutionResult>,
+}
+
+impl TaskLog {
+    /// 读已有 log.json；**兼容**旧的单批格式（整个文件就是一个 ExecutionResult）
+    pub fn load(path: &std::path::Path) -> Self {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return Self::default();
+        };
+        if let Ok(t) = serde_json::from_str::<Self>(&text) {
+            return t;
+        }
+        serde_json::from_str::<ExecutionResult>(&text)
+            .map(|r| Self { batches: vec![r] })
+            .unwrap_or_default()
+    }
+}
+
 /// 脚本执行结果
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionResult {

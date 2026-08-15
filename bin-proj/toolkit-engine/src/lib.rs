@@ -89,6 +89,7 @@ pub use models::{
     Bounds,
     ExecutionResult,
     StepResult,
+    TaskLog,
     AppInfo,
     CurrentFocus,
 };

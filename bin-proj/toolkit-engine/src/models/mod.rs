@@ -14,4 +14,4 @@ pub use ui_element::UIElement;
 pub use locator::{Locator, LocatorStrategy, Platform, AndroidLocator, IosLocator, WebLocator, ElementLibrary};
 pub use tks_types::{TksCommand, TksParam, TksStep, TksScript};
 pub use device_info::{DeviceInfo, HardwareInfo, BatteryInfo, NetworkInfo};
-pub use execution::{ExecutionResult, StepResult, AppInfo, CurrentFocus};
+pub use execution::{ExecutionResult, StepResult, TaskLog, AppInfo, CurrentFocus};

@@ -94,6 +94,40 @@ pub fn write_session_report(root: &Path, embed: bool) -> Result<PathBuf> {
     Ok(out)
 }
 
+/// 生成**任务报告** `<task_dir>/report.html`（Task 布局：`tke steps` 反复调用续写同一目录）。
+///
+/// 与 `write_session_report` 的区别：那份要去子目录里搜集碎批次、图片按相对路径引用；
+/// 这份的产物全在同一层（`screenshots/` `pages/`），批次来自 `log.json` 的 `batches`，
+/// 且**默认压缩内嵌**——人拿到的就是一个能直接转发的自包含文件。
+///
+/// `full_image=true` 用原图内嵌（体积大，逐像素复核时用）。
+pub fn write_task_report(task_dir: &Path) -> Result<PathBuf> {
+    write_task_report_with(task_dir, false)
+}
+
+pub fn write_task_report_with(task_dir: &Path, full_image: bool) -> Result<PathBuf> {
+    let log = task_dir.join("log.json");
+    let task = crate::TaskLog::load(&log);
+    if task.batches.is_empty() {
+        return Err(TkeError::InvalidArgument(format!(
+            "{} 里没有检查记录（应有 log.json，且含 batches）",
+            task_dir.display()
+        )));
+    }
+    // 产物与 html 同层：prefix 为空；每批的 run_dir 都是任务目录本身
+    let batches: Vec<Batch> = task
+        .batches
+        .into_iter()
+        .map(|result| Batch { dir: task_dir.to_path_buf(), prefix: String::new(), result })
+        .collect();
+
+    let mode = if full_image { ImgMode::Embed } else { ImgMode::EmbedCompressed };
+    let html = render_session_with(&batches, mode, false);
+    let out = task_dir.join("report.html");
+    std::fs::write(&out, html).map_err(TkeError::IoError)?;
+    Ok(out)
+}
+
 /// 静默重建总报告——`tke steps` 每批跑完后顺手调用，AI 不必记得收尾。
 /// 失败只 warn：证据本体已经落好了，汇总生不出来不该让整次运行失败。
 pub fn refresh_session_report(run_dir: &Path) {
@@ -291,12 +325,42 @@ h1{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}
 
 /// 图片怎么进报告：内嵌成 data URI，还是留一个相对链接。
 ///
-/// 单次报告内嵌——它要能**单独发给同事**；全流程报告默认用相对链接——十几个批次几十张图
-/// 全内嵌会有几十 MB，而且每次追加都得把所有图重新编码一遍，慢得没道理。
-#[derive(Clone, Copy, PartialEq)]
+/// 任务报告(Task 布局)默认 `EmbedCompressed`——**报告的用处就是发给人看**，
+/// 一个自包含文件能直接转发/贴进工单，而原图内嵌 20 步就 5MB+、大到没法粘。
+/// 旧的碎批次汇总仍默认 `Link`（那棵目录树里图片就在旁边，重建也快）。
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum ImgMode {
+    /// 原图 base64 内嵌（保真，但一步就 ~270KB）
     Embed,
+    /// **缩放 + JPEG 后**内嵌：一步 ~60KB，20 步的报告 5.4MB → 1.2MB。
+    /// 按钮文字、输入框内容、标注横幅、元素框、点击点都还看得清；
+    /// 极小图标细节会糊——要逐像素复核就用 `--full-image` 或直接看 screenshots/ 里的原图。
+    EmbedCompressed,
     Link,
+}
+
+/// 内嵌图片的目标宽度。报告容器是 880px（见 CSS `.wrap`），图片最多显示到 ~850px——
+/// 内嵌比这更大的像素**一个字都不会更清楚**，只是撑体积。960 给高 DPI 屏留了点余量。
+const EMBED_MAX_WIDTH: u32 = 960;
+/// 内嵌 JPEG 质量。注意：对 UI 截图，**光转 JPEG 几乎不省**（PNG 对大片纯色压得很好，
+/// 而 JPEG 在文字锐边上还吃亏）——真正省体积的是上面那个缩放。
+const EMBED_JPEG_QUALITY: u8 = 82;
+
+/// 把截图压缩成适合内嵌的 JPEG。失败(解码不了/编码不了)返回 None，
+/// 调用方回退到原图内嵌——**宁可报告大，也不能没有证据**。
+fn compress_for_embed(bytes: &[u8]) -> Option<Vec<u8>> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let img = if img.width() > EMBED_MAX_WIDTH {
+        let h = (img.height() as f64 * EMBED_MAX_WIDTH as f64 / img.width() as f64).round() as u32;
+        img.resize(EMBED_MAX_WIDTH, h.max(1), image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, EMBED_JPEG_QUALITY)
+        .encode_image(&img.to_rgb8())
+        .ok()?;
+    Some(out)
 }
 
 /// 渲染一份报告所需的上下文
@@ -325,6 +389,20 @@ impl Ctx<'_> {
                     "data:image/png;base64,{}",
                     base64::engine::general_purpose::STANDARD.encode(bytes)
                 ))
+            }
+            ImgMode::EmbedCompressed => {
+                let bytes = std::fs::read(self.run_dir.join(rel)).ok()?;
+                match compress_for_embed(&bytes) {
+                    Some(jpg) => Some(format!(
+                        "data:image/jpeg;base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(jpg)
+                    )),
+                    // 压不了就用原图——证据不能因为压缩失败而消失
+                    None => Some(format!(
+                        "data:image/png;base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(bytes)
+                    )),
+                }
             }
         }
     }
@@ -573,6 +651,16 @@ fn target_block(
 
 /// 全流程报告：所有批次接成一条时间线
 fn render_session(batches: &[Batch], embed: bool) -> String {
+    render_session_with(
+        batches,
+        if embed { ImgMode::Embed } else { ImgMode::Link },
+        true,
+    )
+}
+
+/// `batch_links=true` 时每批带「单独看这一批」链接（碎批次布局才有单批报告；
+/// Task 布局下产物全在一层、没有单批报告，带了就是死链）。
+fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> String {
     let all_steps: usize = batches.iter().map(|b| b.result.steps.len()).sum();
     let passed: usize = batches
         .iter()
@@ -596,25 +684,29 @@ fn render_session(batches: &[Batch], embed: bool) -> String {
     let mut seq = 0usize;   // 跨批次连续编号
     for (i, b) in batches.iter().enumerate() {
         let plat = platform_tag(b.result.device.as_deref());
-        let ctx = Ctx {
-            run_dir: &b.dir,
-            prefix: &b.prefix,
-            img: if embed { ImgMode::Embed } else { ImgMode::Link },
-        };
+        let ctx = Ctx { run_dir: &b.dir, prefix: &b.prefix, img };
         let dev = b.result.device.clone().unwrap_or_else(|| "—".into());
+        let link = if batch_links {
+            format!(
+                r#"<a class="b-link" href="{href}">单独看这一批</a>"#,
+                href = esc(&format!("{}report.html", b.prefix)),
+            )
+        } else {
+            String::new()
+        };
         body.push_str(&format!(
             r#"<div class="batch">
   <span class="b-no">{n}</span>
   <span class="b-dev">{dev}</span>
   <span class="b-time">{time}</span>
   <span class="b-steps">{steps} 步</span>
-  <a class="b-link" href="{href}">单独看这一批</a>
+  {link}
 </div>"#,
             n = i + 1,
             dev = esc(&dev),
             time = hhmmss(&b.result.start_time),
             steps = b.result.steps.len(),
-            href = esc(&format!("{}report.html", b.prefix)),
+            link = link,
         ));
         for (j, st) in b.result.steps.iter().enumerate() {
             seq += 1;
@@ -715,11 +807,19 @@ fn step_card_seq(
     plat: &str,
     seq: Option<usize>,
 ) -> String {
+    // 内嵌的是缩过的图；点一下能看**原始分辨率**那张（证据目录里躺着的）。
+    // 报告发给别人时这个链接会失效，但图本身还在——不影响读，只是点不开大图。
     let img = s
         .screenshot
         .as_deref()
-        .and_then(|rel| ctx.img_src(rel))
-        .map(|uri| format!(r#"<div class="s-img"><img src="{}" alt="step"></div>"#, uri))
+        .and_then(|rel| ctx.img_src(rel).map(|uri| (rel, uri)))
+        .map(|(rel, uri)| {
+            format!(
+                r#"<div class="s-img"><a href="{href}" title="查看原图"><img src="{uri}" alt="step"></a></div>"#,
+                href = esc(&ctx.href(rel)),
+                uri = uri,
+            )
+        })
         .unwrap_or_default();
 
     format!(

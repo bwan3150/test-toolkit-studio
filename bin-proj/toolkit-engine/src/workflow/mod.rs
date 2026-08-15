@@ -17,7 +17,7 @@ pub mod agent;
 
 pub use events::RunEvent;
 pub use tks::{TksRunner, ScriptParser, ScriptInterpreter, ActionTrace, script_to_source, step_to_source};
-pub use artifacts::RunArtifacts;
+pub use artifacts::{RunArtifacts, Layout};
 pub use script_runner::ScriptRunner;
 pub use flow::{FlowDef, FlowRunner, FlowResult};
 pub use agent::{
