@@ -83,6 +83,12 @@ impl Controller {
         Ok(Self { driver })
     }
 
+    /// 这个设备有没有**软键盘**（点输入框后要等它弹出来）。
+    /// 只有真实移动端有；web 是硬件键盘、fake 没有键盘——它们不该为此白等（见 control.rs 的 Input）。
+    pub fn has_soft_keyboard(&self) -> bool {
+        matches!(self.driver, Driver::Adb(_) | Driver::Wda(_))
+    }
+
     // ===== 页面状态采集 =====
 
     pub async fn capture_ui_state(&self, workarea: &Workarea) -> Result<()> {

@@ -106,7 +106,12 @@ pub async fn execute_action(controller: &Controller, action: ControlAction) -> R
         ControlAction::Input { text, point } => {
             if let Some(p) = point {
                 controller.tap(p.x, p.y)?;
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                // 等**软键盘**弹出来——只有真实移动端需要。web 没有软键盘，而且 tap 本身
+                // 已经等到页面就绪了，再睡 500ms 是纯白等（实测占「输入」这一步的 ~38%，
+                // 与 P-27 同族：一个平台的必需品被无条件套到所有平台上）。
+                if controller.has_soft_keyboard() {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                }
             }
             controller.input_text(&text)?;
             Ok(serde_json::json!({ "action": "input", "text": text }))

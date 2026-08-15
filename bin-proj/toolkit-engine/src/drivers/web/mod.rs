@@ -526,29 +526,34 @@ return { ok: true, picked: norm(hit.text) };
         let script = r#"
 const el = document.activeElement;
 const text = arguments[0];
-if (!el) return false;
+if (!el) return 'none';
 if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
   const proto = el.tagName === 'INPUT' ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
   setter.call(el, (el.value || '') + text);
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
-  return true;
+  return 'ok';
 }
 if (el.isContentEditable) {
   el.textContent += text;
   el.dispatchEvent(new Event('input', { bubbles: true }));
-  return true;
+  return 'ok';
 }
-return false;
+// 回报聚焦在什么上——诊断全靠这个
+return el.tagName.toLowerCase();
 "#;
-        let ok = self.execute(script, serde_json::json!([text]))?;
-        if ok.as_bool() == Some(true) {
-            Ok(())
-        } else {
-            Err(TkeError::DeviceError(
-                "输入失败：当前没有聚焦的输入框（请先点击输入框）".to_string(),
-            ))
+        let r = self.execute(script, serde_json::json!([text]))?;
+        match r.as_str() {
+            Some("ok") => Ok(()),
+            // 原文案是「当前没有聚焦的输入框（请先点击输入框）」——它把人和 AI 都引向
+            // "那我先点一下"，可真实原因往往是**上一步点空了**：文字定位命中了同名的非输入
+            // 元素，点下去焦点根本没落到输入框上。错误必须指向真正的原因（INV-9）。
+            other => Err(TkeError::DeviceError(format!(
+                "输入失败：点击后焦点落在 <{}> 上，不是输入框——多半是定位命中了同名的非输入元素；\
+                 换用输入框自身的标签文字，或改用坐标",
+                other.unwrap_or("无")
+            ))),
         }
     }
 

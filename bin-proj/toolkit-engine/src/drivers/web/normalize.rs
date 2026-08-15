@@ -28,7 +28,15 @@ const walk = (el) => {
   for (const child of el.children) {
     const r = child.getBoundingClientRect();
     const style = getComputedStyle(child);
-    const visible = r.width > 0 && r.height > 0 &&
+    // 读屏专用元素（sr-only / screen-reader-text）必须排除：它们**人看不见但带着那行文字**，
+    // 典型实现是 1×1 像素 + clip 裁掉。不排除的话文字定位会优先命中这个 1×1 幽灵点，
+    // 点下去自然什么也没发生——实测撞过：某百科首页的 `<label>Search Wikipedia</label>`
+    // 就是 1×1，于是 `输入 ["Search Wikipedia", …]` 点空，报的还是「没有聚焦的输入框」，
+    // 极难查。人点不到的东西，就不该出现在给 AI 的元素表里。
+    const srOnly = r.width <= 1 || r.height <= 1 || style.opacity === '0' ||
+      (style.clipPath && style.clipPath !== 'none' && style.clipPath.indexOf('inset(50%') === 0) ||
+      (style.clip && style.clip !== 'auto' && /^rect\((0px,\s*){3}0px\)$/.test(style.clip));
+    const visible = r.width > 0 && r.height > 0 && !srOnly &&
       style.visibility !== 'hidden' && style.display !== 'none' &&
       r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
     if (visible) {
@@ -41,6 +49,25 @@ const walk = (el) => {
       // 输入框取 placeholder/value 兜底
       if (!ownText && (child.tagName === 'INPUT' || child.tagName === 'TEXTAREA')) {
         ownText = (child.value || child.placeholder || '').slice(0, 120);
+      }
+      // 可及名称兜底：输入框/图标按钮常常**一个字都没有**——没有直接文本、没有 placeholder，
+      // 可见的那行字其实来自 <label for>（实测撞过：某百科首页搜索框只有 label，text 全空，
+      // 于是文字定位必失败、调用方只能回落坐标，语义定位这条路等于断了）。
+      // 顺序照可及性标准：aria-label(已单列) > aria-labelledby > label > title。
+      if (!ownText) {
+        let acc = '';
+        const by = child.getAttribute('aria-labelledby');
+        if (by) {
+          acc = by.split(/\s+/)
+            .map(id => { const n = document.getElementById(id); return n ? (n.innerText || n.textContent || '') : ''; })
+            .join(' ').trim();
+        }
+        // .labels 是原生属性，<label for=id> 与 <label> 包裹两种写法都能拿到
+        if (!acc && child.labels && child.labels.length) {
+          acc = (child.labels[0].innerText || child.labels[0].textContent || '').trim();
+        }
+        if (!acc) acc = (child.getAttribute('title') || '').trim();
+        ownText = acc.slice(0, 120);
       }
       // <select> 特判：文字全在子 <option> 里，只取直接文本节点会得到空；
       // 而闭合状态下 option 的 getBoundingClientRect 是 0，走不到这一层就被可见性
