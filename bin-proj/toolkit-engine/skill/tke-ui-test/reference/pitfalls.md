@@ -278,3 +278,31 @@ tke -d web steps '选择 ["模式", "日间模式"]'
 ```
 
 **还撞到同名的话**：用更具体的文字，或退回坐标（`fetch --interactive` 拿 bounds 算中心点）。
+
+---
+
+## C-17 中途换了 `--log` 目录名 → 一次检查散成几份报告
+
+**现象**：交付时才发现证据拼不起来：`~/.tke/logs/` 下多了 `login-check/`、
+`login-check-2/`、`login-phone/`……每个里面几步，没有一份是完整的。
+
+**原因**：**`--log` 目录名就是任务身份**。探索式检查要调很多次 `steps`，中途换了名字
+（加时间戳、按设备分、想到一个更贴切的词就改了）就等于开了个新任务。
+**这件事不会报任何错**——每次调用都成功，报告也都生成了，只是各是各的。
+
+**做法**：**任务开始时定好一个名字，之后一字不改地照抄**。
+
+```bash
+# ✅ 同一个任务，走一步看一步也没关系
+tke -d web    steps '启动 ["http://localhost:3000"] # 先看看首页' --log ~/.tke/logs/login-fix/
+tke -d web    steps '点击 ["登录"] # 看到登录入口了'            --log ~/.tke/logs/login-fix/
+tke -d <序列号> steps '启动 ["com.x", ".Main"] # 去手机上验收'   --log ~/.tke/logs/login-fix/
+
+# ❌ 这些都会各自成为一个新任务
+--log ~/.tke/logs/login-fix-2/        # 手滑改名
+--log ~/.tke/logs/login-fix-1430/     # 自作主张加时间戳
+--log ~/.tke/logs/login-fix/phone/    # 按设备分（跨设备也用同一个目录，见 C-10）
+```
+
+**已经散了怎么办**：把各目录的 `screenshots/`、`pages/` 按时间顺序合并、编号重排后放进
+一个目录，再 `tke report <目录>` 重建——但那很麻烦，**一开始别改名**便宜得多。

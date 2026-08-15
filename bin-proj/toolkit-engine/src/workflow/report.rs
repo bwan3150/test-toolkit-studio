@@ -11,8 +11,13 @@
 //    所以第 N 步点中的东西，得在第 N-1 步的页面里找。第一步没有前置页面，就不显示。
 //
 // 自包含策略（有意的取舍）：
-//   - 截图 **base64 内嵌** → 单个 html 发给同事/贴进工单也能看图，这是人最需要的
+//   - 截图 **base64 内嵌** → 单个 html 发给同事/贴进工单也能看图，这是人最需要的。
+//     任务报告内嵌前先**缩放**（见 EMBED_MAX_WIDTH）：报告容器只有 880px，
+//     内嵌更大的像素一个字都不会更清楚，只是撑体积
 //   - 页面结构 xml **不内嵌**，只在顶部给文件链接 → xml 动辄几百 KB 且只有排障才逐行看
+//
+// 批次分隔行只在**有信息量**时才插（换设备 / 中间停了很久）。探索式使用会产生一长串
+// "1 步"的批次，每批插一行的话，人看到的全是"AI 分几次调的"——那是工具的实现细节。
 //
 // 无外部依赖：CSS 全内联，不引 CDN——离线、内网、断网的 CI 里打开都一样。
 
@@ -423,6 +428,25 @@ fn hhmmss(rfc3339: &str) -> String {
         .unwrap_or_else(|| rfc3339.to_string())
 }
 
+/// 两批之间空了多久才值得在报告里标一行。低于这个值就是 AI 正常的"想一下再走下一步"，
+/// 标出来只会变成噪音；超过它多半是**人在中间做了什么**（手动登录、去后台改配置）——
+/// 那件事对读报告的人很重要，而它在证据里没有任何痕迹，只剩这个时间空档。
+const IDLE_GAP_SECS: i64 = 60;
+
+fn gap_secs(prev_end: &str, next_start: &str) -> Option<i64> {
+    ms_between(prev_end, next_start).map(|ms| ms / 1000)
+}
+
+fn human_gap(secs: i64) -> String {
+    if secs >= 3600 {
+        format!("{}h{}m", secs / 3600, (secs % 3600) / 60)
+    } else if secs >= 60 {
+        format!("{} 分钟", secs / 60)
+    } else {
+        format!("{} 秒", secs)
+    }
+}
+
 fn ms_between(start: &str, end: &str) -> Option<i64> {
     let (Ok(a), Ok(b)) = (
         chrono::DateTime::parse_from_rfc3339(start),
@@ -671,17 +695,26 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
     let last = &batches[batches.len() - 1].result;
     let all_ok = batches.iter().all(|b| b.result.success);
 
+    // 任务目录：旧的碎批次布局里批次在子目录中（要往上一层才是任务目录）；
+    // Task 布局下产物与报告同层，`dir` 就是任务目录本身——照旧取 parent 会拿到
+    // `~/.tke/logs`，于是报告标题变成 "logs"、"打开检查目录"也跳错地方。
+    let task_dir: &Path = if batches[0].prefix.is_empty() {
+        &batches[0].dir
+    } else {
+        batches[0].dir.parent().unwrap_or(&batches[0].dir)
+    };
+
     // 标题用任务目录名（`~/.tke/logs/<任务简称>/` 里那个简称），比脚本名更像"这次检查"
-    let title = batches[0]
-        .dir
-        .parent()
-        .and_then(|p| p.file_name())
+    let title = task_dir
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(&first.script_name)
         .to_string();
 
     let mut body = String::new();
     let mut seq = 0usize;   // 跨批次连续编号
+    let mut prev_dev: Option<String> = None;
+    let mut prev_end: Option<String> = None;
     for (i, b) in batches.iter().enumerate() {
         let plat = platform_tag(b.result.device.as_deref());
         let ctx = Ctx { run_dir: &b.dir, prefix: &b.prefix, img };
@@ -694,20 +727,41 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
         } else {
             String::new()
         };
-        body.push_str(&format!(
-            r#"<div class="batch">
+        // 分隔行只在**有信息量**时才插。探索式使用(看一步、想一想、再走一步)会产生一长串
+        // "1 步"的批次，每批都插一行分隔的话，读报告的人看到的全是"AI 分几次调的"——
+        // 那是工具的实现细节，不是这次检查发生了什么。
+        // 真正值得标出来的只有两件事：**换设备了**、**中间停了很久**（多半是人在手动登录/操作）。
+        // 第一批不算"换设备"——顶部摘要已经写了设备，再插一行是重复
+        let dev_changed = prev_dev.is_some() && prev_dev.as_deref() != Some(dev.as_str());
+        let gap = prev_end
+            .as_deref()
+            .and_then(|p| gap_secs(p, &b.result.start_time))
+            .filter(|s| *s >= IDLE_GAP_SECS);
+        if batch_links || dev_changed || gap.is_some() {
+            let gap_note = gap
+                .map(|s| format!(r#"<span class="b-gap">间隔 {}</span>"#, human_gap(s)))
+                .unwrap_or_default();
+            body.push_str(&format!(
+                r#"<div class="batch">
   <span class="b-no">{n}</span>
   <span class="b-dev">{dev}</span>
   <span class="b-time">{time}</span>
-  <span class="b-steps">{steps} 步</span>
+  {gap_note}
   {link}
 </div>"#,
-            n = i + 1,
-            dev = esc(&dev),
-            time = hhmmss(&b.result.start_time),
-            steps = b.result.steps.len(),
-            link = link,
-        ));
+                n = i + 1,
+                dev = esc(&dev),
+                time = hhmmss(&b.result.start_time),
+                gap_note = gap_note,
+                link = link,
+            ));
+        }
+        prev_dev = Some(dev.clone());
+        prev_end = Some(if b.result.end_time.is_empty() {
+            b.result.start_time.clone()
+        } else {
+            b.result.end_time.clone()
+        });
         for (j, st) in b.result.steps.iter().enumerate() {
             seq += 1;
             body.push_str(&step_card_seq(&ctx, &b.result, j, st, plat, Some(seq)));
@@ -738,6 +792,8 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
   border-radius:50%;background:var(--acc);color:#fff;font-size:11px;font-weight:700;flex-shrink:0}}
 .b-dev{{font-family:var(--mono);font-weight:600;color:var(--txt)}}
 .b-time,.b-steps{{font-family:var(--mono);color:var(--txt3)}}
+.b-gap{{font-family:var(--mono);color:var(--warn);background:var(--warn-bg);
+  padding:1px 7px;border-radius:99px;font-size:11px}}
 .b-link{{margin-left:auto;color:var(--acc);text-decoration:none;font-size:11px}}
 .b-link:hover{{text-decoration:underline}}
 </style>
@@ -785,11 +841,8 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
         devs = esc(&if devs.is_empty() { "—".to_string() } else { devs.join(" · ") }),
         start = hhmmss(&first.start_time),
         end = hhmmss(&last.end_time),
-        dir = esc(&batches[0].dir.parent().map(|p| p.display().to_string()).unwrap_or_default()),
-        file_dir = esc(&format!(
-            "file://{}",
-            batches[0].dir.parent().map(|p| p.display().to_string()).unwrap_or_default()
-        )),
+        dir = esc(&task_dir.display().to_string()),
+        file_dir = esc(&format!("file://{}", task_dir.display())),
         body = body,
     )
 }
@@ -921,6 +974,72 @@ mod tests {
         std::fs::create_dir_all(d.join("page")).unwrap();
         std::fs::write(d.join("page/step_001.xml"), PAGE).unwrap();
         d
+    }
+
+    /// 任务报告的批次分隔行：**只在有信息量时才插**。
+    /// 探索式使用(看一步、想一想、再走一步)会产生一长串"1 步"的批次——每批插一行的话，
+    /// 人看到的全是"AI 分几次调的"，那是工具的实现细节，不是这次检查发生了什么。
+    #[test]
+    fn task_report_separator_only_when_meaningful() {
+        let mk = |dev: &str, start: &str, end: &str| {
+            let mut r = mk_result(vec![step(0, "点击 [\"X\"]", None)]);
+            r.device = Some(dev.into());
+            r.start_time = start.into();
+            r.end_time = end.into();
+            r
+        };
+        let render = |batches: Vec<ExecutionResult>, tag: &str| {
+            let dir = std::env::temp_dir()
+                .join(format!("tke-report-sep-{}-{}", tag, std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("log.json"),
+                serde_json::to_string(&crate::TaskLog { batches }).unwrap(),
+            )
+            .unwrap();
+            let html =
+                std::fs::read_to_string(write_task_report(&dir).unwrap()).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            html
+        };
+
+        // ① 同设备、连着跑：一行都不该有（探索式的常态）
+        let html = render(
+            vec![
+                mk("web", "2026-08-15T10:00:00+10:00", "2026-08-15T10:00:05+10:00"),
+                mk("web", "2026-08-15T10:00:07+10:00", "2026-08-15T10:00:09+10:00"),
+                mk("web", "2026-08-15T10:00:11+10:00", "2026-08-15T10:00:13+10:00"),
+            ],
+            "quiet",
+        );
+        assert_eq!(
+            html.matches(r#"<div class="batch">"#).count(),
+            0,
+            "同设备连续批次不该插分隔行"
+        );
+
+        // ② 换设备：要标出来——这正是跨设备检查要还原的因果
+        let html = render(
+            vec![
+                mk("web", "2026-08-15T10:00:00+10:00", "2026-08-15T10:00:05+10:00"),
+                mk("phone-1", "2026-08-15T10:00:07+10:00", "2026-08-15T10:00:09+10:00"),
+            ],
+            "dev",
+        );
+        assert_eq!(html.matches(r#"<div class="batch">"#).count(), 1);
+        assert!(html.contains("phone-1"), "分隔行要写明换到了哪台设备");
+
+        // ③ 中间停了很久：多半是人在手动登录/改配置，那件事在证据里只剩这个空档
+        let html = render(
+            vec![
+                mk("web", "2026-08-15T10:00:00+10:00", "2026-08-15T10:00:05+10:00"),
+                mk("web", "2026-08-15T10:06:05+10:00", "2026-08-15T10:06:09+10:00"),
+            ],
+            "gap",
+        );
+        assert_eq!(html.matches(r#"<div class="batch">"#).count(), 1);
+        assert!(html.contains("间隔 6 分钟"), "应标出空档时长:{}", html);
     }
 
     /// 坐标命中：报告要说清点的是哪个元素（这是这份报告存在的主要理由）
