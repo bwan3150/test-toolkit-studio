@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-15
-Last-Commit: 55e492cc
+Last-Commit: 741d86cc
 ---
 
 # 当前状态
@@ -24,6 +24,9 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | web 无头（无头服务器/docker CI） | ✅ **坐标可移植性已验证** | mac有头=mac无头=Linux无头=1280x813,bounds 零差异。会话模式失配已修(P-18) |
 | App 侧（handlers/frontend） | ⏸ 冻结 | healed 字段等新 NDJSON 待接 |
 | **skill 已上线可用** | ✅ 用户实测过一轮并已调优 | 一行装:`install.sh`/`install.ps1`;六平台分发齐备;CI 自动发版。**用户实测反馈已消化**(语义定位/选择指令/提速 6.5×),**效果待他重跑验证** |
+| **语义定位链路** | ✅ 本机 web 实测打通 | 2026-08-15:实跑撞出四个洞并全修(P-28 幽灵 sr-only / 可及名称缺采 / 误导错误 / P-30 视口+文档坑)。修完同一批 **3 步纯语义、零坐标、零 fetch**。**安卓侧未验**(无设备) |
+| `fetch --wait-text` | ✅ 本机实测 | ADR-0013,关闭 Q-8。出现即返回/超时非零退出;skill 里的手写 shell 轮询范例全部替换。**跨设备真机待验** |
+| **skill 版本过期无提示** | ❌ 已知缺口 | **Q-11,优先级高**:本机装的是 8-13 旧版,repo 已到 8-15。改完 SKILL.md 的收益可能根本到不了用户手上。**用户重跑前必须先重装 skill** |
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
 | 跨设备/跨平台测试 | ✅ 已实现,**AI 侧真机未验** | ADR-0011 全套:flow per-script device / 重试断言 / 设备成为工具参数 + list_devices;动态值传递未做(Q-7) |
 | 宿主机能力门禁 | ✅ 本机实测 | iOS 只在 macOS 放行(门禁在 `Controller::new`,control/run/steps/harness 一处覆盖);留 `TKE_ALLOW_IOS=1` 逃生口——界线是产品决策不是技术极限 |
