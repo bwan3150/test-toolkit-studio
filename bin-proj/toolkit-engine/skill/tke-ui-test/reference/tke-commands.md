@@ -10,6 +10,10 @@ tke -d web fetch --interactive        # 可交互元素 JSON（text/bounds/resou
 tke -d web fetch                      # 全部元素（含纯文本节点，判断结果时用）
 tke -d web fetch --cached             # 复用上次采集，不重新抓（省一次往返）
 tke -d web fetch --ocr offline        # 图标没有文字时，用 OCR 补可读文字
+tke -d web fetch --wait-text "已保存" --timeout 30
+                                      # ★ 等这段文字出现（异步下发/跨设备同步用）
+                                      #   出现即刻返回；超时非零退出，`||` 直接接住
+                                      #   多候选写 "A|B"；查全量，纯文本标签也找得到
 tke -d web refresh                    # 采集截图 + 页面结构，路径在输出里
 tke -d web refresh --crop 100,200,400,500 --out /tmp/x.png   # 剪裁某块区域
 ```

@@ -48,26 +48,22 @@ tke -d <设备> fetch | Select-String -SimpleMatch "夜间回家"        # ✅ W
 
 **原因**：`for ... do grep -q ... && break; done` 跑完自然结束，**退出循环不等于找到了**。
 
-**做法**：置一个标志位，循环后必须判断：
+**做法**：**别自己写循环**，用 `fetch --wait-text`——它出现即刻返回、超时非零退出，
+"没等到"根本没法被当成"等到了"：
 
 ```bash
-found=0
-for i in $(seq 1 15); do
-  tke -d <设备> fetch | grep -q "夜间回家" && { found=1; break; }
-  sleep 2
-done
-[ "$found" = 1 ] && echo "✅ 出现了" || echo "❌ 等了 30 秒仍未出现"
+tke -d <设备> fetch --wait-text "夜间回家-1430" --timeout 30 \
+  && echo "✅ 出现了" || echo "❌ 等了 30 秒仍未出现"
 ```
 
 ```powershell
 # Windows（PowerShell）
-$found = $false
-foreach ($i in 1..15) {
-  if (tke -d <设备> fetch | Select-String -SimpleMatch "夜间回家") { $found = $true; break }
-  Start-Sleep -Seconds 2
-}
-if ($found) { "✅ 出现了" } else { "❌ 等了 30 秒仍未出现" }
+tke -d <设备> fetch --wait-text "夜间回家-1430" --timeout 30
+if ($LASTEXITCODE -eq 0) { "✅ 出现了" } else { "❌ 等了 30 秒仍未出现" }
 ```
+
+多个候选写 `"名字A|名字B"`，任一命中即算。它查的是**全量**元素，不可点击的文本标签也找得到
+（这正是 C-1 那个坑：手写轮询时误加 `--interactive` 会漏掉纯文本，等到超时报假失败）。
 
 ---
 
@@ -237,3 +233,47 @@ tke -d web steps '选择 ["模式", "日间模式"]'
 '点击 ["保存"]' '点击 ["确认"]'
 ```
 
+
+---
+
+## C-15 目标在折叠下方 → 文字定位必失败（不是"元素不存在"）
+
+**现象**：`点击 ["Memory safety"]` 报「未找到包含文本 'Memory safety' 的元素」，
+可你明明知道页面上有这个链接——往下滚一屏就看得见。
+
+**原因**：**采集只收当前视口内的元素**。视口外的东西根本不在元素表里，
+定位的隐式等待再等 6 秒也等不出来（它等的是"还没渲染完"，不是"在别处"）。
+代价是白等 ~9 秒，**而且这一批后面的步骤全被中断**。
+
+**做法**：目标不是首屏可见的，就先 `滚动查找`——纯文字、不需要元素库：
+
+```bash
+# ❌ 直接点视口外的东西
+'点击 ["Memory safety"]'                 # 失败，白等 9.1s
+
+# ✅ 先滚到它
+'滚动查找 ["Memory safety", 上]'          # 0.4s 找到
+'点击 ["Memory safety"]'                 # 点中
+```
+
+方向按"手指怎么滑"理解：**看更下面的内容 = 上**。它每滚一步都重新识别、滚到底会自动停。
+
+---
+
+## C-16 点到了"人看不见的同名元素"
+
+**现象**：`输入 ["Search Wikipedia", "关键词"]` 报「点击后焦点落在 <label> 上，不是输入框」，
+或者点击"成功"了但页面毫无反应。
+
+**原因**：无障碍标签（`sr-only` / `screen-reader-text`）**人看不见，却带着那行文字**，
+典型是 1×1 像素。定位按文字找，可能先命中这个幽灵点，点下去当然什么也没发生。
+
+**采集层已排除这类元素**（1×1、`opacity:0`、`clip` 裁掉的），
+同时把 `<label for>` / `aria-labelledby` / `title` 的文字并进对应输入框——
+所以**输入框现在可以直接按它的可见标签定位**：
+
+```bash
+'输入 ["Search Wikipedia", "关键词"]'    # 直接命中真正的输入框
+```
+
+**还撞到同名的话**：用更具体的文字，或退回坐标（`fetch --interactive` 拿 bounds 算中心点）。

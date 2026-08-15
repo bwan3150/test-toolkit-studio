@@ -306,3 +306,24 @@ fn report_empty_dir_fails_clearly() {
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("没有找到"), "应说清目录里没有记录:{}", s);
 }
+
+/// fetch --wait-text / --timeout 装配正确且在帮助里可见(ADR-0013)
+#[test]
+fn fetch_help_lists_wait_text() {
+    let o = tke().args(["fetch", "--help"]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("--wait-text"), "fetch 帮助应含 --wait-text:{}", s);
+    assert!(s.contains("--timeout"), "fetch 帮助应含 --timeout:{}", s);
+}
+
+/// --wait-text 仍然必须给设备——别让人以为"等待"是不需要设备的本地操作
+#[test]
+fn fetch_wait_text_still_requires_device() {
+    let o = tke()
+        .args(["fetch", "--wait-text", "随便什么", "--timeout", "1"])
+        .output()
+        .unwrap();
+    assert!(!o.status.success(), "缺 -d 应非零退出");
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("设备"), "报错应指出缺设备:{}", s);
+}
