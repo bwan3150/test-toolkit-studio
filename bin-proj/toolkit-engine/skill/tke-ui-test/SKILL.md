@@ -46,6 +46,31 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证功能到
 tke doctor
 ```
 
+> ### 报 `tke: command not found`？——**这台机器还没装 tke**
+>
+> 这个 skill 只是**文档**，`tke` 是个单独的二进制。一条命令装好（mac / Linux）：
+>
+> ```bash
+> curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash
+> ```
+>
+> Windows（PowerShell）——**先落地再执行**，别用 `irm … | iex`：
+> 那个脚本开头有 `param()` 块，管道执行会把它当成语句而报错。
+>
+> ```powershell
+> $u="https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.ps1"
+> irm $u -OutFile "$env:TEMP\tke-install.ps1"; & "$env:TEMP\tke-install.ps1"
+> ```
+>
+> **装完当前这个终端里还是找不到它**——安装器把 PATH 写进了 `~/.zshrc` / `~/.bashrc`，
+> 只对新终端生效。你在同一个会话里继续跑，先让它立刻可用：
+>
+> ```bash
+> export PATH="$HOME/.tke/bin:$PATH"     # Windows: $env:Path += ";$env:USERPROFILE\.tke\bin"
+> ```
+>
+> 然后再 `tke doctor`。**别去猜、别去翻源码构建**——装它就这一条命令。
+
 三平台通用（Windows 也是这条），**不下载任何东西**。它会报：缺什么依赖、连了哪些安卓设备、
 tke 版本、**这份 skill 是不是最新的**、日志落点、这台机能不能开浏览器窗口。
 

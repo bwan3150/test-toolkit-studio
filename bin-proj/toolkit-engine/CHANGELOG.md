@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### 2026-08-17 · 删掉误导人的 check-env.sh;安装方法写进 skill
+用户实跑撞到:新机器上 `tke doctor` 报 command not found,AI 翻到 skill 里的
+`scripts/check-env.sh`,被它那句「构建 bin-proj/toolkit-engine/build-mac.sh」带偏,
+最后卡住问用户要源码——**而普通用户手上根本没有源码**。
+- **fix(删遗留物)** `check-env.sh` **零引用**(SKILL.md 第 0 步早就统一成 `tke doctor` 了),
+  内容还停在开发者视角。留着就是个误导源,删掉;README/skill-integration/publishing 三处
+  引用同步清理
+- **docs(安装方法进 skill)** SKILL.md 第 0 步最显眼处写明:报 `command not found` 就是
+  **没装**,一条 curl 装好;并说清**装完当前终端仍找不到**是正常的(安装器只写 rc 文件),
+  同会话要 `export PATH="$HOME/.tke/bin:$PATH"`。Windows 给的是**先落地再执行**的写法——
+  `install.ps1` 开头有 `param()` 块,`irm … | iex` 会报错
+- **docs** 坑册 C-21;tke-commands 速查开头也补上安装那两条
+- **验证** 用 `env -i` 造了个干净环境(PATH 里没有 tke)端到端跑通:
+  command not found → curl 安装 → export → `tke --version` 可用
+
 ### 2026-08-17 · 报告能装下 AI 那份完整总结(表格/卡片) + pages 改成元素库
 用户拿真实报告对照:对话框里 AI 写了漂亮的对照表+列表+注意事项,报告里却成了一句流水账。
 - **诊断** Markdown 渲染**是生效的**,但两处逼着 AI 压缩:①**不支持表格**(AI 做对照最爱用)

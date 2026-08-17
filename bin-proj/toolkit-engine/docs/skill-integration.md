@@ -91,7 +91,6 @@ SKILL.md 里给了分诊表。tke 侧 ADR-0006 的分诊层仍服务于 `tke run
 ```
 <项目>/.claude/skills/tke-ui-test/
 ├── SKILL.md                 # 主循环 + 先verify后explore + .tks 语法 + 护栏 + 红线
-└── scripts/check-env.sh     # 前置体检
 ```
 
 没有 verify.sh / explore.sh——**流程写在 SKILL.md 里由调用方 AI 执行**,包一层脚本反而挡住它。
@@ -99,7 +98,7 @@ SKILL.md 里给了分诊表。tke 侧 ADR-0006 的分诊层仍服务于 `tke run
 放**项目内** `.claude/skills/`(而非 `~/.claude/skills/`):UI 脚本资产本就该跟代码同仓,
 团队 clone 即得,skill 与它驱动的 `tests/ui/*.tks` 一起演进。
 
-**前置体检**(`check-env.sh`)不满足就明确报出来,别让调用方撞进去猜:
+**前置体检**(`tke doctor`)不满足就明确报出来,别让调用方撞进去猜:
 `tke` 在不在 PATH / **chromedriver 是否与 tke 同目录**(ToolManager 只搜同目录,不回退 PATH)/
 Chrome for Testing 在不在(按官方 zip 原样结构找)/ 当前会走有头还是无头 / `tests/ui/` 在不在。
 **不查 `[ai]`——skill 模式不需要**。

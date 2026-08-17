@@ -35,7 +35,7 @@
 https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke
 ```
 
-`install.sh` 与 `check-env.sh` 的默认地址都指向它。
+`install.sh` 与 `tke doctor` 的默认地址都指向它。
 
 ## ⚠️ 坑二：Cloudflare 缓存 4 小时，且不认 no-cache
 
@@ -48,7 +48,7 @@ https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke
 - `publish.sh` 在 `VERSION` 里写 `build: <时间戳>`；
 - `install.sh` 先带随机参数取 `VERSION`（保证新鲜），再用其中的 build 戳作为后续所有下载的
   `?b=` 键——**发过新版就自动破缓存，没发新版则照常命中 CDN**；
-- `check-env.sh` 的版本检查也带随机参数，否则永远看到旧版本号。
+- `tke doctor` 的版本检查也带随机参数，否则永远看到旧版本号。
 
 **所以每次发布都要重新上传 `VERSION`**，它是缓存键的来源。只传二进制不传 VERSION，
 使用者不会拿到新文件。
@@ -64,7 +64,7 @@ https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke
 装完一跑才发现是垃圾。
 
 `install.sh` 因此**逐个校验文件头**（gzip 的 `1f8b` / zip 的 `PK` / 版本号必须以 `tke ` 开头），
-不合格一律当下载失败。`check-env.sh` 的版本检查同理。
+不合格一律当下载失败。`tke doctor` 的版本检查同理。
 
 **自查有没有漏传**（看返回的是文件还是网页；注意平台不支持 Range，要整取后再截头）：
 

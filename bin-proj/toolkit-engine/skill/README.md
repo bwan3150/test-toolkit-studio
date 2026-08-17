@@ -79,7 +79,6 @@ cp -r tke-ui-test <你的项目>/.claude/skills/
 ```
 ~/.claude/skills/tke-ui-test/
 ├── SKILL.md                    # 主文件，Claude Code 自动读
-├── scripts/check-env.sh        # 环境体检
 └── reference/                  # 以下 AI 按需读
     ├── pitfalls.md             # 踩坑册：会导致「假结论」的坑，新踩的往里加
     ├── tke-commands.md         # tke 命令速查

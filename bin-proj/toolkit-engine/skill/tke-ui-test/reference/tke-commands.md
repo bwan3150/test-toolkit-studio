@@ -1,5 +1,14 @@
 # tke 命令速查（tke-ui-test 用得上的部分）
 
+**没装 tke？**（`tke: command not found`）——skill 只是文档，二进制要单独装：
+
+```bash
+curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash
+export PATH="$HOME/.tke/bin:$PATH"    # 当前会话立即可用（安装器只写了 rc 文件）
+```
+
+装好后 `tke update` 升级、`tke uninstall` 卸载，不用再记这串 URL。
+
 全局参数：`-d <设备>` 必带（**iOS 只有 macOS 能做**，其余平台 tke 会拦下）；`--log <dir>` 留证据；`--cache <dir>` 并发隔离；
 `--headless=on|off` 强制无头/有头（**必须带等号**）。
 **浏览器默认无头**（不抢鼠标）；要开窗口让人手动登录/扫码时用 `--headless=off`，

@@ -379,3 +379,23 @@ tke report ~/.tke/logs/<任务简称>/ --task "用户要验的事" --verdict pas
 
 > 早先这类行会被**静默丢掉**：五条里错一条，那条悄悄不执行、其余照跑，
 > 结果是"少做了一步却显示成功"。现在整批拦下并列出可用指令。
+
+---
+
+## C-21 `tke: command not found` 时别去猜、别去构建源码
+
+**现象**：`tke doctor` 报 command not found，于是翻 skill 目录找二进制、
+读到某个脚本说"构建 `bin-proj/toolkit-engine/build-mac.sh`"，然后卡住问用户要源码。
+
+**原因**：**skill 只是文档**，`tke` 是单独的二进制，要装。而普通用户手上根本没有源码。
+
+**做法**：装它就一条命令（见 SKILL.md 第 0 步）：
+
+```bash
+curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash
+export PATH="$HOME/.tke/bin:$PATH"    # 安装器只写了 rc 文件，当前会话要这句才立刻可用
+tke doctor
+```
+
+**装完当前终端里仍然找不到**是正常的——安装器把 PATH 写进 `~/.zshrc`/`~/.bashrc`，
+那只对**新终端**生效；你在同一个会话里继续跑，就得上面那句 `export`。
