@@ -13,7 +13,7 @@ use crate::models::AndroidLocator;
 use crate::utils::Workarea;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 // 元素库默认查找已收敛到参数层 utils::params（单一来源）；
 // Recognizer 只接收解析好的库路径（None 表示无元素库，仅坐标/文本定位可用）。
@@ -43,7 +43,10 @@ impl Recognizer {
                 (dir, Self::load_library(&path)?)
             }
             None => {
-                warn!("未找到元素库文件，元素引用将不可用");
+                // 不warn：**没有元素库是常态**——`tke steps` 按文字/坐标操作根本不需要它
+                // （tke-ui-test skill 明令不建元素库）。真要用 `{元素名}` 却没有库时，
+                // 定位那一步会实打实报错，用不着在每条命令前先吓人一跳。
+                debug!("未找到元素库文件，元素引用将不可用");
                 (PathBuf::from("."), HashMap::new())
             }
         };

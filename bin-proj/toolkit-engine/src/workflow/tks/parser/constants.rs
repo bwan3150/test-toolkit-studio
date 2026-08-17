@@ -27,6 +27,13 @@ pub fn create_command_map() -> HashMap<String, TksCommand> {
     map
 }
 
+/// 所有可用指令名（报错时列给人看——认不出指令时最该知道的就是"那有哪些能用"）
+pub fn command_names() -> Vec<String> {
+    let mut v: Vec<String> = create_command_map().into_keys().collect();
+    v.sort();
+    v
+}
+
 /// 创建方向映射表（中文方向 → 英文方向）
 pub fn create_direction_map() -> HashMap<String, String> {
     let mut map = HashMap::new();

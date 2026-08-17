@@ -9,6 +9,50 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct TaskLog {
     pub batches: Vec<ExecutionResult>,
+    /// 这次检查**要验的是什么**（用户的原话/需求）。报告开头显示它——
+    /// 没有它，人打开报告只看到一串点击，根本不知道当初想验证什么。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// 调用方 AI 给出的**结论**。**tke 自己判断不了**：
+    /// 某一步定位没命中只说明"这次尝试无效"，换个方式点中了就没事；
+    /// 而"功能真的坏了"只有走完全程的人/AI 才知道。见 `Verdict`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<Verdict>,
+    /// 结论的一句话说明（"3 台 player 全部在线，指标正常" / "保存后列表不刷新，是 bug"）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+/// 任务级结论。**只有这三种**，且都由调用方 AI 判断——
+/// 步骤级的"没点中"不在此列（那是过程中的无效尝试，不是任务失败）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Verdict {
+    /// 要验的功能确实可用
+    Pass,
+    /// **被测对象有问题**：功能坏了 / 复现了 bug / 用户说的问题属实
+    Fail,
+    /// 没验成：跑不下去（前提不满足、环境问题、被挡住了），不是被测对象的错
+    Blocked,
+}
+
+impl Verdict {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "pass" | "ok" | "通过" => Some(Self::Pass),
+            "fail" | "bug" | "失败" => Some(Self::Fail),
+            "blocked" | "block" | "受阻" => Some(Self::Blocked),
+            _ => None,
+        }
+    }
+    /// (徽章样式, 徽章文字)
+    pub fn badge(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Pass => ("b-ok", "通过"),
+            Self::Fail => ("b-ng", "有问题"),
+            Self::Blocked => ("b-wa", "未验成"),
+        }
+    }
 }
 
 impl TaskLog {
@@ -21,7 +65,7 @@ impl TaskLog {
             return t;
         }
         serde_json::from_str::<ExecutionResult>(&text)
-            .map(|r| Self { batches: vec![r] })
+            .map(|r| Self { batches: vec![r], ..Default::default() })
             .unwrap_or_default()
     }
 }

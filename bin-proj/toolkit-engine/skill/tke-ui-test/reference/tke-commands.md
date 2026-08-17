@@ -88,3 +88,17 @@ tke -d <序列号> app stop <包名>        # 安卓关掉启动过的 App
 - 会话信息：`$TMPDIR/tke/web/<设备>.json`
 - 页面采集缓存：`$TMPDIR/tke/workarea/<设备>/`
 - **切换有头/无头时**必须先 `control close`，否则会沿用旧模式的会话（tke 会拦住并提示）
+
+## 收尾：写结论 + 打开报告
+
+```bash
+tke report ~/.tke/logs/<任务简称>/ \
+  --task "用户让我验的那件事" \
+  --verdict pass|fail|blocked \
+  --summary "一句话结果" \
+  --open                      # 用系统浏览器打开（无图形界面时自动跳过）
+tke report <目录> --full-image  # 原图版，逐像素复核用
+```
+
+`--verdict`：`pass`=功能可用 / `fail`=**被测对象有问题** / `blocked`=没验成。
+**某一步没点中不算 `fail`**——那是过程里的无效尝试，见 SKILL.md。

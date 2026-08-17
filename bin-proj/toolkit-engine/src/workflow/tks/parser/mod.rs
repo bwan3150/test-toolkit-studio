@@ -82,6 +82,8 @@ impl ScriptParser {
 
         // 找到 "步骤:" 标记
         let mut in_steps = false;
+        // 认不出的行：收集起来一次报清楚，而不是逐行静默丢弃
+        let mut unknown: Vec<(usize, String)> = Vec::new();
 
         for (line_num, line) in lines.iter().enumerate() {
             // 行内注释切出来单独留着：它是「这一步在干什么」，要带进报告
@@ -100,11 +102,30 @@ impl ScriptParser {
 
             // 只解析步骤部分的内容
             if in_steps {
-                if let Some(mut step) = self.parse_step(trimmed, line_num + 1) {
-                    step.note = note;
-                    script.steps.push(step);
+                match self.parse_step(trimmed, line_num + 1) {
+                    Some(mut step) => {
+                        step.note = note;
+                        script.steps.push(step);
+                    }
+                    // **认不出来的行绝不能静默跳过**（INV-9）：五条里错一条，
+                    // 那条被悄悄丢掉、其余照跑，结果是"少做了一步却显示成功"。
+                    // 实测撞过：AI 写了个不存在的 `refresh`，只收到一句
+                    // "没有可执行的有效指令"，完全看不出是指令名写错了。
+                    None => unknown.push((line_num + 1, trimmed.to_string())),
                 }
             }
+        }
+
+        if !unknown.is_empty() {
+            let lines: Vec<String> = unknown
+                .iter()
+                .map(|(n, l)| format!("第 {} 行：{}", n, l))
+                .collect();
+            return Err(crate::TkeError::ScriptParseError(format!(
+                "认不出这些指令：\n  {}\n可用指令：{}",
+                lines.join("\n  "),
+                constants::command_names().join(" / ")
+            )));
         }
 
         Ok(script)

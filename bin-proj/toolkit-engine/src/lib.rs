@@ -90,6 +90,7 @@ pub use models::{
     ExecutionResult,
     StepResult,
     TaskLog,
+    Verdict,
     AppInfo,
     CurrentFocus,
 };

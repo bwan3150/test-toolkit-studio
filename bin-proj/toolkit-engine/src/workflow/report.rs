@@ -38,6 +38,16 @@ pub fn write_report(run_dir: &Path, result: &ExecutionResult) -> Result<PathBuf>
 
 // ── 全流程汇总 ─────────────────────────────────────────────────────────
 
+/// 报告头部要展示的"任务级"信息。**tke 自己给不出这些**——
+/// 要验什么是用户说的，验没验成只有走完全程的调用方 AI 知道。
+/// 都为空时报告只如实陈述步骤，不替谁下结论。
+#[derive(Default)]
+struct TaskMeta {
+    task: Option<String>,
+    verdict: Option<crate::Verdict>,
+    summary: Option<String>,
+}
+
 /// 一次检查里的一个批次（一次 `tke steps` 调用留下的产物）
 struct Batch {
     dir: PathBuf,
@@ -113,6 +123,11 @@ pub fn write_task_report(task_dir: &Path) -> Result<PathBuf> {
 pub fn write_task_report_with(task_dir: &Path, full_image: bool) -> Result<PathBuf> {
     let log = task_dir.join("log.json");
     let task = crate::TaskLog::load(&log);
+    let meta = TaskMeta {
+        task: task.task.clone(),
+        verdict: task.verdict,
+        summary: task.summary.clone(),
+    };
     if task.batches.is_empty() {
         return Err(TkeError::InvalidArgument(format!(
             "{} 里没有检查记录（应有 log.json，且含 batches）",
@@ -127,7 +142,7 @@ pub fn write_task_report_with(task_dir: &Path, full_image: bool) -> Result<PathB
         .collect();
 
     let mode = if full_image { ImgMode::Embed } else { ImgMode::EmbedCompressed };
-    let html = render_session_with(&batches, mode, false);
+    let html = render_session_with(&batches, mode, false, &meta);
     let out = task_dir.join("report.html");
     std::fs::write(&out, html).map_err(TkeError::IoError)?;
     Ok(out)
@@ -274,11 +289,20 @@ header{background:var(--card);border:1px solid var(--border);border-radius:12px;
 h1{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}
 .badge{padding:4px 14px;border-radius:99px;font-size:12px;font-weight:700;flex-shrink:0}
 .b-ok{background:var(--ok);color:#fff} .b-ng{background:var(--ng);color:#fff}
+.b-wa{background:var(--warn);color:#fff}
+/* 没人给结论时的中性徽章：只说"跑完了"，不替谁判成败 */
+.b-nu{background:var(--bg);color:var(--txt2);border:1px solid var(--border)}
+/* 任务 / 结论：报告开头最该先看到的两行 */
+.task{margin-top:10px;font-size:13px;line-height:1.5;color:var(--txt);
+  display:flex;gap:10px;align-items:baseline}
+.t-k{flex-shrink:0;color:var(--txt3);font-size:11px;padding:1px 7px;border-radius:4px;
+  background:var(--bg);border:1px solid var(--border)}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip{padding:3px 10px;border-radius:6px;font-size:12px;font-family:var(--mono);
   background:var(--bg);border:1px solid var(--border);color:var(--txt2)}
 .chip b{color:var(--txt);font-weight:700}
 .c-ok b{color:var(--ok)} .c-ng b{color:var(--ng)} .c-warn b{color:var(--warn)}
+.c-wa b{color:var(--warn)}
 .meta{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);
   display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:12px}
 .m-row{display:contents}
@@ -679,12 +703,13 @@ fn render_session(batches: &[Batch], embed: bool) -> String {
         batches,
         if embed { ImgMode::Embed } else { ImgMode::Link },
         true,
+        &TaskMeta::default(),
     )
 }
 
 /// `batch_links=true` 时每批带「单独看这一批」链接（碎批次布局才有单批报告；
 /// Task 布局下产物全在一层、没有单批报告，带了就是死链）。
-fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> String {
+fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta: &TaskMeta) -> String {
     let all_steps: usize = batches.iter().map(|b| b.result.steps.len()).sum();
     let passed: usize = batches
         .iter()
@@ -693,7 +718,6 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
     let failed = all_steps - passed;
     let first = &batches[0].result;
     let last = &batches[batches.len() - 1].result;
-    let all_ok = batches.iter().all(|b| b.result.success);
 
     // 任务目录：旧的碎批次布局里批次在子目录中（要往上一层才是任务目录）；
     // Task 布局下产物与报告同层，`dir` 就是任务目录本身——照旧取 parent 会拿到
@@ -805,8 +829,9 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
     <h1>{title}</h1>
     <span class="badge {badge_cls}">{badge_txt}</span>
   </div>
+  {task_row}
   <div class="chips">
-    <span class="chip c-ok"><b>{passed}</b> 步通过</span>
+    <span class="chip c-ok"><b>{passed}</b> 步成功</span>
     {failed_chip}
     <span class="chip">共 <b>{all_steps}</b> 步 / <b>{nb}</b> 批操作</span>
     <span class="chip">耗时 <b>{dur}</b></span>
@@ -827,13 +852,29 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool) -> St
 </html>"#,
         title = esc(&title),
         css = BASE_CSS,
-        badge_cls = if all_ok { "b-ok" } else { "b-ng" },
-        badge_txt = if all_ok { "通过" } else { "失败" },
+        // 结论**只认调用方给的**。步骤里有没有"没点中"跟任务成没成是两回事——
+        // 定位失败换个方式点中了就没事，而功能是否真的可用只有走完全程的人/AI 知道。
+        // 没人给结论时不下判断，只说"已完成"（此前一步没命中就整份标"失败"，是在撒谎）。
+        badge_cls = meta.verdict.map(|v| v.badge().0).unwrap_or("b-nu"),
+        badge_txt = meta.verdict.map(|v| v.badge().1).unwrap_or("已完成"),
+        task_row = {
+            let mut s = String::new();
+            if let Some(task) = &meta.task {
+                s.push_str(&format!(r#"<div class="task"><span class="t-k">任务</span>{}</div>"#, esc(task)));
+            }
+            if let Some(sum) = &meta.summary {
+                s.push_str(&format!(r#"<div class="task"><span class="t-k">结论</span>{}</div>"#, esc(sum)));
+            }
+            s
+        },
         passed = passed,
         all_steps = all_steps,
         nb = batches.len(),
         failed_chip = if failed > 0 {
-            format!(r#"<span class="chip c-ng"><b>{}</b> 步失败</span>"#, failed)
+            // 步骤级只说"没成"：它可能只是定位没命中，后面换个方式就点中了。
+            // 叫"失败"会让人以为整件事砸了——用户实测撞到过（7 步里 1 步没命中，
+            // 第 6 步用坐标点回来了，报告顶上却写着"失败"）
+            format!(r#"<span class="chip c-wa"><b>{}</b> 步未成</span>"#, failed)
         } else {
             String::new()
         },
@@ -976,6 +1017,54 @@ mod tests {
         d
     }
 
+    /// **一步没命中 ≠ 任务失败**（用户实测撞到过：7 步里 1 步定位没中、第 6 步用坐标点
+    /// 回来了，报告顶上却写着"失败"）。没人给结论时报告只说"已完成"，不替谁判成败。
+    #[test]
+    fn one_missed_step_does_not_fail_the_task() {
+        let dir = std::env::temp_dir().join(format!("tke-report-verdict-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |t: &crate::TaskLog| {
+            std::fs::write(dir.join("log.json"), serde_json::to_string(t).unwrap()).unwrap();
+            std::fs::read_to_string(write_task_report(&dir).unwrap()).unwrap()
+        };
+
+        let mut ok = mk_result(vec![step(0, "点击 [\"A\"]", None)]);
+        ok.device = Some("web".into());
+        let mut bad = mk_result(vec![{
+            let mut s = step(0, "点击 [\"没有的东西\"]", None);
+            s.success = false;
+            s.error = Some("元素未找到".into());
+            s
+        }]);
+        bad.success = false;
+        bad.device = Some("web".into());
+
+        // ① 没给结论：不许出现"失败"字样的徽章，只说"已完成"
+        let html = write(&crate::TaskLog { batches: vec![bad, ok], ..Default::default() });
+        assert!(html.contains("已完成"), "没人下结论时该是中性措辞:{}", &html[..400.min(html.len())]);
+        assert!(html.contains("步未成"), "步骤级要如实说有一步没成");
+        assert!(!html.contains(r#"badge b-ng"#), "不该自作主张判失败");
+
+        // ② 调用方说通过：徽章就是通过，哪怕中间有一步没命中
+        let mut t = crate::TaskLog::load(&dir.join("log.json"));
+        t.verdict = Some(crate::Verdict::Pass);
+        t.task = Some("验证播放器面板".into());
+        t.summary = Some("换个方式点中了，功能正常".into());
+        let html = write(&t);
+        assert!(html.contains("badge b-ok"), "调用方说 pass 就是 pass");
+        assert!(html.contains("验证播放器面板"), "报告开头要写明这次验的是什么");
+        assert!(html.contains("换个方式点中了"), "结论说明要显示出来");
+
+        // ③ 只有被测对象真有问题才是"有问题"
+        let mut t = crate::TaskLog::load(&dir.join("log.json"));
+        t.verdict = Some(crate::Verdict::Fail);
+        let html = write(&t);
+        assert!(html.contains("有问题"), "fail 才判被测对象有问题");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// 任务报告的批次分隔行：**只在有信息量时才插**。
     /// 探索式使用(看一步、想一想、再走一步)会产生一长串"1 步"的批次——每批插一行的话，
     /// 人看到的全是"AI 分几次调的"，那是工具的实现细节，不是这次检查发生了什么。
@@ -995,7 +1084,7 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(
                 dir.join("log.json"),
-                serde_json::to_string(&crate::TaskLog { batches }).unwrap(),
+                serde_json::to_string(&crate::TaskLog { batches, ..Default::default() }).unwrap(),
             )
             .unwrap();
             let html =

@@ -24,8 +24,16 @@ const xpathOf = (el) => {
   }
   return '/' + segs.join('/');
 };
-const walk = (el) => {
+// SVG 的内部构件：图标画出来靠它们，但**没有一个是该单独点的目标**。
+// 它们会因为 cursor:pointer 从父按钮继承而全部变成 "clickable"，于是一个图标按钮
+// 能刷出 svg+path+rect+g 四五条记录 —— 实测某后台一屏 43 个元素里 30 个是这种噪音。
+const GRAPHIC = ['SVG','PATH','RECT','CIRCLE','ELLIPSE','LINE','POLYGON','POLYLINE',
+                 'G','USE','DEFS','MASK','CLIPPATH','TSPAN','STOP','LINEARGRADIENT'];
+
+const walk = (el, clickableAncestor) => {
   for (const child of el.children) {
+    // 声明在 if 外：下面递归时要把它传给子元素（块作用域里的 const 出不来）
+    let selfClickable = false;
     const r = child.getBoundingClientRect();
     const style = getComputedStyle(child);
     // 读屏专用元素（sr-only / screen-reader-text）必须排除：它们**人看不见但带着那行文字**，
@@ -85,15 +93,21 @@ const walk = (el) => {
         const cur = child.selectedOptions && child.selectedOptions[0];
         ownText = ((cur && cur.text) || '').trim().slice(0, 120);
       }
-      const clickable = ['A','BUTTON','SELECT'].includes(child.tagName) ||
-        ['INPUT','TEXTAREA'].includes(child.tagName) ||
-        child.onclick != null || style.cursor === 'pointer' ||
-        child.getAttribute('role') === 'button';
-      // 只收"有意义"的元素：可点击 / 有自身文字 / aria 标注 / 输入框；
-      // 纯包裹层(无文字、不可点的 div/svg/use 等)不入列表，避免噪音淹没 AI。
       const aria = child.getAttribute('aria-label') || '';
-      const meaningful = clickable || ownText || aria ||
-        child.tagName === 'INPUT' || child.tagName === 'TEXTAREA';
+      const tag = child.tagName.toUpperCase();
+      const isGraphic = GRAPHIC.includes(tag);
+      const isFormControl = ['INPUT','TEXTAREA','SELECT'].includes(tag);
+      // 这个元素**自己**是可点的吗。`cursor: pointer` 会被子元素继承，所以只有在
+      // **没有可点祖先**时才认它——否则按钮里的每个 span/svg/path 都会各算一条，
+      // 而它们点起来效果完全一样（实测：一个图标按钮刷出 4 条记录）
+      selfClickable = ['A','BUTTON'].includes(tag) || isFormControl ||
+        child.onclick != null || child.getAttribute('role') === 'button' ||
+        (style.cursor === 'pointer' && !clickableAncestor);
+      // 只收**人会去点、或人看得见的文字**：有自身文字 / aria 标注 / 表单控件 / 自身可点。
+      // 图形构件一律排除（除非它自己带了 aria/title —— 那种是真图标按钮）。
+      const meaningful = isGraphic
+        ? !!(aria || child.getAttribute('title'))
+        : (selfClickable || ownText || aria || isFormControl);
       if (meaningful) {
         out.push({
           tag: child.tagName.toLowerCase(),
@@ -101,7 +115,7 @@ const walk = (el) => {
           aria: aria,
           text: ownText,
           xpath: xpathOf(child),
-          clickable: clickable,
+          clickable: selfClickable,
           password: isPassword,
           options: optionList,
           x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
@@ -109,10 +123,11 @@ const walk = (el) => {
         });
       }
     }
-    walk(child);
+    // 把"祖先里已经有可点的了"传下去，子元素就不会因为继承 cursor:pointer 而重复上榜
+    walk(child, clickableAncestor || selfClickable);
   }
 };
-walk(document.body);
+walk(document.body, false);
 return out;
 "#;
 
