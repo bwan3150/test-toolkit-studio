@@ -27,9 +27,14 @@ pub struct ReportArgs {
     #[arg(long, value_parser = ["pass", "fail", "blocked"])]
     pub verdict: Option<String>,
 
-    /// 结论的一句话说明
+    /// 结论说明。**支持 Markdown**（表格/列表/加粗/小标题都会渲染出来）
     #[arg(long)]
     pub summary: Option<String>,
+
+    /// 从文件读结论（内容同 `--summary`）。**总结长、带表格时用这个**——
+    /// 一大段多行 Markdown 塞进命令行要跟引号和换行搏斗，先写成文件再指过来省事得多
+    #[arg(long, value_name = "文件")]
+    pub summary_file: Option<PathBuf>,
 
     /// 生成后用系统默认程序打开（mac=open / Linux=xdg-open / Windows=start）
     #[arg(long)]
@@ -53,7 +58,9 @@ pub async fn handle(args: ReportArgs) -> Result<()> {
     let is_task = args.dir.join("log.json").is_file();
 
     // 先把结论写进 log.json，再渲染——否则这次生成的报告里还是旧结论
-    if args.task.is_some() || args.verdict.is_some() || args.summary.is_some() {
+    if args.task.is_some() || args.verdict.is_some() || args.summary.is_some()
+        || args.summary_file.is_some()
+    {
         if !is_task {
             JsonOutput::error("这个目录不是任务布局（没有 log.json），写不了任务结论");
         }
@@ -62,7 +69,13 @@ pub async fn handle(args: ReportArgs) -> Result<()> {
         if let Some(v) = &args.task {
             t.task = Some(v.clone());
         }
-        if let Some(v) = &args.summary {
+        // --summary-file 优先：两个都给时，文件里那份通常才是完整的
+        if let Some(f) = &args.summary_file {
+            match std::fs::read_to_string(f) {
+                Ok(s) => t.summary = Some(s.trim().to_string()),
+                Err(e) => JsonOutput::error(format!("读不到 {}：{}", f.display(), e)),
+            }
+        } else if let Some(v) = &args.summary {
             t.summary = Some(v.clone());
         }
         if let Some(v) = &args.verdict {

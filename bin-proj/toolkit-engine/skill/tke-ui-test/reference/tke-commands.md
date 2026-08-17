@@ -109,7 +109,7 @@ tke report <目录> --full-image  # 原图版，逐像素复核用
 ~/.tke/logs/<任务简称>/
 ├── report.html   全程报告（自带截图，可直接转发）
 ├── screenshots/  每步标注截图
-├── pages/        每步**元素表**（tke 筛选归一化后）← 想回看页面读这个，别重新 fetch
+├── pages/        每步**元素表 JSON**（"这一页的元素库"）← 想回看页面读这个，别重新 fetch
 ├── raw_pages/    每步**原始页面**（浏览器 DOM / uiautomator 原文，没被 tke 动过）
 └── log.json      每批命令/成败/耗时 + 任务与结论
 ```

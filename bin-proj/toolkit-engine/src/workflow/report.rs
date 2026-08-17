@@ -212,8 +212,36 @@ fn parse_bounds(s: &str) -> Option<(i64, i64, i64, i64)> {
     (nums.len() >= 4).then(|| (nums[0], nums[1], nums[2], nums[3]))
 }
 
-/// 在页面结构里找**包含该坐标的最小元素**（最内层的那个才是真正被点到的）
-fn hit_test(xml: &str, x: i64, y: i64) -> Option<HitElement> {
+/// 在页面结构里找**包含该坐标的最小元素**（最内层的那个才是真正被点到的）。
+/// 新证据是 `pages/*.json`（元素表），老证据是 XML —— 两种都认。
+fn hit_test_any(text: &str, x: i64, y: i64) -> Option<HitElement> {
+    if text.trim_start().starts_with('[') {
+        return hit_test_json(text, x, y);
+    }
+    hit_test_xml(text, x, y)
+}
+
+/// 元素表 JSON 版：直接反序列化，比抠 XML 属性稳
+fn hit_test_json(json: &str, x: i64, y: i64) -> Option<HitElement> {
+    let els: Vec<crate::UIElement> = serde_json::from_str(json).ok()?;
+    els.iter()
+        .filter(|e| {
+            let b = &e.bounds;
+            x >= b.x1 as i64 && x <= b.x2 as i64 && y >= b.y1 as i64 && y <= b.y2 as i64
+        })
+        .map(|e| HitElement {
+            class: e.class_name.clone(),
+            text: e.text.clone().unwrap_or_default(),
+            desc: e.content_desc.clone().unwrap_or_default(),
+            resource_id: e.resource_id.clone().unwrap_or_default(),
+            xpath: e.xpath.clone().unwrap_or_default(),
+            bounds: (e.bounds.x1 as i64, e.bounds.y1 as i64, e.bounds.x2 as i64, e.bounds.y2 as i64),
+            clickable: e.clickable,
+        })
+        .min_by_key(|e| e.area())
+}
+
+fn hit_test_xml(xml: &str, x: i64, y: i64) -> Option<HitElement> {
     let mut best: Option<HitElement> = None;
     for tag in xml.split('<').filter(|t| t.starts_with("node ")) {
         let Some(b) = parse_bounds(&attr(tag, "bounds")) else { continue };
@@ -297,7 +325,21 @@ h1{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}
   display:flex;gap:10px;align-items:baseline}
 .t-k{flex-shrink:0;color:var(--txt3);font-size:11px;padding:1px 7px;border-radius:4px;
   background:var(--bg);border:1px solid var(--border)}
+/* 任务/结论卡片：报告里最该先看到的东西，给它独立的一块 */
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:16px 18px;margin-bottom:14px}
+.c-blk+.c-blk{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.c-k{font-size:11px;color:var(--txt3);letter-spacing:.06em;margin-bottom:6px}
+.c-v{font-size:13.5px;line-height:1.6;color:var(--txt)}
 .t-md{min-width:0}
+/* 表格：窄屏/长表横向滚动，别把整页撑破 */
+.t-tw{overflow-x:auto;margin:8px 0}
+.t-md table{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.t-md th,.t-md td{border:1px solid var(--border);padding:5px 10px;text-align:left;
+  white-space:nowrap;vertical-align:top}
+.t-md th{background:var(--bg);font-weight:650;color:var(--txt2)}
+.t-md h4,.t-md h5{margin:10px 0 6px;font-size:13px;font-weight:650}
+.t-md h5{font-size:12.5px;color:var(--txt2)}
 .t-md p{margin:0 0 6px} .t-md p:last-child{margin-bottom:0}
 .t-md ul,.t-md ol{margin:0 0 6px;padding-left:20px} .t-md li{margin:2px 0}
 .t-md code{font-family:var(--mono);font-size:12px;padding:1px 5px;border-radius:4px;
@@ -657,7 +699,7 @@ fn target_block(
         );
     };
 
-    let Some(el) = hit_test(&xml, x, y) else {
+    let Some(el) = hit_test_any(&xml, x, y) else {
         return format!(
             r#"<details class="tgt"><summary>
       <span class="t-src" style="background:var(--ng)">坐标</span>
@@ -835,7 +877,6 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
     <h1>{title}</h1>
     <span class="badge {badge_cls}">{badge_txt}</span>
   </div>
-  {task_row}
   <div class="chips">
     <span class="chip c-ok"><b>{passed}</b> 步成功</span>
     {failed_chip}
@@ -852,6 +893,7 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
     <a class="fbtn" href="{file_dir}">打开检查目录</a>
   </div>
 </header>
+{task_card}
 {body}
 </div>
 </body>
@@ -863,20 +905,30 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
         // 没人给结论时不下判断，只说"已完成"（此前一步没命中就整份标"失败"，是在撒谎）。
         badge_cls = meta.verdict.map(|v| v.badge().0).unwrap_or("b-nu"),
         badge_txt = meta.verdict.map(|v| v.badge().1).unwrap_or("已完成"),
-        task_row = {
-            let mut s = String::new();
-            if let Some(task) = &meta.task {
-                s.push_str(&format!(r#"<div class="task"><span class="t-k">任务</span>{}</div>"#, esc(task)));
+        // 任务与结论**独立成卡片**放在最前面：人打开报告第一眼要看的就是
+        // "要验什么"和"结论是什么"，把它们挤在标题行旁边等于藏起来
+        task_card = {
+            if meta.task.is_none() && meta.summary.is_none() {
+                String::new()
+            } else {
+                let mut s = String::from(r#"<section class="card">"#);
+                if let Some(task) = &meta.task {
+                    s.push_str(&format!(
+                        r#"<div class="c-blk"><div class="c-k">任务</div><div class="c-v">{}</div></div>"#,
+                        esc(task)
+                    ));
+                }
+                if let Some(sum) = &meta.summary {
+                    // 总结按 **Markdown** 渲染：AI 写表格/列表/多段是常态，塞进一行读不了。
+                    // 在 Rust 侧转好（不往报告里塞 JS——它得离线、内网、转 PDF 都能看）
+                    s.push_str(&format!(
+                        r#"<div class="c-blk"><div class="c-k">结论</div><div class="c-v t-md">{}</div></div>"#,
+                        crate::workflow::markdown::to_html(sum)
+                    ));
+                }
+                s.push_str("</section>");
+                s
             }
-            if let Some(sum) = &meta.summary {
-                // 总结按 **Markdown** 渲染：AI 写多段/列表/加粗是常态，塞进一行读不了。
-                // 在 Rust 侧转好（不往报告里塞 JS——它得离线、内网、转 PDF 都能看）
-                s.push_str(&format!(
-                    r#"<div class="task"><span class="t-k">结论</span><div class="t-md">{}</div></div>"#,
-                    crate::workflow::markdown::to_html(sum)
-                ));
-            }
-            s
         },
         passed = passed,
         all_steps = all_steps,

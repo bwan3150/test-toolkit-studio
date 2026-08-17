@@ -154,12 +154,23 @@ impl RunArtifacts {
             None
         };
 
-        // 页面结构文件：原样复制
+        // 页面结构：存**解析后的元素表 JSON**，而不是内部那份 XML。
+        // 这份等于"当前页面的元素库"——AI 直接读就知道页面上有什么、能点什么、
+        // 各自在哪（也是将来把一次性检查固化成脚本的底料）。
+        // 落盘用紧凑 JSON：一个元素一行，几十个元素也就几 KB。
+        let json_name = format!("step_{:03}.json", seq);
         let xml = if src_xml.exists() && std::fs::create_dir_all(&self.page_dir).is_ok() {
-            let dst = self.page_dir.join(&xml_name);
-            std::fs::copy(&src_xml, &dst)
-                .ok()
-                .map(|_| format!("pages/{}", xml_name))
+            match crate::Fetcher::new().fetch_elements_from_file(&src_xml) {
+                Ok(els) => serde_json::to_string_pretty(&els)
+                    .ok()
+                    .and_then(|s| std::fs::write(self.page_dir.join(&json_name), s).ok())
+                    .map(|_| format!("pages/{}", json_name)),
+                // 解析不了就退回原样复制，总比什么都不留强
+                Err(_) => {
+                    let dst = self.page_dir.join(&xml_name);
+                    std::fs::copy(&src_xml, &dst).ok().map(|_| format!("pages/{}", xml_name))
+                }
+            }
         } else {
             None
         };
