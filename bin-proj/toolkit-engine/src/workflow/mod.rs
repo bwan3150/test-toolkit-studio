@@ -5,6 +5,7 @@
 
 pub mod events;
 pub mod artifacts;
+pub mod markdown;
 pub mod report;
 pub mod script_runner;
 pub mod flow;

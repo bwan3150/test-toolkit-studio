@@ -300,6 +300,15 @@ impl WebDriver {
         let elements = self.execute(normalize::DOM_WALK_JS, serde_json::json!([]))?;
         let xml = normalize::dom_elements_to_xml(&elements);
         std::fs::write(workarea.ui_tree_path(), xml).map_err(TkeError::IoError)?;
+
+        // 另存一份**未经加工的 DOM**：归一化会按可见性/可点性筛掉一大批节点，
+        // 筛得对不对、有没有漏掉真该点的东西，只有对着原文才看得出来。
+        // 取不到不算错——原文是给人和 AI 参照的，缺了不影响这一步执行。
+        if let Ok(html) = self.execute("return document.documentElement.outerHTML;", serde_json::json!([])) {
+            if let Some(s) = html.as_str() {
+                let _ = std::fs::write(workarea.raw_page_path("html"), s);
+            }
+        }
         Ok(())
     }
 

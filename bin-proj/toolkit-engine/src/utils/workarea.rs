@@ -59,6 +59,15 @@ impl Workarea {
         self.dir.join("current_ui_tree.xml")
     }
 
+    /// **驱动直接给的原始页面**（web=DOM 原文 .html，安卓/iOS=驱动原生 XML）。
+    ///
+    /// 与 `ui_tree_path()` 的区别是这份**没被 tke 动过**：
+    ///   - 给 AI 一个"页面本来长什么样"的参照，判断某个元素是不是被我们漏采了
+    ///   - 也是脚本持久化的底料——将来页面改版，对着两份原文才看得出改了什么
+    pub fn raw_page_path(&self, ext: &str) -> PathBuf {
+        self.dir.join(format!("current_raw_page.{}", ext))
+    }
+
     /// 清理：临时区删除整个目录，设备缓存区不动
     pub fn cleanup(&self) {
         if self.is_temp {

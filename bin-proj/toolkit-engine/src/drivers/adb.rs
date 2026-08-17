@@ -109,6 +109,10 @@ impl AdbDriver {
         // 删除设备上的临时文件
         self.run_adb_command(&["shell", "rm", temp_path])?;
 
+        // uiautomator 的输出本身就是原文，复制一份进 raw：解析层会筛掉一批节点，
+        // 有了这份才对得出"是不是漏采了"（web 那边同理，见 web/mod.rs）
+        let _ = std::fs::copy(output_path, output_path.with_file_name("current_raw_page.xml"));
+
         Ok(())
     }
     

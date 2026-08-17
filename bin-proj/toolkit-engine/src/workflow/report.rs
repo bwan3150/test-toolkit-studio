@@ -297,6 +297,12 @@ h1{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}
   display:flex;gap:10px;align-items:baseline}
 .t-k{flex-shrink:0;color:var(--txt3);font-size:11px;padding:1px 7px;border-radius:4px;
   background:var(--bg);border:1px solid var(--border)}
+.t-md{min-width:0}
+.t-md p{margin:0 0 6px} .t-md p:last-child{margin-bottom:0}
+.t-md ul,.t-md ol{margin:0 0 6px;padding-left:20px} .t-md li{margin:2px 0}
+.t-md code{font-family:var(--mono);font-size:12px;padding:1px 5px;border-radius:4px;
+  background:var(--bg);border:1px solid var(--border)}
+.t-md strong{font-weight:650}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .chip{padding:3px 10px;border-radius:6px;font-size:12px;font-family:var(--mono);
   background:var(--bg);border:1px solid var(--border);color:var(--txt2)}
@@ -863,7 +869,12 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
                 s.push_str(&format!(r#"<div class="task"><span class="t-k">任务</span>{}</div>"#, esc(task)));
             }
             if let Some(sum) = &meta.summary {
-                s.push_str(&format!(r#"<div class="task"><span class="t-k">结论</span>{}</div>"#, esc(sum)));
+                // 总结按 **Markdown** 渲染：AI 写多段/列表/加粗是常态，塞进一行读不了。
+                // 在 Rust 侧转好（不往报告里塞 JS——它得离线、内网、转 PDF 都能看）
+                s.push_str(&format!(
+                    r#"<div class="task"><span class="t-k">结论</span><div class="t-md">{}</div></div>"#,
+                    crate::workflow::markdown::to_html(sum)
+                ));
             }
             s
         },

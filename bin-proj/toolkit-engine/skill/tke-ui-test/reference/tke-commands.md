@@ -102,3 +102,17 @@ tke report <目录> --full-image  # 原图版，逐像素复核用
 
 `--verdict`：`pass`=功能可用 / `fail`=**被测对象有问题** / `blocked`=没验成。
 **某一步没点中不算 `fail`**——那是过程里的无效尝试，见 SKILL.md。
+
+## 证据目录里有什么
+
+```
+~/.tke/logs/<任务简称>/
+├── report.html   全程报告（自带截图，可直接转发）
+├── screenshots/  每步标注截图
+├── pages/        每步**元素表**（tke 筛选归一化后）← 想回看页面读这个，别重新 fetch
+├── raw_pages/    每步**原始页面**（浏览器 DOM / uiautomator 原文，没被 tke 动过）
+└── log.json      每批命令/成败/耗时 + 任务与结论
+```
+
+`pages/` vs `raw_pages/`：实测同一页 **原始 1151 个标签 → 元素表 74 个**。
+定位不到某个元素时对比这两份，就知道是被筛掉了还是页面上根本没有。

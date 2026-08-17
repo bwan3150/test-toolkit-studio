@@ -41,8 +41,10 @@ pub struct RunArtifacts {
     pub run_dir: PathBuf,
     /// 截图序列目录
     screenshots_dir: PathBuf,
-    /// 页面结构序列目录
+    /// 页面结构序列目录（tke 归一化后的元素表）
     page_dir: PathBuf,
+    /// 原始页面序列目录（驱动直给，没被 tke 动过）
+    raw_page_dir: PathBuf,
     /// 本批步骤编号的起点：Task 布局下续写已有序列，从已存在的最大编号往后接
     step_offset: usize,
     /// 文字标注字体（系统字体，加载失败则不画文字）
@@ -84,10 +86,12 @@ impl RunArtifacts {
         std::fs::create_dir_all(&run_dir).map_err(TkeError::IoError)?;
         let screenshots_dir = run_dir.join("screenshots");
         let page_dir = run_dir.join("pages");
+        let raw_page_dir = run_dir.join("raw_pages");
         Ok(Self {
             run_dir,
             screenshots_dir,
             page_dir,
+            raw_page_dir,
             step_offset: 0,
             font: load_system_font(),
         })
@@ -159,6 +163,19 @@ impl RunArtifacts {
         } else {
             None
         };
+
+        // **驱动直给的原文**（web=.html / 移动端=.xml）另存一份。
+        // `pages/` 里是 tke 筛选归一化后的元素表——好读、能直接拿来定位；
+        // `raw_pages/` 是没动过的原始页面——用来回答"这个元素是被我们筛掉了，
+        // 还是压根没采到"，也是将来页面改版时做脚本持久化的底料。
+        // 拿不到就跳过：它是参照物，缺了不影响这一步。
+        for ext in ["html", "xml"] {
+            let src_raw = workarea.raw_page_path(ext);
+            if src_raw.exists() && std::fs::create_dir_all(&self.raw_page_dir).is_ok() {
+                let _ = std::fs::copy(&src_raw, self.raw_page_dir.join(format!("step_{:03}.{}", seq, ext)));
+                break;
+            }
+        }
 
         (screenshot, xml)
     }

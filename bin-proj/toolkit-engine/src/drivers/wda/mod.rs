@@ -277,6 +277,10 @@ impl WdaDriver {
             .as_str()
             .ok_or_else(|| TkeError::DeviceError("UI 结构响应无数据".to_string()))?;
 
+        // WDA 给的 XCUI 原文先存一份：normalize 会做坐标换算与筛选，
+        // 对得上原文才知道某个控件是被筛掉了还是压根没采到（web/adb 同理）
+        let _ = std::fs::write(workarea.raw_page_path("xml"), source);
+
         let xml = normalize::normalize_xcui_xml(source, conn.scale)?;
         std::fs::write(workarea.ui_tree_path(), xml).map_err(TkeError::IoError)?;
         Ok(())
