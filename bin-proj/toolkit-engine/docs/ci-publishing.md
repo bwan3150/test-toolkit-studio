@@ -142,7 +142,7 @@ macos-14/15/26，**全是 Apple Silicon**。所以 `darwin-amd64` 改成在 arm6
 tke/
 ├── install.sh
 ├── VERSION                       # 第一行 tke 版本(体检比对)；build 戳=破缓存键
-├── skill/tke-ui-test.tar.gz
+├── skill/tke-ui-test.tar.gz     # 包内含一份 VERSION 副本(ADR-0014,doctor 据此判断 skill 是否过期)
 ├── bin/<platform>/               # darwin-arm64 / darwin-amd64 / linux-amd64 / windows-amd64
 │   ├── tke.gz
 │   ├── chromedriver.gz
