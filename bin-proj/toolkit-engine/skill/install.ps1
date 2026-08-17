@@ -261,14 +261,9 @@ try {
     $health = $LASTEXITCODE
 
     Write-Host ""
+    # 结论上面的体检已经说过了，这里只补一句它不会讲的：怎么用
     if ($health -eq 0) {
-        Write-Host "  $Bd${Gn}装好了$Rs —— 在 Claude Code 里直接提需求即可："
-        Write-Host "    $Dm「我刚改完设置页的保存按钮，帮我在浏览器上验一下真的能存」$Rs"
-        Write-Host "    ${Dm}或显式调用 /tke-ui-test$Rs"
-    } else {
-        # 如实反映：文件装好了不等于能用（INV-9）
-        Write-Host "  $Bd${Ye}文件装好了，但环境还不完整$Rs —— 现在跑不了检查。"
-        Write-Host "    补齐：$Bd tke doctor --fix --profile $Profile$Rs"
+        Write-Host "  在 Claude Code 中输入 $Bd/tke-ui-test$Rs 以调用"
     }
     Write-Host "  $Dim升级 tke update  ·  卸载 tke uninstall$Rs"
     if ($health -ne 0) { exit 1 }

@@ -289,12 +289,10 @@ HEALTH=0
 "$TKE_HOME/tke" fix --check --profile "$PROFILE" || HEALTH=1
 
 printf '\n'
+# 结论**上面的体检已经说过了**（"✓ 全局已就绪" / "✗ 环境不完整 · 补齐：…"），
+# 这里再说一遍就是重复。只补一句体检不会讲的、装完才有意义的事：怎么用。
 if [ "$HEALTH" = "0" ]; then
-    printf '  %s%s全局已就绪%s，在 Claude Code 中输入 %s/tke-ui-test%s 以调用\n' \
-        "$C_B" "$C_OK" "$C_R" "$C_B" "$C_R"
-else
-    # 如实反映：文件装好了不等于能用（INV-9）
-    printf '  %s%s环境还不完整%s  补齐：%stke doctor --fix%s\n' "$C_B" "$C_WARN" "$C_R" "$C_B" "$C_R"
+    printf '  在 Claude Code 中输入 %s/tke-ui-test%s 以调用\n' "$C_B" "$C_R"
 fi
 printf '  %s升级 tke update  ·  卸载 tke uninstall%s\n' "$C_DIM" "$C_R"
 [ "$HEALTH" = "0" ] || exit 1
