@@ -176,7 +176,16 @@ try {
             # 分发源上统一不带 .exe，落地时补回来——否则 Windows 上执行不了
             $leaf = if ($Name -like '*.*') { $Name } else { "$Name.exe" }
             $dest = Join-Path $TkeHome $leaf
-            Remove-Item $dest -Force -ErrorAction SilentlyContinue
+            # Windows 锁住**正在运行**的 exe：删不掉，但**可以改名**。
+            # `tke update` 是 tke 自己拉起这个脚本的，那时 tke.exe 正在跑——
+            # 不改名就会卡在这一步报"另一个程序正在使用此文件"。
+            # 改开后原位就空出来了，旧文件下次安装时清掉（此刻还被占用，删不动）。
+            Get-ChildItem -Path $TkeHome -Filter '*.old-*' -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+            if (Test-Path $dest) {
+                try { Remove-Item $dest -Force -ErrorAction Stop }
+                catch { Move-Item $dest "$dest.old-$(Get-Random)" -Force }
+            }
             Expand-Gzip -In $gz -Out $dest
             Write-Host "  $SOK $leaf"
             return $true
@@ -259,7 +268,7 @@ try {
         Write-Host "  $Bd${Ye}文件装好了，但环境还不完整$Rs —— 现在跑不了检查。"
         Write-Host "    补齐：$Bd tke doctor --fix --profile $Profile$Rs"
     }
-    Write-Host "  ${Dm}卸载：irm $BaseUrl/uninstall.ps1 | iex$Rs"
+    Write-Host "  $Dim升级 tke update  ·  卸载 tke uninstall$Rs"
     if ($health -ne 0) { exit 1 }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

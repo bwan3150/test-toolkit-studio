@@ -57,24 +57,19 @@ impl Staleness {
     }
 
     /// 给人看的一行提醒（没落后就是 None）。
-    /// 措辞刻意保守：本地可能是**刚编出来的**、比分发源还新，所以说"不一致"而不是"该更新了"。
+    /// **只说有更新 + 怎么更新**，版本号那些细节留给 `tke doctor`——
+    /// 这行是缀在别人正干着的活后面的，不该抢戏，更不该甩一条一百多字符的 curl 命令。
     pub fn hint(&self) -> Option<String> {
         if !self.any_stale() {
             return None;
         }
         let what = match (self.tke_stale, self.skill_stale) {
-            (true, true) => "tke 与 skill".to_string(),
-            (true, false) => format!("tke（本地 {} / 分发源 {}）", self.local_tke, self.remote.tke),
-            (false, true) => {
-                let l = self.local_skill_build.as_deref().unwrap_or("未知");
-                format!("skill（本地 {} / 分发源 {}）", short_build(l), short_build(&self.remote.build))
-            }
+            (true, true) => "tke 与 skill",
+            (true, false) => "tke",
+            (false, true) => "skill",
             (false, false) => return None, // 上面已提前返回，这里只是让编译器满意
         };
-        Some(format!(
-            "{} 与分发源不一致 —— 更新：curl -fsSL {}/install.sh | bash",
-            what, DEFAULT_BASE_URL
-        ))
+        Some(format!("{} 有可用更新　更新：tke update", what))
     }
 }
 
@@ -249,9 +244,9 @@ mod tests {
         assert_eq!(short_build("weird"), "weird");
     }
 
-    /// 提醒措辞不能暗示方向——本地可能是刚编出来的、比分发源还新
+    /// 提醒要短、且指向 `tke update`——它是缀在别人正干着的活后面的，不该甩一条长 URL
     #[test]
-    fn hint_says_inconsistent_not_outdated() {
+    fn hint_is_short_and_points_at_update_command() {
         let s = Staleness {
             local_tke: "0.7.4-beta".into(),
             remote: Remote { tke: "0.7.5-beta".into(), build: "20260817-010101".into() },
@@ -261,8 +256,9 @@ mod tests {
             skill_stale: true,
         };
         let h = s.hint().unwrap();
-        assert!(h.contains("不一致"), "{}", h);
-        assert!(h.contains("install.sh"), "要给出更新命令:{}", h);
+        assert!(h.contains("tke update"), "要给出更新命令:{}", h);
+        assert!(!h.contains("http"), "别在这行甩 URL（细节留给 doctor）:{}", h);
+        assert!(h.chars().count() < 40, "这行要短:{}", h);
 
         // 没落后就不该有提醒
         let ok = Staleness::default();

@@ -26,5 +26,7 @@ pub mod tools;
 pub use atomic::{RefreshArgs, FetchArgs, RecognizeArgs, ControlCommands};
 pub use workflow::{RunArgs, StepsArgs, HarnessArgs};
 pub use fix::FixArgs;
+pub mod selfmanage;
+pub use selfmanage::{UpdateArgs, UninstallArgs};
 pub use report::ReportArgs;
 pub use tools::{FileCommands, AppCommands, DeviceCommands, ElementCommands};

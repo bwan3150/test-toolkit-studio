@@ -72,7 +72,7 @@ case "$REMOTE_VER" in
             echo "  ✅ ${LOCAL_VER}（已是分发源上的版本）"
         else
             echo "  ⬆️  本地 $LOCAL_VER ／ 分发源 $REMOTE_VER"
-            echo "     更新：curl -fsSL $TKE_BASE_URL/install.sh | bash"
+            echo "     更新：tke update"
         fi
         ;;
     *)

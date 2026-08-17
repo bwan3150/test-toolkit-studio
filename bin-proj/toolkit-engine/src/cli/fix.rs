@@ -266,11 +266,12 @@ fn print_health(exe_dir: &Path, missing: usize) {
     match &st {
         None => println!("  {} {} {}", dim("版本    "), local, dim("· 离线，未校验")),
         Some(s) if s.tke_stale => {
+            // 只说"有新的"，版本号细节走 dim——人要的是"该不该动手"，不是两串数字对比
             println!(
                 "  {} {} {}",
                 dim("版本    "),
-                format!("本地 {} ／ 分发源 {}", local, s.remote.tke),
-                sym_warn()
+                "可用更新",
+                dim(&format!("· {} → {}", local, s.remote.tke))
             );
         }
         Some(_) => println!("  {} {} {}", dim("版本    "), "已是最新", dim(&format!("· {}", local))),
@@ -281,21 +282,12 @@ fn print_health(exe_dir: &Path, missing: usize) {
     // （Q-11 就是这么发生的：改完的四个修复根本没送到用户手上）。
     if let Some(s) = &st {
         match (&s.skill_dir, &s.local_skill_build) {
-            (Some(dir), Some(_)) if s.skill_stale => {
+            (Some(_), Some(_)) if s.skill_stale => {
                 println!(
                     "  {} {} {}",
                     dim("skill   "),
-                    format!(
-                        "本地 {} ／ 分发源 {}",
-                        s.local_skill_build.as_deref().unwrap_or("?"),
-                        s.remote.build
-                    ),
-                    sym_warn()
-                );
-                println!("    {}", dim(&format!("{}", dir.display())));
-                println!(
-                    "    {}",
-                    dim("更新：curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash")
+                    "可用更新",
+                    dim(&format!("· {}", s.remote.build))
                 );
             }
             (Some(_), Some(_)) => println!("  {} {}", dim("skill   "), "已是最新"),
@@ -333,6 +325,10 @@ fn print_health(exe_dir: &Path, missing: usize) {
             missing,
             dim("　补齐：tke doctor --fix")
         );
+    }
+    // 更新提示只出现一次：tke 和 skill 谁旧都是同一条命令，分开说两遍是噪音
+    if st.as_ref().is_some_and(|s| s.any_stale()) {
+        println!("  {} 有可用更新{}", sym_warn(), dim("　更新：tke update"));
     }
 }
 

@@ -7,6 +7,27 @@
 
 ## [Unreleased]
 
+### 2026-08-17 · `tke update` / `tke uninstall` + 更新提示收敛(用户反馈"这个不好看")
+用户:"这个不好看,就直接告诉用户有可用更新,然后提示用什么一行指令更新就好了……
+这么看是不是应该有个 tke update 和 tke uninstall 的指令?"
+- **style(提示收敛)** 原来三行(本地/分发源对比 + 路径 + 一条 100+ 字符的 curl)压成一行:
+  体检里是 `skill  可用更新 · 20260817-040034`(版本号走 dim),**更新命令只在结论区出现一次**
+  (`! 有可用更新　更新：tke update`)——tke 和 skill 谁旧都是同一条命令,说两遍是噪音。
+  `steps` 缀的那行同样收成 `! skill 有可用更新　更新：tke update`
+- **feat** `tke update` / `tke uninstall`:**不另起一套逻辑,就是去跑官方 install.sh / uninstall.sh**
+  (重写一遍只会多一条必然分叉的路径)。`uninstall` 支持 `--logs/--chrome/--all/--dry-run`,
+  默认问一句
+- **feat(exec 交接)** 用户原话:"执行这个 curl 指令然后立刻放手,让 sh 脚本来替换自己"——
+  **Unix 用 `exec` 把本进程替换掉**:tke 就此消失、bash 接管同一个 PID 与前台,
+  输出/Ctrl+C/退出码全部照常,而且**没有任何进程还占着 tke 的可执行文件**。
+  Windows 没有 exec,只能 spawn 等待,故 `install.ps1` 补了"删不掉就改名"的兜底
+  (Windows 允许重命名运行中的文件)
+- **安全** **不用 `curl … | bash`**:分发平台对不存在的路径回落 200 + HTML(P-19),
+  管道执行会把网页喂给 bash。先落地、**验文件头**(`#!` / `<#`)再执行;加了 CLI 契约测试
+- **docs** 安装器结尾从 curl 卸载命令改成 `升级 tke update · 卸载 tke uninstall`
+- **验证** `uninstall --dry-run` 走通 exec 交接;`update --profile web` 完整链路实测
+  (下载→装→体检→"全局已就绪");指向 SPA 路径时如实拒绝执行。lib 75/75 + CLI 27/27(+2)
+
 ### 2026-08-17 · 浏览器默认无头 + 凭据不落进证据(ADR-0015)
 用户:"能否默认跑无头?**有头会和用户抢鼠标**。"顺着这条又定了凭据怎么处理。
 - **feat(默认无头)** `Auto` 从"按桌面探测"改为**恒定无头**。无头与有头渲染早已验证一致

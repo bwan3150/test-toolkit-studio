@@ -42,6 +42,8 @@ pub fn build_help() -> String {
 
 {c}环境{r}
   {g}doctor{r}       环境体检 {d}(依赖齐不齐·设备连没连·版本与 skill 跟不跟得上；不下载任何东西){r}
+  {g}update{r}       升级到最新版 {d}(tke 与 skill 一起；跑官方安装脚本){r}
+  {g}uninstall{r}    卸载 {d}(默认保留日志与 Chrome；--logs / --chrome / --all 一并删){r}
   {g}doctor --fix{r} 顺带补齐缺的依赖 {d}(chromedriver/Chrome/adb/go-ios；唯一会联网下载的命令){r}
   {d}fix 是 doctor --fix 的别名，老写法照常能用{r}
 

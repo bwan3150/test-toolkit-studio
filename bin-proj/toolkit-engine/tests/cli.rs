@@ -356,3 +356,33 @@ fn fix_check_still_accepted() {
     // 只体检就不该出现下载动作
     assert!(!s.contains("要现在下载补齐吗"), "--check 不该询问下载:{}", s);
 }
+
+/// update / uninstall 装配正确（ADR-0014：人不该被要求记一串 curl URL）
+#[test]
+fn update_and_uninstall_are_registered() {
+    for (cmd, flag) in [("update", "--profile"), ("uninstall", "--dry-run")] {
+        let o = tke().args([cmd, "--help"]).output().unwrap();
+        let s = format!("{}{}", stdout(&o), stderr(&o));
+        assert!(o.status.success(), "{} --help 应退出 0:{}", cmd, s);
+        assert!(s.contains(flag), "{} 应有 {}:{}", cmd, flag, s);
+    }
+}
+
+/// **绝不执行下载到的非脚本内容**：分发平台对不存在的路径回落 200 + HTML(P-19),
+/// `curl … | bash` 会把网页喂给 bash。这里必须先验文件头再执行。
+#[test]
+fn update_refuses_non_script_payload() {
+    let o = tke()
+        .args(["update"])
+        // 这个路径是 SPA 页面(少了 /sl/preview 前缀)，会回 200 + HTML
+        .env("TKE_BASE_URL", "https://cloud.test-toolkit.app/tookit-engine-resource/tke")
+        .output()
+        .unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    // 网络不通时会是"取不到"，同样算拒绝——两种都不该执行
+    assert!(
+        s.contains("不是脚本") || s.contains("取不到"),
+        "拿到网页必须拒绝执行:{}",
+        s
+    );
+}

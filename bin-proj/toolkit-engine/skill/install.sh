@@ -265,5 +265,5 @@ else
     # 如实反映：文件装好了不等于能用（INV-9）
     printf '  %s%s环境还不完整%s  补齐：%stke doctor --fix%s\n' "$C_B" "$C_WARN" "$C_R" "$C_B" "$C_R"
 fi
-printf '  %s卸载  curl -fsSL %s/uninstall.sh | bash%s\n' "$C_DIM" "$BASE_URL" "$C_R"
+printf '  %s升级 tke update  ·  卸载 tke uninstall%s\n' "$C_DIM" "$C_R"
 [ "$HEALTH" = "0" ] || exit 1

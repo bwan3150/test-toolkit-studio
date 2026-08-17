@@ -62,8 +62,8 @@ struct Cli {
     #[arg(long, global = true, num_args = 0..=1, default_missing_value = "true")]
     copilot: Option<bool>,
 
-    /// web 无头模式：auto（默认，无桌面自动走无头）/ on（强制无头）/ off（强制有头）。
-    /// 无头服务器、docker、CI 里无需指定——auto 会自动判断。裸 `--headless` 等价 `--headless=on`。
+    /// web 无头模式：auto（默认=无头，且沿用现有会话）/ on（强制无头）/ off（强制有头，
+    /// 开窗口给人手动登录用）。裸 `--headless` 等价 `--headless=on`。
     /// **必须用等号形式**（require_equals）：否则 `tke --headless run x.tks` 里的 `run`
     /// 会被当成本参数的值吃掉，子命令就没了（--copilot 踩过同类坑，见 tests/cli.rs 回归）
     #[arg(
@@ -128,6 +128,18 @@ enum Commands {
     Report {
         #[command(flatten)]
         args: ReportArgs,
+    },
+
+    /// [环境] 升级到最新版（跑官方安装脚本；tke 与 skill 一起更新）
+    Update {
+        #[command(flatten)]
+        args: UpdateArgs,
+    },
+
+    /// [环境] 卸载 tke 与 skill（默认保留日志与 Chrome）
+    Uninstall {
+        #[command(flatten)]
+        args: UninstallArgs,
     },
 
     /// [环境] 体检：依赖齐不齐、设备连没连、版本跟不跟得上（加 --fix 才联网补依赖）
@@ -288,6 +300,12 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Report { args } => {
             report::handle(args).await
+        }
+        Commands::Update { args } => {
+            cli::selfmanage::update(args).await
+        }
+        Commands::Uninstall { args } => {
+            cli::selfmanage::uninstall(args).await
         }
         Commands::Doctor { args } => {
             fix::handle(args).await
