@@ -388,3 +388,32 @@ grep -n 'execute(' -A2 src/drivers/web/mod.rs | grep '\["value"\]'   # 应为空
 curl -fsSL "$BASE/bin/<platform>/tke.gz?t=$RANDOM" | gunzip > /tmp/tke && chmod +x /tmp/tke
 /tmp/tke --help | grep doctor
 ```
+
+## P-32 (2026-08-17) 管道里的 `tr` 会把实时进度攒成一坨
+
+**现象**：安装 Chrome 时进度条"出来很慢"——盯着空白等半天，最后才一次性跳到 100% 变对钩。
+
+**原因**：这条流水线里 `tr` 是**块缓冲**的：
+
+```bash
+curl -#  … 2>&1 >/dev/null | tee log | tr '\r' '\n' | while read -r frame; do …
+```
+
+curl 的 `-#` 进度靠 `\r` 原地刷新、**一行到底不换行**，而 `tr` 输出到管道（不是终端）时
+按 4KB 块缓冲——要攒够 4KB 进度帧才吐给下游。10MB 的文件下完也攒不满几块，
+于是**整个下载期间一帧都不显示**，最后才全吐出来。
+
+**实测**：第一帧出现时间 **9.25s → 0.28s**（限速 1200k、约 9 秒下完的文件）。
+
+**做法**：管道里**别放会缓冲的外部命令**。按 `\r` 切帧用 bash 内建就够：
+
+```bash
+| while IFS= read -r -d $'\r' frame; do …
+```
+
+`stdbuf -oL` 能治 GNU 的 tr，但 **macOS 没有 stdbuf**，而安装脚本要三平台通用。
+
+**另一半是心理上的慢**：建连接/TLS 握手那几秒 curl 一个字节都不输出。
+先把 `· <名字> ` 打出来占位，人就知道"开始了"，而不是盯着空白猜。
+
+**自查**：给下载限速跑一遍，看第一帧多久出现——应当是零点几秒，不是下完才出现。

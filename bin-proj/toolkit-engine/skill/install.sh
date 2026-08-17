@@ -128,12 +128,18 @@ fetch() {
         # curl 的 `-#` 走 stderr、用 \r 原地刷新；把 \r 拆成行、逐帧重画整行，
         # 就能把「· 名字」和进度条拼在同一行上（\033[K 清掉上一帧的残尾）。
         # PIPESTATUS 取的是 curl 的退出码——管道最后一个是 while，它总是成功。
+        # 先把名字打出来：建连接/握手期间 curl 一个字节都不输出，
+        # 不先占位的话人要盯着**空白**等好几秒，才是真正的"慢"
+        printf '  %s %s ' "$S_DOT" "$label"
         # tee 留一份：curl 的**报错也走 stderr**，和进度帧混在一起。
         # 失败时进度条会被擦掉，不留一份就等于把失败原因也擦了（INV-9）
+        #
+        # ⚠️ 这里**不能用 `tr '\r' '\n'` 转一道**：tr 输出到管道时是**块缓冲**，
+        # 要攒够 4KB 进度帧才吐给下游，于是进度条迟迟不出现、出现后又一次跳好几帧。
+        # 改用 bash 内建的 `read -d`（按 \r 切帧），管道里就没有会缓冲的外部命令了。
         curl -fL# --retry 2 --max-time 1800 "$url" -o "$out" 2>&1 >/dev/null \
             | tee "$out.log" \
-            | tr '\r' '\n' \
-            | while IFS= read -r frame; do
+            | while IFS= read -r -d $'\r' frame; do
                   [ -n "$frame" ] && printf '\r  %s %s %s\033[K' "$S_DOT" "$label" "$frame"
               done
         local rc="${PIPESTATUS[0]}"
