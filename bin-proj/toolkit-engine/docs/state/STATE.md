@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-15
-Last-Commit: 600b1b95
+Last-Commit: 17bb7b00
 ---
 
 # 当前状态
@@ -28,6 +28,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | `fetch --wait-text` | ✅ 本机实测 | ADR-0013,关闭 Q-8。出现即返回/超时非零退出;skill 里的手写 shell 轮询范例全部替换。**跨设备真机待验** |
 | **浏览器默认无头 + 凭据脱敏** | ✅ 本机 web 实测 | ADR-0015:有头抢鼠标 → 默认无头;`Auto` 不算显式要求(否则手动登录的会话会被销毁);密码框的值在**采集/命令/报告/截图横幅**四处一律 `••••••`。**移动端密码框判据待真机验** |
 | **证据组织(一个任务一份)** | ✅ 本机实测 | 用户反馈"组织方式很乱"后重做:`--log` 就是任务目录、反复调用续写、步骤连续编号、`pages/`、报告默认压缩内嵌自包含(1.7MB→598KB)。**只改 steps**,run/flow/harness 维持时间戳目录。跨设备不再分目录 |
+| **自我管理 `tke update`/`uninstall`** | ✅ 本机实测 | ADR-0014 补充:**就是去跑官方 install.sh/uninstall.sh**;Unix 用 **exec 把自己替换掉**(放手,不占着自己的二进制),Windows spawn+改名兜底;**先验文件头再执行**(不用 `curl \| bash`,P-19 会喂 HTML 给 bash) |
 | **版本新鲜度 `tke doctor`** | ✅ 本机实测 | **Q-11 已关闭**(ADR-0014):`tke fix`→`tke doctor`(fix 保留别名);比 **build 戳**而非版本号;`steps` 每批提醒(缓存 4h/stderr/--json 闭嘴);只提醒不自更新。⚠️ **要等下一次发布把 VERSION 打进 skill 包后才对用户生效** |
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
 | 跨设备/跨平台测试 | ✅ 已实现,**AI 侧真机未验** | ADR-0011 全套:flow per-script device / 重试断言 / 设备成为工具参数 + list_devices;动态值传递未做(Q-7) |

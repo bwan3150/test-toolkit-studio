@@ -73,15 +73,6 @@ impl Staleness {
     }
 }
 
-/// `20260815-040547` → `08-15`，提示里够用了，不必让人读一长串
-fn short_build(b: &str) -> String {
-    if b.len() >= 8 && b.chars().take(8).all(|c| c.is_ascii_digit()) {
-        format!("{}-{}", &b[4..6], &b[6..8])
-    } else {
-        b.to_string()
-    }
-}
-
 fn base_url() -> String {
     std::env::var("TKE_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
 }
@@ -236,12 +227,6 @@ mod tests {
         assert!(r2.build.is_empty());
         // 拿到的是 SPA 兜底的 HTML（P-19）→ 不该被当成版本
         assert!(parse_remote("<!DOCTYPE html><html>").is_none());
-    }
-
-    #[test]
-    fn build_stamp_shortens_for_humans() {
-        assert_eq!(short_build("20260815-040547"), "08-15");
-        assert_eq!(short_build("weird"), "weird");
     }
 
     /// 提醒要短、且指向 `tke update`——它是缀在别人正干着的活后面的，不该甩一条长 URL
