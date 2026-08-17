@@ -360,12 +360,20 @@ fn fix_check_still_accepted() {
 /// update / uninstall 装配正确（ADR-0014：人不该被要求记一串 curl URL）
 #[test]
 fn update_and_uninstall_are_registered() {
-    for (cmd, flag) in [("update", "--profile"), ("uninstall", "--dry-run")] {
+    for cmd in ["update", "uninstall"] {
         let o = tke().args([cmd, "--help"]).output().unwrap();
         let s = format!("{}{}", stdout(&o), stderr(&o));
         assert!(o.status.success(), "{} --help 应退出 0:{}", cmd, s);
-        assert!(s.contains(flag), "{} 应有 {}:{}", cmd, flag, s);
     }
+    // `tke update` 要**零专属参数**：装的时候已经选过一次 profile，更新时按已装的推断
+    let o = tke().args(["update", "--help"]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(!s.contains("--profile"), "update 不该再要人选 profile:{}", s);
+    // 卸载只留一个好懂的开关；--dry-run 由确认提示里的清单取代
+    let o = tke().args(["uninstall", "--help"]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("--all"), "uninstall 应有 --all:{}", s);
+    assert!(!s.contains("--dry-run"), "--dry-run 已由确认清单取代:{}", s);
 }
 
 /// **绝不执行下载到的非脚本内容**：分发平台对不存在的路径回落 200 + HTML(P-19),
