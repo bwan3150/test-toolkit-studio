@@ -37,11 +37,13 @@ pub fn build_help() -> String {
 {c}工作流{r}
   {g}run{r}          执行 .tks 单脚本 或 .toml flow {d}(多脚本顺序执行){r}
   {g}steps{r}        不落文件执行一串指令  {d}例: tke steps \"点击 [{{登录按钮}}]\" \"等待 [2s]\"{r}
-  {g}report{r}       汇总一次检查的全流程报告 {d}例: tke report ~/.tke/logs/登录检查/（steps 会自动重建，跨设备时手动跑）{r}
+  {g}report{r}       重建一次检查的报告 {d}例: tke report ~/.tke/logs/登录检查/（steps 每批跑完会自动重建；--full-image 出原图版）{r}
   {g}harness{r}      AI 探索测试并生成脚本  {d}例: tke harness 用例.md --scripts 目录/（文件名 AI 起·简写 harn）{r}
 
 {c}环境{r}
-  {g}fix{r}          补齐缺失的运行依赖 {d}(chromedriver/Chrome/adb/go-ios；唯一会联网下载的命令。--check 只看不下){r}
+  {g}doctor{r}       环境体检 {d}(依赖齐不齐·设备连没连·版本与 skill 跟不跟得上；不下载任何东西){r}
+  {g}doctor --fix{r} 顺带补齐缺的依赖 {d}(chromedriver/Chrome/adb/go-ios；唯一会联网下载的命令){r}
+  {d}fix 是 doctor --fix 的别名，老写法照常能用{r}
 
 {c}自有工具{r}
   {g}ocr{r}          图片文字识别 {d}(离线 / 在线){r}

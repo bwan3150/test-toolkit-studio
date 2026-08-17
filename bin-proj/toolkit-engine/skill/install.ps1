@@ -257,7 +257,7 @@ try {
     } else {
         # 如实反映：文件装好了不等于能用（INV-9）
         Write-Host "  $Bd${Ye}文件装好了，但环境还不完整$Rs —— 现在跑不了检查。"
-        Write-Host "    补齐：$Bd tke fix --profile $Profile$Rs"
+        Write-Host "    补齐：$Bd tke doctor --fix --profile $Profile$Rs"
     }
     Write-Host "  ${Dm}卸载：irm $BaseUrl/uninstall.ps1 | iex$Rs"
     if ($health -ne 0) { exit 1 }

@@ -89,9 +89,9 @@ case "$OS" in
             CHROME_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/tke" ;;
     *)
         # Windows 还没有对应的安装脚本。可行路径：手工把 tke.exe 放进某个目录并加进
-        # PATH，然后 `tke fix` 补齐驱动（它是 Rust 写的，三平台都能跑）。
+        # PATH，然后 `tke doctor --fix` 补齐驱动（它是 Rust 写的，三平台都能跑）。
         echo "❌ 这个脚本只支持 macOS / Linux。" >&2
-        echo "   Windows：先手工放好 tke.exe 并加进 PATH，再跑 \`tke fix\` 补齐依赖。" >&2
+        echo "   Windows：先手工放好 tke.exe 并加进 PATH，再跑 \`tke doctor --fix\` 补齐依赖。" >&2
         exit 1 ;;
 esac
 
@@ -260,7 +260,7 @@ if [ "$HEALTH" = "0" ]; then
         "$C_B" "$C_OK" "$C_R" "$C_B" "$C_R"
 else
     # 如实反映：文件装好了不等于能用（INV-9）
-    printf '  %s%s环境还不完整%s  补齐：%stke fix%s\n' "$C_B" "$C_WARN" "$C_R" "$C_B" "$C_R"
+    printf '  %s%s环境还不完整%s  补齐：%stke doctor --fix%s\n' "$C_B" "$C_WARN" "$C_R" "$C_B" "$C_R"
 fi
 printf '  %s卸载  curl -fsSL %s/uninstall.sh | bash%s\n' "$C_DIM" "$BASE_URL" "$C_R"
 [ "$HEALTH" = "0" ] || exit 1

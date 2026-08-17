@@ -131,7 +131,7 @@ xattr -cr "chrome-mac-arm64/Google Chrome for Testing.app"   # macOS 必须清�
 ### 3. 验证
 
 ```bash
-tke fix --check      # 三平台通用
+tke doctor           # 三平台通用（体检，不下载）
 ```
 
 它会逐项告诉你 tke、chromedriver、Chrome、安卓设备的状态，以及当前会跑有头还是无头。

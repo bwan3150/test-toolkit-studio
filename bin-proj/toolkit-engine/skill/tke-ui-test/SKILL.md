@@ -28,22 +28,35 @@ description: 亲手操作真实浏览器 / 安卓 / iOS 设备，验证你刚写
 ## 第 0 步：环境体检
 
 ```bash
-tke fix --check
+tke doctor
 ```
 
-三平台通用（Windows 也是这条）。它会报：缺什么依赖、连了哪些安卓设备、版本、
-证据落点、这台机会跑有头还是无头。
+三平台通用（Windows 也是这条），**不下载任何东西**。它会报：缺什么依赖、连了哪些安卓设备、
+tke 版本、**这份 skill 是不是最新的**、证据落点、这台机会跑有头还是无头。
 
-不通过就告诉用户缺什么，别硬跑。**缺依赖（chromedriver / Chrome / adb / go-ios）可以一条命令补齐**：
+不通过就告诉用户缺什么，别硬跑。**缺依赖（chromedriver / Chrome / adb / go-ios）一条命令补齐**：
 
 ```bash
-tke fix --check          # 只看缺什么，不下载
-tke fix --profile web    # 补网页那套（会问一句再下）
-tke fix -y --profile web # 不问直接下
+tke doctor                    # 只体检，不下载
+tke doctor --fix --profile web    # 补网页那套（会问一句再下）
+tke doctor --fix -y --profile web # 不问直接下
 ```
 
-`tke fix` 是**唯一会联网下载的命令**——别的命令缺东西只会报错指路，不会偷偷拖几百 MB。
-Chrome 有 600MB，下之前**跟用户说一声**。
+`tke doctor --fix`（旧名 `tke fix`，仍可用）是**唯一会联网下载的命令**——
+别的命令缺东西只会报错指路，不会偷偷拖几百 MB。Chrome 有 600MB，下之前**跟用户说一声**。
+
+> ### 报告 skill 过期时，先让用户更新再干活
+>
+> 体检里如果出现这样一行，**先停下来告诉用户**：
+>
+> ```
+> skill    本地 20260813-000000 ／ 分发源 20260815-040547 !
+>          更新：curl -fsSL <分发源>/install.sh | bash
+> ```
+>
+> 你手上这份 SKILL.md 是旧的，**里面写的做法可能已经被修过了**——
+> 拿旧文档去跑，很容易复现一个早就修好的问题，然后得出"这东西不好使"的错误结论。
+> 更新只要一条命令、十几秒。（`tke steps` 也会在过期时缀一行提醒，别忽略它。）
 
 ## 设备怎么给
 
@@ -57,7 +70,7 @@ Chrome 有 600MB，下之前**跟用户说一声**。
 
 **iOS 只能在 macOS 上做**——设备上的 WebDriverAgent 必须先用 Xcode 装一次，而 Xcode 只有
 mac 有。在 Windows/Linux 上碰 iOS 设备，tke 会直接拦下并说明，别把时间花在那儿。
-（`tke fix --check` 会告诉你这台机器能做什么。）
+（`tke doctor` 会告诉你这台机器能做什么。）
 
 **安卓要启动 App 得知道包名 + Activity，不知道就查、别猜**：
 
@@ -249,13 +262,13 @@ tke 无状态、每条命令自带 `-d`，所以这本来就做得到——**难
 用这次专用的名字（带时间戳后缀），跟历史数据撞不上。
 
 ```bash
-tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log ~/.tke/logs/<任务简称>/phone-before/
+tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log ~/.tke/logs/<任务简称>/
 tke -d <序列号> fetch | grep -q "夜间回家-1430" && echo "⚠️ 起点就有同名的，换个名字"
 ```
 
 ```powershell
 # Windows（PowerShell）
-tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log $env:USERPROFILE\.tke\logs\<任务简称>\phone-before\
+tke -d <序列号> steps '启动 ["com.example.app", ".MainActivity"]' --log $env:USERPROFILE\.tke\logs\<任务简称>\
 if (tke -d <序列号> fetch | Select-String -SimpleMatch "夜间回家-1430") { "⚠️ 起点就有同名的，换个名字" }
 ```
 

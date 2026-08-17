@@ -10,6 +10,7 @@ pub mod deps;
 pub mod tklib;
 pub mod scroll;
 pub mod xml;
+pub mod update;
 
 pub use json_output::JsonOutput;
 pub use workarea::Workarea;

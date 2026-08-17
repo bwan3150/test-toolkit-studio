@@ -33,12 +33,12 @@ if [ -x "$TKE_DIR/chromedriver" ] || [ -x "$TKE_DIR/chromedriver.exe" ]; then
         echo "  ✅ Chrome for Testing 就位"
         targets=$((targets+1))
     else
-        echo "  ❌ 找不到 Chrome for Testing。补齐：tke fix --profile web（约 600MB）"
+        echo "  ❌ 找不到 Chrome for Testing。补齐：tke doctor --fix --profile web（约 600MB）"
         echo "     或手动解压官方 zip 到 $DATA/（保持原目录名，版本要与 chromedriver 配对）"
     fi
 else
     echo "  ❌ chromedriver 不在 tke 同目录（${TKE_DIR}）——tke 只在这里找，不搜 PATH"
-    echo "     补齐：tke fix --profile web"
+    echo "     补齐：tke doctor --fix --profile web"
 fi
 
 echo "== 安卓（-d <序列号>）=="
@@ -53,7 +53,7 @@ if command -v adb >/dev/null 2>&1 || [ -x "$TKE_DIR/adb" ]; then
         echo "  ⚠️  adb 可用但没有已连接设备"
     fi
 else
-    echo "  ⚠️  没有 adb（不做安卓检查就无所谓；要装：tke fix --profile android）"
+    echo "  ⚠️  没有 adb（不做安卓检查就无所谓；要装：tke doctor --fix --profile android）"
 fi
 
 echo "== 版本 =="

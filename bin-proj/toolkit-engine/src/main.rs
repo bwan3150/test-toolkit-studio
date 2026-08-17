@@ -130,7 +130,13 @@ enum Commands {
         args: ReportArgs,
     },
 
-    /// [环境] 补齐缺失的运行依赖（chromedriver / Chrome / adb / go-ios）——**唯一会联网下载的命令**
+    /// [环境] 体检：依赖齐不齐、设备连没连、版本跟不跟得上（加 --fix 才联网补依赖）
+    Doctor {
+        #[command(flatten)]
+        args: FixArgs,
+    },
+
+    /// [环境] 补齐缺失的运行依赖——**唯一会联网下载的命令**（= `doctor --fix` 的别名）
     Fix {
         #[command(flatten)]
         args: FixArgs,
@@ -283,8 +289,13 @@ async fn main() -> tke::Result<()> {
         Commands::Report { args } => {
             report::handle(args).await
         }
-        Commands::Fix { args } => {
+        Commands::Doctor { args } => {
             fix::handle(args).await
+        }
+        // 别名：`tke fix` 的旧语义是"默认就下载"，不能因为改名而变——
+        // 已发布的 install.sh 和用户脚本里全是这条
+        Commands::Fix { args } => {
+            fix::handle_as(args, true).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {

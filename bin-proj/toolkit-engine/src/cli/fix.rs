@@ -42,15 +42,19 @@ fn section(title: &str) {
 
 const DEFAULT_BASE_URL: &str = "https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke";
 
-/// Fix 命令参数
+/// Doctor 命令参数（`tke fix` 是它的别名，见 main.rs）
 #[derive(clap::Args)]
 pub struct FixArgs {
-    /// 只补这一类：web（浏览器）/ android / ios / all（默认，按平台补齐所有缺的）
+    /// 只看这一类：web（浏览器）/ android / ios / all（默认）
     #[arg(long, default_value = "all", value_parser = ["web", "android", "ios", "all"])]
     pub profile: String,
 
-    /// 只检查不下载——报告缺什么就退出（CI 里适合用这个 + 退出码判断）
+    /// 补齐缺失的依赖（**会联网下载**）。不加就只体检，一个字节都不下
     #[arg(long)]
+    pub fix: bool,
+
+    /// 只检查不下载 —— `tke fix --check` 的旧写法，等同于不加 `--fix`
+    #[arg(long, hide = true)]
     pub check: bool,
 
     /// 不询问直接下载（脚本/CI 里用）
@@ -60,6 +64,17 @@ pub struct FixArgs {
     /// 分发源地址（默认走官方源；也可用环境变量 TKE_BASE_URL）
     #[arg(long)]
     pub base_url: Option<String>,
+}
+
+impl FixArgs {
+    /// 这次要不要下载。`tke doctor` 默认只看；`tke fix`（别名）默认下载——
+    /// 老命令的语义不能变，用户的脚本和已发布的 install.sh 都还在用它。
+    fn wants_download(&self, invoked_as_fix: bool) -> bool {
+        if self.check {
+            return false; // --check 永远只看（旧写法）
+        }
+        self.fix || invoked_as_fix
+    }
 }
 
 /// 一件缺失的依赖
@@ -75,6 +90,12 @@ struct Missing {
 }
 
 pub async fn handle(args: FixArgs) -> Result<()> {
+    handle_as(args, false).await
+}
+
+/// `invoked_as_fix=true` 表示走的是 `tke fix` 别名——那条命令的旧语义是"默认就下载"
+pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
+    let download = args.wants_download(invoked_as_fix);
     let base_url = args
         .base_url
         .clone()
@@ -110,7 +131,7 @@ pub async fn handle(args: FixArgs) -> Result<()> {
         } else {
             println!("  {} {} 需要的依赖都在", sym_ok(), args.profile);
         }
-        if args.check {
+        if !download {
             print_health(&exe_dir, &base_url);
         }
         return Ok(());
@@ -136,15 +157,15 @@ pub async fn handle(args: FixArgs) -> Result<()> {
         }
     }
 
-    if args.check {
+    if !download {
         print_health(&exe_dir, &base_url);
-        // --check 只报告不下载：退出码非 0，CI 可以据此判断环境是否就绪
-        println!("\n  {}", dim("--check 模式，未下载；去掉 --check 即可补齐"));
+        // 只体检不下载：退出码非 0，CI 可以据此判断环境是否就绪
+        println!("\n  {}", dim("只体检，未下载；要补齐跑 tke doctor --fix"));
         std::process::exit(1);
     }
 
     if !args.yes && !confirm("  要现在下载补齐吗？")? {
-        println!("  {}", dim("已取消；需要时再跑 tke fix"));
+        println!("  {}", dim("已取消；需要时再跑 tke doctor --fix"));
         return Ok(());
     }
 
@@ -211,7 +232,7 @@ pub async fn handle(args: FixArgs) -> Result<()> {
 /// 放进 `tke fix --check` 而不是再写一个体检脚本：**一份 Rust 实现三平台通用**。
 /// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
 /// 「同事跑完 Claude Code 要验一遍」的主力平台。
-fn print_health(exe_dir: &Path, base_url: &str) {
+fn print_health(exe_dir: &Path, _base_url: &str) {
 
     // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
     if deps::present_in(exe_dir, "adb") {
@@ -239,19 +260,49 @@ fn print_health(exe_dir: &Path, base_url: &str) {
         }
     }
 
-    // 版本：跟分发源比一下，免得一直用着旧 tke。取不到就静默跳过（离线/内网照常用）
+    // 版本：跟分发源比一下，免得一直用着旧的。取不到就静默跳过（离线/内网照常用）。
+    // max_age=0 = 手动跑 doctor 时**强制联网**，不吃缓存——人特地来问，就给他最新的答案。
+    // 只报"不一致"，不摆箭头暗示方向——本地可能是刚编出来的、比分发源还新。
     let local = env!("BUILD_VERSION");
-    let remote = curl_text(&format!("{}/VERSION?t={}", base_url, std::process::id()))
-        .unwrap_or_default();
-    let remote_first = remote.lines().next().unwrap_or("").trim().to_string();
-    match remote_first.strip_prefix("tke ") {
-        // 只报"不一致"，不摆箭头暗示方向——本地可能是刚编出来的、比分发源还新，
-        // 一个 ⬆️ 会让人以为该去更新
-        Some(rv) if rv != local => {
-            println!("  {} 本地 {} ／ 分发源 {} {}", dim("版本    "), local, rv, sym_warn());
+    let st = tke::utils::update::check(0);
+    match &st {
+        None => println!("  {} {} {}", dim("版本    "), local, dim("（没连上分发源）")),
+        Some(s) if s.tke_stale => {
+            println!("  {} 本地 {} ／ 分发源 {} {}", dim("版本    "), local, s.remote.tke, sym_warn());
         }
         Some(_) => println!("  {} {} {}", dim("版本    "), local, dim("（与分发源一致）")),
-        None => println!("  {} {} {}", dim("版本    "), local, dim("（没连上分发源）")),
+    }
+
+    // skill 新鲜度：**这条是这次体检最要紧的一行**。tke 二进制版本号只在 bump 时才变，
+    // 而 SKILL.md 天天改——只比版本号的话，用户抱着两天前的旧文档，体检照样说"一致"
+    // （Q-11 就是这么发生的：改完的四个修复根本没送到用户手上）。
+    if let Some(s) = &st {
+        match (&s.skill_dir, &s.local_skill_build) {
+            (Some(dir), Some(_)) if s.skill_stale => {
+                println!(
+                    "  {} {} {}",
+                    dim("skill   "),
+                    format!(
+                        "本地 {} ／ 分发源 {}",
+                        s.local_skill_build.as_deref().unwrap_or("?"),
+                        s.remote.build
+                    ),
+                    sym_warn()
+                );
+                println!("    {}", dim(&format!("{}", dir.display())));
+                println!(
+                    "    {}",
+                    dim("更新：curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash")
+                );
+            }
+            (Some(_), Some(_)) => println!("  {} {}", dim("skill   "), dim("（与分发源一致）")),
+            // 老安装器装的没写版本文件——不当成过期（无从判断），但要说清为什么看不出来
+            (Some(dir), None) => {
+                println!("  {} {}", dim("skill   "), dim("装了，但没有版本信息（旧安装器）"));
+                println!("    {}", dim(&format!("{}", dir.display())));
+            }
+            (None, _) => println!("  {} {}", dim("skill   "), dim("未安装（这台机器只用 tke CLI）")),
+        }
     }
 
     // 证据落点：人找报告时不用回头问 AI

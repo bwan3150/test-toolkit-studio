@@ -27,7 +27,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | **语义定位链路** | ✅ 本机 web 实测打通 | 2026-08-15:实跑撞出四个洞并全修(P-28 幽灵 sr-only / 可及名称缺采 / 误导错误 / P-30 视口+文档坑)。修完同一批 **3 步纯语义、零坐标、零 fetch**。**安卓侧未验**(无设备) |
 | `fetch --wait-text` | ✅ 本机实测 | ADR-0013,关闭 Q-8。出现即返回/超时非零退出;skill 里的手写 shell 轮询范例全部替换。**跨设备真机待验** |
 | **证据组织(一个任务一份)** | ✅ 本机实测 | 用户反馈"组织方式很乱"后重做:`--log` 就是任务目录、反复调用续写、步骤连续编号、`pages/`、报告默认压缩内嵌自包含(1.7MB→598KB)。**只改 steps**,run/flow/harness 维持时间戳目录。跨设备不再分目录 |
-| **skill 版本过期无提示** | ❌ 已知缺口 | **Q-11,优先级高**:本机装的是 8-13 旧版,repo 已到 8-15。改完 SKILL.md 的收益可能根本到不了用户手上。**用户重跑前必须先重装 skill** |
+| **版本新鲜度 `tke doctor`** | ✅ 本机实测 | **Q-11 已关闭**(ADR-0014):`tke fix`→`tke doctor`(fix 保留别名);比 **build 戳**而非版本号;`steps` 每批提醒(缓存 4h/stderr/--json 闭嘴);只提醒不自更新。⚠️ **要等下一次发布把 VERSION 打进 skill 包后才对用户生效** |
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
 | 跨设备/跨平台测试 | ✅ 已实现,**AI 侧真机未验** | ADR-0011 全套:flow per-script device / 重试断言 / 设备成为工具参数 + list_devices;动态值传递未做(Q-7) |
 | 宿主机能力门禁 | ✅ 本机实测 | iOS 只在 macOS 放行(门禁在 `Controller::new`,control/run/steps/harness 一处覆盖);留 `TKE_ALLOW_IOS=1` 逃生口——界线是产品决策不是技术极限 |

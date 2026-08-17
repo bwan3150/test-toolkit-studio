@@ -327,3 +327,32 @@ fn fetch_wait_text_still_requires_device() {
     let s = format!("{}{}", stdout(&o), stderr(&o));
     assert!(s.contains("设备"), "报错应指出缺设备:{}", s);
 }
+
+/// doctor 与 fix 并存，且帮助里都说得清（改名后老写法不能断）
+#[test]
+fn doctor_and_fix_alias_both_exist() {
+    for cmd in ["doctor", "fix"] {
+        let o = tke().args([cmd, "--help"]).output().unwrap();
+        let s = format!("{}{}", stdout(&o), stderr(&o));
+        assert!(o.status.success(), "{} --help 应退出 0:{}", cmd, s);
+        assert!(s.contains("--profile"), "{} 应有 --profile:{}", cmd, s);
+    }
+    // doctor 有 --fix 开关（体检默认不下载）
+    let o = tke().args(["doctor", "--help"]).output().unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("--fix"), "doctor 应有 --fix 开关:{}", s);
+}
+
+/// `tke fix --check` 是 install.sh 与用户脚本里的老写法,**不能因为改名而失效**
+#[test]
+fn fix_check_still_accepted() {
+    let o = tke()
+        .args(["fix", "--check", "--profile", "web"])
+        .env("TKE_BASE_URL", "http://127.0.0.1:9")  // 打不通 → 版本检查静默跳过,不影响体检
+        .output()
+        .unwrap();
+    let s = format!("{}{}", stdout(&o), stderr(&o));
+    assert!(s.contains("DOCTOR"), "应走体检输出:{}", s);
+    // 只体检就不该出现下载动作
+    assert!(!s.contains("要现在下载补齐吗"), "--check 不该询问下载:{}", s);
+}

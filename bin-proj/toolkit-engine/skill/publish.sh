@@ -61,9 +61,25 @@ echo "== 打包 =="
 echo "   平台   $PLATFORM"
 echo "   输出   $OUT"
 
+# —— 版本留痕：让人能看出这批是什么 ——
+"$SRC/tke" --version > "$OUT/VERSION" 2>/dev/null || echo "unknown" > "$OUT/VERSION"
+# 驱动版本要标平台:两个平台的 chromedriver 未必同版本,而 VERSION 是全站一份、
+# 谁后传谁覆盖——不标平台的话,mac 用户会看到 linux 那批的驱动版本,反过来也一样。
+# (install.sh 只消费第一行的 tke 版本和 build 戳,这行纯给人看)
+[ -x "$SRC/chromedriver" ] && echo "[${PLATFORM}] $("$SRC/chromedriver" --version 2>/dev/null)" >> "$OUT/VERSION"
+# build 戳 = 下载缓存键。分发走 Cloudflare(max-age 4h,且不认 no-cache 请求头),
+# 只有**变化的查询参数**能破缓存——所以每次发布换一个戳,新版本自然绕过旧缓存,
+# 同版本则照常命中 CDN。没有它的话:传了新文件,使用者 4 小时内下到的还是旧的。
+echo "build: $(date -u +%Y%m%d-%H%M%S)" >> "$OUT/VERSION"
+
 # —— skill 文件 ——（只收 AI 和使用者要的，不含 dist/ 与打包脚本自身）
+# **VERSION 要一起打进 skill 包**：装完之后，本地这份 skill 是哪一批就有据可查了。
+# 没有它的话 `tke doctor` 只能比 tke 二进制的版本号，而版本号只在 bump 时才变、
+# SKILL.md 却天天改 —— 用户抱着两天前的旧文档，体检照样说"一致"（Q-11 就是这么发生的）。
+cp "$OUT/VERSION" "$SCRIPT_DIR/tke-ui-test/VERSION"
 tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/tke-ui-test.tar.gz" -C "$SCRIPT_DIR" tke-ui-test
-echo "   ✅ skill/tke-ui-test.tar.gz"
+rm -f "$SCRIPT_DIR/tke-ui-test/VERSION"   # 不留在源码树里（它是发布产物，不是源文件）
+echo "   ✅ skill/tke-ui-test.tar.gz（含 VERSION）"
 
 # —— 二进制 ——（逐个 gzip，install.sh 按名字取；缺的跳过）
 # 默认只打 tke —— 驱动几乎不变，云上已有的不会因为没重传而消失。
@@ -100,16 +116,6 @@ else
 fi
 [ "$WITH_DRIVERS" = "1" ] || echo "   -- 驱动未打包（要打加 --with-drivers；换驱动版本时才需要）"
 
-# —— 版本留痕：让人能看出这批是什么 ——
-"$SRC/tke" --version > "$OUT/VERSION" 2>/dev/null || echo "unknown" > "$OUT/VERSION"
-# 驱动版本要标平台:两个平台的 chromedriver 未必同版本,而 VERSION 是全站一份、
-# 谁后传谁覆盖——不标平台的话,mac 用户会看到 linux 那批的驱动版本,反过来也一样。
-# (install.sh 只消费第一行的 tke 版本和 build 戳,这行纯给人看)
-[ -x "$SRC/chromedriver" ] && echo "[${PLATFORM}] $("$SRC/chromedriver" --version 2>/dev/null)" >> "$OUT/VERSION"
-# build 戳 = 下载缓存键。分发走 Cloudflare(max-age 4h,且不认 no-cache 请求头),
-# 只有**变化的查询参数**能破缓存——所以每次发布换一个戳,新版本自然绕过旧缓存,
-# 同版本则照常命中 CDN。没有它的话:传了新文件,使用者 4 小时内下到的还是旧的。
-echo "build: $(date -u +%Y%m%d-%H%M%S)" >> "$OUT/VERSION"
 echo
 echo "版本：$(tr '\n' ' ' < "$OUT/VERSION")"
 echo
