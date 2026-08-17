@@ -46,9 +46,14 @@ const walk = (el) => {
         if (n.nodeType === 3) ownText += n.textContent;
       }
       ownText = ownText.trim().slice(0, 120);
-      // 输入框取 placeholder/value 兜底
+      // 输入框取 placeholder/value 兜底。
+      // ⚠️ 密码框**永远不取 value**：采集结果会落进 page/*.xml、进报告、进 AI 上下文，
+      // 而这些是要发给别人看的证据。密码框里有什么，谁也不需要知道（只需要知道"填了"）。
+      const isPassword = child.tagName === 'INPUT' && child.type === 'password';
       if (!ownText && (child.tagName === 'INPUT' || child.tagName === 'TEXTAREA')) {
-        ownText = (child.value || child.placeholder || '').slice(0, 120);
+        ownText = isPassword
+          ? (child.value ? '••••••' : (child.placeholder || ''))
+          : (child.value || child.placeholder || '').slice(0, 120);
       }
       // 可及名称兜底：输入框/图标按钮常常**一个字都没有**——没有直接文本、没有 placeholder，
       // 可见的那行字其实来自 <label for>（实测撞过：某百科首页搜索框只有 label，text 全空，
@@ -97,6 +102,7 @@ const walk = (el) => {
           text: ownText,
           xpath: xpathOf(child),
           clickable: clickable,
+          password: isPassword,
           options: optionList,
           x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
           x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
@@ -135,8 +141,15 @@ pub(super) fn dom_elements_to_xml(elements: &serde_json::Value) -> String {
         } else {
             format!(" options=\"{}\"", escape_attr(&options))
         };
+        // 与安卓 uiautomator 同名属性对齐（那边原生就有 password="true"），
+        // 于是上层判断"这是不是密码框"三个平台走同一条路
+        let password_attr = if e["password"].as_bool().unwrap_or(false) {
+            " password=\"true\""
+        } else {
+            ""
+        };
         xml.push_str(&format!(
-            "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" xpath=\"{}\" clickable=\"{}\"{} enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
+            "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" xpath=\"{}\" clickable=\"{}\"{}{} enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
             escape_attr(e["tag"].as_str().unwrap_or("")),
             escape_attr(e["id"].as_str().unwrap_or("")),
             escape_attr(e["aria"].as_str().unwrap_or("")),
@@ -144,6 +157,7 @@ pub(super) fn dom_elements_to_xml(elements: &serde_json::Value) -> String {
             escape_attr(e["xpath"].as_str().unwrap_or("")),
             e["clickable"].as_bool().unwrap_or(false),
             options_attr,
+            password_attr,
             e["x1"].as_i64().unwrap_or(0),
             e["y1"].as_i64().unwrap_or(0),
             e["x2"].as_i64().unwrap_or(0),

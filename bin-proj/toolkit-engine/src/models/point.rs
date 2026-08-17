@@ -48,6 +48,11 @@ impl Bounds {
     }
 
     /// 判断是否可见（宽高都大于0）
+    /// 这个点落在框内吗（含边界）
+    pub fn contains(&self, p: Point) -> bool {
+        p.x >= self.x1 && p.x <= self.x2 && p.y >= self.y1 && p.y <= self.y2
+    }
+
     pub fn is_visible(&self) -> bool {
         self.width() > 0 && self.height() > 0
     }

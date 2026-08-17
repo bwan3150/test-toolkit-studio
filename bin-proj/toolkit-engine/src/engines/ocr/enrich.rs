@@ -199,6 +199,7 @@ fn dist2(a: &Point, b: &Point) -> i64 {
 fn ocr_element(index: usize, bounds: Bounds, text: &str) -> UIElement {
     UIElement {
         options: None,   // OCR 造的伪元素没有 <select> 概念
+        is_password: false,
         index,
         class_name: "OcrText".to_string(),
         bounds,

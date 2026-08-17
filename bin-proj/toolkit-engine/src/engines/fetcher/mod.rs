@@ -166,6 +166,7 @@ impl Fetcher {
         let mut clickable = false;
         let mut options: Option<Vec<String>> = None;
         let mut checkable = false;
+        let mut is_password = false;
         let mut checked = false;
         let mut focusable = false;
         let mut focused = false;
@@ -202,6 +203,7 @@ impl Fetcher {
                         }
                     }
                     "checkable" => checkable = value == "true",
+                    "password" => is_password = value == "true",
                     "checked" => checked = value == "true",
                     "focusable" => focusable = value == "true",
                     "focused" => focused = value == "true",
@@ -223,6 +225,7 @@ impl Fetcher {
             hint,
             clickable,
             checkable,
+            is_password,
             checked,
             focusable,
             focused,

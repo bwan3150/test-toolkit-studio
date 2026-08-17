@@ -63,17 +63,21 @@ impl WebDriver {
 
         // 尝试复用持久化的会话
         if let Some(info) = Self::load_session(&self.device_id) {
-            let want_headless = crate::utils::params::web_headless().resolve();
-            if info.headless != want_headless {
-                // 模式不符：**不能复用**，否则 --headless 静默失效（INV-9）。
-                // 销毁旧会话，让调用方经 launch 重建；说清原因，别让人以为参数没用。
-                let (had, want) = (mode_name(info.headless), mode_name(want_headless));
-                eprintln!("现有 web 会话是{had}模式、本次要求{want}模式 → 销毁重建（{want}会话需重新 launch）");
-                drop(guard);
-                let _ = self.close_session();
-                return Err(TkeError::DeviceError(format!(
-                    "已销毁{had}模式的旧会话；请重新执行 启动 [URL] / control launch <URL> 以建立{want}会话"
-                )));
+            // 只有**显式** --headless=on/off 才要求会话模式匹配。
+            // 不带参数（Auto）时沿用现有会话：否则「--headless=off 开有头窗口 → 人手动登录
+            // → 后续命令不带参数」这一步就会被判成失配，**把刚登好的会话销毁掉**。
+            if let Some(want_headless) = crate::utils::params::web_headless().explicit() {
+                if info.headless != want_headless {
+                    // 模式不符：**不能复用**，否则 --headless 静默失效（INV-9）。
+                    // 销毁旧会话，让调用方经 launch 重建；说清原因，别让人以为参数没用。
+                    let (had, want) = (mode_name(info.headless), mode_name(want_headless));
+                    eprintln!("现有 web 会话是{had}模式、本次要求{want}模式 → 销毁重建（{want}会话需重新 launch）");
+                    drop(guard);
+                    let _ = self.close_session();
+                    return Err(TkeError::DeviceError(format!(
+                        "已销毁{had}模式的旧会话；请重新执行 启动 [URL] / control launch <URL> 以建立{want}会话"
+                    )));
+                }
             }
             let base = format!("http://127.0.0.1:{}", info.port);
             if Self::session_alive(&base, &info.session_id) {
@@ -305,8 +309,10 @@ impl WebDriver {
         // 启动/导航是唯一允许创建会话的入口
         self.ensure_create()?;
 
-        // 无协议前缀自动补 https://
-        let url = if url.starts_with("http://") || url.starts_with("https://") || url.starts_with("about:") {
+        // 无协议前缀自动补 https://。
+        // file:/// 与 data: 也要放行——本地 HTML 是最省事的测试页，被拼成
+        // `https://file:///…` 只会得到一句 ERR_NAME_NOT_RESOLVED，谁也想不到是被补了前缀
+        let url = if url.contains("://") || url.starts_with("about:") || url.starts_with("data:") {
             url.to_string()
         } else {
             format!("https://{}", url)
@@ -522,7 +528,8 @@ return { ok: true, picked: norm(hit.text) };
     }
 
     /// 输入文本到当前聚焦元素（原生 setter + input 事件，兼容 React/Vue 受控组件）
-    pub fn input_text(&self, text: &str) -> Result<()> {
+    /// 返回值 = **写入的是不是密码框**（供上层给证据打码，见 utils::redact）
+    pub fn input_text(&self, text: &str) -> Result<bool> {
         let script = r#"
 const el = document.activeElement;
 const text = arguments[0];
@@ -533,7 +540,9 @@ if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
   setter.call(el, (el.value || '') + text);
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
-  return 'ok';
+  // 回报是不是密码框：**焦点所在的元素**才是真正被写入的那个。
+  // 按"解析出的坐标上有什么"判断会漏——点 <label> 同样能聚焦到密码框（实测撞过）
+  return el.type === 'password' ? 'ok:password' : 'ok';
 }
 if (el.isContentEditable) {
   el.textContent += text;
@@ -545,7 +554,8 @@ return el.tagName.toLowerCase();
 "#;
         let r = self.execute(script, serde_json::json!([text]))?;
         match r.as_str() {
-            Some("ok") => Ok(()),
+            Some("ok:password") => Ok(true),
+            Some("ok") => Ok(false),
             // 原文案是「当前没有聚焦的输入框（请先点击输入框）」——它把人和 AI 都引向
             // "那我先点一下"，可真实原因往往是**上一步点空了**：文字定位命中了同名的非输入
             // 元素，点下去焦点根本没落到输入框上。错误必须指向真正的原因（INV-9）。

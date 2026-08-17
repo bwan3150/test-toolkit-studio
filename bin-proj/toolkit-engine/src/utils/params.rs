@@ -66,15 +66,16 @@ pub fn ocr_url() -> String {
 /// 在线 OCR 服务默认地址
 const DEFAULT_OCR_URL: &str = "https://ocr.test-toolkit.app/ocr";
 
-/// web 无头模式（三态）。**无头与否是环境属性**（有没有桌面），所以默认 Auto 自动探测——
-/// 无头服务器 / docker / CI 里不必每次传参；有桌面的机器上照常有头（能看见浏览器在动）。
+/// web 无头模式（三态）。**默认无头**：有头浏览器会抢鼠标和焦点，人就没法一边跑检查
+/// 一边干别的；而无头与有头渲染一致（1280×813，bounds 零差异），日常没有理由弹窗口。
+/// 要看着它跑（调试、或需要人手动登录）时再显式 `--headless=off`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadlessMode {
-    /// 自动：无桌面（Linux 无 DISPLAY/WAYLAND_DISPLAY）→ 无头；其余 → 有头
+    /// 没指定：**新建会话走无头**；已有会话则沿用它的模式（见 explicit）
     Auto,
-    /// 强制无头（有桌面的机器上跑 CI）
+    /// 强制无头
     On,
-    /// 强制有头（无桌面时会明确失败，而不是悄悄换模式——见 INV-9）
+    /// 强制有头——要看着它跑，或要人在窗口里手动登录
     Off,
 }
 
@@ -89,12 +90,28 @@ impl HeadlessMode {
         }
     }
 
-    /// 定案：本次是否走无头
+    /// 定案：**新建**会话时是否走无头。
+    ///
+    /// Auto = 无头。有头浏览器会**抢走鼠标和焦点**，人就没法一边跑检查一边干别的了——
+    /// 而无头与有头的渲染早已验证一致（同为 1280×813，bounds 零差异），
+    /// 日常检查没有任何理由把窗口弹出来。要看着它跑再显式 `--headless=off`。
     pub fn resolve(self) -> bool {
         match self {
             Self::On => true,
             Self::Off => false,
-            Self::Auto => !desktop_available(),
+            Self::Auto => true,
+        }
+    }
+
+    /// 使用者**显式指定**的模式；Auto 返回 None = "不挑，现有会话什么样就什么样"。
+    ///
+    /// 这个区分是登录流程的命脉：`--headless=off` 开一个有头窗口让人手动登录后，
+    /// 后续命令通常不再带这个参数——若把 Auto 也当成"要求无头"，就会判定会话模式失配、
+    /// **把人刚登好的会话销毁掉**。所以只有显式 on/off 才要求匹配（见 web/mod.rs）。
+    pub fn explicit(self) -> Option<bool> {
+        match self {
+            Self::Auto => None,
+            other => Some(other.resolve()),
         }
     }
 }
@@ -154,7 +171,7 @@ pub struct Params {
     /// AI 辅助驾驶（run/flow 回放的定位自愈）：CLI --copilot > config copilot > 默认 true。
     /// 开启且配置了 [ai] 时，回放中元素定位失败会让 AI 按当前页面修正并回写元素包。
     pub copilot: bool,
-    /// web 无头模式：CLI --headless > config headless > 默认 Auto（按环境探测）
+    /// web 无头模式：CLI --headless > config headless > 默认 Auto（=无头，见 HeadlessMode）
     pub headless: HeadlessMode,
     /// harness 各环节次数上限
     pub harness: HarnessLimits,
@@ -295,7 +312,22 @@ mod tests {
 
     /// Auto 完全由「有没有桌面」决定
     #[test]
-    fn headless_auto_follows_desktop_availability() {
-        assert_eq!(HeadlessMode::Auto.resolve(), !desktop_available());
+    /// 默认无头——**不看这台机器有没有桌面**。
+    /// 有头浏览器会抢鼠标和焦点，人就没法一边跑检查一边干别的；而无头与有头渲染一致
+    /// （同为 1280×813，bounds 零差异），日常没有理由把窗口弹出来。
+    fn headless_defaults_to_on_regardless_of_desktop() {
+        assert!(HeadlessMode::Auto.resolve(), "Auto 应默认无头");
+        // 有没有桌面不影响这个默认（这台机器是什么环境都一样）
+        let _ = desktop_available();
+    }
+
+    /// Auto 不算"显式要求"——这是登录流程的命脉。
+    /// `--headless=off` 开有头窗口让人手动登录后，后续命令通常不带参数；
+    /// 若把 Auto 也当成"要求无头"，就会判定会话模式失配、**把刚登好的会话销毁掉**。
+    #[test]
+    fn auto_is_not_an_explicit_requirement() {
+        assert_eq!(HeadlessMode::Auto.explicit(), None);
+        assert_eq!(HeadlessMode::On.explicit(), Some(true));
+        assert_eq!(HeadlessMode::Off.explicit(), Some(false));
     }
 }

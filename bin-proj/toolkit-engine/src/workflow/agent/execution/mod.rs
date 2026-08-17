@@ -126,6 +126,7 @@ pub async fn apply(
             let saved = save_target(device, element_path, &name, &None, bounds.clone(), None, OcrChannel::None, tx, round).await;
             let detail = exec(device, ControlAction::Click { point: c }).await?;
             let trace = ActionTrace {
+                sensitive: false,
                 captured: false,
                 points: vec![c],
                 bounds: Some(bounds),
@@ -152,7 +153,7 @@ pub async fn apply(
             let saved = save_target(device, element_path, &name, &None, bounds.clone(), None, OcrChannel::None, tx, round).await;
             let cond = if *exist { "存在" } else { "不存在" };
             let detail = format!("记录视觉断言：{} {}", name, cond);
-            let trace = ActionTrace { captured: false, points: vec![c], bounds: Some(bounds), element_name: Some(name.clone()) };
+            let trace = ActionTrace { captured: false, points: vec![c], bounds: Some(bounds), element_name: Some(name.clone()), sensitive: false };
             Ok((line(TksCommand::Assert, vec![el_param(&name), TksParam::Text(cond.to_string())]), detail, trace, saved))
         }
         AgentAction::SwipeDir { direction, distance, amount } => {
@@ -182,7 +183,7 @@ pub async fn apply(
                 },
             )
             .await?;
-            let trace = ActionTrace { captured: false, points: vec![from, to], bounds: None, element_name: None };
+            let trace = ActionTrace { captured: false, points: vec![from, to], bounds: None, element_name: None, sensitive: false };
             Ok((
                 line(
                     TksCommand::DirectionalSwipe,
@@ -271,7 +272,7 @@ pub async fn apply(
             } else {
                 format!("滚动找到「{}」", found_kw)
             };
-            let trace = ActionTrace { captured: false, points: vec![from], bounds: None, element_name: None };
+            let trace = ActionTrace { captured: false, points: vec![from], bounds: None, element_name: None, sensitive: false };
             Ok((
                 line(TksCommand::ScrollFind, vec![TksParam::Text(found_kw), TksParam::Direction(direction.clone())]),
                 detail,
@@ -361,7 +362,7 @@ pub async fn apply(
             let (sb, ob) = tier_for(b);
             let saved = save_target(device, element_path, &nb, &None, b.bounds.clone(), sb, ob, tx, round).await;
             let detail = exec(device, ControlAction::Swipe { from: ca, to: cb, duration_ms: 400 }).await?;
-            let trace = ActionTrace { captured: false, points: vec![ca, cb], bounds: None, element_name: Some(na.clone()) };
+            let trace = ActionTrace { captured: false, points: vec![ca, cb], bounds: None, element_name: Some(na.clone()), sensitive: false };
             Ok((line(TksCommand::Swipe, vec![el_param(&na), el_param(&nb)]), detail, trace, saved))
         }
         AgentAction::PressKey { key } => {
@@ -438,6 +439,7 @@ fn el_trace(c: Point, el: &UIElement, name: &str) -> ActionTrace {
         points: vec![c],
         bounds: Some(el.bounds.clone()),
         element_name: Some(name.to_string()),
+        sensitive: el.is_password,
     }
 }
 

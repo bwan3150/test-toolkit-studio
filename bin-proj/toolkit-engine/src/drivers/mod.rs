@@ -158,12 +158,15 @@ impl Controller {
         }
     }
 
-    pub fn input_text(&self, text: &str) -> Result<()> {
+    /// 返回值 = **写入的是不是密码框**（供上层给证据打码，见 utils::redact）
+    pub fn input_text(&self, text: &str) -> Result<bool> {
         match &self.driver {
-            Driver::Adb(d) => d.input_text(text),
+            // 只有 web 说得准（它看得到焦点元素的 type）；移动端靠页面结构里的
+            // password 属性判断（见 TargetResolver::hits_password）
+            Driver::Adb(d) => d.input_text(text).map(|_| false),
             Driver::Web(d) => d.input_text(text),
-            Driver::Wda(d) => d.input_text(text),
-            Driver::Fake(d) => d.input_text(text),
+            Driver::Wda(d) => d.input_text(text).map(|_| false),
+            Driver::Fake(d) => d.input_text(text).map(|_| false),
         }
     }
 

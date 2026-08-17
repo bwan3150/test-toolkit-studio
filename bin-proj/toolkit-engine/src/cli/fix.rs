@@ -314,10 +314,12 @@ fn print_health(exe_dir: &Path, missing: usize) {
         println!("  {} {}", dim("日志落点"), logs.display());
     }
 
+    // 浏览器**一律默认无头**（有头会抢鼠标和焦点）。这里报的是"这台机器能不能开有头"，
+    // 因为需要人在窗口里手动登录时要靠它
     if tke::utils::params::desktop_available() {
-        println!("  {} {} {}", dim("运行环境"), "有头环境", dim("· --headless=on 可切无头"));
+        println!("  {} {} {}", dim("浏览器  "), "无头运行", dim("· --headless=off 可开窗口（手动登录时用）"));
     } else {
-        println!("  {} {} {}", dim("运行环境"), "无头环境", dim("· 无图形界面"));
+        println!("  {} {} {}", dim("浏览器  "), "无头运行", dim("· 本机无图形界面，开不了窗口"));
     }
 
     // ── 结论 ──（对钩在最后：上面每行是一项检查，这行才是"到底行不行"）

@@ -113,8 +113,14 @@ pub async fn execute_action(controller: &Controller, action: ControlAction) -> R
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 }
             }
-            controller.input_text(&text)?;
-            Ok(serde_json::json!({ "action": "input", "text": text }))
+            // 写进了密码框的话回报出去——上层据此给命令原文打码（log/报告/截图横幅）。
+            // **文本本身不进返回值**：这个 json 也会流向日志
+            let sensitive = controller.input_text(&text)?;
+            Ok(serde_json::json!({
+                "action": "input",
+                "text": if sensitive { "••••••".to_string() } else { text },
+                "sensitive": sensitive,
+            }))
         }
         ControlAction::Clear => {
             controller.clear_input()?;

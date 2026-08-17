@@ -266,7 +266,14 @@ impl<'a> CommandExecutor<'a> {
 
         let point = self.resolve_target(&params[0]).await?;
         let text = ParamExtractor::extract_text(&params[1])?;
-        execute_action(&*self.controller, ControlAction::Input { text, point: Some(point) }).await.map(|_| ())
+        let r = execute_action(&*self.controller, ControlAction::Input { text, point: Some(point) }).await?;
+        // 写进的是密码框 → 标记这一步敏感，命令原文在落盘前会被打码。
+        // 判据取自**焦点所在的元素**：光看"解析出的坐标上有什么"会漏——
+        // `输入 ["密码", …]` 常常命中的是 <label>，点它同样能聚焦到密码框（实测撞过）
+        if r.get("sensitive").and_then(|v| v.as_bool()).unwrap_or(false) {
+            self.trace.sensitive = true;
+        }
+        Ok(())
     }
 
     /// 清理输入框

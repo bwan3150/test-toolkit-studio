@@ -279,6 +279,15 @@ impl ScriptRunner {
                 None => None,
             };
 
+            // 命令原文里若含密码，**从这里往后一律用打码版**：
+            // 它会进 log.json、进报告、还会烧进标注截图的顶部横幅（那是拿去分享的证据）。
+            // 判据来自执行时的真实页面（trace.sensitive），不是猜命令里有没有"密码"二字。
+            let shown = if interpreter.last_trace.sensitive {
+                crate::utils::redact::mask_command_values(&step.raw)
+            } else {
+                step.raw.clone()
+            };
+
             // 保存本步产物（仅 --log 时）
             let (screenshot, xml) = if let Some(artifacts) = &artifacts {
                 // 本步执行中若未采集过页面状态（如纯坐标点击/等待/返回），补采一次，
@@ -290,7 +299,7 @@ impl ScriptRunner {
                     &workarea,
                     index,
                     &interpreter.last_trace,
-                    &step.raw,
+                    &shown,
                     success,
                 )
             } else {
@@ -299,7 +308,7 @@ impl ScriptRunner {
 
             let step_result = StepResult {
                 index,
-                command: step.raw.clone(),
+                command: shown.clone(),
                 success,
                 error: error.clone(),
                 duration_ms,
@@ -313,7 +322,7 @@ impl ScriptRunner {
             on_event(&RunEvent::StepEnd {
                 index,
                 line: step.line_number,
-                command: step.raw.clone(),
+                command: shown.clone(),
                 success,
                 error: error.clone(),
                 duration_ms,

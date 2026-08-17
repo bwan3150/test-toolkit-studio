@@ -54,6 +54,13 @@ impl<'a> TargetResolver<'a> {
             }
         };
 
+        // 落在密码框上就标记：命令原文里的值要在落盘前打码（log/报告/截图横幅）。
+        // 按**当前页面结构**判断而不是猜命令文本里有没有"密码"二字——
+        // 三个平台同一条路（安卓 uiautomator 原生就有 password 属性，web 侧已对齐）
+        if self.hits_password(point) {
+            self.trace.sensitive = true;
+        }
+
         // 记录解析出的坐标到执行轨迹
         self.trace.points.push(point);
 
@@ -61,6 +68,14 @@ impl<'a> TargetResolver<'a> {
     }
 
     /// 解析元素定位（带隐式等待：找不到就重新采集重试，应对页面尚未加载完）
+    /// 该坐标是不是落在密码框上（用刚采集的页面结构判断）
+    fn hits_password(&self, p: Point) -> bool {
+        crate::Fetcher::new()
+            .fetch_elements_from_file(&self.workarea.ui_tree_path())
+            .map(|els| els.iter().any(|e| e.is_password && e.bounds.contains(p)))
+            .unwrap_or(false)
+    }
+
     async fn resolve_element(&mut self, name: &str, strategy: &LocatorStrategy) -> Result<Point> {
         self.trace.element_name = Some(name.to_string());
         // 最多 ~6s（12 次 × 500ms），覆盖慢加载/切换动画

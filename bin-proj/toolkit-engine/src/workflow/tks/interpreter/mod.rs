@@ -25,6 +25,10 @@ pub struct ActionTrace {
     pub bounds: Option<Bounds>,
     /// 目标元素名称
     pub element_name: Option<String>,
+    /// 本步碰的是**密码框**——命令原文里那个值必须在落盘前打码。
+    /// `--log` 会把命令写进 log.json、报告，还会**烧进标注截图的顶部横幅**
+    /// （实测：代填的密码就那样明晃晃印在图上，而报告是拿去分享的）。
+    pub sensitive: bool,
 }
 
 impl ActionTrace {

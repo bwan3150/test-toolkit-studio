@@ -26,6 +26,11 @@ pub struct UIElement {
     /// 只能挂在 select 上带出来——没有它 AI 就不知道这个下拉框能选什么
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<Vec<String>>,
+    /// 这是个**密码框**（安卓 uiautomator 的 `password="true"` / web 的 `type=password`）。
+    /// 有它才能在**证据落盘前**把值打码——`--log` 会把每步的命令、页面结构、标注截图
+    /// 全存下来，而那些是要发给别人看的（实测：代填的密码会明文烧进截图横幅）。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_password: bool,
     /// 用于前端渲染的z-index，基于元素面积计算
     #[serde(skip_serializing_if = "Option::is_none")]
     pub z_index: Option<usize>,
