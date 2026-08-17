@@ -252,11 +252,14 @@ fi
 # —— 5. 体检 ——（结论要如实反映，别装完就说"好了"）
 export PATH="$TKE_HOME:$PATH"
 HEALTH=0
+# 用别名 `fix --check` 而不是 `doctor`：这一步跑的是**刚下下来那个** tke，
+# 万一分发源上还是旧版（没有 doctor 子命令），用新名字会直接报"命令不存在"。
+# 别名永久保留，新旧二进制都认（ADR-0014）。
 "$TKE_HOME/tke" fix --check --profile "$PROFILE" || HEALTH=1
 
 printf '\n'
 if [ "$HEALTH" = "0" ]; then
-    printf '  %s%s装好了%s  在 Claude Code 里直接提需求，或 %s/tke-ui-test%s\n' \
+    printf '  %s%s全局已就绪%s，在 Claude Code 中输入 %s/tke-ui-test%s 以调用\n' \
         "$C_B" "$C_OK" "$C_R" "$C_B" "$C_R"
 else
     # 如实反映：文件装好了不等于能用（INV-9）

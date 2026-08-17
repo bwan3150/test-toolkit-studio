@@ -113,35 +113,34 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     let wants_ios = args.profile == "ios" || args.profile == "all";
     let ios_blocked = wants_ios && !tke::utils::capability::ios_supported();
 
-    // 这两条要在"缺不缺"之前说：不然 iOS 被门禁挡住时 missing 是空的，
-    // 只会看到一句"✅ 依赖都在"——而这台机器其实压根做不了 iOS
-    if ios_blocked {
-        println!();
-        println!("  {} 这台机器做不了 iOS（只有 macOS 能——设备上的 WDA 要用 Xcode 装一次）", sym_dot());
-        println!("    {}", dim("所以不装 go-ios；网页与安卓照常"));
-    }
-    if wants_ios && !upstream_has_go_ios() {
-        println!();
-        println!("  {} 32 位 Windows 做不了 iOS：go-ios 上游只发布 64 位包", sym_dot());
-    }
+    // iOS 门禁要说出来：被挡住时 missing 是空的，光看"依赖已就绪"会以为这台机器什么都能做
+    let ios_note = || {
+        if ios_blocked {
+            println!("  {} {}", dim("iOS     "), dim("不支持 · 需 macOS（设备端 WDA 依赖 Xcode）"));
+        } else if wants_ios && !upstream_has_go_ios() {
+            println!("  {} {}", dim("iOS     "), dim("不支持 · go-ios 无 32 位 Windows 版"));
+        }
+    };
 
     if missing.is_empty() {
+        // 依赖状态是**一项检查**，不是结论——结论统一放最后那行（见 print_health 收尾）
         if args.profile == "ios" && (ios_blocked || !upstream_has_go_ios()) {
-            println!("  {} 没有可补的依赖——这台机器做不了 iOS", sym_dot());
+            println!("  {} {}", dim("依赖    "), dim("无需补齐 · 此机型不支持 iOS"));
         } else {
-            println!("  {} {} 需要的依赖都在", sym_ok(), args.profile);
+            println!("  {} {} {}", dim("依赖    "), "已就绪", dim(&format!("· {}", args.profile)));
         }
+        ios_note();
         if !download {
-            print_health(&exe_dir, &base_url);
+            print_health(&exe_dir, 0);
         }
         return Ok(());
     }
 
-    println!();
-    println!("  缺少 {} 项：", missing.len());
+    println!("  {} {} {}", dim("依赖    "), format!("缺 {} 项", missing.len()), dim(&format!("· {}", args.profile)));
     for m in &missing {
-        println!("  {} {:<16} {}{}", sym_err(), m.name, m.what, dim(&format!("（约 {}）", m.size)));
+        println!("    {} {:<16} {}{}", sym_err(), m.name, m.what, dim(&format!("（约 {}）", m.size)));
     }
+    ios_note();
 
     // arm64 Linux：浏览器与安卓那套驱动上游就没有官方包，下了也是白下
     if !upstream_has_drivers() {
@@ -158,9 +157,8 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     }
 
     if !download {
-        print_health(&exe_dir, &base_url);
+        print_health(&exe_dir, missing.len());
         // 只体检不下载：退出码非 0，CI 可以据此判断环境是否就绪
-        println!("\n  {}", dim("只体检，未下载；要补齐跑 tke doctor --fix"));
         std::process::exit(1);
     }
 
@@ -232,7 +230,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
 /// 放进 `tke fix --check` 而不是再写一个体检脚本：**一份 Rust 实现三平台通用**。
 /// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
 /// 「同事跑完 Claude Code 要验一遍」的主力平台。
-fn print_health(exe_dir: &Path, _base_url: &str) {
+fn print_health(exe_dir: &Path, missing: usize) {
 
     // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
     if deps::present_in(exe_dir, "adb") {
@@ -251,12 +249,12 @@ fn print_health(exe_dir: &Path, _base_url: &str) {
                     })
                     .collect();
                 if list.is_empty() {
-                    println!("  {} {}", dim("安卓设备"), dim("无（adb 可用但没连设备）"));
+                    println!("  {} {}", dim("设备    "), dim("未连接"));
                 } else {
-                    println!("  {} {}", dim("安卓设备"), list.join(" · "));
+                    println!("  {} {}", dim("设备    "), list.join(" · "));
                 }
             }
-            Err(e) => println!("  {} adb 跑不起来：{}", dim("安卓设备"), e),
+            Err(e) => println!("  {} {}", dim("设备    "), dim(&format!("adb 不可用：{}", e))),
         }
     }
 
@@ -266,11 +264,16 @@ fn print_health(exe_dir: &Path, _base_url: &str) {
     let local = env!("BUILD_VERSION");
     let st = tke::utils::update::check(0);
     match &st {
-        None => println!("  {} {} {}", dim("版本    "), local, dim("（没连上分发源）")),
+        None => println!("  {} {} {}", dim("版本    "), local, dim("· 离线，未校验")),
         Some(s) if s.tke_stale => {
-            println!("  {} 本地 {} ／ 分发源 {} {}", dim("版本    "), local, s.remote.tke, sym_warn());
+            println!(
+                "  {} {} {}",
+                dim("版本    "),
+                format!("本地 {} ／ 分发源 {}", local, s.remote.tke),
+                sym_warn()
+            );
         }
-        Some(_) => println!("  {} {} {}", dim("版本    "), local, dim("（与分发源一致）")),
+        Some(_) => println!("  {} {} {}", dim("版本    "), "已是最新", dim(&format!("· {}", local))),
     }
 
     // skill 新鲜度：**这条是这次体检最要紧的一行**。tke 二进制版本号只在 bump 时才变，
@@ -295,33 +298,39 @@ fn print_health(exe_dir: &Path, _base_url: &str) {
                     dim("更新：curl -fsSL https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke/install.sh | bash")
                 );
             }
-            (Some(_), Some(_)) => println!("  {} {}", dim("skill   "), dim("（与分发源一致）")),
+            (Some(_), Some(_)) => println!("  {} {}", dim("skill   "), "已是最新"),
             // 老安装器装的没写版本文件——不当成过期（无从判断），但要说清为什么看不出来
             (Some(dir), None) => {
-                println!("  {} {}", dim("skill   "), dim("装了，但没有版本信息（旧安装器）"));
+                println!("  {} {}", dim("skill   "), dim("无版本信息 · 由旧安装器安装"));
                 println!("    {}", dim(&format!("{}", dir.display())));
             }
-            (None, _) => println!("  {} {}", dim("skill   "), dim("未安装（这台机器只用 tke CLI）")),
+            (None, _) => println!("  {} {}", dim("skill   "), dim("未安装")),
         }
     }
 
-    // 证据落点：人找报告时不用回头问 AI
+    // 日志落点：人找报告时不用回头问 AI
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
         let logs = PathBuf::from(home).join(".tke").join("logs");
-        let n = std::fs::read_dir(&logs)
-            .map(|d| d.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).count())
-            .unwrap_or(0);
-        if n > 0 {
-            println!("  {} {} {}", dim("证据落点"), logs.display(), dim(&format!("（已有 {} 次检查）", n)));
-        } else {
-            println!("  {} {} {}", dim("证据落点"), logs.display(), dim("（首次检查时创建）"));
-        }
+        println!("  {} {}", dim("日志落点"), logs.display());
     }
 
     if tke::utils::params::desktop_available() {
-        println!("  {} {}", dim("运行模式"), dim("有桌面 → 浏览器默认有头（要无头加 --headless=on）"));
+        println!("  {} {} {}", dim("运行环境"), "有头环境", dim("· --headless=on 可切无头"));
     } else {
-        println!("  {} {}", dim("运行模式"), dim("无桌面 → 浏览器自动走无头"));
+        println!("  {} {} {}", dim("运行环境"), "无头环境", dim("· 无图形界面"));
+    }
+
+    // ── 结论 ──（对钩在最后：上面每行是一项检查，这行才是"到底行不行"）
+    println!();
+    if missing == 0 {
+        println!("  {} {}", sym_ok(), "全局已就绪");
+    } else {
+        println!(
+            "  {} 环境不完整 · 缺 {} 项{}",
+            sym_err(),
+            missing,
+            dim("　补齐：tke doctor --fix")
+        );
     }
 }
 

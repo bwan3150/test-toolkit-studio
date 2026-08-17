@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2      # 要跟上一个提交比
+          fetch-depth: 0      # 要比**整个 push 范围**，不是只比最后一个提交
       - id: f
         shell: bash
         run: |
@@ -69,9 +69,26 @@ jobs:
             [ "${{ inputs.skill_only }}" = "true" ] && echo "code=0" >> "$GITHUB_OUTPUT" || echo "code=1" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          # ⚠️ 必须比**这次 push 的全部提交**（before..sha），不能比 HEAD^..HEAD。
+          # 踩过一次：一次 push 里推了 `feat(src/…)` + `docs(STATE 收尾)` 两个提交，
+          # 只比最后一个就成了"只动文档" → **跳过编译** → 新功能的二进制根本没发出去，
+          # 而 skill 包照发、全程零报错。等用户报"这命令用不了"才发现（P-31）。
+          BASE="${{ github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            # 新分支 / force push / 对象取不到：拿不准就编。
+            # 多编一次只是十几分钟，漏编一次是"改了却没发出去"
+            echo "code=1" >> "$GITHUB_OUTPUT"
+            echo "→ 取不到上一个提交（新分支或 force push），保守起见照常构建"
+            exit 0
+          fi
+
+          CHANGED="$(git diff --name-only "$BASE" "${{ github.sha }}")"
+          echo "本次 push 改动的文件："; echo "$CHANGED" | sed 's/^/    /'
           # 自动触发：源码/构建配置动了才编，只动 skill 文档就跳过编译直接发
           # workflow 自己也算：改了 runner / target / 构建参数，不重编一次就等于没验
-          if git diff --name-only HEAD^ HEAD | grep -qE '^(bin-proj/toolkit-engine/(src/|Cargo\.|build\.rs)|\.github/workflows/tke-publish\.yml)'; then
+          if echo "$CHANGED" | grep -qE '^(bin-proj/toolkit-engine/(src/|Cargo\.|build\.rs)|\.github/workflows/tke-publish\.yml)'; then
             echo "code=1" >> "$GITHUB_OUTPUT"
             echo "→ 源码有改动，六平台重新构建"
           else

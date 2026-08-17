@@ -108,10 +108,11 @@ if [ "$DEL_CHROME" = 1 ]; then
 fi
 
 # 保留了什么只用一句话带过——没删的东西不值得各占一节
-KEPT=""
-[ "$DEL_LOGS" = 0 ] && [ -d "$HOME/.tke/logs" ] && KEPT="检查记录(--logs)"
+KEPT=""; KEPT_FLAGS=""
+[ "$DEL_LOGS" = 0 ] && [ -d "$HOME/.tke/logs" ] && { KEPT="日志 $HOME/.tke/logs"; KEPT_FLAGS="--logs"; }
 if [ "$DEL_CHROME" = 0 ] && ls "$CHROME_DIR"/chrome-* >/dev/null 2>&1; then
-    [ -n "$KEPT" ] && KEPT="$KEPT · Chrome(--chrome)" || KEPT="Chrome(--chrome)"
+    [ -n "$KEPT" ] && { KEPT="$KEPT · Chrome"; KEPT_FLAGS="$KEPT_FLAGS / --chrome"; } \
+                   || { KEPT="Chrome"; KEPT_FLAGS="--chrome"; }
 fi
 
 printf '\n'
@@ -120,4 +121,9 @@ if [ "$DRY" = 1 ]; then
 else
     printf '  %s%s卸载完成%s  新终端生效\n' "$C_B" "$C_OK" "$C_R"
 fi
-[ -n "$KEPT" ] && printf '  %s保留  %s%s\n' "$C_DIM" "$KEPT" "$C_R"
+# 说清"留了什么"**和"怎么删"**——原来只写 `检查记录(--logs)`，
+# 那个括号想表达"加这个参数才会删",但没人看得出来
+if [ -n "$KEPT" ]; then
+    printf '  %s已保留  %s%s\n' "$C_DIM" "$KEPT" "$C_R"
+    printf '  %s        重跑并加 %s 可一并删除（--all 全删）%s\n' "$C_DIM" "$KEPT_FLAGS" "$C_R"
+fi

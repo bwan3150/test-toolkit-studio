@@ -356,3 +356,35 @@ grep -n 'execute(' -A2 src/drivers/web/mod.rs | grep '\["value"\]'   # 应为空
 **注意这个坑的真正形态是文档坑**：`滚动查找` 的能力一直都在，
 但 skill 的 `steps-syntax.md` 把它标成"需要元素库"，而那个 skill 明令不建元素库——
 **于是调用方 AI 一次都没用过它**。与 90d9dcad（语义定位能力早就有、只是没告诉 AI）同型。
+
+## P-31 (2026-08-17) CI 只比 `HEAD^..HEAD` → 一次 push 里的代码改动被漏编
+
+**现象**：用户装完最新版，`tke doctor` 报「doctor 可执行文件缺失或不完整」——
+那是 **passthrough 层**的报错：clap 不认识这个子命令，于是当成外部工具去找。
+说明发出去的二进制**根本没有这个命令**，可 CI 全绿、skill 包也照发了。
+
+**原因**：`changes` job 用 `git diff --name-only HEAD^ HEAD` 判断要不要编译，
+**只比最后一个提交**。而那次 push 推了两个：
+
+```
+8f9eb45d  feat(tke): tke doctor …        ← 动了 src/
+337fb835  docs(tke): STATE 对齐 HEAD      ← 只动 docs/  ← CI 只看到这个
+```
+
+于是判定"只动了文档" → **跳过六平台编译** → 新功能的二进制从来没被构建过。
+而本项目的收尾惯例正是**最后补一个 docs 提交**（STATE/CHANGELOG），
+所以这个坑会**稳定复现在每一次带收尾提交的功能发布上**。
+
+**做法**：比**整个 push 范围** `${{ github.event.before }}..${{ github.sha }}`，
+并把 `fetch-depth` 从 2 改成 0。取不到 before（新分支/force push）时**默认编译**——
+多编一次十几分钟，漏编一次是"改了却没发出去"。
+
+**这类 bug 的共性**：每一步都成功、没有任何红色，只是**不起作用**。
+判断"要不要做某事"的条件写错时，错的那一侧永远是静默的——
+所以条件本身要能被看见（改完后 CI 会打印本次 push 的全部改动文件）。
+
+**自查**：发布后确认新命令真的在里面
+```bash
+curl -fsSL "$BASE/bin/<platform>/tke.gz?t=$RANDOM" | gunzip > /tmp/tke && chmod +x /tmp/tke
+/tmp/tke --help | grep doctor
+```
