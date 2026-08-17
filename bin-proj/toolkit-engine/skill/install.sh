@@ -117,10 +117,35 @@ magic_ok() {
 
 # 下载 + 按类型验内容；不合格一律当失败（并删掉半成品）
 # 第 4 个参数给 "bar" 时显示进度条——Chrome 有几百 MB，静默下载会让人以为卡死了
+# fetch 失败时的具体原因（curl 那句），由调用方决定要不要展示
+FETCH_ERR=""
+
 fetch() {
-    local url="$1" out="$2" kind="${3:-any}" show="${4:-}"
+    local url="$1" out="$2" kind="${3:-any}" show="${4:-}" label="${5:-}"
+    FETCH_ERR=""
     if [ "$show" = "bar" ] && [ -t 1 ]; then
-        curl -fL# --retry 2 --max-time 1800 "$url" -o "$out" || { rm -f "$out"; return 1; }
+        # 进度条**接在名字后面**，而不是自己单占一行。
+        # curl 的 `-#` 走 stderr、用 \r 原地刷新；把 \r 拆成行、逐帧重画整行，
+        # 就能把「· 名字」和进度条拼在同一行上（\033[K 清掉上一帧的残尾）。
+        # PIPESTATUS 取的是 curl 的退出码——管道最后一个是 while，它总是成功。
+        # tee 留一份：curl 的**报错也走 stderr**，和进度帧混在一起。
+        # 失败时进度条会被擦掉，不留一份就等于把失败原因也擦了（INV-9）
+        curl -fL# --retry 2 --max-time 1800 "$url" -o "$out" 2>&1 >/dev/null \
+            | tee "$out.log" \
+            | tr '\r' '\n' \
+            | while IFS= read -r frame; do
+                  [ -n "$frame" ] && printf '\r  %s %s %s\033[K' "$S_DOT" "$label" "$frame"
+              done
+        local rc="${PIPESTATUS[0]}"
+        printf '\r\033[K'   # 擦掉进度条：成功让调用方原地打对钩，失败下面把原因摆出来
+        if [ "$rc" != "0" ]; then
+            # 不锚行首：curl 把报错**追加在进度条同一行的右侧**，前面是进度条的空白。
+            # 只**存**不打——打印交给调用方，否则和它那句"下载失败"重复成两行
+            FETCH_ERR="$(tr '\r' '\n' < "$out.log" 2>/dev/null | grep -m1 -o 'curl: .*')"
+            rm -f "$out" "$out.log"
+            return 1
+        fi
+        rm -f "$out.log"
     else
         curl -fsSL --retry 2 --max-time 900 "$url" -o "$out" || { rm -f "$out"; return 1; }
     fi
@@ -219,8 +244,7 @@ esac
 if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
     if [ -d "$CHROME_DIR/$CHROME_PKG" ]; then
         printf '  %s %s\n' "$S_OK" "$CHROME_PKG"
-    elif printf '  %s %s %s下载中（几百 MB）%s\n' "$S_DOT" "$CHROME_PKG" "$C_DIM" "$C_R" && \
-         fetch "$BASE_URL/chrome/$CHROME_PKG.zip$Q" "$TMP/chrome.zip" zip bar; then
+    elif fetch "$BASE_URL/chrome/$CHROME_PKG.zip$Q" "$TMP/chrome.zip" zip bar "$CHROME_PKG"; then
         mkdir -p "$CHROME_DIR"
         unzip -q -o "$TMP/chrome.zip" -d "$CHROME_DIR"
         # macOS：清隔离属性，否则自动化下会卡在授权弹窗且无任何报错
@@ -228,6 +252,7 @@ if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
         printf '  %s %s\n' "$S_OK" "$CHROME_PKG"
     else
         printf '  %s %s 下载失败，网页检查会用不了\n' "$S_WARN" "$CHROME_PKG"
+        [ -n "$FETCH_ERR" ] && printf '      %s%s%s\n' "$C_DIM" "$FETCH_ERR" "$C_R"
     fi
 fi
 

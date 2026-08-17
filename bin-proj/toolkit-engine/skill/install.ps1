@@ -229,16 +229,18 @@ try {
             Write-Host "  $SOK $chromePkg ${Dm}已在 $chromeDir（换版本先删这个目录）$Rs"
         } else {
             $zip = Join-Path $tmp 'chrome.zip'
-            Write-Host "  $SDOT $chromePkg ${Dm}下载中（几百 MB）$Rs"
-            $ProgressPreference = 'Continue'      # 大文件才显进度条
+            # 不写"下载中（几百 MB）"——进度自己会说话，完成后这一行变成对钩。
+            # PowerShell 的进度是顶部横幅（Write-Progress 的固有形式，Windows 上是惯例），
+            # 做不成 bash 那种"接在名字后面"；为此手写整个下载循环不值得。
+            $ProgressPreference = 'Continue'
             $chromeOk = Get-File -Url "$BaseUrl/chrome/$chromePkg.zip$q" -Out $zip -Kind 'zip'
             $ProgressPreference = 'SilentlyContinue'
             if ($chromeOk) {
                 New-Item -ItemType Directory -Path $chromeDir -Force | Out-Null
                 Expand-Archive -Path $zip -DestinationPath $chromeDir -Force
-                Write-Host "  $SOK $Dm$skillRoot\tke-ui-test$Rs"
+                Write-Host "  $SOK $chromePkg"
             } else {
-                Write-Host "  $SWARN 下载失败，网页检查会用不了"
+                Write-Host "  $SWARN $chromePkg 下载失败，网页检查会用不了"
             }
         }
     }
