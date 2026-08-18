@@ -105,6 +105,8 @@ pub async fn uninstall(args: UninstallArgs) -> Result<()> {
         use std::io::Write;
         let _ = std::io::stderr().flush();
         let mut line = String::new();
+        // 等输入期间 Ctrl+C 立即退出，不然它要等到用户敲回车才生效
+        let _g = tke::utils::interrupt::prompting();
         if std::io::stdin().read_line(&mut line).is_err()
             || !matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
         {

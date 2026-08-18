@@ -12,16 +12,59 @@ use std::sync::Once;
 static ABORTED: AtomicBool = AtomicBool::new(false);
 static INSTALL: Once = Once::new();
 
-/// 安装一次性 Ctrl+C 监听（重复调用只生效一次）。在一次运行开始时调用。
+/// 安装 Ctrl+C 监听（重复调用只生效一次）。在一次运行开始时调用。
+///
+/// ⚠️ 「优雅停止」只对**正在跑步骤**成立：置个标志，循环走到检查点自己停。
+/// 但有两种情况下它就是个坑，都得能立刻退出——
+///   1. **在等用户输入时**（`继续？[y/N]`）：主线程阻塞在 `read_line`，
+///      没有任何循环会去查标志。用户按十次 Ctrl+C 都"没反应",直到他敲回车
+///      才轮到检查点——按取消键还得再按回车,这不叫中断
+///   2. **按第二次**：第一次没停下来，说明当前步骤要么很长要么卡住了。
+///      这时用户要的是"马上给我停"，通用惯例也是第二次硬退
 pub fn install() {
     INSTALL.call_once(|| {
         tokio::spawn(async {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                ABORTED.store(true, Ordering::Relaxed);
-                eprintln!("\n⏹ 收到中断（Ctrl+C）——将在当前步骤结束后安全停止…");
+            loop {
+                if tokio::signal::ctrl_c().await.is_err() {
+                    break;
+                }
+                // swap：第一次拿到 false（转入优雅停），第二次拿到 true（硬退）
+                if AT_PROMPT.load(Ordering::Relaxed) || ABORTED.swap(true, Ordering::Relaxed) {
+                    eprintln!("\n已取消");
+                    // 130 = 128 + SIGINT，shell 的通用约定
+                    std::process::exit(130);
+                }
+                eprintln!(
+                    "\n⏹ 收到中断（Ctrl+C）——将在当前步骤结束后安全停止…（再按一次立即退出）"
+                );
             }
         });
     });
+}
+
+// —— 等用户输入期间：Ctrl+C 立即退出（见 install 的说明）——
+static AT_PROMPT: AtomicBool = AtomicBool::new(false);
+
+/// 包住**阻塞读 stdin** 的那一段。在它的生命周期内 Ctrl+C 直接退出进程：
+/// 这时没有任何"当前步骤"需要收尾，等标志被查到反而要用户再敲一次回车。
+///
+/// ```ignore
+/// let _g = interrupt::prompting();   // 离开作用域自动恢复
+/// std::io::stdin().read_line(&mut line)
+/// ```
+pub fn prompting() -> PromptGuard {
+    AT_PROMPT.store(true, Ordering::Relaxed);
+    PromptGuard
+}
+
+/// 见 [`prompting`]。用 Drop 而不是手工配对的 `end()`——中间那段常有 `return`，
+/// 漏掉一次就会让后续的 Ctrl+C 变成硬退，那是另一种难查的怪事
+pub struct PromptGuard;
+
+impl Drop for PromptGuard {
+    fn drop(&mut self) {
+        AT_PROMPT.store(false, Ordering::Relaxed);
+    }
 }
 
 /// 是否已请求中断（各处循环在检查点查询）

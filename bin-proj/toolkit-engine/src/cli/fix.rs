@@ -491,6 +491,8 @@ fn confirm(prompt: &str) -> Result<bool> {
     print!("{} [y/N] ", prompt);
     std::io::stdout().flush().ok();
     let mut line = String::new();
+    // 等输入期间 Ctrl+C 立即退出，不然它要等到用户敲回车才生效
+    let _g = tke::utils::interrupt::prompting();
     if std::io::stdin().read_line(&mut line).is_err() {
         return Ok(false); // 非交互环境（管道里跑）当作否——下载要显式同意
     }

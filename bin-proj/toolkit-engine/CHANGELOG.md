@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · Ctrl+C 在确认提示处按了没反应
+用户实跑:`tke uninstall` 停在 `继续？[y/N]`,连按十次 Ctrl+C 不动,**还得敲回车才退**。
+- **fix(P-34)** 全局中断只置标志、等循环到检查点再停——这对跑步骤是对的,但此刻主线程
+  阻塞在 `read_line`,**没有任何循环会去查那个标志**。新增 `interrupt::prompting()`
+  (Drop guard)包住阻塞读 stdin 的那段,期间 Ctrl+C 直接 `exit(130)`;
+  `tke uninstall` 与 `tke doctor --fix` 两处确认都接上
+- **fix(二次硬退)** 监听改 `loop`,第二次 Ctrl+C 立即退出(第一次没停下来说明当前步骤
+  很长或卡住了),提示语补「再按一次立即退出」
+
 ### 2026-08-18 · 装完开新 tab 又 not found:PATH 判断看错了地方
 用户实跑撞到:装完那个 tab 里 `which tke` 有,**开新 tab 就 not found**,而 `tke doctor`
 还一路绿灯写着「✓ 全局已就绪」。
