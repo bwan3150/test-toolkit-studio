@@ -263,21 +263,43 @@ if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
 fi
 
 # —— 4. PATH ——
-if command -v tke >/dev/null 2>&1 && [ "$(command -v tke)" = "$TKE_HOME/tke" ]; then
-    printf '  %s PATH 已就绪\n' "$S_OK"
-else
-    case "${SHELL:-}" in
-        */zsh)  RC="$HOME/.zshrc" ;;
-        */bash) RC="$HOME/.bashrc" ;;
-        *)      RC="" ;;
-    esac
-    LINE="export PATH=\"$TKE_HOME:\$PATH\""
-    if [ -n "$RC" ] && ! grep -qF "$TKE_HOME" "$RC" 2>/dev/null; then
-        echo "$LINE" >> "$RC"
-        printf '  %s PATH 已写入 %s%s%s（新终端生效）\n' "$S_OK" "$C_DIM" "$RC" "$C_R"
-    else
-        printf '  %s 请自行加进 PATH：%s%s%s\n' "$S_WARN" "$C_B" "$LINE" "$C_R"
+#
+# ⚠️ 判断依据只能是**rc 文件的内容**，绝不能是当前进程的 PATH。
+# 曾经这里写的是 `command -v tke = $TKE_HOME/tke → 打印"PATH 已就绪"直接跳过`，
+# 结果：用户（或帮他跑命令的 AI）在当前会话里 `export PATH="$HOME/.tke/bin:$PATH"` 之后
+# 再跑安装，脚本就认为"已就绪"、**一个 rc 文件都没写**——这个 tab 里 `which tke` 有，
+# 开新 tab 就 not found。当前进程的 PATH 是**临时的**，它不能证明下一个终端也有。
+#
+# 写哪些文件（学 fnm 的做法：宁可多写一个，也不能漏）：
+#   zsh  → .zshrc              （登录/非登录的交互 shell 都读它）
+#   bash → .bashrc + .bash_profile
+#          **macOS 的终端开的是登录 shell，只读 .bash_profile 不读 .bashrc**，
+#          只写 .bashrc 的话新窗口照样找不到——这是最经典的那个坑。
+#   其它 → .profile            （兜底，POSIX sh 都读）
+case "${SHELL:-}" in
+    */zsh)  RC_FILES="$HOME/.zshrc" ;;
+    */bash) RC_FILES="$HOME/.bashrc $HOME/.bash_profile" ;;
+    *)      RC_FILES="$HOME/.profile" ;;
+esac
+LINE="export PATH=\"$TKE_HOME:\$PATH\""
+PATH_WRITTEN=""
+PATH_PRESENT=""
+for RC in $RC_FILES; do
+    if grep -qF "$TKE_HOME" "$RC" 2>/dev/null; then
+        PATH_PRESENT="$PATH_PRESENT $RC"
+        continue
     fi
+    # rc 不存在就建一个：新机器上 .bash_profile 常常压根没有，跳过等于不装
+    if printf '%s\n' "$LINE" >> "$RC" 2>/dev/null; then
+        PATH_WRITTEN="$PATH_WRITTEN $RC"
+    fi
+done
+if [ -n "$PATH_WRITTEN" ]; then
+    printf '  %s PATH 已写入 %s%s%s（新终端生效）\n' "$S_OK" "$C_DIM" "${PATH_WRITTEN# }" "$C_R"
+elif [ -n "$PATH_PRESENT" ]; then
+    printf '  %s PATH 已就绪 %s%s%s\n' "$S_OK" "$C_DIM" "${PATH_PRESENT# }" "$C_R"
+else
+    printf '  %s 请自行加进 PATH：%s%s%s\n' "$S_WARN" "$C_B" "$LINE" "$C_R"
 fi
 
 # —— 5. 体检 ——（结论要如实反映，别装完就说"好了"）

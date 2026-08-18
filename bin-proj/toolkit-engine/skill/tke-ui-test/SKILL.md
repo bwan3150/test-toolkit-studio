@@ -69,6 +69,10 @@ tke doctor
 > export PATH="$HOME/.tke/bin:$PATH"     # Windows: $env:Path += ";$env:USERPROFILE\.tke\bin"
 > ```
 >
+> 这句只让**当前会话**能用；让新终端也能用是安装器的事（它写 rc 文件）。
+> `tke doctor` 里的「新终端」一项会告诉你这事有没有办成——它只查 rc 文件，
+> **不看当前 PATH**（当前能跑不代表下个窗口能跑，P-33）。
+>
 > 然后再 `tke doctor`。**别去猜、别去翻源码构建**——装它就这一条命令。
 
 三平台通用（Windows 也是这条），**不下载任何东西**。它会报：缺什么依赖、连了哪些安卓设备、

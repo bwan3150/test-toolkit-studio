@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · 装完开新 tab 又 not found:PATH 判断看错了地方
+用户实跑撞到:装完那个 tab 里 `which tke` 有,**开新 tab 就 not found**,而 `tke doctor`
+还一路绿灯写着「✓ 全局已就绪」。
+- **fix(install.sh 根因,P-33)** PATH 段原先用 `command -v tke` 判断"装没装"——那看的是
+  **当前进程的 PATH**,而它可能只是刚才临时 `export` 的(上一条改动恰恰教 AI 这么做),
+  于是脚本认为已就绪、**一个 rc 文件都没写**。改成只看 **rc 文件的内容**;bash 同时写
+  `.bashrc` **和 `.bash_profile`**(macOS 终端开的是登录 shell,只读后者);rc 不存在就创建
+- **fix(doctor 不许撒谎,INV-9)** 新增「新终端」一项,同样只查 rc;不持久时结论从
+  「全局已就绪」降级为「当前窗口可用 · 新终端里还找不到 tke」,并给出补写命令。
+  体检报的是**这台机器**行不行,不是**这个窗口**行不行
+- `install.ps1` 无此问题:它读写的是**注册表里的用户级 Path**,本来就是持久层
+
 ### 2026-08-17 · 删掉误导人的 check-env.sh;安装方法写进 skill
 用户实跑撞到:新机器上 `tke doctor` 报 command not found,AI 翻到 skill 里的
 `scripts/check-env.sh`,被它那句「构建 bin-proj/toolkit-engine/build-mac.sh」带偏,

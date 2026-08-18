@@ -108,6 +108,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     section("DOCTOR");
     println!("  {} {}", dim("平台    "), platform);
     println!("  {} {}", dim("落点    "), exe_dir.display());
+    report_shell_path(&exe_dir);
 
     let missing = detect_missing(&exe_dir, &args.profile);
     let wants_ios = args.profile == "ios" || args.profile == "all";
@@ -225,6 +226,54 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     }
 }
 
+/// 新开的终端里还能不能直接敲 `tke`——**只看 shell rc 文件的内容**。
+///
+/// 为什么不看 `command -v tke` / 当前 PATH：**当前进程能跑，什么都证明不了**。
+/// PATH 可能是刚才手动 `export` 的，也可能是安装脚本临时加的，窗口一关就没了。
+/// 用户真踩过（P-33）：doctor 一路绿灯说"全局已就绪"，开个新 tab 就 `tke: command not found`。
+/// 体检报的是"这台机器行不行"，不是"这个窗口行不行"。
+///
+/// 返回 `None` = 无从判断（Windows 的 PATH 在注册表里，不归 rc 文件管）。
+fn path_persisted(exe_dir: &Path) -> Option<bool> {
+    if cfg!(windows) {
+        return None;
+    }
+    // 装进系统默认目录的（比如自己 cp 到 /usr/local/bin），rc 里当然不会有，但它本来就持久
+    let dir = exe_dir.to_string_lossy().to_string();
+    if matches!(
+        dir.as_str(),
+        "/usr/local/bin" | "/usr/bin" | "/bin" | "/opt/homebrew/bin" | "/usr/local/sbin"
+    ) {
+        return Some(true);
+    }
+    let home = PathBuf::from(std::env::var_os("HOME")?);
+    // 覆盖 zsh / bash / sh 三种；任一命中就算数（新终端只会读其中之一）
+    let hit = [".zshrc", ".zprofile", ".bashrc", ".bash_profile", ".profile"]
+        .iter()
+        .any(|f| {
+            std::fs::read_to_string(home.join(f))
+                .map(|s| s.contains(&dir))
+                .unwrap_or(false)
+        });
+    Some(hit)
+}
+
+/// 体检里那一行。只有**不持久**时才出声——正常状态多一行就是噪音。
+fn report_shell_path(exe_dir: &Path) {
+    if path_persisted(exe_dir) == Some(false) {
+        println!(
+            "  {} {} {}",
+            dim("新终端  "),
+            "找不到 tke · 只有当前窗口能用",
+            dim("（PATH 没写进 shell 配置）")
+        );
+        println!(
+            "    {}",
+            dim(&format!("补：echo 'export PATH=\"{}:$PATH\"' >> ~/.zshrc", exe_dir.display()))
+        );
+    }
+}
+
 /// 依赖之外的环境状况——设备连没连、版本跟不跟得上、证据落哪儿、跑有头还是无头。
 ///
 /// 放进 `tke fix --check` 而不是再写一个体检脚本：**一份 Rust 实现三平台通用**。
@@ -316,7 +365,10 @@ fn print_health(exe_dir: &Path, missing: usize) {
 
     // ── 结论 ──（对钩在最后：上面每行是一项检查，这行才是"到底行不行"）
     println!();
-    if missing == 0 {
+    if missing == 0 && path_persisted(exe_dir) == Some(false) {
+        // 依赖齐了但 PATH 没落地——**不能说"全局已就绪"**，它恰恰只在这个窗口里就绪
+        println!("  {} {}", sym_warn(), "当前窗口可用 · 新终端里还找不到 tke");
+    } else if missing == 0 {
         println!("  {} {}", sym_ok(), "全局已就绪");
     } else {
         println!(
