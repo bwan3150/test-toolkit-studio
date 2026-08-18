@@ -146,6 +146,11 @@ impl ScriptInterpreter {
         self.controller.dialog_text()
     }
 
+    /// 取走浏览器日志里的错误（只有 web 有）。见 drivers::Controller::console_errors
+    pub fn console_errors(&self) -> Vec<String> {
+        self.controller.console_errors()
+    }
+
     /// 主动采集一次页面状态（截图+XML 到工作区），供工作流补采产物
     pub async fn capture_state(&self) -> Result<()> {
         self.controller.capture_ui_state(&self.workarea).await

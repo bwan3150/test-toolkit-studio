@@ -13,6 +13,7 @@
 
 mod infra;
 mod normalize;
+mod browser_ops;
 
 use crate::{Result, TkeError, DeviceInfo};
 use crate::utils::Workarea;
@@ -329,6 +330,32 @@ impl WebDriver {
         self.post("/url", serde_json::json!({ "url": url }))?;
         self.wait_ready();
         Ok(())
+    }
+
+    /// 取走浏览器日志里的**错误**：console.error、未捕获异常、加载失败的请求。
+    ///
+    /// 「点了没反应」最常见的真因就是页面报了个 JS 错,而它**在任何页面结构里都看不见**——
+    /// AI 只能看到"元素还在、状态没变",于是往被测功能上找原因。有这行就能一眼指到真因。
+    ///
+    /// 语义是**取走**（读一次就清空）,所以每步收一次,天然落到"是哪一步触发的"。
+    /// `/log` 是 chromedriver 的扩展端点,不是 W3C 标准——拿不到就当没有,别为它报错。
+    pub fn console_errors(&self) -> Vec<String> {
+        let Ok(v) = self.post("/log", serde_json::json!({ "type": "browser" })) else {
+            return vec![];
+        };
+        let Some(list) = v["value"].as_array() else { return vec![] };
+        list.iter()
+            .filter(|e| e["level"].as_str() == Some("SEVERE"))
+            .filter_map(|e| e["message"].as_str())
+            // favicon 几乎每个站点都缺,报它纯属噪音（用户明确抱怨过 WARN 刷屏）
+            .filter(|m| !m.contains("favicon.ico"))
+            .map(|m| {
+                let m = m.trim();
+                if m.chars().count() > 300 { m.chars().take(300).collect::<String>() + "…" } else { m.to_string() }
+            })
+            // 一步里报十几条同源错误是常事,给前 3 条足够定位,再多就是刷屏
+            .take(3)
+            .collect()
     }
 
     // ── 原生对话框（alert / confirm / prompt）──

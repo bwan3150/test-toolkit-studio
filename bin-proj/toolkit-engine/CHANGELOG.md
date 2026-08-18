@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · web 能力补齐:页面报错可见 + 干净态 + eval + 视口 + 下载
+- **feat(页面报错,P-38)** 每步自动收 console.error / 未捕获异常 / 加载失败的请求
+  (`POST /log`,chromedriver 扩展端点,无需额外 capability),写进 StepResult/StepEnd/
+  报告/终端。「点了没反应」最常见的真因就在这儿,而页面结构和截图里都看不见。
+  噪音控制:只留 SEVERE、滤 favicon、每步最多 3 条、单条截 300 字
+- **feat(browser 子命令组)** `tke -d web browser reset|eval|viewport|download`
+  - `reset` 回到「首次访问」:cookie/localStorage/sessionStorage/IndexedDB/缓存全清。
+    浏览器会话跨命令复用,不清的话你以为在测新用户、其实是老用户视角
+  - `eval` 在页面里跑 JS(不写 return 当表达式)。边界:观察和造前置,不代替用户操作
+  - `viewport` 走 CDP `Emulation.setDeviceMetricsOverride` 而非 `/window/rect`(P-39):
+    后者改的是窗口,实测设 390x844 量到 390x757,差一截就跨过断点了
+  - `download --dir [--wait N]`:无头 Chrome 默认不落盘。判据是「有文件且无 .crdownload」
+    ——**不能用"有没有新增"**,CLI 每条命令都是独立进程,记不住基线(实测踩过)
+- **docs** skill 的 tke-commands.md / steps-syntax.md 同步写上——**能力不写进文档等于
+  不存在**,这条已经踩过三次
+
 ### 2026-08-18 · 原生对话框被 WebDriver 自动点成「取消」,全程没提示
 - **fix(P-37)** `unhandledPromptBehavior: "ignore"`,别让 WebDriver 替人做决定;
   每步后探测 `/alert/text` 写进 StepResult/StepEnd/报告/终端;下一步执行前拦截并

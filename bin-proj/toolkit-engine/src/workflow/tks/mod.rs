@@ -87,6 +87,7 @@ impl TksRunner {
         let outcome = interpreter.interpret_step(step).await;
         // 对话框探测：AI 逐步探索时同样会撞上,而它不在 DOM 里、下一步必然失败（P-37）
         let dialog = interpreter.dialog_text();
+        let errors = if dialog.is_none() { interpreter.console_errors() } else { vec![] };
         match outcome {
             Ok(()) => Ok(StepResult {
                 index: 0,
@@ -100,6 +101,7 @@ impl TksRunner {
                 healed: None,
                 note: None,
                 dialog: dialog.clone(),
+                errors: errors.clone(),
             }),
             Err(e) => Ok(StepResult {
                 index: 0,
@@ -113,6 +115,7 @@ impl TksRunner {
                 healed: None,
                 note: None,
                 dialog,
+                errors,
             })
         }
     }

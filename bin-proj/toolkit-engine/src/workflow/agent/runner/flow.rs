@@ -774,6 +774,7 @@ pub async fn drive(
                                 healed: None,
                                 note: None,
                                 dialog: None,
+                                errors: vec![],
                             });
                             lines.push(line.clone());
                             step_comments.push(comment.clone().unwrap_or_default());

@@ -5,8 +5,10 @@ pub mod file;
 pub mod app;
 pub mod device;
 pub mod element;
+pub mod browser;
 
 pub use file::FileCommands;
 pub use app::AppCommands;
 pub use device::DeviceCommands;
 pub use element::ElementCommands;
+pub use browser::BrowserCommands;

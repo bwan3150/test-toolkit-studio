@@ -68,7 +68,7 @@ fn print_pretty(state: &mut PrettyState, event: &RunEvent) {
                    index + 1, state.total_steps, command);
             let _ = std::io::stdout().flush();
         }
-        RunEvent::StepEnd { success, error, duration_ms, healed, dialog, .. } => {
+        RunEvent::StepEnd { success, error, duration_ms, healed, dialog, errors, .. } => {
             if *success {
                 println!("{GREEN}✓{RESET} {DIM}{}{RESET}", fmt_duration(*duration_ms));
             } else {
@@ -82,6 +82,10 @@ fn print_pretty(state: &mut PrettyState, event: &RunEvent) {
             if let Some(d) = dialog {
                 println!("         {YELLOW}⚠ 页面弹出对话框：「{d}」{RESET}");
                 println!("         {DIM}它挡着后面所有操作，先用 `确认对话框` / `取消对话框` 处理掉{RESET}");
+            }
+            // 页面自己报的错。「点了没反应」的真因常常就在这儿，而页面结构和截图里都没有它
+            for e in errors {
+                println!("         {YELLOW}⚠ 页面报错：{e}{RESET}");
             }
             // AI 辅助驾驶：本步元素按原定位没找到，AI 依当前页面找回（不改脚本/元素包）
             if let Some(h) = healed {

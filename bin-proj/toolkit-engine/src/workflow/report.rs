@@ -991,6 +991,7 @@ fn step_card_seq(
   {tgt}
   {heal}
   {dlg}
+  {errs}
   {err}
   {img}
   {foot}
@@ -1014,6 +1015,12 @@ fn step_card_seq(
                 esc(name)
             ),
             None => String::new(),
+        },
+        // 页面自己报的错：截图和页面结构里都没有它，报告不说就等于没发生过
+        errs = if s.errors.is_empty() { String::new() } else {
+            s.errors.iter()
+                .map(|e| format!(r#"<div class="s-err">⚠ 页面报错：{}</div>"#, esc(e)))
+                .collect::<Vec<_>>().join("")
         },
         // 原生对话框：浏览器自己画的，**截图里也拍不到**，报告不说就没人知道它出现过
         dlg = match &s.dialog {
@@ -1079,6 +1086,7 @@ mod tests {
             healed: None,
             note: None,
             dialog: None,
+            errors: vec![],
         }
     }
 

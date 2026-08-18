@@ -43,6 +43,29 @@ tke -d web control click 640,380      # 等价操作，但什么都不留
 `control` 子命令：`click` `press`(长按) `swipe` `drag` `swipe-dir` `input` `clear`
 `hide-keyboard` `back` `home` `launch` `close` `key` `switch` `hover`(web)
 
+## 浏览器专属（`-d web`）
+
+```bash
+tke -d web browser reset                     # 回到「首次访问」：清 cookie/localStorage/sessionStorage/IndexedDB/缓存
+tke -d web browser eval "localStorage.getItem('token')"   # 在页面里跑一段 JS，打印结果
+tke -d web browser viewport 390x844          # 改视口测响应式（iPhone 竖屏）
+tke -d web browser download --dir ~/dl       # 指定下载目录（无头 Chrome 默认不落盘）
+tke -d web browser download --dir ~/dl --wait 15   # 并等下载完成，打印文件路径
+```
+
+**`reset` 什么时候必须用**：浏览器会话跨命令复用，登录态会一直带着。测登录、首访引导、
+权限弹窗前不清，你以为在测新用户，其实看到的是老用户视角——这类假结论最难发现。
+
+**`eval` 的边界**：用来**观察和造前置状态**（读 storage、看 window 上的状态、mock 时间）。
+**别拿它代替用户操作**——直接调函数改状态，测的就不是真链路了，那正是这个 skill 存在的意义。
+
+**`--wait` 靠"目录里有下完的文件"判定**（`.crdownload` 还在就继续等）。
+它**分不出新旧**——每条 CLI 命令都是独立进程，记不住基线。要区分就用个空目录。
+
+**页面报错会自动收**：每一步执行后，tke 会把这步里的 console.error、未捕获异常、
+加载失败的请求写进结果（`errors` 字段，终端也会打）。**「点了没反应」最常见的真因就在这儿**，
+而它在页面结构和截图里都看不见——先看这行，再怀疑功能本身。
+
 ## 安卓：包名和 Activity 从哪来
 
 启动 App 需要包名 + Activity，**不知道就查，别猜**：

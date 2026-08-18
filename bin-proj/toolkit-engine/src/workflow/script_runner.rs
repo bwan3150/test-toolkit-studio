@@ -293,6 +293,10 @@ impl ScriptRunner {
             // 它不在 DOM 里、截图也拍不到（浏览器自己画的），不在这儿探一次就等于不存在——
             // 而它正挡着后面每一步（P-37）。
             let dialog = interpreter.dialog_text();
+            // 页面这一步报错了吗（console.error / 未捕获异常 / 加载失败的请求）。
+            // 同样在补采之前收：对话框挂着时这条也走不通。读一次就清空,所以天然
+            // 落到"是哪一步触发的"
+            let errors = if dialog.is_none() { interpreter.console_errors() } else { vec![] };
 
             // 保存本步产物（仅 --log 时）。对话框挂着时跳过：这时候采什么都失败
             let (screenshot, xml) = if dialog.is_some() {
@@ -326,6 +330,7 @@ impl ScriptRunner {
                 healed: healed.clone(),
                 note: step.note.clone(),
                 dialog: dialog.clone(),
+                errors: errors.clone(),
             };
 
             on_event(&RunEvent::StepEnd {
@@ -339,6 +344,7 @@ impl ScriptRunner {
                 xml,
                 healed,
                 dialog,
+                errors,
             });
 
             result.steps.push(step_result);

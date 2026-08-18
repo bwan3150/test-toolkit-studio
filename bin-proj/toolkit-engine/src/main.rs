@@ -104,6 +104,11 @@ enum Commands {
         #[command(subcommand)]
         action: ControlCommands,
     },
+    /// [浏览器] 干净态重置 / 注入 JS / 视口尺寸 / 下载（只对 -d web）
+    Browser {
+        #[command(subcommand)]
+        action: cli::tools::BrowserCommands,
+    },
 
     // ==================== ③ 工作流 ====================
     /// [工作流] 执行 .tks 单脚本 / .toml flow(多脚本顺序执行)
@@ -327,6 +332,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Device { action } => {
             tools::device::handle(action, params.clone())
+        }
+        Commands::Browser { action } => {
+            cli::tools::browser::handle(action, params.clone())
         }
         Commands::Element { action } => {
             tools::element::handle(action, params.clone()).await

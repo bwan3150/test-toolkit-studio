@@ -268,6 +268,58 @@ impl Controller {
         }
     }
 
+    /// 浏览器日志里的错误（console.error / 未捕获异常 / 加载失败的请求）。
+    /// **只有 web 有**；读一次就清空,所以每步收一次
+    pub fn console_errors(&self) -> Vec<String> {
+        match &self.driver {
+            Driver::Web(d) => d.console_errors(),
+            _ => vec![],
+        }
+    }
+
+    // ===== 浏览器专属（cookie/storage/下载/视口）=====
+    // 这些**只有浏览器有**，移动端没有对应概念，所以不做成三端统一动作、
+    // 也不给别的驱动编空壳实现——调错设备就如实说"只对浏览器有效"
+
+    pub fn web_reset(&self, with_cache: bool) -> Result<Vec<String>> {
+        match &self.driver {
+            Driver::Web(d) => d.reset_state(with_cache),
+            _ => Err(TkeError::InvalidArgument("只对浏览器有效（-d web）".into())),
+        }
+    }
+
+    pub fn web_eval(&self, script: &str) -> Result<serde_json::Value> {
+        match &self.driver {
+            Driver::Web(d) => d.eval_js(script),
+            _ => Err(TkeError::InvalidArgument("只对浏览器有效（-d web）".into())),
+        }
+    }
+
+    pub fn web_viewport(&self, w: u32, h: u32) -> Result<()> {
+        match &self.driver {
+            Driver::Web(d) => d.set_viewport(w, h),
+            _ => Err(TkeError::InvalidArgument("只对浏览器有效（-d web）".into())),
+        }
+    }
+
+    pub fn web_download_dir(&self, dir: &std::path::Path) -> Result<()> {
+        match &self.driver {
+            Driver::Web(d) => d.set_download_dir(dir),
+            _ => Err(TkeError::InvalidArgument("只对浏览器有效（-d web）".into())),
+        }
+    }
+
+    pub fn web_wait_download(
+        &self,
+        dir: &std::path::Path,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<std::path::PathBuf>> {
+        match &self.driver {
+            Driver::Web(d) => d.wait_download(dir, timeout),
+            _ => Err(TkeError::InvalidArgument("只对浏览器有效（-d web）".into())),
+        }
+    }
+
     // ===== 原生对话框（alert / confirm / prompt）=====
     //
     // **只有 web 有**：这三种是浏览器画的,不在 DOM 里,fetch 一个字都采不到。

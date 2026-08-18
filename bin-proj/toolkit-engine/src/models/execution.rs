@@ -125,6 +125,10 @@ pub struct StepResult {
     /// 它就等于不存在，而它正挡着后面所有操作（P-37）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dialog: Option<String>,
+    /// 这一步里页面报的错：console.error / 未捕获异常 / 加载失败的请求（web 独有）。
+    /// 「点了没反应」最常见的真因就在这儿，而它在页面结构和截图里都看不见。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<String>,
 }
 
 /// 应用信息
