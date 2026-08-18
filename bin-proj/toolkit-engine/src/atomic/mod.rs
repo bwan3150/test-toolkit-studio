@@ -15,4 +15,4 @@ pub mod control;
 pub use refresh::{Refresh, RefreshOptions, RefreshResult};
 pub use fetch::Fetch;
 pub use recognize::Recognize;
-pub use control::{Control, ControlAction};
+pub use control::{Control, ControlAction, DialogAction};

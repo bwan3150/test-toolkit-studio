@@ -49,7 +49,7 @@ pub use engines::ocr::{ocr as run_ocr, OcrResult, OcrText};
 // ② 原子方法
 pub use atomic::{
     Refresh, RefreshOptions, RefreshResult,
-    Fetch, Recognize, Control, ControlAction,
+    Fetch, Recognize, Control, ControlAction, DialogAction,
 };
 
 // ③ 工作流

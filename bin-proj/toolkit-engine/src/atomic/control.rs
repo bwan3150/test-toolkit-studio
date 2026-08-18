@@ -35,6 +35,35 @@ pub enum ControlAction {
     Switch { target: String },
     /// 悬停 hover x,y（web 独有：鼠标移到坐标触发 hover，展开悬停下拉/菜单，不按下）
     Hover { point: Point },
+
+    // ── 浏览器独有 ──
+    // 移动端没有 cookie / localStorage / 下载目录这些概念,所以这几个动作**只有 web 实现**,
+    // 别的驱动如实报"只对浏览器有效"而不是编个空壳。
+    // 放进 ControlAction 而不是单开一组 CLI 命令:这里是「动作 → 设备」的**唯一映射**,
+    // 绕过它的话 tks 解释器和 AI agent 就都用不上这些能力。
+
+    /// 回到「首次访问」：清 cookie / localStorage / sessionStorage / IndexedDB / 缓存
+    BrowserReset,
+    /// 在页面里执行 JS 并返回结果（观察和造前置状态用，不代替用户操作）
+    BrowserEval { script: String },
+    /// 设视口尺寸（测响应式断点）
+    BrowserViewport { width: u32, height: u32 },
+    /// 设下载目录；`wait_secs` 非空则等到下载完成并返回文件路径
+    BrowserDownload { dir: std::path::PathBuf, wait_secs: Option<u64> },
+    /// 原生对话框（alert/confirm/prompt）：确定 / 取消 / 填字并确定。
+    /// 这三种框是浏览器画的、不在 DOM 里，点不到也采不到，只能走这条专门的路
+    Dialog { action: DialogAction },
+}
+
+/// 对话框要怎么处理
+#[derive(Debug, Clone)]
+pub enum DialogAction {
+    /// 点「确定」
+    Accept,
+    /// 点「取消」
+    Dismiss,
+    /// 往 prompt 里填字**并确定**——填完不确定等于没填
+    Input(String),
 }
 
 /// control 原子方法
@@ -157,6 +186,51 @@ pub async fn execute_action(controller: &Controller, action: ControlAction) -> R
         ControlAction::Hover { point } => {
             controller.hover(point.x, point.y)?;
             Ok(serde_json::json!({ "action": "hover", "x": point.x, "y": point.y }))
+        }
+
+        // ── 浏览器独有 ──
+        ControlAction::BrowserReset => {
+            // 返回**实际清成了哪几项**：清不掉的要说出来，否则"已重置"三个字
+            // 会让人以为回到干净态了，其实没有
+            let done = controller.web_reset(true)?;
+            Ok(serde_json::json!({ "action": "browser-reset", "cleared": done }))
+        }
+        ControlAction::BrowserEval { script } => {
+            let value = controller.web_eval(&script)?;
+            Ok(serde_json::json!({ "action": "browser-eval", "value": value }))
+        }
+        ControlAction::BrowserViewport { width, height } => {
+            controller.web_viewport(width, height)?;
+            Ok(serde_json::json!({ "action": "browser-viewport", "width": width, "height": height }))
+        }
+        ControlAction::BrowserDownload { dir, wait_secs } => {
+            controller.web_download_dir(&dir)?;
+            let mut out = serde_json::json!({ "action": "browser-download", "dir": dir.to_string_lossy() });
+            if let Some(secs) = wait_secs {
+                let files = controller
+                    .web_wait_download(&dir, std::time::Duration::from_secs(secs))?;
+                out["files"] = serde_json::json!(
+                    files.iter().map(|p| p.to_string_lossy().to_string()).collect::<Vec<_>>()
+                );
+            }
+            Ok(out)
+        }
+        ControlAction::Dialog { action } => {
+            let name = match &action {
+                DialogAction::Accept => {
+                    controller.dialog_accept()?;
+                    "accept"
+                }
+                DialogAction::Dismiss => {
+                    controller.dialog_dismiss()?;
+                    "dismiss"
+                }
+                DialogAction::Input(text) => {
+                    controller.dialog_input(text)?;
+                    "input"
+                }
+            };
+            Ok(serde_json::json!({ "action": "dialog", "how": name }))
         }
     }
 }

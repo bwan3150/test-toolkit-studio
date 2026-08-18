@@ -1,7 +1,7 @@
 // 命令执行器模块 - 执行各种 TKS 命令
 
 use crate::{Result, TkeError, TksParam, Point, Controller, Recognizer, LocatorStrategy};
-use crate::atomic::control::{execute_action, ControlAction};
+use crate::atomic::control::{execute_action, ControlAction, DialogAction};
 use crate::utils::Workarea;
 use tracing::{debug, info};
 
@@ -293,14 +293,21 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::HideKeyboard).await.map(|_| ())
     }
 
+    // 对话框三条都走 execute_action：那里是「动作 → 设备」的唯一映射，
+    // 直接调 controller 的话 CLI / tks / agent 就各走各的了
+
     /// 确认对话框：原生 alert/confirm 的「确定」
     pub async fn execute_dialog_accept(&mut self) -> Result<()> {
-        self.controller.dialog_accept()
+        execute_action(&*self.controller, ControlAction::Dialog { action: DialogAction::Accept })
+            .await
+            .map(|_| ())
     }
 
     /// 取消对话框：原生 confirm 的「取消」
     pub async fn execute_dialog_dismiss(&mut self) -> Result<()> {
-        self.controller.dialog_dismiss()
+        execute_action(&*self.controller, ControlAction::Dialog { action: DialogAction::Dismiss })
+            .await
+            .map(|_| ())
     }
 
     /// 对话框输入：往 prompt 里填字**并确定**
@@ -308,7 +315,9 @@ impl<'a> CommandExecutor<'a> {
         let text = ParamExtractor::extract_text(&params.first().ok_or_else(|| {
             TkeError::InvalidArgument("对话框输入需要文本，如 [\"张三\"]".to_string())
         })?.clone())?;
-        self.controller.dialog_input(&text)
+        execute_action(&*self.controller, ControlAction::Dialog { action: DialogAction::Input(text) })
+            .await
+            .map(|_| ())
     }
 
     /// 按键：`按键 ["ENTER"]` / `["TAB"]` 等（归一大写传给驱动 key_event，web 映射为 WebDriver 键码）

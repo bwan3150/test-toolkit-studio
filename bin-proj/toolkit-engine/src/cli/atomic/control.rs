@@ -2,7 +2,7 @@
 // 对设备执行统一操作，操作名与 .tks 命令对应
 // 坐标参数格式: "x,y" 或 "x,y,毫秒"（如 tke control press 100,200,800）
 
-use tke::{Result, Control, ControlAction, JsonOutput};
+use tke::{Result, Control, ControlAction, DialogAction, JsonOutput, TkeError};
 use tke::atomic::control::parse_point;
 
 /// Control 命令枚举（统一操作名）
@@ -86,6 +86,50 @@ pub enum ControlCommands {
     Key {
         code: String,
     },
+    // ── 浏览器独有（只对 -d web；别的设备会如实报错，不编空壳）──
+    // 平铺在 control 下、统一 `browser-` 前缀：control 层就是所有原子指令的入口，
+    // 单开一组命令的话 tks 解释器和 AI agent 都绕不到这些能力
+
+    /// 回到「首次访问」: 清 cookie/localStorage/sessionStorage/IndexedDB/缓存
+    ///
+    /// 浏览器会话跨命令复用，登录态会一直带着——测登录/首访引导/权限弹窗前不清，
+    /// 你以为在测新用户，其实看到的是老用户视角
+    BrowserReset,
+    /// 在页面里跑 JS: control browser-eval "localStorage.getItem('token')"
+    ///
+    /// 用来**观察和造前置状态**。别拿它代替用户操作——直接调函数改状态，
+    /// 测的就不是真链路了
+    BrowserEval {
+        /// JS 代码。不写 return 就当表达式处理
+        script: String,
+    },
+    /// 设视口测响应式: control browser-viewport 390x844
+    BrowserViewport {
+        /// `宽x高`，如 390x844（iPhone 竖屏）/ 1440x900
+        size: String,
+    },
+    /// 设下载目录(无头 Chrome 默认不落盘): control browser-download --dir ~/dl [--wait 15]
+    BrowserDownload {
+        /// 下载落到哪个目录
+        #[arg(long, value_name = "目录")]
+        dir: std::path::PathBuf,
+        /// 等到下载完成再返回（秒），并打印文件路径
+        #[arg(long, value_name = "秒")]
+        wait: Option<u64>,
+    },
+    /// 处理原生对话框: control browser-dialog accept|dismiss [--text "张三"]
+    ///
+    /// alert/confirm/prompt 是**浏览器画的**，不在 DOM 里——点不到也采不到，
+    /// 只能走这条路。给了 --text 就是往 prompt 里填字并确定
+    BrowserDialog {
+        /// accept=确定 / dismiss=取消（给了 --text 时忽略）
+        #[arg(default_value = "accept")]
+        how: String,
+        /// prompt 要填的文本（填完自动确定）
+        #[arg(long)]
+        text: Option<String>,
+    },
+
     /// 切换: control switch <标签序号|URL> (web) / control switch <包名> (App)
     Switch {
         /// web=标签序号 或 http(s) URL（新标签打开）；移动端=要切到前台的 App 包名
@@ -150,6 +194,30 @@ fn to_action(cmd: ControlCommands, device: &str) -> Result<ControlAction> {
             }),
         },
         ControlCommands::Key { code } => ControlAction::Key { code },
+        ControlCommands::BrowserReset => ControlAction::BrowserReset,
+        ControlCommands::BrowserEval { script } => ControlAction::BrowserEval { script },
+        ControlCommands::BrowserViewport { size } => {
+            let (width, height) = parse_size(&size).ok_or_else(|| {
+                TkeError::InvalidArgument(format!("尺寸要写成 宽x高，如 390x844（收到 {}）", size))
+            })?;
+            ControlAction::BrowserViewport { width, height }
+        }
+        ControlCommands::BrowserDownload { dir, wait } => {
+            ControlAction::BrowserDownload { dir, wait_secs: wait }
+        }
+        ControlCommands::BrowserDialog { how, text } => ControlAction::Dialog {
+            action: match (text, how.as_str()) {
+                (Some(t), _) => DialogAction::Input(t),
+                (None, "dismiss" | "cancel" | "取消") => DialogAction::Dismiss,
+                (None, "accept" | "ok" | "确定") => DialogAction::Accept,
+                (None, other) => {
+                    return Err(TkeError::InvalidArgument(format!(
+                        "对话框动作只能是 accept / dismiss（收到 {}），填 prompt 用 --text",
+                        other
+                    )))
+                }
+            },
+        },
         ControlCommands::Switch { target } => ControlAction::Switch { target },
     })
 }
@@ -177,5 +245,25 @@ pub async fn handle(cmd: ControlCommands, params: std::sync::Arc<tke::Params>) -
             Ok(())
         }
         Err(e) => JsonOutput::error(e.to_string()),
+    }
+}
+
+/// `390x844` → (390, 844)。大小写 X 和 `*` 都认——人打字不会在意这个
+fn parse_size(s: &str) -> Option<(u32, u32)> {
+    let (w, h) = s.trim().split_once(['x', 'X', '*'])?;
+    Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_size;
+
+    #[test]
+    fn parses_sizes_people_actually_type() {
+        assert_eq!(parse_size("390x844"), Some((390, 844)));
+        assert_eq!(parse_size(" 1440X900 "), Some((1440, 900)));
+        assert_eq!(parse_size("1280*720"), Some((1280, 720)));
+        assert_eq!(parse_size("390"), None);
+        assert_eq!(parse_size("axb"), None);
     }
 }

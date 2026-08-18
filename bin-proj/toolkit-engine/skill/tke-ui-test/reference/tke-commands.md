@@ -46,11 +46,12 @@ tke -d web control click 640,380      # 等价操作，但什么都不留
 ## 浏览器专属（`-d web`）
 
 ```bash
-tke -d web browser reset                     # 回到「首次访问」：清 cookie/localStorage/sessionStorage/IndexedDB/缓存
-tke -d web browser eval "localStorage.getItem('token')"   # 在页面里跑一段 JS，打印结果
-tke -d web browser viewport 390x844          # 改视口测响应式（iPhone 竖屏）
-tke -d web browser download --dir ~/dl       # 指定下载目录（无头 Chrome 默认不落盘）
-tke -d web browser download --dir ~/dl --wait 15   # 并等下载完成，打印文件路径
+tke -d web control browser-reset             # 回到「首次访问」：清 cookie/localStorage/sessionStorage/IndexedDB/缓存
+tke -d web control browser-eval "localStorage.getItem('token')"   # 在页面里跑一段 JS
+tke -d web control browser-viewport 390x844  # 改视口测响应式（iPhone 竖屏）
+tke -d web control browser-download --dir ~/dl            # 指定下载目录（无头 Chrome 默认不落盘）
+tke -d web control browser-download --dir ~/dl --wait 15  # 并等下载完成，打印文件路径
+tke -d web control browser-dialog accept     # 处理原生对话框（steps 里写 `确认对话框`）
 ```
 
 **`reset` 什么时候必须用**：浏览器会话跨命令复用，登录态会一直带着。测登录、首访引导、

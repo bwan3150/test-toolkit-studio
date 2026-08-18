@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · browser 能力收进 control 层（用户拍板）
+用户指出:control 层就是所有原子指令的入口,浏览器独有能力也该在它下面。
+理由比命名更硬——`execute_action` 的注释写着「**唯一的 ControlAction → 设备映射**,
+`tke control` / tks 解释器 / AI agent 都经此执行」,而上一版把 browser 能力放在 CLI 里
+**直接调 Controller**,等于绕过了这个单一来源:steps 和 agent 都用不上这些能力。
+- **refactor** 删掉顶层 `tke browser` 子命令组,四条平铺进 control(统一 `browser-` 前缀):
+  `control browser-reset|browser-eval|browser-viewport|browser-download`
+- **refactor** 新增 `ControlAction::{BrowserReset,BrowserEval,BrowserViewport,BrowserDownload,Dialog}`,
+  经 `execute_action` 分发;输出也跟着统一成 JsonOutput(之前那版自己 println,风格也不一致)
+- **fix(同类问题)** tks 的三条对话框指令原本也直接调 controller、绕过了统一映射,一并改回
+  `execute_action`;新增 `control browser-dialog accept|dismiss [--text]` 补上 control 侧入口
+- 真浏览器实测:eval/reset/viewport/dialog/download 五条全过,tks 侧 `对话框输入` 照常
+
 ### 2026-08-18 · web 能力补齐:页面报错可见 + 干净态 + eval + 视口 + 下载
 - **feat(页面报错,P-38)** 每步自动收 console.error / 未捕获异常 / 加载失败的请求
   (`POST /log`,chromedriver 扩展端点,无需额外 capability),写进 StepResult/StepEnd/
