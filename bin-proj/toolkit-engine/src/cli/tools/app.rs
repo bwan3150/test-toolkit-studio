@@ -26,6 +26,18 @@ pub enum AppCommands {
         /// 应用包名 (如: com.example.app)
         package: String,
     },
+    /// 看设备日志 (logcat)：App 崩了、点了没反应，真因往往只在这里
+    Log {
+        /// 只看这个包的日志（按 PID 过滤，比 grep 包名准——堆栈行里不带包名）
+        #[arg(short = 'p', long)]
+        package: Option<String>,
+        /// 取最后多少行
+        #[arg(short = 'n', long, default_value = "200")]
+        lines: usize,
+        /// 最低级别 V/D/I/W/E。默认 W——拉全量会把上下文冲爆
+        #[arg(short = 'l', long, default_value = "W")]
+        level: String,
+    },
 }
 
 /// 处理 App 相关命令
@@ -57,6 +69,12 @@ pub async fn handle(action: AppCommands, params: std::sync::Arc<tke::Params>) ->
                 "message": message,
                 "package": package
             }));
+        }
+        AppCommands::Log { package, lines, level } => {
+            let text = app_manager.logcat(package.as_deref(), lines, &level).await?;
+            // 日志**直接打原文**，不裹 JSON：这东西是给人和 AI 读的，
+            // 裹进 JSON 字符串里满屏 \n 转义，谁也看不下去
+            print!("{}", text);
         }
         AppCommands::Focus => {
             let focus_info = app_manager.get_current_focus().await?;

@@ -11,7 +11,6 @@ pub mod fix;
 pub mod report;
 
 // ① 直通（统一处理所有外部二进制，含 adb -d 注入特例）
-pub mod passthrough;
 
 // ② 原子方法
 pub mod atomic;

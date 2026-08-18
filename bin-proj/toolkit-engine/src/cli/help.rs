@@ -12,16 +12,6 @@ pub fn build_help() -> String {
         ("", "", "", "", "")
     };
 
-    let available = tke::ToolManager::list_available();
-    let tools_line = if available.is_empty() {
-        format!("  {d}(当前目录下未发现可直通的二进制){r}")
-    } else {
-        available
-            .iter()
-            .map(|t| format!("  {g}{t}{r}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
 
     format!(
         "\
@@ -50,12 +40,9 @@ pub fn build_help() -> String {
 {c}自有工具{r}
   {g}ocr{r}          图片文字识别 {d}(离线 / 在线){r}
   {g}file{r}         设备文件系统管理
-  {g}app{r}          设备应用管理
+  {g}app{r}          设备应用管理 {d}(app log 看 logcat: App 崩了/点了没反应先看它){r}
   {g}device{r}       设备详细信息
   {g}element{r}      元素库管理 {d}(element add <名称> --at x,y 取元素落库, 自动crop模板图+ocr){r}
-
-{c}直通{r}
-{tools_line}
 
 {c}全局参数{r}
   {g}-d, --device{r} <ID>      目标设备 {d}(Android序列号 / web / iOS UDID){r}

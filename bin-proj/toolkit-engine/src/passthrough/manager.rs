@@ -5,7 +5,6 @@
 
 use crate::{Result, TkeError};
 use std::path::PathBuf;
-use std::process::Command;
 
 /// 通用工具管理器：按名称解析 tke 同目录下的二进制
 pub struct ToolManager;
@@ -33,74 +32,13 @@ impl ToolManager {
             }
         }
 
+        // 指向 doctor 而不是列一串"目录里现在有什么"——缺依赖时人要的是**怎么补**，
+        // 不是"还缺哪些"的清单
         Err(TkeError::InvalidArgument(format!(
-            "{} 可执行文件缺失或不完整：请将其放在与 tke 相同的目录下。当前可用: {}",
-            name,
-            Self::list_available().join(", ")
+            "缺少 {}（要和 tke 放在同一目录）。补齐：tke doctor --fix",
+            name
         )))
     }
 
-    /// 列出 tke 同目录下所有可执行工具（排除 tke 自身）
-    pub fn list_available() -> Vec<String> {
-        let mut tools = Vec::new();
 
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                if let Ok(entries) = std::fs::read_dir(exe_dir) {
-                    for entry in entries.flatten() {
-                        let path = entry.path();
-                        if !path.is_file() {
-                            continue;
-                        }
-                        let name = match path.file_name().and_then(|n| n.to_str()) {
-                            Some(n) => n.trim_end_matches(".exe").to_string(),
-                            None => continue,
-                        };
-                        // 排除 tke 自身和非可执行资源文件（如 .jar/.dll）
-                        if name == "tke" || name.contains('.') {
-                            continue;
-                        }
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::PermissionsExt;
-                            if let Ok(meta) = path.metadata() {
-                                if meta.permissions().mode() & 0o111 == 0 {
-                                    continue;
-                                }
-                            }
-                        }
-                        tools.push(name);
-                    }
-                }
-            }
-        }
-
-        tools.sort();
-        tools.dedup();
-        tools
-    }
-
-    /// 直通执行：继承标准输入输出，以工具自身退出码退出（不返回）
-    ///
-    /// device_id 仅对支持 -s 的工具（adb）注入设备参数
-    pub fn passthrough(name: &str, args: Vec<String>, device_id: Option<String>) -> Result<()> {
-        let tool_path = Self::resolve(name)?;
-
-        let mut command = Command::new(&tool_path);
-
-        // adb 特例：-d/--device 转为 adb -s <id>
-        if name == "adb" {
-            if let Some(device) = device_id {
-                command.arg("-s").arg(device);
-            }
-        }
-
-        command.args(&args);
-
-        let status = command.status().map_err(|e| {
-            TkeError::InvalidArgument(format!("执行工具 '{}' 失败: {}", name, e))
-        })?;
-
-        std::process::exit(status.code().unwrap_or(1));
-    }
 }

@@ -1,7 +1,7 @@
 // Toolkit Engine 核心库
 // tke = 所有测试工具的统一入口/协调器。按职责分层（自底向上）：
 //   models / utils        数据模型 / 基础设施
-//   passthrough           ① 直通: 透传同目录任意二进制 + 二进制定位 (adb/aapt/k6/...)
+//   passthrough           二进制定位 (adb/chromedriver/go-ios/tke-opencv)——CLI 直通已删，见 ADR-0015
 //   drivers               设备/协议对接层 (adb/wda/web) + Controller 分发
 //   engines               纯逻辑引擎: fetcher(解析) / recognizer(识别) / ocr
 //   atomic                ② 原子方法: refresh / fetch / recognize / control（编排 drivers+engines）
@@ -12,7 +12,7 @@
 pub mod utils;
 pub mod models;
 
-// ① 直通 + 二进制定位
+// 二进制定位
 pub mod passthrough;
 
 // 设备/协议对接层
@@ -35,7 +35,7 @@ pub mod tools;
 // 基础设施
 pub use utils::{JsonOutput, Workarea, TkeConfig, AiConfig, KnowledgeConfig, Params};
 
-// ① 直通 + 二进制定位
+// 二进制定位
 pub use passthrough::ToolManager;
 
 // 设备驱动分发

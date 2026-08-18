@@ -70,7 +70,7 @@ commit message 是本项目最重要的变更叙事（CHANGELOG 只是索引）�
 | `workflow/tks/`       | .tks 脚本引擎：解析器 + 解释器 + 单步执行（编辑器调试用）。**与 `workflow/agent/runner`（AI 编排）是两回事**，曾同名 "runner" 已改名。 |
 | `workflow/`（顶层）   | `script_runner` 完整脚本执行（事件+产物）、`flow` 多脚本顺序执行、`artifacts` 产物落盘。 |
 | `workflow/agent/`     | AI harness（`tke harness`），见下表。 |
-| `passthrough/`        | 外部二进制定位与直通。 |
+| `passthrough/`        | 外部二进制**定位**（adb/chromedriver/go-ios/tke-opencv 靠它找路径）。CLI 直通已删，见 ADR-0016。 |
 | `cli/`                | 参数翻译层，**禁止业务逻辑**（已知违例：`cli/workflow/harness.rs` 直调 AdbDriver 列设备，待修）。 |
 
 ## workflow/agent/ 子模块表

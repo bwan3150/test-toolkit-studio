@@ -296,4 +296,64 @@ impl AppManager {
             Ok((false, format!("关闭失败: {}", stderr)))
         }
     }
+
+    /// 取设备日志（logcat）——**App 崩了、点了没反应，真因往往只在这里**。
+    ///
+    /// 这是 tke 唯一必须补的直通替代品：删掉 CLI 直通之后，没有它就没法看崩溃堆栈。
+    ///
+    /// - `package`：只看这个包的日志（按 PID 过滤，比 grep 包名准——堆栈行里不带包名）
+    /// - `lines`：取最后多少行
+    /// - `level`：最低级别（V/D/I/W/E），默认 W——默认拉全量会把 AI 的上下文冲爆
+    ///
+    /// 一律**取一次就返回**（`-d` 模式），不做 follow：一条 CLI 命令挂在那儿等日志，
+    /// 调用方只能超时杀掉，拿不到东西。要盯变化就前后各取一次。
+    pub async fn logcat(
+        &self,
+        package: Option<&str>,
+        lines: usize,
+        level: &str,
+    ) -> Result<String> {
+        // 按包名过滤要先拿 PID：崩溃堆栈那几行里**不含包名**，直接 grep 包名会把最有用的
+        // 那段滤掉。拿不到 PID（进程没起来/已崩溃退出）就退回全量——有总比没有强
+        let pid = match package {
+            Some(pkg) => self.pid_of(pkg).await,
+            None => None,
+        };
+
+        let mut cmd = Command::new(&self.adb_path);
+        if let Some(ref device) = self.device_id {
+            cmd.arg("-s").arg(device);
+        }
+        cmd.args(["logcat", "-d", "-v", "time", "-t", &lines.to_string()]);
+        if let Some(p) = pid {
+            cmd.args(["--pid", &p.to_string()]);
+        }
+        // `*:W` = 所有 tag 至少 W 级
+        cmd.arg(format!("*:{}", level.trim().to_uppercase()));
+
+        let output = cmd
+            .output()
+            .map_err(|e| TkeError::AdbError(format!("执行 logcat 失败: {}", e)))?;
+        if !output.status.success() {
+            return Err(TkeError::AdbError(format!(
+                "logcat 失败: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// 包名 → 当前 PID（进程没在跑就是 None）
+    async fn pid_of(&self, package: &str) -> Option<u32> {
+        let mut cmd = Command::new(&self.adb_path);
+        if let Some(ref device) = self.device_id {
+            cmd.arg("-s").arg(device);
+        }
+        let out = cmd.args(["shell", "pidof", package]).output().ok()?;
+        String::from_utf8_lossy(&out.stdout)
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    }
 }

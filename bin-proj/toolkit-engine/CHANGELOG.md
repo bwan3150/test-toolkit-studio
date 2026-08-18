@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · 平台能力矩阵 + 删掉 CLI 直通（用户拍板）
+- **docs** 新增 `docs/platform-matrix.md`:三端共有/平台独有/**同名不同义**三张表 +
+  「加新动作的检查单」;skill 的 steps-syntax.md 同步一份精简版
+- **fix(INV-9)** 写文档时炸出:iOS 的 `key_event` 对认不出的键 `_ => Ok(())`——
+  `按键 ["TAB"]` 什么都不做却报成功。改成明确报错
+- **refactor(ADR-0016)** 删掉 CLI 直通(`tke adb shell …`)。它是操作设备的第二条路,
+  绕过证据留存、坐标换算和唯一的动作映射——「点得中但什么都没留下」多一条入口。
+  保留 `ToolManager::resolve`(内部定位 adb/chromedriver/go-ios/tke-opencv)和
+  `tke <path.tks>` 便捷路由;未知命令报错并指路
+- **feat** 补上删除前盘出的唯一缺口 `tke app log`(logcat):按**包名的 PID** 过滤而不是
+  grep 包名——崩溃堆栈那几行不含包名,grep 会把最有用的一段滤掉;默认 `*:W` 200 行,
+  拉全量会把 AI 上下文冲爆;取一次就返回(不 follow,CLI 挂着等日志只能被超时杀掉)
+
 ### 2026-08-18 · browser 能力收进 control 层（用户拍板）
 用户指出:control 层就是所有原子指令的入口,浏览器独有能力也该在它下面。
 理由比命名更硬——`execute_action` 的注释写着「**唯一的 ControlAction → 设备映射**,

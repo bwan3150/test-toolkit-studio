@@ -99,14 +99,20 @@ tke -d <序列号> file write <设备路径> <内容>
 tke -d <序列号> file rm|cp|mv ...
 ```
 
-## 直通原生工具
-
-tke 同目录下的二进制可以直接透传：
+## 安卓：看设备日志（App 崩了 / 点了没反应）
 
 ```bash
-tke -d <序列号> adb shell dumpsys battery     # 注意 -d 要放在 adb 前面
-tke ffmpeg -i in.mp4 out.gif
+tke -d <序列号> app log -p com.example.app          # 只看这个 App 的日志（按 PID 过滤）
+tke -d <序列号> app log -p com.example.app -n 500   # 多取几行
+tke -d <序列号> app log -l E                        # 只看 Error
 ```
+
+**「点了没反应」先看这里再下结论**——崩溃堆栈、后台异常都在设备日志里，
+页面结构和截图里一个字都看不到。网页侧对应的东西 tke 会自动收（见上面「页面报错会自动收」）。
+
+> **tke 不透传原生工具**：`tke adb shell …` 这类用法已经删掉了。设备操作一律走 tke 指令
+> ——直通绕过证据留存和坐标换算，点得中、什么都没留下、报告里一片空白。
+> 缺什么能力就提，别绕路。
 
 ## 收尾
 

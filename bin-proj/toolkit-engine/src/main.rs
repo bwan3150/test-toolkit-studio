@@ -246,14 +246,10 @@ async fn main() -> tke::Result<()> {
             l.ends_with(".tks") || l.ends_with(".toml")
         }).unwrap_or(false));
 
-    // 直通命令：完全跳过日志初始化，保持原生工具体验
-    // 注：harness 已改为内置 AI 闭环（不再透传 tester-ai），因此走正常日志初始化
-    let is_passthrough_command = !tool_is_script && matches!(
-        cli.command,
-        Commands::Tool(_)
-    );
+    // 未知命令那条路只打几行指路文字，不需要日志子系统
+    let is_unknown_command = !tool_is_script && matches!(cli.command, Commands::Tool(_));
 
-    if !is_passthrough_command {
+    if !is_unknown_command {
         // 默认只输出 WARN 以上保持 CLI 干净；-v 输出 DEBUG；日志一律走 stderr
         let level = if cli.verbose {
             tracing::Level::DEBUG
@@ -331,13 +327,23 @@ async fn main() -> tke::Result<()> {
         Commands::Element { action } => {
             tools::element::handle(action, params.clone()).await
         }
-        // ① 直通（.tks/.toml 路径自动转 run）
+        // 便捷路由：tke <path.tks|path.toml> 等价于 tke run <path>。
+        // 认不出的就是**未知命令**——CLI 直通已删（ADR-0015），
+        // `tke adb shell input tap …` 这类用法绕过证据留存和坐标换算，
+        // 点得中、什么都没留下、报告里一片空白
         Commands::Tool(args) => {
             if tool_is_script {
                 let path = PathBuf::from(&args[0]);
                 workflow::run::handle(RunArgs { path, ocr: None }, params.clone()).await
             } else {
-                passthrough::handle(args, params.clone()).await
+                let what = args.first().map(String::as_str).unwrap_or("");
+                eprintln!("未知命令：{}", what);
+                eprintln!("tke 不再透传原生工具——设备操作一律走 tke 指令，由 tke 转译后落到二进制上。");
+                eprintln!("  看日志       tke -d <设备> app log -p <包名>");
+                eprintln!("  应用/文件/信息 tke app|file|device --help");
+                eprintln!("  操作设备      tke control --help  /  tke steps '点击 [\"登录\"]'");
+                eprintln!("  跑脚本        tke run <path.tks>（或直接 tke <path.tks>）");
+                std::process::exit(2);
             }
         }
     }

@@ -5,7 +5,7 @@
 ## 二进制布局
 
 ```
-bin/<platform>/                          # 与 tke 同目录 = 直通可用
+bin/<platform>/                          # 与 tke 同目录 = tke 找得到（ToolManager::resolve）
 ├── tke                                  # 主程序 (bin-proj/toolkit-engine 构建输出)
 ├── adb, aapt                            # Android 工具链
 ├── chromedriver                         # Web 驱动 (单文件, 可以放这里)
@@ -151,8 +151,8 @@ tke --headless=off ...  # 强制有头
   `BUS_ADRALN`）：终端注入的进程上下文被 Chrome 继承导致。tke 拉起 chromedriver
   时已做环境清洗（env_clear 白名单）+ 脱离终端进程组。**白名单含 DISPLAY/WAYLAND_DISPLAY/
   XAUTHORITY**——Linux 有头模式 Chrome 靠它们连图形栈，早期漏了导致起不来（P-15）。
-- **直通 adb 时全局 -d 必须放在 adb 之前**：`tke -d <serial> adb shell ...` ✓；
-  `tke adb -d <serial> ...` ✗（-d 会被透传给 adb 本身，语义完全不同）。
+- **CLI 直通已删（ADR-0016）**：`tke adb shell …` 不再可用。看日志用 `tke app log`，
+  其余走 `tke app|file|device|control`——设备操作一律经 tke 转译，绕过去就没有证据留存和坐标换算。
 - **渲染确定性**：web 会话固定 `--window-size=1280,900` +
   `--force-device-scale-factor=1`，不同机器/显示器（视网膜或外接屏）截图尺寸与
   坐标系完全一致，脚本里的像素坐标可移植。不要移除这两个参数。

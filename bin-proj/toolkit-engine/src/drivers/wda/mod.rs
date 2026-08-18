@@ -382,7 +382,13 @@ impl WdaDriver {
         match key_code {
             "KEYCODE_ENTER" | "ENTER" => self.input_text("\n"),
             "KEYCODE_BACK" => self.back(),
-            _ => Ok(()),
+            // ⚠️ 认不出的键**必须报错**。这里原先是 `_ => Ok(())`——`按键 ["TAB"]`
+            // 在 iOS 上什么都不做,却报成功。这种"成功了但没发生"最难查:人会以为
+            // 焦点已经移走了,接着往下写,错在后面几步才暴露出来(INV-9)
+            other => Err(TkeError::InvalidArgument(format!(
+                "iOS 上没有这个按键：{}（WDA 只认 ENTER 和 BACK；其它键请直接点目标元素）",
+                other
+            ))),
         }
     }
 
