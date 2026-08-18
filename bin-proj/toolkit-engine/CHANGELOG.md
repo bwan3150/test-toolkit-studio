@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · skill 踩坑册与文档跟上这两天的改动
+- **docs(skill)** 踩坑册加 4 条,全是这两天新修出来的:C-22「点了没反应先看页面报错」、
+  C-23「原生对话框挡住所有操作且 fetch 采不到」、C-24「iframe 能采到但要认出跨域标记」、
+  C-25「别绕过 tke 操作设备(直通已删)」;C-16 补上同名元素**优先可点击**(P-35)、
+  C-8 补一句"没有第二条路了"
+- **docs(skill)** SKILL.md 确认结果那节加 `errors` / `dialog` 两个字段的读法;
+  tke-commands.md 补 iframe 与对话框在采集里的表现
+- **docs** `driver-mapping.md` 补齐 hover/select/browser-*/对话框/页面报错/iframe 六行,
+  修掉 key 那行的过时描述;与新的 `platform-matrix.md` 互相指路并说清分工
+  (一份面向排查"怎么实现的",一份面向调用"有没有/一不一致")
+- **fix(P-40,INV-9)** 核对矩阵时发现 **web 的 `key_event` 也是 `_ => Ok(())`**
+  (上一轮只修了 iOS):认不出的键报成功却什么都不做。改成报错并列出支持的键;
+  web 顺带支持单个字符(`按键 ["a"]` 是有意义的请求)
+
 ### 2026-08-18 · 平台能力矩阵 + 删掉 CLI 直通（用户拍板）
 - **docs** 新增 `docs/platform-matrix.md`:三端共有/平台独有/**同名不同义**三张表 +
   「加新动作的检查单」;skill 的 steps-syntax.md 同步一份精简版

@@ -656,8 +656,25 @@ return false;
             "KEYCODE_ESCAPE" | "ESC" => "\u{E00C}",
             "KEYCODE_DEL" | "BACKSPACE" => "\u{E003}",
             "KEYCODE_BACK" => return self.back(),
-            _ => return Ok(()),
+            // 单个字符直接当键发（`按键 ["a"]` 是有意义的），其余**必须报错**：
+            // 这里原先是 `_ => Ok(())`——认不出的键什么都不做却报成功，
+            // 人会以为按下去了，错在后面几步才暴露（INV-9，iOS 侧同一个毛病一起修的）
+            one if one.chars().count() == 1 => {
+                let ch = one.to_string();
+                return self.send_key(&ch);
+            }
+            other => {
+                return Err(TkeError::InvalidArgument(format!(
+                    "网页上没有这个按键：{}（支持 ENTER / TAB / ESC / BACKSPACE / BACK，或直接给单个字符）",
+                    other
+                )))
+            }
         };
+        self.send_key(key)
+    }
+
+    /// 发一个键（按下 + 抬起）
+    fn send_key(&self, key: &str) -> Result<()> {
         self.post("/actions", serde_json::json!({
             "actions": [{
                 "type": "key",

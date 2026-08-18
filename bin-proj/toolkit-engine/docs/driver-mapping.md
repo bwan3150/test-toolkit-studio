@@ -1,6 +1,11 @@
 # 驱动指令映射对照表
 
-tke 原子指令在各端驱动下的底层实现对照，用于排查平台间行为差异。
+tke 原子指令在各端驱动下的**底层实现**对照——这条指令最终落成什么 adb / HTTP 调用。
+用于排查"为什么这个平台上行为不一样"。
+
+> **想知道"某个动作某个平台有没有"**，看 [`platform-matrix.md`](platform-matrix.md)：
+> 那份讲**有没有 / 一不一致 / 怎么用**（面向调用方和加新动作的人），这份讲**怎么实现的**
+> （面向排查）。两份都得跟着代码改——说法不一致本身就是坑。
 
 - **Android**: `src/drivers/adb.rs`（adb，串号寻址 `-d <serial>`）
 - **iOS**: `src/drivers/wda/`（WebDriverAgent HTTP 协议，`-d <UDID>` 或 `-d wda:<UDID>`，UDID 格式自动识别；mod=协议 / infra=go-ios / normalize=XCUI→XML）
@@ -42,7 +47,17 @@ tke 原子指令在各端驱动下的底层实现对照，用于排查平台间�
 | `home` | `keyevent KEYCODE_HOME` | `POST /wda/homescreen` | 导航到 `about:blank` |
 | `launch` | `shell am start -n 包名/Activity`（双参数） | 单参数 BundleID；无会话→创建会话随之拉起（唯一会话创建入口），有会话→`/wda/apps/launch` | `POST /url` 导航（单参数 URL，无协议自动补 https://） |
 | `close` | `shell am force-stop 包名` | `POST /wda/apps/terminate` {bundleId}；空参 = `DELETE /session` 销毁会话（保留转发/隧道/WDA 进程） | `DELETE /session` + kill chromedriver（销毁整个会话） |
-| `key CODE` | `keyevent <CODE>`（任意 Android keycode） | 仅 ENTER（→输入 \n）/KEYCODE_BACK（→返回手势）；其余忽略 | 仅映射 ENTER/TAB/ESC/BACKSPACE → WebDriver key actions；KEYCODE_BACK→back；其余忽略 |
+| `key CODE` | `keyevent <CODE>`（任意 Android keycode） | 仅 ENTER（→输入 \n）/ KEYCODE_BACK（→返回手势）；**其余报错** | ENTER/TAB/ESC/BACKSPACE → WebDriver key actions；KEYCODE_BACK→back；**单个字符直接发**；其余报错 |
+| `hover x,y` | **报错**（触摸屏没有 hover） | **报错** | `POST /actions` pointerMove（不按下） |
+| `select x,y "选项"` | **报错** | **报错** | execute JS：原生 select value setter + 派发 change（原生下拉展开后由浏览器绘制，DOM 里看不见） |
+| `browser-reset` | — | — | `DELETE /cookie` + JS 清 localStorage/sessionStorage/IndexedDB + CDP `Network.clearBrowserCache` |
+| `browser-eval "js"` | — | — | `POST /execute/sync`（不写 return 时包成表达式） |
+| `browser-viewport WxH` | — | — | CDP `Emulation.setDeviceMetricsOverride`（**不是** `/window/rect`——那个改的是窗口，量下来差一截，P-39） |
+| `browser-download --dir` | — | — | CDP `Page.setDownloadBehavior`；等待靠轮询"有文件且无 `.crdownload`" |
+| `browser-dialog accept\|dismiss` | — | — | `POST /alert/accept` / `/alert/dismiss` / `/alert/text`（建会话时 `unhandledPromptBehavior: ignore`，否则 WebDriver 会自作主张取消掉，P-37） |
+| 每步页面报错采集 | — | — | `POST /log {"type":"browser"}`（chromedriver 扩展端点）取 SEVERE：console.error / 未捕获异常 / 加载失败请求 |
+| 每步对话框探测 | — | — | `GET /alert/text`，有就写进 StepResult.dialog 并拦下下一步 |
+| 设备日志 | `logcat -d -v time -t N --pid <包名的PID>` | — | 见上面「每步页面报错采集」 |
 
 ## 已知行为差异（排查备忘）
 
@@ -54,4 +69,6 @@ tke 原子指令在各端驱动下的底层实现对照，用于排查平台间�
 | `swipe` 语义 | 触摸拖动（可拖元素/滑列表） | 触摸拖动（同 Android） | 滚轮滚动（不能拖元素，拖拽需后续单独实现 pointer-drag） |
 | 会话生命周期 | 无会话概念 | 单脚本/原子指令保留会话；flow 结束关 App+销毁会话 | 单脚本/原子指令保留会话；flow 结束销毁会话 |
 | 单步典型耗时 | 3-4s（含采集） | 1-1.5s（含采集） | 0.2-0.5s |
+| iframe 内容 | — | — | **同源递归采集**（坐标累加 iframe 位置+边框，xpath 前缀 `iframe[1]>>`）；跨域拿不到，留一条 `[跨域内容，采不到内部元素]` 标记（P-36） |
+| 原生对话框 | 系统弹窗是真元素，照常点 | 同 Android | **浏览器画的，不在 DOM 里**：fetch 采不到、截图拍不到，只能走 `/alert/*`（P-37） |
 | 前置条件 | adb 可见即可 | 设备装过 WDA 即可（tke 经 go-ios 自动启动，冷启动约 10s） | 无（chromedriver 自动拉起） |
