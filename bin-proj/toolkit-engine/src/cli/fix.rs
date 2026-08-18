@@ -379,8 +379,13 @@ fn print_health(exe_dir: &Path, missing: usize) {
         );
     }
     // 更新提示只出现一次：tke 和 skill 谁旧都是同一条命令，分开说两遍是噪音
-    if st.as_ref().is_some_and(|s| s.any_stale()) {
+    if let Some(s) = st.as_ref().filter(|s| s.any_stale()) {
         println!("  {} 有可用更新{}", sym_warn(), dim("　更新：tke update"));
+        // skill 旧的时候多说一句：调用方 AI 的上下文里那份是会话开始时加载的，
+        // 只换磁盘文件它是不知道的——不重读等于白更新
+        if s.skill_stale {
+            println!("    {}", dim("更新后重新读一遍 SKILL.md——你上下文里那份还是旧的"));
+        }
     }
 }
 

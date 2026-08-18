@@ -59,6 +59,13 @@ impl Staleness {
     /// 给人看的一行提醒（没落后就是 None）。
     /// **只说有更新 + 怎么更新**，版本号那些细节留给 `tke doctor`——
     /// 这行是缀在别人正干着的活后面的，不该抢戏，更不该甩一条一百多字符的 curl 命令。
+    ///
+    /// skill 过期时**多缀一句"更新后重读 SKILL.md"**：调用方 AI 的上下文里那份是会话
+    /// 开始时加载的，`tke update` 换的是磁盘文件——不重读，它手里拿的还是旧文档，
+    /// 更新等于白做（要到下次会话才生效）。
+    ///
+    /// 这句话**必须由 tke 说**，写在 SKILL.md 里没用：手上文档旧的那个 AI，
+    /// 恰恰就是看不到新指示的那个（同 ADR-0010：护栏进工具，别只写在提示词里）。
     pub fn hint(&self) -> Option<String> {
         if !self.any_stale() {
             return None;
@@ -69,7 +76,11 @@ impl Staleness {
             (false, true) => "skill",
             (false, false) => return None, // 上面已提前返回，这里只是让编译器满意
         };
-        Some(format!("{} 有可用更新　更新：tke update", what))
+        let mut line = format!("{} 有可用更新　更新：tke update", what);
+        if self.skill_stale {
+            line.push_str("（更新后重读 SKILL.md）");
+        }
+        Some(line)
     }
 }
 
@@ -243,7 +254,16 @@ mod tests {
         let h = s.hint().unwrap();
         assert!(h.contains("tke update"), "要给出更新命令:{}", h);
         assert!(!h.contains("http"), "别在这行甩 URL（细节留给 doctor）:{}", h);
-        assert!(h.chars().count() < 40, "这行要短:{}", h);
+        // skill 过期时多一句"更新后重读"——那句非说不可（见 hint 的文档注释），
+        // 但也就多十来个字，仍然是一行
+        assert!(h.contains("重读 SKILL.md"), "skill 旧时要提醒重读:{}", h);
+        assert!(h.chars().count() < 60, "还是得是短短一行:{}", h);
+
+        // 只有 tke 旧（skill 是新的）：不该出现那句重读提醒，也要更短
+        let tke_only = Staleness { skill_stale: false, ..s };
+        let h2 = tke_only.hint().unwrap();
+        assert!(!h2.contains("SKILL.md"), "skill 不旧就别提它:{}", h2);
+        assert!(h2.chars().count() < 40, "这行要短:{}", h2);
 
         // 没落后就不该有提醒
         let ok = Staleness::default();
