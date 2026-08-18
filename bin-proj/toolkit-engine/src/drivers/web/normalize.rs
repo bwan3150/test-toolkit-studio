@@ -30,7 +30,11 @@ const xpathOf = (el) => {
 const GRAPHIC = ['SVG','PATH','RECT','CIRCLE','ELLIPSE','LINE','POLYGON','POLYLINE',
                  'G','USE','DEFS','MASK','CLIPPATH','TSPAN','STOP','LINEARGRADIENT'];
 
-const walk = (el, clickableAncestor) => {
+// ox/oy = 这层文档相对**顶层页面**的像素偏移(iframe 内部文档的 rect 是相对它自己的视口的);
+// vw/vh = 这层文档的视口大小(iframe 里判"在不在视口内"要用 iframe 的尺寸,不是主窗口的)
+// fp = frame 前缀:iframe 内元素的 xpath 是相对**内部文档**的,拿到主文档去找必然落空。
+// 前缀成 `iframe[2]>>/*[@id='x']`,一眼看得出"它在第 2 个 iframe 里",也不会被误用
+const walk = (el, clickableAncestor, ox, oy, vw, vh, fp) => {
   for (const child of el.children) {
     // 声明在 if 外：下面递归时要把它传给子元素（块作用域里的 const 出不来）
     let selfClickable = false;
@@ -46,7 +50,7 @@ const walk = (el, clickableAncestor) => {
       (style.clip && style.clip !== 'auto' && /^rect\((0px,\s*){3}0px\)$/.test(style.clip));
     const visible = r.width > 0 && r.height > 0 && !srOnly &&
       style.visibility !== 'hidden' && style.display !== 'none' &&
-      r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+      r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw;
     if (visible) {
       // 仅取直接文本（不含子元素文本），避免父容器吞掉所有文字
       let ownText = '';
@@ -93,8 +97,21 @@ const walk = (el, clickableAncestor) => {
         const cur = child.selectedOptions && child.selectedOptions[0];
         ownText = ((cur && cur.text) || '').trim().slice(0, 120);
       }
-      const aria = child.getAttribute('aria-label') || '';
+      let aria = child.getAttribute('aria-label') || '';
       const tag = child.tagName.toUpperCase();
+      // 跨域 iframe:里面一个元素都采不到。**必须留一条标记**(INV-9)——
+      // 不然它跟"这块本来就是空的"长得一模一样,AI 只会往被测对象身上找原因。
+      // 标记拼进这个 iframe 自己那条记录里,不另外 push,否则同一个 iframe 会出现两次
+      let crossOrigin = false;
+      if (tag === 'IFRAME' || tag === 'FRAME') {
+        let d = null;
+        try { d = child.contentDocument; } catch (e) { d = null; }
+        if (!d || !d.body) {
+          crossOrigin = true;
+          aria = (aria || child.getAttribute('title') || child.getAttribute('name') || '')
+                 + ' [跨域内容，采不到内部元素]';
+        }
+      }
       const isGraphic = GRAPHIC.includes(tag);
       const isFormControl = ['INPUT','TEXTAREA','SELECT'].includes(tag);
       // 这个元素**自己**是可点的吗。`cursor: pointer` 会被子元素继承，所以只有在
@@ -105,29 +122,45 @@ const walk = (el, clickableAncestor) => {
         (style.cursor === 'pointer' && !clickableAncestor);
       // 只收**人会去点、或人看得见的文字**：有自身文字 / aria 标注 / 表单控件 / 自身可点。
       // 图形构件一律排除（除非它自己带了 aria/title —— 那种是真图标按钮）。
-      const meaningful = isGraphic
+      const meaningful = crossOrigin ? true : (isGraphic
         ? !!(aria || child.getAttribute('title'))
-        : (selfClickable || ownText || aria || isFormControl);
+        : (selfClickable || ownText || aria || isFormControl));
       if (meaningful) {
         out.push({
           tag: child.tagName.toLowerCase(),
           id: child.id || '',
           aria: aria,
           text: ownText,
-          xpath: xpathOf(child),
+          xpath: fp + xpathOf(child),
           clickable: selfClickable,
           password: isPassword,
           options: optionList,
-          x1: Math.round(r.left * dpr), y1: Math.round(r.top * dpr),
-          x2: Math.round(r.right * dpr), y2: Math.round(r.bottom * dpr),
+          x1: Math.round((r.left + ox) * dpr), y1: Math.round((r.top + oy) * dpr),
+          x2: Math.round((r.right + ox) * dpr), y2: Math.round((r.bottom + oy) * dpr),
         });
       }
     }
+    // —— iframe：跨进这层文档，否则里面的东西一个都采不到 ——
+    // 支付、第三方登录、富文本编辑器、验证码都常住在 iframe 里。不进去的话
+    // AI 拿到的是一张「什么都没有」的页面,然后得出「功能没渲染出来」的假结论。
+    if (visible && (child.tagName === 'IFRAME' || child.tagName === 'FRAME')) {
+      let doc = null;
+      try { doc = child.contentDocument; } catch (e) { doc = null; }   // 跨域会抛
+      if (doc && doc.body) {
+        // 内部 rect 相对 iframe 自己的视口 → 累加 iframe 在外层的位置。
+        // 还要加边框宽度:内容区从边框内侧开始
+        const bl = parseFloat(style.borderLeftWidth) || 0;
+        const bt = parseFloat(style.borderTopWidth) || 0;
+        walk(doc.body, false, ox + r.left + bl, oy + r.top + bt,
+             child.clientWidth || r.width, child.clientHeight || r.height,
+             fp + xpathOf(child) + '>>');
+      }
+    }
     // 把"祖先里已经有可点的了"传下去，子元素就不会因为继承 cursor:pointer 而重复上榜
-    walk(child, clickableAncestor || selfClickable);
+    walk(child, clickableAncestor || selfClickable, ox, oy, vw, vh, fp);
   }
 };
-walk(document.body, false);
+walk(document.body, false, 0, 0, innerWidth, innerHeight, '');
 return out;
 "#;
 
