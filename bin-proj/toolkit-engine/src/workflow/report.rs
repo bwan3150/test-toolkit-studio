@@ -990,6 +990,7 @@ fn step_card_seq(
   {say}
   {tgt}
   {heal}
+  {dlg}
   {err}
   {img}
   {foot}
@@ -1011,6 +1012,14 @@ fn step_card_seq(
             Some(name) => format!(
                 r#"<div class="s-heal">⚠ 元素「{}」按原定位没找到，由 AI 依当前页面找回（脚本定位可能该更新了）</div>"#,
                 esc(name)
+            ),
+            None => String::new(),
+        },
+        // 原生对话框：浏览器自己画的，**截图里也拍不到**，报告不说就没人知道它出现过
+        dlg = match &s.dialog {
+            Some(d) => format!(
+                r#"<div class="s-heal">⚠ 弹出原生对话框：「{}」（浏览器绘制，截图与页面结构中均无此内容）</div>"#,
+                esc(d)
             ),
             None => String::new(),
         },
@@ -1069,6 +1078,7 @@ mod tests {
             xml: xml.map(String::from),
             healed: None,
             note: None,
+            dialog: None,
         }
     }
 

@@ -84,7 +84,10 @@ impl TksRunner {
         let start_time = Instant::now();
 
         // 执行单个步骤
-        match interpreter.interpret_step(step).await {
+        let outcome = interpreter.interpret_step(step).await;
+        // 对话框探测：AI 逐步探索时同样会撞上,而它不在 DOM 里、下一步必然失败（P-37）
+        let dialog = interpreter.dialog_text();
+        match outcome {
             Ok(()) => Ok(StepResult {
                 index: 0,
                 command: line.to_string(),
@@ -96,6 +99,7 @@ impl TksRunner {
                 xml: None,
                 healed: None,
                 note: None,
+                dialog: dialog.clone(),
             }),
             Err(e) => Ok(StepResult {
                 index: 0,
@@ -108,6 +112,7 @@ impl TksRunner {
                 xml: None,
                 healed: None,
                 note: None,
+                dialog,
             })
         }
     }

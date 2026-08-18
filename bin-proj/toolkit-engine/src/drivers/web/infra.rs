@@ -25,10 +25,22 @@ impl WebDriver {
     }
 
     pub(super) fn session_alive(base: &str, session_id: &str) -> bool {
-        ureq::get(&format!("{}/session/{}/url", base, session_id))
+        match ureq::get(&format!("{}/session/{}/url", base, session_id))
             .timeout(Duration::from_millis(1500))
             .call()
-            .is_ok()
+        {
+            Ok(_) => true,
+            // ⚠️ 有原生对话框挂着时,**任何**页面命令都会回 `unexpected alert open`,
+            // 包括这条探活。那恰恰证明会话活得好好的——只是被挡住了。
+            // 早先一律当"会话已死",于是撞上对话框的下一条命令直接报「无活动浏览器会话」,
+            // AI 连把它点掉的机会都没有(实测撞到,P-37)。真死了的会话回的是
+            // `invalid session id`,不含 alert 字样,照旧判死。
+            Err(ureq::Error::Status(_, resp)) => resp
+                .into_string()
+                .map(|b| b.contains("unexpected alert"))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
     }
 
     /// 本设备的 profile 目录前缀（孤儿识别特征）
@@ -174,6 +186,13 @@ impl WebDriver {
                 "capabilities": {
                     "alwaysMatch": {
                         "browserName": "chrome",
+                        // 原生对话框(alert/confirm/prompt)**不要让 WebDriver 自作主张**。
+                        // W3C 默认是 "dismiss and notify" —— confirm 会被**自动点成取消**,
+                        // 而 tke 这边只看到"点击成功"。实测:点「删除」弹 confirm,结果页面
+                        // 显示 CANCELLED,全程没有一句提示。AI 由此得出「删除功能失效」的
+                        // 假结论(P-37)。改成 ignore:对话框留在那儿,由 tke 探测、报出来,
+                        // 再由调用方显式决定确认还是取消
+                        "unhandledPromptBehavior": "ignore",
                         "goog:chromeOptions": chrome_options
                     }
                 }

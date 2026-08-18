@@ -68,7 +68,7 @@ fn print_pretty(state: &mut PrettyState, event: &RunEvent) {
                    index + 1, state.total_steps, command);
             let _ = std::io::stdout().flush();
         }
-        RunEvent::StepEnd { success, error, duration_ms, healed, .. } => {
+        RunEvent::StepEnd { success, error, duration_ms, healed, dialog, .. } => {
             if *success {
                 println!("{GREEN}✓{RESET} {DIM}{}{RESET}", fmt_duration(*duration_ms));
             } else {
@@ -76,6 +76,12 @@ fn print_pretty(state: &mut PrettyState, event: &RunEvent) {
                 if let Some(err) = error {
                     println!("         {RED}{}{RESET}", err);
                 }
+            }
+            // 原生对话框：浏览器自己画的，截图和页面结构里都没有它的影子，
+            // 而它正挡着后面每一步——这行不打出来，AI 只会看到后续操作莫名其妙全失败
+            if let Some(d) = dialog {
+                println!("         {YELLOW}⚠ 页面弹出对话框：「{d}」{RESET}");
+                println!("         {DIM}它挡着后面所有操作，先用 `确认对话框` / `取消对话框` 处理掉{RESET}");
             }
             // AI 辅助驾驶：本步元素按原定位没找到，AI 依当前页面找回（不改脚本/元素包）
             if let Some(h) = healed {

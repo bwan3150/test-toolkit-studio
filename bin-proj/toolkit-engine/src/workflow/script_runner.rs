@@ -288,8 +288,16 @@ impl ScriptRunner {
                 step.raw.clone()
             };
 
-            // 保存本步产物（仅 --log 时）
-            let (screenshot, xml) = if let Some(artifacts) = &artifacts {
+            // 这一步弹出原生对话框了吗。**必须在补采页面之前问**：对话框挂着的时候
+            // WebDriver 的任何页面操作都会返回 unexpected alert open，补采只会白报一串错。
+            // 它不在 DOM 里、截图也拍不到（浏览器自己画的），不在这儿探一次就等于不存在——
+            // 而它正挡着后面每一步（P-37）。
+            let dialog = interpreter.dialog_text();
+
+            // 保存本步产物（仅 --log 时）。对话框挂着时跳过：这时候采什么都失败
+            let (screenshot, xml) = if dialog.is_some() {
+                (None, None)
+            } else if let Some(artifacts) = &artifacts {
                 // 本步执行中若未采集过页面状态（如纯坐标点击/等待/返回），补采一次，
                 // 保证每一步都留有截图和结构文件
                 if !interpreter.last_trace.captured {
@@ -317,6 +325,7 @@ impl ScriptRunner {
                 xml: xml.clone(),
                 healed: healed.clone(),
                 note: step.note.clone(),
+                dialog: dialog.clone(),
             };
 
             on_event(&RunEvent::StepEnd {
@@ -329,6 +338,7 @@ impl ScriptRunner {
                 screenshot,
                 xml,
                 healed,
+                dialog,
             });
 
             result.steps.push(step_result);

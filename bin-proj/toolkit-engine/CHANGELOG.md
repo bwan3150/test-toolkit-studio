@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-18 · 原生对话框被 WebDriver 自动点成「取消」,全程没提示
+- **fix(P-37)** `unhandledPromptBehavior: "ignore"`,别让 WebDriver 替人做决定;
+  每步后探测 `/alert/text` 写进 StepResult/StepEnd/报告/终端;下一步执行前拦截并
+  讲人话(否则冒出来的是 `unexpected alert open`,AI 会去改定位、重试、绕路)
+- **feat** 三条指令:`确认对话框` / `取消对话框` / `对话框输入 ["文本"]`(填完自动确定)
+- **fix(顺带炸出的真 bug)** `session_alive()` 用 `GET /url` 探活,而对话框挂着时它同样回
+  `unexpected alert open` → 判定**会话已死**,撞上对话框的下一条命令直接报「无活动浏览器
+  会话」,AI 连把它点掉的机会都没有。改成含 `unexpected alert` 的照样算活着
+- 真浏览器实测:confirm 确认→CONFIRMED、取消→CANCELLED、prompt 填字→张三;
+  跨批次也能把遗留对话框处理掉
+
 ### 2026-08-18 · iframe 里的东西一个都采不到
 - **feat(P-36)** 同源 iframe 递归采集:内部 rect 相对它自己的视口,累加 iframe 位置 +
   边框宽度;视口裁剪换成 iframe 自己的尺寸;xpath 前缀 `iframe[1]>>…`(内部 xpath

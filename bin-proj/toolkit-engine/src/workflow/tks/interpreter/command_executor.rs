@@ -293,6 +293,24 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::HideKeyboard).await.map(|_| ())
     }
 
+    /// 确认对话框：原生 alert/confirm 的「确定」
+    pub async fn execute_dialog_accept(&mut self) -> Result<()> {
+        self.controller.dialog_accept()
+    }
+
+    /// 取消对话框：原生 confirm 的「取消」
+    pub async fn execute_dialog_dismiss(&mut self) -> Result<()> {
+        self.controller.dialog_dismiss()
+    }
+
+    /// 对话框输入：往 prompt 里填字**并确定**
+    pub async fn execute_dialog_input(&mut self, params: &[TksParam]) -> Result<()> {
+        let text = ParamExtractor::extract_text(&params.first().ok_or_else(|| {
+            TkeError::InvalidArgument("对话框输入需要文本，如 [\"张三\"]".to_string())
+        })?.clone())?;
+        self.controller.dialog_input(&text)
+    }
+
     /// 按键：`按键 ["ENTER"]` / `["TAB"]` 等（归一大写传给驱动 key_event，web 映射为 WebDriver 键码）
     pub async fn execute_key(&mut self, params: &[TksParam]) -> Result<()> {
         let code = ParamExtractor::extract_text(&params.first().ok_or_else(|| {

@@ -27,6 +27,10 @@ pub enum TksCommand {
     Hover,            // 悬停（web 独有：鼠标移到元素上触发 hover，展开悬停下拉/菜单，不点击）
     Select,           // 选择（web 独有：选中 <select> 的某一项。原生下拉展开后选项由浏览器绘制、
                       //       DOM 里不可见，点击路线走不通，只能走 DOM 设值 + 派发事件）
+    DialogAccept,     // 确认对话框（web 独有：原生 alert/confirm 的「确定」。这三种是浏览器画的、
+                      //             不在 DOM 里，fetch 采不到，只能走这条专门的路）
+    DialogDismiss,    // 取消对话框（web 独有：原生 confirm 的「取消」）
+    DialogInput,      // 对话框输入（web 独有：往 prompt 里填字**并确定**——填完不确定等于没填）
 }
 
 impl TksCommand {
@@ -49,6 +53,9 @@ impl TksCommand {
             "断言页面" => Some(Self::AssertPage),
             "切换" => Some(Self::Switch),
             "滚动查找" => Some(Self::ScrollFind),
+            "确认对话框" => Some(Self::DialogAccept),
+            "取消对话框" => Some(Self::DialogDismiss),
+            "对话框输入" => Some(Self::DialogInput),
             _ => None,
         }
     }

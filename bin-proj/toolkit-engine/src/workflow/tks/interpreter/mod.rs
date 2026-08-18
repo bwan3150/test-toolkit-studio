@@ -4,7 +4,7 @@ mod command_executor;
 mod param_extractor;
 mod target_resolver;
 
-use crate::{Result, TksStep, TksCommand, Controller, Recognizer, Platform, Point, Bounds};
+use crate::{Result, TkeError, TksStep, TksCommand, Controller, Recognizer, Platform, Point, Bounds};
 use crate::utils::Workarea;
 use std::path::Path;
 use tracing::debug;
@@ -90,6 +90,21 @@ impl ScriptInterpreter {
 
         self.last_trace.reset();
 
+        // 有对话框挂着时,除了处理对话框本身,**什么都干不了**：WebDriver 会对每条命令
+        // 回一句 `unexpected alert open`——那串错跟"元素找不到"长得差不多,AI 多半会
+        // 去改定位、重试、绕路,而真正该做的只是先把对话框点掉。把话说清楚（P-37）
+        if !matches!(step.command,
+            TksCommand::DialogAccept | TksCommand::DialogDismiss | TksCommand::DialogInput)
+        {
+            if let Some(d) = self.controller.dialog_text() {
+                return Err(TkeError::ScriptExecuteError(format!(
+                    "页面上有个对话框还没处理：「{}」——它挡着所有操作。\
+                     先用 `确认对话框` 或 `取消对话框`（prompt 用 `对话框输入 [\"文本\"]`）",
+                    d
+                )));
+            }
+        }
+
         let mut executor = CommandExecutor::new(
             &self.workarea,
             &mut self.controller,
@@ -119,7 +134,16 @@ impl ScriptInterpreter {
             TksCommand::Switch => executor.execute_switch(&step.params).await,
             TksCommand::ScrollFind => executor.execute_scroll_find(&step.params).await,
             TksCommand::Key => executor.execute_key(&step.params).await,
+            TksCommand::DialogAccept => executor.execute_dialog_accept().await,
+            TksCommand::DialogDismiss => executor.execute_dialog_dismiss().await,
+            TksCommand::DialogInput => executor.execute_dialog_input(&step.params).await,
         }
+    }
+
+    /// 当前有没有未处理的原生对话框（alert/confirm/prompt）；有则返回它的文字。
+    /// **只有 web 会返回 Some**。见 drivers::Controller::dialog_text
+    pub fn dialog_text(&self) -> Option<String> {
+        self.controller.dialog_text()
     }
 
     /// 主动采集一次页面状态（截图+XML 到工作区），供工作流补采产物

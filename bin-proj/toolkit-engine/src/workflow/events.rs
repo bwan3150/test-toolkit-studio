@@ -38,6 +38,10 @@ pub enum RunEvent {
         /// 只影响本次执行，不改 .tks / .tklib
         #[serde(skip_serializing_if = "Option::is_none")]
         healed: Option<String>,
+        /// 这一步弹出了原生对话框（alert/confirm/prompt），值 = 上面的文字。
+        /// 浏览器画的、不在 DOM 里，截图和页面结构都采不到——不报出来就等于不存在
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dialog: Option<String>,
     },
     /// 脚本结束
     RunEnd {

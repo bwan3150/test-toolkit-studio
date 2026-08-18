@@ -120,6 +120,11 @@ pub struct StepResult {
     /// 只影响本次执行，不改 .tks / .tklib——报告用，提示脚本定位可能需要更新。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub healed: Option<String>,
+    /// 这一步**弹出了原生对话框**（alert/confirm/prompt），值 = 对话框上的文字。
+    /// 它是浏览器画的、不在 DOM 里，截图和页面结构里都找不到——不在这儿说一句，
+    /// 它就等于不存在，而它正挡着后面所有操作（P-37）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dialog: Option<String>,
 }
 
 /// 应用信息

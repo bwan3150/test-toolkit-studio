@@ -773,6 +773,7 @@ pub async fn drive(
                                 xml,
                                 healed: None,
                                 note: None,
+                                dialog: None,
                             });
                             lines.push(line.clone());
                             step_comments.push(comment.clone().unwrap_or_default());

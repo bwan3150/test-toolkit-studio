@@ -24,6 +24,9 @@ pub fn create_command_map() -> HashMap<String, TksCommand> {
     map.insert("滚动查找".to_string(), TksCommand::ScrollFind);
     map.insert("断言页面".to_string(), TksCommand::AssertPage);
     map.insert("按键".to_string(), TksCommand::Key);
+    map.insert("确认对话框".to_string(), TksCommand::DialogAccept);
+    map.insert("取消对话框".to_string(), TksCommand::DialogDismiss);
+    map.insert("对话框输入".to_string(), TksCommand::DialogInput);
     map
 }
 

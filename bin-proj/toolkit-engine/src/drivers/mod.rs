@@ -268,6 +268,44 @@ impl Controller {
         }
     }
 
+    // ===== 原生对话框（alert / confirm / prompt）=====
+    //
+    // **只有 web 有**：这三种是浏览器画的,不在 DOM 里,fetch 一个字都采不到。
+    // 移动端的系统弹窗是真元素,照常点就行,不走这条路。
+
+    /// 当前有没有未处理的对话框；有则返回它的文字。**每步操作后都该问一句**——
+    /// 它不出现在任何页面结构里,不主动探测就等于不存在(P-37)
+    pub fn dialog_text(&self) -> Option<String> {
+        match &self.driver {
+            Driver::Web(d) => d.dialog_text(),
+            _ => None,
+        }
+    }
+
+    /// 点「确定」（confirm 的确认、alert 的知道了）
+    pub fn dialog_accept(&self) -> Result<()> {
+        match &self.driver {
+            Driver::Web(d) => d.dialog_accept(),
+            _ => Err(TkeError::InvalidArgument("只有浏览器有原生对话框".into())),
+        }
+    }
+
+    /// 点「取消」
+    pub fn dialog_dismiss(&self) -> Result<()> {
+        match &self.driver {
+            Driver::Web(d) => d.dialog_dismiss(),
+            _ => Err(TkeError::InvalidArgument("只有浏览器有原生对话框".into())),
+        }
+    }
+
+    /// 往 prompt 里填字并确定
+    pub fn dialog_input(&self, text: &str) -> Result<()> {
+        match &self.driver {
+            Driver::Web(d) => d.dialog_input(text),
+            _ => Err(TkeError::InvalidArgument("只有浏览器有原生对话框".into())),
+        }
+    }
+
     // ===== 信息 =====
 
     pub fn get_device_info(&self) -> Result<DeviceInfo> {

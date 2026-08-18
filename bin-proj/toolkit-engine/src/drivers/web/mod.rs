@@ -331,6 +331,35 @@ impl WebDriver {
         Ok(())
     }
 
+    // ── 原生对话框（alert / confirm / prompt）──
+    //
+    // 这三种是**浏览器画的**,不在 DOM 里,fetch 一个字都采不到。会话建的时候把
+    // unhandledPromptBehavior 设成 ignore(见 infra.rs),它们就会一直留着等人处理——
+    // 于是「有没有弹对话框」变成可探测的事实,而不是背地里被自动点掉。
+
+    /// 当前是否有未处理的对话框；有则返回它的文字
+    pub fn dialog_text(&self) -> Option<String> {
+        self.get("/alert/text").ok()?["value"].as_str().map(String::from)
+    }
+
+    /// 点「确定」
+    pub fn dialog_accept(&self) -> Result<()> {
+        self.post("/alert/accept", serde_json::json!({}))?;
+        Ok(())
+    }
+
+    /// 点「取消」
+    pub fn dialog_dismiss(&self) -> Result<()> {
+        self.post("/alert/dismiss", serde_json::json!({}))?;
+        Ok(())
+    }
+
+    /// 往 prompt 里填字**并确定**——填完不确定等于没填,分两步只会让调用方多记一件事
+    pub fn dialog_input(&self, text: &str) -> Result<()> {
+        self.post("/alert/text", serde_json::json!({ "text": text }))?;
+        self.dialog_accept()
+    }
+
     /// 等页面就绪：轮询 document.readyState=='complete'（最多 ~4s）再加一小段渲染缓冲。
     /// 回放时点击/导航后若不等加载就执行下一步，常会在空白/旧页上"跑过场"——这里挡住。
     fn wait_ready(&self) {
