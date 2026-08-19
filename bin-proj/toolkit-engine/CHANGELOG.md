@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · 把「四种设备」这件事查漏补齐
+用户问 fetch/refresh 是不是也同步到四种设备了。**采集/操作是通的**——它们全走
+`Controller` 的穷尽匹配,漏一个编译都过不去。但**按 Platform 分叉或 `_ =>` 兜底的地方
+会静默漏**,查出两个真缺口:
+- **fix(harness 向导)** 早先是自己 adb 列一遍、iOS **让人手打 UDID**、模拟器压根不出现。
+  改成一律走 `tools::discover`——跟 `tke device list` 同一个来源。同一个问题不该有两套答案,
+  手打 UDID 这道门槛本身也没必要。没查成的那几类**也摆进选项**(INV-9):
+  不然人只会以为"设备没连",而真相是"没装 adb / 没装 idb"
+- **fix(doctor)** iOS 那栏只查 go-ios(真机),模拟器要的 idb 没人查。补一行状态;
+  **不进"缺 N 项"**——idb 是 brew 装的,不归 `--fix` 管,把补不了的东西算进缺失
+  只会让结论变成死路
+- flow 收尾那句"iOS 关完销毁 WDA 会话"的注释补上模拟器的情形(空操作,无害)
+- **docs** skill 的 tke-commands 写明 fetch/refresh **四种设备同一套**:
+  换个 `-d` 就行,输出格式、坐标口径、`--interactive`/`--ocr`/`--wait-text` 全一样,
+  底层(uiautomator / XCUI / AX 树 / DOM)已经归一化掉了
+
 ### 2026-08-19 · iOS 模拟器改走 idb（ADR-0017）
 上一条(5dd97961)让模拟器也走 WDA,但那要求用户自己编译一个 WDA 的 Xcode 工程。
 看到用户另一个会话的实跑记录后改了路线:**模拟器走 idb,真机继续 WDA**。

@@ -285,7 +285,8 @@ impl FlowRunner {
                     for p in &packages {
                         let _ = controller.stop_app(p);
                     }
-                    // iOS: App 关完后销毁 WDA 会话
+                    // iOS 真机：App 关完后销毁 WDA 会话。
+                    // 模拟器走的是 idb，没有"会话"这回事——空参对它是空操作，无害
                     if platform == crate::Platform::Ios {
                         let _ = controller.stop_app("");
                     }

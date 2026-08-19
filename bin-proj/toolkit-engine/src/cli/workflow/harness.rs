@@ -257,44 +257,55 @@ struct SetupResult {
 /// 用户中途 Ctrl+C / 放弃返回 None。
 async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<SetupResult> {
     // —— 设备/平台 ——
-    // 列 Android 设备（仅 Android 有列举能力；iOS 手填、Web 直接 Chrome）
-    let devices: Vec<String> = match tke::drivers::AdbDriver::new(None) {
-        Ok(adb) => adb.get_devices().unwrap_or_default(),
-        Err(_) => Vec::new(),
-    };
-    // 候选按平台**分组**（选项串用「组\t标签」编码，render_choice 按组渲染小标题）。
+    // **一律走 discover()**：它是"这台机器能测什么"的单一来源，`tke device list`
+    // 用的也是它。早先这里是自己 adb 列一遍、iOS 让人手打 UDID、模拟器压根不出现——
+    // 于是同一个问题在两个地方有两套答案，而手打 UDID 这道门槛本身就没必要。
+    let found = tke::tools::discover::discover();
+
     enum Kind {
-        Android(String),
-        Ios,
-        Web,
+        /// 一台具体设备（id 已经是 `-d` 能直接用的值）
+        Target(String),
         /// 不在这里定：设备由编排官按任务语义选（ADR-0011），跨设备任务必须走这条
         Defer,
+        /// 兜底：discover 没列到（没装 adb、设备刚插上还没认出来……）
+        Manual,
     }
     let mut opts: Vec<String> = Vec::new();
     let mut kinds: Vec<Kind> = Vec::new();
-    for d in &devices {
-        opts.push(format!("Android\t{}", d));
-        kinds.push(Kind::Android(d.clone()));
+    for t in &found.targets {
+        // 选项串用「组\t标签」编码，render_choice 按组渲染小标题
+        let group = match t.kind {
+            "android" => "Android",
+            "ios" => "iOS 真机",
+            "ios-sim" => "iOS 模拟器",
+            _ => "Web",
+        };
+        opts.push(format!("{}\t{}　{}", group, t.name, t.id));
+        kinds.push(Kind::Target(t.id.clone()));
     }
-    // 无 Android 设备就不显示 Android 组；Web 始终在。
-    // iOS 只在 macOS 上列——别把选了必然失败的选项摆给用户
-    if tke::utils::capability::ios_supported() {
-        opts.push("iOS\t输入设备 ID（UDID / wda:..）".to_string());
-        kinds.push(Kind::Ios);
+    // 某一类**没查成**也要摆出来（INV-9）：不然人只会以为"设备没连"，
+    // 而真相可能是"没装 adb / 没装 idb"
+    for sk in &found.skipped {
+        opts.push(format!("未检测\t{}：{}", sk.kind, sk.why.lines().next().unwrap_or("")));
+        kinds.push(Kind::Manual);
     }
-    opts.push("Web\tChrome".to_string());
-    kinds.push(Kind::Web);
     // 跨设备/跨平台任务在这里选哪一台都是错的——交给编排官按任务语义决定
     opts.push("由 AI 决定\t按任务描述选设备（跨设备任务选这个；不确定时它会问你）".to_string());
     kinds.push(Kind::Defer);
+    opts.push("手动输入\t上面都不是（自己填设备 ID）".to_string());
+    kinds.push(Kind::Manual);
 
     let idx = ui.await_choice("选择设备".to_string(), opts).await?;
     let (device, platform): (Option<String>, Option<Platform>) = match &kinds[idx] {
-        Kind::Android(id) => (Some(id.clone()), Some(Platform::Android)),
-        Kind::Web => (Some("web".to_string()), Some(Platform::Web)),
+        Kind::Target(id) => (Some(id.clone()), Some(Platform::from_device(Some(id)))),
         Kind::Defer => (None, None),
-        Kind::Ios => {
-            let id = ui.await_answer(0, "输入设备 ID（iOS UDID / wda:..）".to_string()).await?;
+        Kind::Manual => {
+            let id = ui
+                .await_answer(
+                    0,
+                    "设备 ID（安卓序列号 / iOS UDID / sim:模拟器UDID / web）".to_string(),
+                )
+                .await?;
             let id = id.trim().to_string();
             if id.is_empty() {
                 (Some("web".to_string()), Some(Platform::Web))

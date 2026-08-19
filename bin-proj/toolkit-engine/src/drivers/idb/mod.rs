@@ -69,25 +69,7 @@ impl IdbDriver {
         Ok(String::from_utf8_lossy(&out.stdout).to_string())
     }
 
-    /// 跑一条 `xcrun simctl`
-    fn simctl(&self, args: &[&str]) -> Result<String> {
-        let out = Command::new("xcrun")
-            .arg("simctl")
-            .args(args)
-            .arg(&self.udid)
-            .output()
-            .map_err(|e| TkeError::DeviceError(format!("执行 simctl 失败: {}", e)))?;
-        if !out.status.success() {
-            return Err(TkeError::DeviceError(format!(
-                "simctl {}: {}",
-                args.join(" "),
-                String::from_utf8_lossy(&out.stderr).trim()
-            )));
-        }
-        Ok(String::from_utf8_lossy(&out.stdout).to_string())
-    }
-
-    /// simctl 的参数顺序是 `simctl <子命令> <udid> [其余]`，跟上面那个反过来
+    /// `simctl <子命令> <udid> [其余]`
     fn simctl_dev_first(&self, sub: &str, rest: &[&str]) -> Result<String> {
         let out = Command::new("xcrun")
             .arg("simctl")

@@ -132,7 +132,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
         }
         ios_note();
         if !download {
-            print_health(&exe_dir, 0);
+            print_health(&exe_dir, 0, &args.profile);
         }
         return Ok(());
     }
@@ -158,7 +158,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     }
 
     if !download {
-        print_health(&exe_dir, missing.len());
+        print_health(&exe_dir, missing.len(), &args.profile);
         // 只体检不下载：退出码非 0，CI 可以据此判断环境是否就绪
         std::process::exit(1);
     }
@@ -279,7 +279,7 @@ fn report_shell_path(exe_dir: &Path) {
 /// 放进 `tke fix --check` 而不是再写一个体检脚本：**一份 Rust 实现三平台通用**。
 /// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
 /// 「同事跑完 Claude Code 要验一遍」的主力平台。
-fn print_health(exe_dir: &Path, missing: usize) {
+fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
 
     // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
     if deps::present_in(exe_dir, "adb") {
@@ -346,6 +346,20 @@ fn print_health(exe_dir: &Path, missing: usize) {
                 println!("    {}", dim(&format!("{}", dir.display())));
             }
             (None, _) => println!("  {} {}", dim("skill   "), dim("未安装")),
+        }
+    }
+
+    // iOS 模拟器要靠 idb 才操作得了，而它**不是 tke 分发的依赖**（brew 装）——
+    // 所以只报状态、不进"缺 N 项"（补不了的东西算进缺失，只会让结论变成一条死路）。
+    // 不说的话就是那个最难查的组合：模拟器列得出来、命令也不报错，就是点不动
+    if cfg!(target_os = "macos") && matches!(profile, "ios" | "all") {
+        let has_idb = tke::ToolManager::resolve("idb").is_ok() || which::which("idb").is_ok();
+        if has_idb {
+            println!("  {} {}", dim("iOS模拟器"), "可操作 · idb 已装");
+        } else {
+            println!("  {} {}", dim("iOS模拟器"), "列得出但操作不了 · 没装 idb");
+            println!("    {}", dim("brew tap facebook/fb && brew trust facebook/fb"));
+            println!("    {}", dim("brew install idb-companion && pip3 install fb-idb"));
         }
     }
 
