@@ -545,6 +545,46 @@ impl WdaDriver {
         format!("{}（真机）", info)
     }
 
+    /// 模拟器的设备信息：机型/系统版本走 `simctl list`，屏幕尺寸靠截一张图量。
+    /// **全程不碰 WDA**
+    fn simulator_info(&self) -> Result<DeviceInfo> {
+        let (w, h) = self.simulator_screen().unwrap_or((0, 0));
+        Ok(DeviceInfo {
+            id: format!("sim:{}", self.udid),
+            model: Some(self.simctl_name().unwrap_or_else(|| "iOS 模拟器".into())),
+            manufacturer: Some("Apple".to_string()),
+            android_version: None,
+            screen_width: w,
+            screen_height: h,
+            hardware: None,
+            battery: None,
+            network: None,
+        })
+    }
+
+    /// 截一张图量屏幕像素。模拟器没启动时截不到——那时给 0，
+    /// 但机型信息照常给（**没启动也该看得到这台是什么**）
+    fn simulator_screen(&self) -> Option<(u32, u32)> {
+        let tmp = std::env::temp_dir().join(format!("tke-siminfo-{}.png", self.udid));
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "io", &self.udid, "screenshot", &tmp.to_string_lossy()])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        // PNG 的 IHDR：8 字节签名 + 4 长度 + 4 类型，宽高在 16..24
+        let bytes = std::fs::read(&tmp).ok()?;
+        let _ = std::fs::remove_file(&tmp);
+        if bytes.len() < 24 || &bytes[12..16] != b"IHDR" {
+            return None;
+        }
+        Some((
+            u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]),
+            u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]),
+        ))
+    }
+
     /// 从 `simctl list` 里查这台模拟器的机型名（"iPhone 17 Pro"）
     fn simctl_name(&self) -> Option<String> {
         let out = std::process::Command::new("xcrun")
@@ -565,6 +605,13 @@ impl WdaDriver {
     }
 
     pub fn get_device_info(&self) -> Result<DeviceInfo> {
+        // 模拟器：**别为了看一眼机型就把 WDA 拉起来**。机型和系统版本 simctl 直接有，
+        // 屏幕尺寸截一张图就知道（截图不需要 WDA）——早先这里一律走 WDA，于是
+        // `tke device info -d sim:…` 回一句「无活动 WDA 会话，请先执行 启动 [BundleID]」，
+        // 而用户只是想看看这台是什么
+        if self.simulator {
+            return self.simulator_info();
+        }
         let conn = self.ensure_existing()?;
         let (w, h) = self.window_size().unwrap_or((0.0, 0.0));
 

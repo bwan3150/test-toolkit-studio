@@ -9,7 +9,12 @@ pub enum DeviceCommands {
     ///
     /// 输出里的 ID 就是 `-d` 该填的值。**查不了的那类会说明原因**——
     /// "没装 adb" 和 "没连手机" 在结果上长得一样，不说清楚人只会去插拔数据线
-    List,
+    List {
+        /// 连**没启动的模拟器**一起列（要挑一台来启动时用）。
+        /// 默认不列：装了 Xcode 的 mac 上动辄二三十台，全摆出来那份清单就没法看了
+        #[arg(long)]
+        all: bool,
+    },
     /// 某台设备的详情：型号 / 屏幕尺寸 / 系统版本（安卓另有硬件、电池、网络）
     ///
     /// 四种设备都能用；要 `-d` 指定哪一台
@@ -24,8 +29,8 @@ pub enum DeviceCommands {
 /// 处理 Device 相关命令
 pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Result<()> {
     // list 是**唯一不需要 -d 的**：它回答的正是"该填什么"
-    if let DeviceCommands::List = action {
-        return list();
+    if let DeviceCommands::List { all } = action {
+        return list(all);
     }
     let device_id = params.device();
     // 只有**真安卓**才走 DeviceManager（它是 adb 专属）。
@@ -46,7 +51,7 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
                     "device prop 仅支持 Android 设备 (adb getprop)".to_string(),
                 ));
             }
-            DeviceCommands::List => unreachable!("函数开头已处理"),
+            DeviceCommands::List { .. } => unreachable!("函数开头已处理"),
         }
     }
 
@@ -57,7 +62,7 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
             let device_info = device_manager.get_full_device_info()?;
             JsonOutput::print(serde_json::to_value(device_info).unwrap());
         }
-        DeviceCommands::List => unreachable!("函数开头已处理"),
+        DeviceCommands::List { .. } => unreachable!("函数开头已处理"),
         DeviceCommands::Prop { name } => {
             let value = device_manager.get_device_prop(&name)?;
             JsonOutput::print(serde_json::json!({
@@ -72,8 +77,8 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
 }
 
 /// `tke device list`
-fn list() -> Result<()> {
-    let d = tke::tools::discover::discover();
+fn list(all: bool) -> Result<()> {
+    let d = tke::tools::discover::discover_with(all);
 
     // 管道里给 JSON（脚本/AI 好接），终端里给对齐的表（人好读）
     if !std::io::IsTerminal::is_terminal(&std::io::stdout()) {

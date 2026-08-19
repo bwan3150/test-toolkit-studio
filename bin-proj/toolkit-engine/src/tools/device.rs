@@ -19,6 +19,30 @@ impl DeviceManager {
     }
 
     /// 获取完整的设备信息（包括硬件、电池、网络）
+    /// 没指定 `-d` 时 adb 连的那台的序列号。查不到就留空——
+    /// 这是补充信息，查询失败不该让整条命令失败
+    fn only_serial(&self) -> String {
+        std::process::Command::new(&self.adb_path)
+            .args(["devices"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .and_then(|out| {
+                let mut it = out
+                    .lines()
+                    .skip(1)
+                    .filter_map(|l| {
+                        let mut p = l.split_whitespace();
+                        match (p.next(), p.next()) {
+                            (Some(sn), Some("device")) => Some(sn.to_string()),
+                            _ => None,
+                        }
+                    });
+                it.next()
+            })
+            .unwrap_or_default()
+    }
+
     pub fn get_full_device_info(&self) -> Result<DeviceInfo> {
         let model = self.get_device_prop("ro.product.model")?;
         let manufacturer = self.get_device_prop("ro.product.manufacturer")?;
@@ -38,7 +62,9 @@ impl DeviceManager {
         let network = Some(self.get_network_info()?);
 
         Ok(DeviceInfo {
-            id: self.device_id.clone().unwrap_or_default(),
+            // 不带 `-d` 时也要说清**到底连的哪台**：adb 会自己挑唯一那台，
+            // 但结果里 id 空着，人根本不知道刚才看的是谁的信息（多设备时更要命）
+            id: self.device_id.clone().unwrap_or_else(|| self.only_serial()),
             model: Some(model),
             manufacturer: Some(manufacturer),
             android_version: Some(android_version),

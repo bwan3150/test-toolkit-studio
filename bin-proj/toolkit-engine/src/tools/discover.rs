@@ -37,7 +37,14 @@ pub struct Discovery {
     pub skipped: Vec<Skipped>,
 }
 
+/// 默认只列**在跑的**。装了 Xcode 的 mac 上模拟器动辄二三十台，
+/// 全摆出来那份清单就没法看了（实测用户机器：24 台，只有 1 台 Booted）。
 pub fn discover() -> Discovery {
+    discover_with(false)
+}
+
+/// `all=true` 连没启动的模拟器一起列（要挑一台来启动时用）
+pub fn discover_with(all: bool) -> Discovery {
     let mut d = Discovery::default();
     // 浏览器：不需要连什么，装了 chromedriver 就能跑
     d.targets.push(Target {
@@ -49,7 +56,7 @@ pub fn discover() -> Discovery {
     });
     android(&mut d);
     ios_devices(&mut d);
-    ios_simulators(&mut d);
+    ios_simulators(&mut d, all);
     d
 }
 
@@ -119,10 +126,11 @@ fn ios_devices(d: &mut Discovery) {
             });
         }
     }
+
 }
 
 /// 模拟器：走 `simctl`，**跟真机完全是两条路**——没有 USB、不需要 go-ios 隧道
-fn ios_simulators(d: &mut Discovery) {
+fn ios_simulators(d: &mut Discovery, all: bool) {
     if !cfg!(target_os = "macos") {
         return; // 上面 ios_devices 已经说过"只有 macOS"，这儿不重复刷屏
     }
@@ -149,6 +157,9 @@ fn ios_simulators(d: &mut Discovery) {
         });
     }
     let Some(runtimes) = v["devices"].as_object() else { return };
+    // 没启动的先攒着：**一台在跑的都没有**时才摆出来——否则用户看到空列表
+    // 会以为"这台机器不支持模拟器"，而真相只是"都关着"
+    let mut idle: Vec<Target> = Vec::new();
     for (runtime, list) in runtimes {
         // "com.apple.CoreSimulator.SimRuntime.iOS-26-0" → "iOS 26.0"
         let ver = runtime
@@ -160,15 +171,35 @@ fn ios_simulators(d: &mut Discovery) {
             let (Some(udid), Some(name)) = (dev["udid"].as_str(), dev["name"].as_str()) else {
                 continue;
             };
-            d.targets.push(Target {
+            let state = dev["state"].as_str().unwrap_or("?").to_string();
+            let t = Target {
                 // **必须带 sim: 前缀**：模拟器 UDID 是标准 UUID（36 位），
                 // 而 tke 认 iOS 靠的是真机 UDID 的形状（25 位），不加前缀会被当成安卓序列号
                 id: format!("sim:{}", udid),
                 kind: "ios-sim",
                 kind_label: "iOS模拟器",
                 name: format!("{} · {}", name, ver),
-                state: dev["state"].as_str().unwrap_or("?").to_string(),
+                state,
+            };
+            if all || t.state == "Booted" {
+                d.targets.push(t);
+            } else {
+                idle.push(t);
+            }
+        }
+    }
+
+    // 一台在跑的都没有 → 把关着的也列出来（不然等于告诉人"没有模拟器"）；
+    // 有在跑的 → 只提一句还有多少台关着,别刷屏
+    if !idle.is_empty() {
+        let booted = d.targets.iter().any(|t| t.kind == "ios-sim");
+        if booted {
+            d.skipped.push(Skipped {
+                kind: "ios-sim",
+                why: format!("另有 {} 台模拟器没启动（`tke device list --all` 看全部）", idle.len()),
             });
+        } else {
+            d.targets.extend(idle);
         }
     }
 }
