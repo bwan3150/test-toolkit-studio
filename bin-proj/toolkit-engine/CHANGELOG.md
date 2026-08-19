@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · `$VAR中文` 那个坑又犯了一次 → 加守卫拦死
+打包脚本第一行就崩:`step "① 取源码（锁定 $WDA_REF）"` → `WDA_REF�: unbound variable`。
+**P-42 刚记完半小时就又犯**——因为 Linux 的 bash 5 两种写法都对,本机永远测不出来。
+- **fix** 改成 `${WDA_REF}`;全仓扫了一遍,只有这一处（install.sh 那处在注释里,无害）
+- **feat(守卫)** `scripts/check-shell-vars.sh` 扫所有 `*.sh` 里 `$VAR` 紧跟多字节字符的写法,
+  跳过注释行;进 **pre-commit 拦死**。造了反例验证它真能抓到
+- **这类「本机测不出来」的坑,光写进坑册没用,得让工具替人记**(同 ADR-0010:护栏进工具)
+
 ### 2026-08-19 · 模拟器收尾：打包脚本 + skill 用法
 - **feat** `scripts/package-wda-sim.sh`:编译 → 打包 → **自检 zip 结构** → 打出上传命令。
   **WDA 版本锁在脚本里**(`WDA_REF`,默认 2026-08-19 实测通过的那个 commit)——

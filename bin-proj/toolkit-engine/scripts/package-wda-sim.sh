@@ -25,7 +25,7 @@ BUILD=/tmp/wda-build
 OUT="$(pwd)/dist-wda"
 ZIP="$OUT/WebDriverAgentRunner-Runner-sim.zip"
 
-step "① 取源码（锁定 $WDA_REF）"
+step "① 取源码（锁定 ${WDA_REF}）"
 if [ ! -d "$SRC/.git" ]; then
     git clone https://github.com/appium/WebDriverAgent "$SRC" >/dev/null 2>&1 || bad "clone 失败"
 fi
