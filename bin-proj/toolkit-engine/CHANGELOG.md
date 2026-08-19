@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · `tke doctor --fix --profile ios` 替你把 idb 装上
+用户提出「idb 也该走 tke 的 fix/doctor,不该让人自己 brew」。查了 `idb_companion --help`:
+它**没有任何 UI 操作参数**(grep tap/touch/describe/accessibility/hid 一条不匹配),
+只管 boot/erase/create 和**起 gRPC 服务**——点击与元素采集全在 Python 前端那一半。
+所以单独分发那个二进制没用。
+- **feat** `--fix` 时替用户跑 `brew tap/trust/install` + `pip install --user fb-idb`,
+  每条**先打出来再执行**(在别人机器上装东西不该是黑箱);复验以「现在装上了没有」为准,
+  不以「命令有没有报错」为准
+- **失败不改退出码**:doctor 的退出码说的是「必需依赖齐不齐」,而 idb 只影响 iOS *模拟器*
+  ——安卓/网页/iOS 真机都不靠它。但必须打出来(INV-9),否则用户会以为模拟器能用了
+- `idb_present()` **两半都要有**:`idb_companion`(服务端)+`idb`(客户端),
+  光有 companion 一个动作都做不了
+
 ### 2026-08-19 · iOS 模拟器链路**真机验通**；顺手修掉产物静默少一份（P-43）
 用户在 mac 上跑通了 `verify-ios-sim.sh`:模拟器列得出、7 个元素采得到、
 **坐标是截图像素量级(366pt×3=1098)**、`点击 ["Skip sign in (demo)"]` 页面真的变了

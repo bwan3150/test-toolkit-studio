@@ -131,7 +131,10 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
             println!("  {} {} {}", dim("依赖    "), "已就绪", dim(&format!("· {}", args.profile)));
         }
         ios_note();
-        if !download {
+        if download {
+            // 二进制都齐了不代表没事干：模拟器还要 idb
+            fix_idb(&args.profile);
+        } else {
             print_health(&exe_dir, 0, &args.profile);
         }
         return Ok(());
@@ -204,6 +207,8 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
         }
     }
     let _ = std::fs::remove_dir_all(&tmp);
+
+    fix_idb(&args.profile);
 
     println!();
     // 复验：以"现在还缺不缺"为准，而不是以"下载有没有报错"为准
@@ -353,13 +358,11 @@ fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
     // 所以只报状态、不进"缺 N 项"（补不了的东西算进缺失，只会让结论变成一条死路）。
     // 不说的话就是那个最难查的组合：模拟器列得出来、命令也不报错，就是点不动
     if cfg!(target_os = "macos") && matches!(profile, "ios" | "all") {
-        let has_idb = tke::ToolManager::resolve("idb").is_ok() || which::which("idb").is_ok();
-        if has_idb {
+        if idb_present() {
             println!("  {} {}", dim("iOS模拟器"), "可操作 · idb 已装");
         } else {
             println!("  {} {}", dim("iOS模拟器"), "列得出但操作不了 · 没装 idb");
-            println!("    {}", dim("brew tap facebook/fb && brew trust facebook/fb"));
-            println!("    {}", dim("brew install idb-companion && pip3 install fb-idb"));
+            println!("    {}", dim("装它：tke doctor --fix --profile ios"));
         }
     }
 
@@ -401,6 +404,104 @@ fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
             println!("    {}", dim("更新后重新读一遍 SKILL.md——你上下文里那份还是旧的"));
         }
     }
+}
+
+/// `--fix` 时顺带把 idb 补上（只在 macOS、只在 iOS 相关 profile、只在没装时）。
+///
+/// **失败不改退出码**：doctor 的退出码说的是「必需依赖齐不齐」，而 idb 只影响
+/// iOS *模拟器*——安卓、网页、iOS 真机都不靠它。但**必须打出来**（INV-9），
+/// 否则用户会以为模拟器可以用了。
+fn fix_idb(profile: &str) {
+    if !cfg!(target_os = "macos") || !matches!(profile, "ios" | "all") || idb_present() {
+        return;
+    }
+    println!();
+    println!("  {} {}", dim("iOS模拟器"), "装 idb（模拟器的点击与元素采集靠它）");
+    match install_idb() {
+        Ok(()) => println!("  {} idb 装好了", sym_ok()),
+        Err(e) => {
+            println!("  {} 没装成：{}", sym_warn(), e);
+            println!("  {}", dim("（不影响安卓 / 网页 / iOS 真机——只是模拟器还操作不了）"));
+        }
+    }
+}
+
+/// idb 装了没有。**两半都要有**：`idb_companion` 是原生二进制（gRPC 服务端），
+/// `idb` 是 Python 前端（gRPC 客户端）——**点击和元素采集在客户端这一半**，
+/// 光有 companion 一个动作都做不了（实测 `idb_companion --help` 里
+/// 没有任何 tap/describe 之类的参数，它只管 boot/erase/create 和起服务）。
+fn idb_present() -> bool {
+    which::which("idb").is_ok() && which::which("idb_companion").is_ok()
+}
+
+/// 把 idb 装上（**只在 macOS，且只在 `--fix` 时**）。
+///
+/// 为什么不像 chromedriver/adb/go-ios 那样由 tke 直接下二进制:
+/// idb 是「gRPC 服务端 + Python 客户端」两件套,**单独分发那个二进制没用**——
+/// UI 操作全在 Python 那半边。要绕开它就得自己实现 gRPC 客户端,
+/// 那意味着引 tonic+prost、还要跟着 Meta 的私有 proto 走,他们改一次我们断一次。
+///
+/// 所以这里的做法是**替用户把那几条跑掉**:目的一样（用户只需要 `tke doctor --fix`），
+/// 但不用把别人的分发体系搬进来。
+fn install_idb() -> Result<()> {
+    let Ok(brew) = which::which("brew") else {
+        return Err(TkeError::InvalidArgument(
+            "没装 Homebrew,装不了 idb。先装 brew（https://brew.sh），或手动：\n\
+             \u{3000}brew tap facebook/fb && brew trust facebook/fb\n\
+             \u{3000}brew install idb-companion && pip3 install fb-idb"
+                .into(),
+        ));
+    };
+
+    // 每条都**先打出来再跑**：这是在用户的机器上装东西,不该是黑箱
+    let steps: [(&str, Vec<&str>); 3] = [
+        ("brew tap facebook/fb", vec!["tap", "facebook/fb"]),
+        // trust 是新版 brew 的安全策略（第三方 tap 要显式信任）。
+        // 老版本没有这个子命令——失败不致命,继续往下走
+        ("brew trust facebook/fb", vec!["trust", "facebook/fb"]),
+        ("brew install idb-companion", vec!["install", "idb-companion"]),
+    ];
+    for (label, args) in steps {
+        println!("  {} {}", sym_dot(), dim(label));
+        let ok = Command::new(&brew)
+            .args(&args)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok && !label.contains("trust") {
+            return Err(TkeError::InvalidArgument(format!("`{}` 失败", label)));
+        }
+    }
+
+    // Python 前端。PEP 668 之后系统 Python 会拒绝直接装,所以带 --user；
+    // 还不行就如实说,别假装装上了
+    let py = which::which("python3").map_err(|_| {
+        TkeError::InvalidArgument("没有 python3,装不了 idb 的客户端那一半".into())
+    })?;
+    println!("  {} {}", sym_dot(), dim("pip3 install --user fb-idb"));
+    let ok = Command::new(&py)
+        .args(["-m", "pip", "install", "--user", "--quiet", "fb-idb"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !ok {
+        return Err(TkeError::InvalidArgument(
+            "fb-idb 装失败（新版 Python 会拒绝往系统环境装）。手动挑一条：\n\
+             \u{3000}pipx install fb-idb\n\
+             \u{3000}python3 -m pip install --user --break-system-packages fb-idb"
+                .into(),
+        ));
+    }
+
+    // 复验：以"现在装上了没有"为准,不以"命令有没有报错"为准
+    if !idb_present() {
+        return Err(TkeError::InvalidArgument(
+            "装完了但 PATH 里还是找不到 idb / idb_companion——\n\
+             \u{3000}pip 的 --user 落点（~/.local/bin 或 ~/Library/Python/*/bin）可能不在 PATH 里"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 // ── 检测 ────────────────────────────────────────────────────────────────

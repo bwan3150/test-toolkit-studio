@@ -38,11 +38,12 @@
 
 **iOS 模拟器**用 `-d sim:<UDID>`（`tke device list` 列得到）。它和真机是两条接入路：
 真机靠 WebDriverAgent，模拟器靠 idb——**但指令写法完全一样**，元素表、坐标口径、
-报告都是同一套。模拟器上要先装 idb：
+报告都是同一套。
+
+模拟器缺 idb 的话 `tke doctor` 会说，装它就一条命令：
 
 ```bash
-brew tap facebook/fb && brew trust facebook/fb
-brew install idb-companion && pip3 install fb-idb
+tke doctor --fix --profile ios
 ```
 
 **同名不同义**，跨端时最容易想当然：

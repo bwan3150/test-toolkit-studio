@@ -100,7 +100,7 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 |---|---|---|
 | 靠什么 | go-ios + **WebDriverAgent**（HTTP 协议） | **idb**（`idb_companion` 直调 CoreSimulator） |
 | 设备上要不要跑 runner | 要，**且必须签名**（Apple 的硬要求） | **不要** |
-| 装起来 | 一次性 Xcode 装 WDA；go-ios 随 `tke doctor --fix` 下载 | `brew tap facebook/fb && brew trust facebook/fb`<br>`brew install idb-companion && pip3 install fb-idb` |
+| 装起来 | 一次性 Xcode 装 WDA；go-ios 随 `tke doctor --fix` 下载 | `tke doctor --fix --profile ios`（它替你跑 brew + pip） |
 | 元素树 | XCUI（`GET /source`） | AX 树（`idb ui describe-all`，扁平 JSON） |
 | 坐标单位 | 点，÷scale 由 `/wda/screen` 给 | 点，scale = **截图宽 ÷ AXApplication 宽**（自己算得出，不用再问一次） |
 | 截图 | WDA `/screenshot` | `xcrun simctl io screenshot` |
@@ -113,6 +113,14 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 一条命令、免签名。反过来了。
 
 **tke 不需要内置 WDA 源码**：它只说 WDA 的 HTTP 协议。谁把 runner 跑起来是接入层的事。
+
+**idb 为什么不像 chromedriver/adb/go-ios 那样由 tke 直接下二进制**：它是两件套——
+`idb_companion`（原生二进制，gRPC 服务端）+ `idb`（Python 前端，gRPC 客户端），
+而**点击和元素采集全在客户端那一半**（实测 `idb_companion --help` 里没有任何
+tap/describe 参数，它只管 boot/erase/create 和起服务）。单独分发那个二进制没用；
+要绕开 Python 就得自己实现 gRPC 客户端，那意味着引 tonic+prost 并绑死 Meta 的私有 proto。
+所以 `tke doctor --fix --profile ios` 的做法是**替用户把 brew/pip 那几条跑掉**——
+用户端体验一样（只跑一条 tke 命令），但不用把别人的分发体系搬进来。
 
 **`Platform` 仍然只有三个**（Android/iOS/Web）：模拟器跑的是同一套 iOS App，
 元素库的 ios 通道、定位策略、归一化目标格式全都复用。多出来的只是**驱动**
