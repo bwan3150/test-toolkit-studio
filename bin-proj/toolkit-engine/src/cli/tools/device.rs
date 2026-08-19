@@ -139,14 +139,14 @@ fn list(all: bool, as_json: bool) -> Result<()> {
     }
 
     // 没查成的单独一段。**混进上面那张表是不行的**：那会读成"这些是设备"，
-    // 而它们恰恰是"这类根本没查"
+    // 而它们恰恰是"这类根本没查"。
+    // 措辞压到最短——CLI 不是教程，每行只放「事实 + 下一步」，不解释为什么
     if !d.skipped.is_empty() {
         println!();
         for s in &d.skipped {
-            println!("  {} {}", dim(&format!("未检测 {}", s.kind)), dim(&s.why));
+            println!("  {}", dim(&s.why));
         }
     }
-    println!("\n  {}", dim("第一列就是 -d 要填的值"));
     Ok(())
 }
 

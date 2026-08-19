@@ -26,7 +26,11 @@ pub struct Target {
     pub ready: bool,
 }
 
-/// 某一类没查成的原因（缺工具 / 平台不支持）——**必须跟结果一起返回**
+/// 某一类没查成的原因（缺工具 / 平台不支持）——**必须跟结果一起返回**。
+///
+/// 措辞形如「安卓未检测 · 缺 adb · tke doctor --fix」：**事实 + 下一步，不解释为什么**。
+/// 「没查」与「没连」的区别靠"未检测"三个字带出来就够了，不必展开成一句话——
+/// CLI 不是教程，多一句解释就是每次都要重读一遍的噪音
 #[derive(Debug, serde::Serialize)]
 pub struct Skipped {
     pub kind: &'static str,
@@ -79,12 +83,12 @@ fn android(d: &mut Discovery) {
     let Ok(adb) = crate::ToolManager::resolve("adb") else {
         d.skipped.push(Skipped {
             kind: "android",
-            why: "没装 adb —— 安卓设备是「没查」，不是「没连」。补齐：tke doctor --fix".into(),
+            why: "安卓未检测 · 缺 adb · tke doctor --fix".into(),
         });
         return;
     };
     let Ok(out) = Command::new(&adb).args(["devices", "-l"]).output() else {
-        d.skipped.push(Skipped { kind: "android", why: "adb devices 执行失败".into() });
+        d.skipped.push(Skipped { kind: "android", why: "安卓未检测 · adb devices 失败".into() });
         return;
     };
     for line in String::from_utf8_lossy(&out.stdout).lines().skip(1) {
@@ -127,19 +131,19 @@ fn ios_devices(d: &mut Discovery) {
     if !crate::utils::capability::ios_supported() {
         d.skipped.push(Skipped {
             kind: "ios",
-            why: "iOS 只能在 macOS 上测（设备端 WDA 依赖 Xcode）".into(),
+            why: "iOS 未检测 · 需 macOS".into(),
         });
         return;
     }
     let Ok(go_ios) = crate::ToolManager::resolve("go-ios") else {
         d.skipped.push(Skipped {
             kind: "ios",
-            why: "没装 go-ios —— iOS 真机是「没查」，不是「没连」。补齐：tke doctor --fix --profile ios".into(),
+            why: "iOS 真机未检测 · 缺 go-ios · tke doctor --fix --profile ios".into(),
         });
         return;
     };
     let Ok(out) = Command::new(&go_ios).args(["list", "--nojson"]).output() else {
-        d.skipped.push(Skipped { kind: "ios", why: "go-ios list 执行失败".into() });
+        d.skipped.push(Skipped { kind: "ios", why: "iOS 真机未检测 · go-ios list 失败".into() });
         return;
     };
     for line in String::from_utf8_lossy(&out.stdout).lines() {
@@ -168,11 +172,11 @@ fn ios_simulators(d: &mut Discovery, all: bool) {
         .args(["simctl", "list", "devices", "available", "--json"])
         .output();
     let Ok(out) = out else {
-        d.skipped.push(Skipped { kind: "ios-sim", why: "xcrun simctl 执行失败（装了 Xcode 吗）".into() });
+        d.skipped.push(Skipped { kind: "ios-sim", why: "模拟器未检测 · simctl 失败".into() });
         return;
     };
     let Ok(v) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else {
-        d.skipped.push(Skipped { kind: "ios-sim", why: "simctl 输出解析不了".into() });
+        d.skipped.push(Skipped { kind: "ios-sim", why: "模拟器未检测 · simctl 输出解析失败".into() });
         return;
     };
     // 列得出来 ≠ 操作得了：模拟器的点击/采集要靠 WebDriverAgent，没有就先说清楚
@@ -182,8 +186,7 @@ fn ios_simulators(d: &mut Discovery, all: bool) {
     if !has_wda {
         d.skipped.push(Skipped {
             kind: "ios-sim",
-            why: "模拟器列得出来但操作不了：缺 WebDriverAgent。装它：tke doctor --fix --profile ios"
-                .into(),
+            why: "模拟器操作不了 · 缺 WebDriverAgent · tke doctor --fix --profile ios".into(),
         });
     }
     let Some(runtimes) = v["devices"].as_object() else { return };
@@ -227,7 +230,7 @@ fn ios_simulators(d: &mut Discovery, all: bool) {
         if booted {
             d.skipped.push(Skipped {
                 kind: "ios-sim",
-                why: format!("另有 {} 台模拟器没启动（`tke device list --all` 看全部）", idle.len()),
+                why: format!("{} 台模拟器未启动 · --all", idle.len()),
             });
         } else {
             d.targets.extend(idle);

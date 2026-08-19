@@ -117,7 +117,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     // iOS 门禁要说出来：被挡住时 missing 是空的，光看"依赖已就绪"会以为这台机器什么都能做
     let ios_note = || {
         if ios_blocked {
-            println!("  {} {}", dim("iOS     "), dim("不支持 · 需 macOS（设备端 WDA 依赖 Xcode）"));
+            println!("  {} {}", dim("iOS     "), dim("不支持 · 需 macOS"));
         } else if wants_ios && !upstream_has_go_ios() {
             println!("  {} {}", dim("iOS     "), dim("不支持 · go-ios 无 32 位 Windows 版"));
         }
@@ -270,12 +270,7 @@ fn path_persisted(exe_dir: &Path) -> Option<bool> {
 /// 体检里那一行。只有**不持久**时才出声——正常状态多一行就是噪音。
 fn report_shell_path(exe_dir: &Path) {
     if path_persisted(exe_dir) == Some(false) {
-        println!(
-            "  {} {} {}",
-            dim("新终端  "),
-            "找不到 tke · 只有当前窗口能用",
-            dim("（PATH 没写进 shell 配置）")
-        );
+        println!("  {} {}", dim("新终端  "), "找不到 tke · PATH 没写进 shell 配置");
         println!(
             "    {}",
             dim(&format!("补：echo 'export PATH=\"{}:$PATH\"' >> ~/.zshrc", exe_dir.display()))
@@ -365,8 +360,11 @@ fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
         if wda_app_path().is_some() {
             println!("  {} {}", dim("iOS模拟器"), "可操作 · WebDriverAgent 已装");
         } else {
-            println!("  {} {}", dim("iOS模拟器"), "列得出但操作不了 · 缺 WebDriverAgent");
-            println!("    {}", dim("装它：tke doctor --fix --profile ios"));
+            println!(
+                "  {} {}",
+                dim("iOS模拟器"),
+                "缺 WebDriverAgent · tke doctor --fix --profile ios"
+            );
         }
     }
 
@@ -405,7 +403,9 @@ fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
         // skill 旧的时候多说一句：调用方 AI 的上下文里那份是会话开始时加载的，
         // 只换磁盘文件它是不知道的——不重读等于白更新
         if s.skill_stale {
-            println!("    {}", dim("更新后重新读一遍 SKILL.md——你上下文里那份还是旧的"));
+            // 给调用方 AI 的指示（P-41）。**只说做什么,不解释为什么**——
+            // 理由写在 SKILL.md 里,这一行是提醒不是教程
+            println!("    {}", dim("更新后重读 SKILL.md"));
         }
     }
 }
