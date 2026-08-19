@@ -128,6 +128,14 @@ impl WdaDriver {
             }
         }
 
+        // 没有会话就**附着当前前台 App** 建一个。
+        // 「App 已经开着，我只想看看这一页」是最常见的诉求，不该逼人先 `启动 [BundleID]`
+        // ——那会重启 App，把要看的现场毁掉。
+        drop(guard);
+        if let Ok(conn) = self.attach_foreground(&base, state) {
+            return Ok(conn);
+        }
+
         Err(TkeError::DeviceError(
             "无活动 WDA 会话，请先执行 启动 [BundleID] 或 control launch <BundleID>".to_string(),
         ))
@@ -135,6 +143,50 @@ impl WdaDriver {
 
     /// 取活动会话，不存在则新建（仅供 启动 使用）
     /// bundle_id: 新建会话时随会话拉起的 App
+    /// 附着到**当前前台 App** 建会话（不带 bundleId，WDA 会挂到活动 App 上）。
+    ///
+    /// ⚠️ 附上之后要**确认附到了谁**：模拟器上第一次拉起 WDA runner 时，
+    /// 它自己会被带到前台、把用户的 App 挤到后台——这时附着成功、`/status` 也正常，
+    /// 但采到的是 WDA 那个空白测试界面。不检查的话就是一份「页面上什么都没有」的
+    /// 假结论（跟这两天那一族一模一样）。
+    fn attach_foreground(&self, base: &str, mut state: WdaState) -> Result<Conn> {
+        let resp: serde_json::Value = ureq::post(&format!("{}/session", base))
+            .timeout(Duration::from_secs(30))
+            .send_json(serde_json::json!({ "capabilities": { "alwaysMatch": {} } }))
+            .map_err(|e| TkeError::DeviceError(format!("附着当前 App 失败: {}", e)))?
+            .into_json()
+            .map_err(|e| TkeError::DeviceError(format!("WDA 会话响应解析失败: {}", e)))?;
+        let session_id = resp["sessionId"]
+            .as_str()
+            .or_else(|| resp["value"]["sessionId"].as_str())
+            .ok_or_else(|| TkeError::DeviceError("附着后没拿到 sessionId".into()))?
+            .to_string();
+
+        // 附到谁身上了
+        let active = ureq::get(&format!("{}/wda/activeAppInfo", base))
+            .timeout(Duration::from_secs(10))
+            .call()
+            .ok()
+            .and_then(|r| r.into_json::<serde_json::Value>().ok())
+            .and_then(|v| v["value"]["bundleId"].as_str().map(String::from))
+            .unwrap_or_default();
+        if active.starts_with("com.facebook.WebDriverAgentRunner") {
+            return Err(TkeError::DeviceError(
+                "现在前台是 WebDriverAgent 自己（第一次把它拉起来时会挤掉你的 App）。\n\
+                 \u{3000}用 `启动 [\"你的BundleID\"]` 把 App 拉回来——之后 WDA 一直在跑，不会再挤了"
+                    .into(),
+            ));
+        }
+
+        let scale = Self::fetch_scale(base, &session_id)?;
+        state.session_id = Some(session_id.clone());
+        state.scale = Some(scale);
+        Self::save_state(&self.udid, &state);
+        let conn = Conn { base: base.to_string(), session_id, scale };
+        *self.conn.lock().unwrap() = Some(conn.clone());
+        Ok(conn)
+    }
+
     fn ensure_create(&self, bundle_id: &str) -> Result<Conn> {
         if let Ok(conn) = self.ensure_existing() {
             return Ok(conn);
