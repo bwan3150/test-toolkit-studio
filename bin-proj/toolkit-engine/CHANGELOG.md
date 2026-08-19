@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · iOS 模拟器改走**预编译 WebDriverAgent**（ADR-0017 修订）
+用户提出「锁定 idb 版本、自己当客户端」,理由是 brew 上的版本我们控制不了。
+这个前提一立,账就反过来了——**同样是「自己分发 + 锁版本」,WDA 全面胜出**:
+协议 HTTP+JSON(客户端代码真机那套现成)、归一化现成、分发物 21MB(idb_companion 是 77MB)。
+- **实测(`scripts/probe-wda-prebuilt.sh`)**:`.xctestrun` 里**没有本机绝对路径**→可分发;
+  **`simctl launch` 直接就起得来**→连 xcodebuild 和 .xctestrun 都不用带,`/status` 回 WDA 16.3.0
+- **feat** 模拟器连接时若 8100 不通,tke 自己 `simctl install` + `simctl launch` 拉起来并等就绪
+- **feat** `tke doctor --fix --profile ios` 下载预编译 runner 到 `~/.tke/wda/`;
+  `TKE_WDA_APP` 可顶掉(自己编译的、或试别的版本)
+- **删掉 idb 驱动与 AX 归一化**:不留两套——那意味着两份归一化、两条调试路径
+- 已知限制:端口写死 8100,多台模拟器同时跑会撞(要并行得传 USE_PORT)
+- ⚠️ **分发源上还没有那个 zip**:传上去之前,用 `TKE_WDA_APP` 指向自己编译的产物
+  (verify-ios-sim.sh 会自动找 /tmp/wda-build 里那份)
+
 ### 2026-08-19 · `tke doctor --fix --profile ios` 替你把 idb 装上
 用户提出「idb 也该走 tke 的 fix/doctor,不该让人自己 brew」。查了 `idb_companion --help`:
 它**没有任何 UI 操作参数**(grep tap/touch/describe/accessibility/hid 一条不匹配),

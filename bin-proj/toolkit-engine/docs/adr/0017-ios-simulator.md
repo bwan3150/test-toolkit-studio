@@ -1,4 +1,4 @@
-# ADR-0017 iOS 模拟器走 idb，不走 WebDriverAgent
+# ADR-0017 iOS 模拟器走**预编译的 WebDriverAgent**（曾短暂走过 idb）
 
 - 日期：2026-08-19
 - 状态：**已落地并在 mac 上实跑验通**（2026-08-19）
@@ -16,7 +16,12 @@
 再试 AppleScript（被辅助功能权限挡死）、最后 `brew install idb-companion` 成功驱动。
 这提示了另一条路。
 
-## 决策
+## 决策（**已修订**）
+
+> **最初的决定是「模拟器走 idb」**，理由是它 `brew install` 一条命令、免签名，
+> 而 WDA 要用户自己编译 Xcode 工程。那个理由在「**我们自己分发预编译产物**」这个
+> 前提下就不成立了——用户拍板要锁版本、自己掌控依赖之后，重新算账，WDA 全面胜出。
+> 下面保留原始分析（它仍然解释了「为什么真机不用 idb」），修订后的结论在最后。
 
 **模拟器走 idb，真机继续走 WDA。**
 
@@ -57,6 +62,39 @@
   拿真实数据当夹具写了 4 个单测
 - idb 是外部依赖（brew 装，77MB）。`tke device list` 会在**列得出模拟器但没装 idb** 时
   明说「列得出来但操作不了」——这两件事看起来一样，不说清楚人会以为是设备问题
+
+## 修订（2026-08-19，实测后）
+
+用户提出：brew 上的版本什么时候更新我们控制不了，不如自己锁版本。
+这个前提一立，账就反过来了——
+
+| | idb + 自研 gRPC 客户端 | **预编译 WDA runner** |
+|---|---|---|
+| 协议 | gRPC → 要引 tonic + prost + h2 | **HTTP + JSON**，`ureq` 已在用 |
+| 客户端代码 | 全新写 | **真机那套现成**，且已验证 |
+| 元素归一化 | AX 树（新写） | XCUI（现成） |
+| 分发物 | `idb_companion` 77MB | `.app` **21MB** |
+| 起法 | companion 起 gRPC 服务 + Python 客户端 | **`simctl launch` 直接起** |
+
+`idb_companion --help` 里**没有任何 UI 操作参数**（tap/describe/accessibility 全无），
+它只管 boot/erase/create 和起 gRPC 服务——所以「只分发那个二进制」根本不成立，
+点击与元素采集全在 Python 前端那一半。
+
+而 WDA 这边实测（`scripts/probe-wda-prebuilt.sh`）：
+
+- `xcodebuild build-for-testing` 出 `WebDriverAgentRunner-Runner.app`（21MB）
+- `.xctestrun` 里**没有本机绝对路径** → 产物可以分发
+- **`simctl launch` 直接就起来了**，`/status` 返回 WDA 16.3.0
+  ——连 `xcodebuild` 和 `.xctestrun` 都不用带（XCTest bundle 一般要 xcodebuild
+  带一堆环境变量，模拟器上不需要）
+
+**修订后的结论**：模拟器走我们自己分发的预编译 WDA runner，
+`tke doctor --fix --profile ios` 下载到 `~/.tke/wda/`，连接时若 8100 不通就
+`simctl install` + `simctl launch` 拉起来。idb 驱动与 AX 归一化**已删除**——
+不留两套，那意味着两份归一化、两条调试路径。
+
+端口写死 8100 是已知限制：模拟器与主机共享网络，多台同时跑会撞。
+单台够用；要并行得给每台传 `USE_PORT`。
 
 ## 自查（`scripts/verify-ios-sim.sh` 一条命令跑完）
 

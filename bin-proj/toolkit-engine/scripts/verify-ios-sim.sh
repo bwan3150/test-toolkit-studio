@@ -34,6 +34,22 @@ TKE="$REPO_ROOT/bin/darwin-$ARCH/tke"
 [ -x "$TKE" ] || { bad "找不到构建产物: $TKE"; note "先跑 ./bin-proj/toolkit-engine/build-mac.sh"; exit 1; }
 note "用的是 $TKE"
 note "版本 $("$TKE" --version 2>&1 | head -1)"
+
+# 模拟器要有 WDA runner。分发源上那份还没传之前，用刚编译的顶上——
+# probe-wda-prebuilt.sh 跑完产物就在 /tmp/wda-build 里
+if [ -z "${TKE_WDA_APP:-}" ] && [ ! -d "$HOME/.tke/wda/WebDriverAgentRunner-Runner.app" ]; then
+    CAND=$(find /tmp/wda-build/Build/Products -maxdepth 2 -name "WebDriverAgentRunner-Runner.app" 2>/dev/null | head -1)
+    if [ -n "$CAND" ]; then
+        export TKE_WDA_APP="$CAND"
+        note "WDA 用刚编译的那份: $CAND"
+    else
+        bad "没有 WebDriverAgent —— 模拟器操作不了"
+        note "要么 tke doctor --fix --profile ios，要么先跑 scripts/probe-wda-prebuilt.sh"
+        exit 1
+    fi
+else
+    note "WDA ${TKE_WDA_APP:-$HOME/.tke/wda/WebDriverAgentRunner-Runner.app}"
+fi
 [ -n "$WANT" ] || { bad "用法: bash scripts/verify-ios-sim.sh \"屏幕上某个按钮的文字\" [bundle-id]"; exit 1; }
 
 # —— 准备：确保有一台跑着的模拟器 ——

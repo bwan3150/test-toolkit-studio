@@ -132,8 +132,12 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
         }
         ios_note();
         if download {
-            // 二进制都齐了不代表没事干：模拟器还要 idb
-            fix_idb(&args.profile);
+            // 二进制都齐了不代表没事干：模拟器还要 WDA runner
+            let nonce = std::process::id();
+            let tmp = std::env::temp_dir().join(format!("tke-fix-{}", nonce));
+            let _ = std::fs::create_dir_all(&tmp);
+            fix_sim_wda(&base_url, &format!("?t={}", nonce), &tmp, &args.profile);
+            let _ = std::fs::remove_dir_all(&tmp);
         } else {
             print_health(&exe_dir, 0, &args.profile);
         }
@@ -208,7 +212,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
     }
     let _ = std::fs::remove_dir_all(&tmp);
 
-    fix_idb(&args.profile);
+    fix_sim_wda(&base_url, &q, &tmp, &args.profile);
 
     println!();
     // 复验：以"现在还缺不缺"为准，而不是以"下载有没有报错"为准
@@ -354,14 +358,14 @@ fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
         }
     }
 
-    // iOS 模拟器要靠 idb 才操作得了，而它**不是 tke 分发的依赖**（brew 装）——
-    // 所以只报状态、不进"缺 N 项"（补不了的东西算进缺失，只会让结论变成一条死路）。
-    // 不说的话就是那个最难查的组合：模拟器列得出来、命令也不报错，就是点不动
+    // 模拟器要有 WDA runner 才操作得了。**只报状态、不进"缺 N 项"**：
+    // 它只影响模拟器，安卓/网页/iOS 真机都不靠它，算进"环境不完整"会误导。
+    // 但不说的话就是那个最难查的组合：模拟器列得出来、命令也不报错，就是点不动
     if cfg!(target_os = "macos") && matches!(profile, "ios" | "all") {
-        if idb_present() {
-            println!("  {} {}", dim("iOS模拟器"), "可操作 · idb 已装");
+        if wda_app_path().is_some() {
+            println!("  {} {}", dim("iOS模拟器"), "可操作 · WebDriverAgent 已装");
         } else {
-            println!("  {} {}", dim("iOS模拟器"), "列得出但操作不了 · 没装 idb");
+            println!("  {} {}", dim("iOS模拟器"), "列得出但操作不了 · 缺 WebDriverAgent");
             println!("    {}", dim("装它：tke doctor --fix --profile ios"));
         }
     }
@@ -406,19 +410,19 @@ fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
     }
 }
 
-/// `--fix` 时顺带把 idb 补上（只在 macOS、只在 iOS 相关 profile、只在没装时）。
+/// `--fix` 时顺带把**模拟器用的 WebDriverAgent** 装上（只在 macOS、只在 iOS profile）。
 ///
-/// **失败不改退出码**：doctor 的退出码说的是「必需依赖齐不齐」，而 idb 只影响
+/// **失败不改退出码**：doctor 的退出码说的是「必需依赖齐不齐」，而这个只影响
 /// iOS *模拟器*——安卓、网页、iOS 真机都不靠它。但**必须打出来**（INV-9），
 /// 否则用户会以为模拟器可以用了。
-fn fix_idb(profile: &str) {
-    if !cfg!(target_os = "macos") || !matches!(profile, "ios" | "all") || idb_present() {
+fn fix_sim_wda(base_url: &str, q: &str, tmp: &Path, profile: &str) {
+    if !cfg!(target_os = "macos") || !matches!(profile, "ios" | "all") || wda_app_path().is_some() {
         return;
     }
     println!();
-    println!("  {} {}", dim("iOS模拟器"), "装 idb（模拟器的点击与元素采集靠它）");
-    match install_idb() {
-        Ok(()) => println!("  {} idb 装好了", sym_ok()),
+    println!("  {} {}", dim("iOS模拟器"), "装 WebDriverAgent（模拟器的点击与元素采集靠它）");
+    match install_sim_wda(base_url, q, tmp) {
+        Ok(()) => println!("  {} 装好了", sym_ok()),
         Err(e) => {
             println!("  {} 没装成：{}", sym_warn(), e);
             println!("  {}", dim("（不影响安卓 / 网页 / iOS 真机——只是模拟器还操作不了）"));
@@ -426,79 +430,67 @@ fn fix_idb(profile: &str) {
     }
 }
 
-/// idb 装了没有。**两半都要有**：`idb_companion` 是原生二进制（gRPC 服务端），
-/// `idb` 是 Python 前端（gRPC 客户端）——**点击和元素采集在客户端这一半**，
-/// 光有 companion 一个动作都做不了（实测 `idb_companion --help` 里
-/// 没有任何 tap/describe 之类的参数，它只管 boot/erase/create 和起服务）。
-fn idb_present() -> bool {
-    which::which("idb").is_ok() && which::which("idb_companion").is_ok()
+/// 模拟器用的 WDA runner 装在哪（`~/.tke/wda/WebDriverAgentRunner-Runner.app`）。
+/// **与 drivers/wda/infra.rs 的 find_wda_app 必须同一口径**
+fn wda_app_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".tke").join("wda"))
 }
 
-/// 把 idb 装上（**只在 macOS，且只在 `--fix` 时**）。
-///
-/// 为什么不像 chromedriver/adb/go-ios 那样由 tke 直接下二进制:
-/// idb 是「gRPC 服务端 + Python 客户端」两件套,**单独分发那个二进制没用**——
-/// UI 操作全在 Python 那半边。要绕开它就得自己实现 gRPC 客户端,
-/// 那意味着引 tonic+prost、还要跟着 Meta 的私有 proto 走,他们改一次我们断一次。
-///
-/// 所以这里的做法是**替用户把那几条跑掉**:目的一样（用户只需要 `tke doctor --fix`），
-/// 但不用把别人的分发体系搬进来。
-fn install_idb() -> Result<()> {
-    let Ok(brew) = which::which("brew") else {
-        return Err(TkeError::InvalidArgument(
-            "没装 Homebrew,装不了 idb。先装 brew（https://brew.sh），或手动：\n\
-             \u{3000}brew tap facebook/fb && brew trust facebook/fb\n\
-             \u{3000}brew install idb-companion && pip3 install fb-idb"
-                .into(),
-        ));
-    };
+fn wda_app_path() -> Option<PathBuf> {
+    let p = wda_app_dir()?.join("WebDriverAgentRunner-Runner.app");
+    p.exists().then_some(p)
+}
 
-    // 每条都**先打出来再跑**：这是在用户的机器上装东西,不该是黑箱
-    let steps: [(&str, Vec<&str>); 3] = [
-        ("brew tap facebook/fb", vec!["tap", "facebook/fb"]),
-        // trust 是新版 brew 的安全策略（第三方 tap 要显式信任）。
-        // 老版本没有这个子命令——失败不致命,继续往下走
-        ("brew trust facebook/fb", vec!["trust", "facebook/fb"]),
-        ("brew install idb-companion", vec!["install", "idb-companion"]),
-    ];
-    for (label, args) in steps {
-        println!("  {} {}", sym_dot(), dim(label));
-        let ok = Command::new(&brew)
-            .args(&args)
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if !ok && !label.contains("trust") {
-            return Err(TkeError::InvalidArgument(format!("`{}` 失败", label)));
+/// 下载并解开模拟器版 WDA。
+///
+/// 为什么是**我们自己分发一个预编译产物**，而不是让用户 brew/pip 装别的东西：
+///   - 版本由我们锁 —— 上游哪天变了不会突然把用户的环境搞坏
+///   - 模拟器**不需要签名**，一个 `.app` 拷进去就能跑（真机必须签，那是 Apple 的限制）
+///   - 实测 `simctl launch` 直接起得来，连 xcodebuild 和 .xctestrun 都不用带
+///   - 之后**整套 WDA 协议代码与真机共用**（HTTP+JSON，早就在跑了）
+fn install_sim_wda(base: &str, q: &str, tmp: &Path) -> Result<()> {
+    let dir = wda_app_dir()
+        .ok_or_else(|| TkeError::InvalidArgument("找不到用户目录（HOME 没设？）".into()))?;
+    let zip_path = tmp.join("wda-sim.zip");
+    curl_file(&format!("{}/wda/WebDriverAgentRunner-Runner-sim.zip{}", base, q), &zip_path, b"PK")?;
+
+    std::fs::create_dir_all(&dir).map_err(TkeError::IoError)?;
+    let file = std::fs::File::open(&zip_path).map_err(TkeError::IoError)?;
+    let mut zip = zip::ZipArchive::new(file)
+        .map_err(|e| TkeError::InvalidArgument(format!("WDA 包不是有效 zip：{}", e)))?;
+    for i in 0..zip.len() {
+        let mut entry = zip
+            .by_index(i)
+            .map_err(|e| TkeError::InvalidArgument(format!("读取 zip 条目失败：{}", e)))?;
+        // 防 zip-slip：enclosed_name 拒绝绝对路径与 `..`
+        let Some(rel) = entry.enclosed_name() else { continue };
+        let out = dir.join(rel);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out).map_err(TkeError::IoError)?;
+            continue;
+        }
+        if let Some(p) = out.parent() {
+            std::fs::create_dir_all(p).map_err(TkeError::IoError)?;
+        }
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        entry.read_to_end(&mut buf).map_err(TkeError::IoError)?;
+        std::fs::write(&out, buf).map_err(TkeError::IoError)?;
+        // zip 不保留可执行位，而 .app 里的主程序必须能执行
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if entry.unix_mode().is_some_and(|m| m & 0o111 != 0) {
+                let _ = std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o755));
+            }
         }
     }
+    clear_quarantine(&dir);
 
-    // Python 前端。PEP 668 之后系统 Python 会拒绝直接装,所以带 --user；
-    // 还不行就如实说,别假装装上了
-    let py = which::which("python3").map_err(|_| {
-        TkeError::InvalidArgument("没有 python3,装不了 idb 的客户端那一半".into())
-    })?;
-    println!("  {} {}", sym_dot(), dim("pip3 install --user fb-idb"));
-    let ok = Command::new(&py)
-        .args(["-m", "pip", "install", "--user", "--quiet", "fb-idb"])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    if !ok {
+    // 解开了不等于装好了：确认那个 .app 真的在（半个解压出来的目录也是目录）
+    if wda_app_path().is_none() {
+        let _ = std::fs::remove_dir_all(&dir); // 清掉半成品，免得下次误判成已装
         return Err(TkeError::InvalidArgument(
-            "fb-idb 装失败（新版 Python 会拒绝往系统环境装）。手动挑一条：\n\
-             \u{3000}pipx install fb-idb\n\
-             \u{3000}python3 -m pip install --user --break-system-packages fb-idb"
-                .into(),
-        ));
-    }
-
-    // 复验：以"现在装上了没有"为准,不以"命令有没有报错"为准
-    if !idb_present() {
-        return Err(TkeError::InvalidArgument(
-            "装完了但 PATH 里还是找不到 idb / idb_companion——\n\
-             \u{3000}pip 的 --user 落点（~/.local/bin 或 ~/Library/Python/*/bin）可能不在 PATH 里"
-                .into(),
+            "解压后找不到 WebDriverAgentRunner-Runner.app（包结构不对？）".into(),
         ));
     }
     Ok(())

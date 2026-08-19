@@ -131,11 +131,14 @@ fn ios_simulators(d: &mut Discovery) {
         d.skipped.push(Skipped { kind: "ios-sim", why: "simctl 输出解析不了".into() });
         return;
     };
-    // 列得出来 ≠ 操作得了：模拟器的点击/采集要靠 idb，没装就先说清楚
-    if crate::ToolManager::resolve("idb").is_err() && which::which("idb").is_err() {
+    // 列得出来 ≠ 操作得了：模拟器的点击/采集要靠 WebDriverAgent，没有就先说清楚
+    let has_wda = std::env::var_os("HOME")
+        .map(|h| std::path::PathBuf::from(h).join(".tke/wda/WebDriverAgentRunner-Runner.app"))
+        .is_some_and(|p| p.exists());
+    if !has_wda {
         d.skipped.push(Skipped {
             kind: "ios-sim",
-            why: "模拟器列得出来但操作不了：没装 idb。\n\u{3000}brew tap facebook/fb && brew trust facebook/fb\n\u{3000}brew install idb-companion && pip3 install fb-idb"
+            why: "模拟器列得出来但操作不了：缺 WebDriverAgent。装它：tke doctor --fix --profile ios"
                 .into(),
         });
     }

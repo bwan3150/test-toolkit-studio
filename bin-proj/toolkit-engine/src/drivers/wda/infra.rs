@@ -32,22 +32,18 @@ impl WdaDriver {
         // 所以这里只连、连不上就如实说清楚该怎么把它跑起来。
         if self.is_simulator() {
             let base = format!("http://127.0.0.1:{}", WDA_DEVICE_PORT);
-            if Self::wda_ready(&base) {
-                let state = Self::load_state(&self.udid).unwrap_or(WdaState {
-                    port: WDA_DEVICE_PORT,
-                    forward_pid: 0,   // 模拟器没有转发进程
-                    runwda_pid: None, // 也没有 runwda
-                    session_id: None,
-                    scale: None,
-                });
-                return Ok((base, WdaState { port: WDA_DEVICE_PORT, ..state }));
+            if !Self::wda_ready(&base) {
+                // 没跑就把它拉起来——这是 tke 该干的活，不该让人自己去 simctl
+                self.launch_wda_on_simulator()?;
             }
-            return Err(TkeError::DeviceError(format!(
-                "模拟器 {} 上的 WebDriverAgent 没在跑（{} 连不上）。\n\
-                 先把 WDA 跑进模拟器再回来——模拟器不需要签名，装一次就行：\n\u{3000}xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n\u{3000}  -destination 'id={}' test-without-building\n\
-                 （tke 暂不自动拉起模拟器上的 WDA：go-ios 只对真机有效，模拟器没有 lockdown 通道）",
-                self.udid, base, self.udid
-            )));
+            let state = Self::load_state(&self.udid).unwrap_or(WdaState {
+                port: WDA_DEVICE_PORT,
+                forward_pid: 0,   // 模拟器没有转发进程
+                runwda_pid: None, // 也没有 runwda
+                session_id: None,
+                scale: None,
+            });
+            return Ok((base, WdaState { port: WDA_DEVICE_PORT, ..state }));
         }
 
         // 复用已有转发
@@ -143,6 +139,76 @@ impl WdaDriver {
     }
 
     /// 状态文件 / go-ios 日志所在目录（$TMPDIR/tke/ios）
+    /// 把 WebDriverAgent 拉进**模拟器**：装（幂等）→ 起 → 等就绪。
+    ///
+    /// 这条路比真机干净得多：**不用签名、不用 xcodebuild、连 .xctestrun 都不用**
+    /// ——实测预编译的 `WebDriverAgentRunner-Runner.app` 用 `simctl launch` 直接就起得来
+    /// （XCTest bundle 一般要 xcodebuild 带一堆环境变量，模拟器上不需要）。
+    ///
+    /// ⚠️ 端口写死 8100：模拟器与主机共享网络，**多台模拟器同时跑会撞端口**。
+    /// 单台够用；真要并行得给每台传 `USE_PORT`，那时再说。
+    fn launch_wda_on_simulator(&self) -> Result<()> {
+        let app = Self::find_wda_app().ok_or_else(|| {
+            TkeError::DeviceError(
+                "模拟器要用 WebDriverAgent，但本机没有它：\n\
+                 \u{3000}装它：tke doctor --fix --profile ios\n\
+                 （自己编译的话，把 WebDriverAgentRunner-Runner.app 的路径设进 TKE_WDA_APP）"
+                    .into(),
+            )
+        })?;
+
+        // install 幂等：装过也不报错，省得先查一遍
+        let _ = Command::new("xcrun")
+            .args(["simctl", "install", &self.udid])
+            .arg(&app)
+            .output();
+        let out = Command::new("xcrun")
+            .args([
+                "simctl",
+                "launch",
+                &self.udid,
+                "com.facebook.WebDriverAgentRunner.xctrunner",
+            ])
+            .output()
+            .map_err(|e| TkeError::DeviceError(format!("拉起模拟器上的 WDA 失败: {}", e)))?;
+        if !out.status.success() {
+            return Err(TkeError::DeviceError(format!(
+                "拉起模拟器上的 WDA 失败: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )));
+        }
+
+        // 等就绪。**别只等一两秒**：冷启动那次要跑一遍 XCTest 初始化
+        let base = format!("http://127.0.0.1:{}", WDA_DEVICE_PORT);
+        for _ in 0..30 {
+            std::thread::sleep(Duration::from_millis(500));
+            if Self::wda_ready(&base) {
+                return Ok(());
+            }
+        }
+        Err(TkeError::DeviceError(format!(
+            "WDA 起来了但 {} 一直不通（15 秒）。模拟器锁屏了？或者上一个 WDA 还占着 8100",
+            base
+        )))
+    }
+
+    /// 找 `WebDriverAgentRunner-Runner.app`。
+    /// `TKE_WDA_APP` 优先——自己编译的、或想试别的版本时用它顶掉
+    fn find_wda_app() -> Option<PathBuf> {
+        if let Some(p) = std::env::var_os("TKE_WDA_APP") {
+            let p = PathBuf::from(p);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        let home = std::env::var_os("HOME")?;
+        let p = PathBuf::from(home)
+            .join(".tke")
+            .join("wda")
+            .join("WebDriverAgentRunner-Runner.app");
+        p.exists().then_some(p)
+    }
+
     pub(super) fn log_dir() -> PathBuf {
         let dir = std::env::temp_dir().join("tke").join("ios");
         let _ = std::fs::create_dir_all(&dir);

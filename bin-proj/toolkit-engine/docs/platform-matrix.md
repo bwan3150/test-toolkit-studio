@@ -29,9 +29,9 @@
 | 滑动 | `滑动` / `定向滑动` | ✅ | ✅ | ✅ | ✅ | web 是滚动容器，不是触摸拖拽 |
 | 输入 | `输入` | ≈ | ✅ | ✅ | ≈ | 见下方「同名不同义」 |
 | 清空输入 | `清理` | ✅ | ≈ | ≈ | ✅ | iOS 两边都是连发 50 个退格（没有"全选删除"这种整体操作） |
-| 按键 | `按键` | ✅ | ≈ | ≈ | ≈ | Android 认全部 keycode；**iOS 真机只认 ENTER/BACK**；iOS 模拟器认 ENTER/ESC/BACKSPACE/TAB/HOME（走 HID keycode）；web 认 ENTER/TAB/ESC/BACKSPACE/BACK + 单个字符。**认不出一律报错**，不静默跳过（P-40） |
+| 按键 | `按键` | ✅ | ≈ | ≈ | ≈ | Android 认全部 keycode；**iOS 两边都只认 ENTER/BACK**（同一套 WDA）；web 认 ENTER/TAB/ESC/BACKSPACE/BACK + 单个字符。**认不出一律报错**，不静默跳过（P-40） |
 | 返回 | `返回` | ✅ | ≈ | ≈ | ≈ | Android=BACK 键 / **iOS 两边都是左边缘右滑手势**（App 能拦截它，所以未必生效）/ web=浏览器后退 |
-| 主页 | （无） | ✅ | ✅ | ✅ | ≈ | 模拟器走 `idb ui button HOME`；web 的"主页"= `about:blank` |
+| 主页 | （无） | ✅ | ✅ | ✅ | ≈ | iOS 两边都走 WDA `/wda/homescreen`；web 的"主页"= `about:blank` |
 | 启动 | `启动` | ≈ | ≈ | ≈ | ≈ | 参数完全不同，见下 |
 | 关闭 | `关闭` | ≈ | ≈ | ≈ | ≈ | 安卓 force-stop / iOS 真机 WDA terminate（空参=销毁会话）/ 模拟器 `simctl terminate`（模拟器没有"会话"）/ web 销毁整个会话 |
 | 切换 | `切换` | ≈ | ≈ | ≈ | ≈ | 移动端切 App 到前台 / web 切标签页或开新标签 |
@@ -98,29 +98,21 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 
 | | 真机（`-d <UDID>`） | 模拟器（`-d sim:<UDID>`） |
 |---|---|---|
-| 靠什么 | go-ios + **WebDriverAgent**（HTTP 协议） | **idb**（`idb_companion` 直调 CoreSimulator） |
-| 设备上要不要跑 runner | 要，**且必须签名**（Apple 的硬要求） | **不要** |
-| 装起来 | 一次性 Xcode 装 WDA；go-ios 随 `tke doctor --fix` 下载 | `tke doctor --fix --profile ios`（它替你跑 brew + pip） |
-| 元素树 | XCUI（`GET /source`） | AX 树（`idb ui describe-all`，扁平 JSON） |
-| 坐标单位 | 点，÷scale 由 `/wda/screen` 给 | 点，scale = **截图宽 ÷ AXApplication 宽**（自己算得出，不用再问一次） |
-| 截图 | WDA `/screenshot` | `xcrun simctl io screenshot` |
-| 归一化之后 | **完全一样**——同一份 uiautomator 风格 XML，上层（元素表/语义定位/steps/报告/harness）一个字都不用改 | 同左 |
+| 靠什么 | **WebDriverAgent**（HTTP + JSON） | **同一个 WebDriverAgent** |
+| 怎么连上 | go-ios 建隧道 + USB 端口转发 → 随机端口 | 与主机共享网络，直连 **8100** |
+| 设备上的 runner 谁装 | 一次性 Xcode 安装，**必须签名**（Apple 硬要求） | tke 自己：`simctl install` 一个预编译 `.app`，**免签名** |
+| runner 谁拉起 | tke（go-ios `runwda`，免 Xcode） | tke（`simctl launch`，**连 xcodebuild 都不用**） |
+| 装起来 | go-ios 随 `tke doctor --fix` 下载；WDA 要 Xcode 装一次 | **`tke doctor --fix --profile ios` 全包**（下 21MB 的 .app 到 `~/.tke/wda/`） |
+| 协议之后的一切 | **完全同一套代码**——元素树、坐标换算、点击、截图 | 同左 |
 
-**为什么真机不用 idb**：idb 在真机上照样要往设备里装一个签名过的 XCTest runner——
-跟 WDA 面对的是同一堵墙，换不来任何好处，却要多维护一份元素归一化。真机那条已经通了。
+**为什么两边都用 WDA**：协议是 HTTP+JSON（客户端代码早就在跑），归一化现成，
+分发物只有 21MB。曾经短暂走过 idb（`brew install` 免签名），但一旦决定
+**自己分发预编译产物、锁版本**，WDA 就全面胜出了——详见 ADR-0017 的「修订」。
 
-**为什么模拟器不用 WDA**：模拟器上 WDA 要你编译一个 Xcode 工程，而 idb 是 `brew install`
-一条命令、免签名。反过来了。
+**tke 不需要内置 WDA 源码**：它只说 WDA 的 HTTP 协议，分发的是**编译好的 runner**。
 
-**tke 不需要内置 WDA 源码**：它只说 WDA 的 HTTP 协议。谁把 runner 跑起来是接入层的事。
-
-**idb 为什么不像 chromedriver/adb/go-ios 那样由 tke 直接下二进制**：它是两件套——
-`idb_companion`（原生二进制，gRPC 服务端）+ `idb`（Python 前端，gRPC 客户端），
-而**点击和元素采集全在客户端那一半**（实测 `idb_companion --help` 里没有任何
-tap/describe 参数，它只管 boot/erase/create 和起服务）。单独分发那个二进制没用；
-要绕开 Python 就得自己实现 gRPC 客户端，那意味着引 tonic+prost 并绑死 Meta 的私有 proto。
-所以 `tke doctor --fix --profile ios` 的做法是**替用户把 brew/pip 那几条跑掉**——
-用户端体验一样（只跑一条 tke 命令），但不用把别人的分发体系搬进来。
+**模拟器端口写死 8100**：模拟器与主机共享网络，**多台模拟器同时跑会撞端口**。
+单台够用；要并行得给每台传 `USE_PORT`。
 
 **`Platform` 仍然只有三个**（Android/iOS/Web）：模拟器跑的是同一套 iOS App，
 元素库的 ios 通道、定位策略、归一化目标格式全都复用。多出来的只是**驱动**

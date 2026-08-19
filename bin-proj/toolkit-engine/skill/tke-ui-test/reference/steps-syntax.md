@@ -30,17 +30,18 @@
 | 启动 / 关闭 / 切换 | ✅ | ✅ | ✅ | ✅ |
 | 等待 / 断言 / 滚动查找 | ✅ | ✅ | ✅ | ✅ |
 | 返回 | ✅ | ✅ 手势模拟 | ✅ 手势模拟 | ✅ 浏览器后退 |
-| 按键 | ✅ 全部 keycode | ⚠️ 只有 ENTER/BACK | ⚠️ ENTER/ESC/BACKSPACE/TAB/HOME | ⚠️ ENTER/TAB/ESC/BACKSPACE + 单个字符 |
-| 隐藏键盘 | ✅ | ✅ | — 用电脑键盘 | — 无软键盘 |
+| 按键 | ✅ 全部 keycode | ⚠️ 只有 ENTER/BACK | ⚠️ 只有 ENTER/BACK | ⚠️ ENTER/TAB/ESC/BACKSPACE + 单个字符 |
+| 隐藏键盘 | ✅ | ✅ | ✅ | — 无软键盘 |
 | **悬停** | ❌ | ❌ | ❌ | ✅ |
 | **选择**（原生下拉） | ❌ | ❌ | ❌ | ✅ |
 | **确认/取消对话框、对话框输入** | ❌ | ❌ | ❌ | ✅ |
 
-**iOS 模拟器**用 `-d sim:<UDID>`（`tke device list` 列得到）。它和真机是两条接入路：
-真机靠 WebDriverAgent，模拟器靠 idb——**但指令写法完全一样**，元素表、坐标口径、
-报告都是同一套。
+**iOS 模拟器**用 `-d sim:<UDID>`（`tke device list` 列得到）。真机与模拟器**同一套
+WebDriverAgent**，只有"怎么连上"不同（真机走 USB 隧道，模拟器直连本机 8100）——
+指令写法、元素表、坐标口径、报告全都一样。
 
-模拟器缺 idb 的话 `tke doctor` 会说，装它就一条命令：
+模拟器缺 WebDriverAgent 的话 `tke doctor` 会说，装它就一条命令（tke 自己拉起，
+不用你碰 Xcode）：
 
 ```bash
 tke doctor --fix --profile ios
