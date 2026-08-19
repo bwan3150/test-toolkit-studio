@@ -15,12 +15,17 @@
 ├── skill/tke-ui-test.tar.gz             # skill 本体，跟平台无关
 ├── bin/<platform>/                   # 平台名 = darwin-arm64 / darwin-amd64 / linux-arm64 / linux-amd64
 │   └── {tke,chromedriver,adb,aapt,go-ios}.gz   # 每个二进制单独 gzip（不是 tar）
-└── chrome/
-    └── <chrome-mac-arm64|chrome-mac-x64|chrome-linux64>.zip   # Chrome for Testing，官方目录原样 zip
+├── chrome/
+│   └── <chrome-mac-arm64|chrome-mac-x64|chrome-linux64>.zip   # Chrome for Testing，官方目录原样 zip
+└── wda/
+    ├── WebDriverAgentRunner-Runner-sim.zip   # iOS 模拟器用的 WDA runner（21MB，arm64+x86_64 通用）
+    └── WDA-VERSION                           # 版本留痕：编的是哪个 commit
 ```
 
 要点：
-- **二进制是单文件 gzip**（`tke.gz`），**Chrome 是整个目录 zip**，两者别搞混。
+- **二进制是单文件 gzip**（`tke.gz`），**Chrome 与 WDA 是整个目录 zip**，别搞混。
+- **WDA 那份只有一个**：`.app` 是 arm64+x86_64 的 fat 包，**Intel 与 Apple Silicon 共用**，
+  不按平台分目录。打包用 `scripts/package-wda-sim.sh`（版本锁在脚本里）。
 - ⚠️ **`install.sh` / `VERSION` / `skill/tke-ui-test.tar.gz` 三个别漏传**——它们不在 `bin/`、
   `chrome/` 里，是另外三个顶层文件。漏了的话使用者根本装不上（见下面「SPA 兜底」）。
 - bin 平台名用 `amd64`，Chrome 包名用 `x64`（`chrome-mac-x64`）——命名不一致，别统一。

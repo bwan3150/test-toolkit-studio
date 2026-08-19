@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · 模拟器收尾：打包脚本 + skill 用法
+- **feat** `scripts/package-wda-sim.sh`:编译 → 打包 → **自检 zip 结构** → 打出上传命令。
+  **WDA 版本锁在脚本里**(`WDA_REF`,默认 2026-08-19 实测通过的那个 commit)——
+  这正是自己分发的意义:上游变了不会突然把用户环境搞坏。顺带出一份 `WDA-VERSION` 留痕
+- 自检那步专门查「zip 里第一层是不是 `WebDriverAgentRunner-Runner.app`」:
+  层级错一层 tke 就找不到,而那是解压之后才会暴露的
+- **docs(skill)** 补「iOS 模拟器」一节,**重点写第一次要先 `启动 [BundleID]`**:
+  拉 WDA 会挤掉前台 App,直接 `fetch` 采到的是桌面那一屏(tke 会认出来并报错);
+  以及 iOS 包名怎么查(`simctl listapps`,`tke app` 是安卓专属)
+- **docs** 发布布局补 `wda/` 一层;写明那份 `.app` 是 fat 包,**Intel 与 Apple Silicon 共用**
+
 ### 2026-08-19 · 附着到「桌面」也得报错（同一个坑的第二个变种）
 用户实跑:模拟器上还没装 WDA 时跑验证——tke 把 WDA 拉起来(挤掉了前台 App),
 然后附着到了**桌面**,采到一堆 Fitness/通讯录/文件 图标,接着"找不到那个按钮"

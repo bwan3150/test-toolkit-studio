@@ -112,6 +112,26 @@ tke -d <序列号> file write <设备路径> <内容>
 tke -d <序列号> file rm|cp|mv ...
 ```
 
+## iOS 模拟器
+
+```bash
+tke device list                                  # 找 sim:<UDID>
+tke -d sim:<UDID> steps '启动 ["com.example.app"]' --log ~/.tke/logs/<任务简称>/
+tke -d sim:<UDID> fetch --interactive            # 之后跟别的设备一模一样
+```
+
+**第一次用先 `启动 [BundleID]`，别直接 `fetch`。** tke 要把 WebDriverAgent 拉进模拟器
+才能操作，而拉起它会**把当前前台 App 挤到后台**（`simctl launch` 必然带到前台，没有
+后台启动选项）。`启动` 这条会一次性做完两件事：拉起 WDA + 把目标 App 带到前台。
+
+直接 `fetch` 的话，采到的多半是**桌面那一屏图标**——tke 会认出来并报错，不会让你
+拿着一屏 Fitness/通讯录 去找按钮。只有第一次会这样，WDA 起来后就一直跑着。
+
+包名不知道就查：`xcrun simctl listapps <UDID> | grep -i <你的App名>`
+（`tke app` 那套是安卓专属的，iOS 用不了）。
+
+缺 WebDriverAgent 的话 `tke doctor` 会说，装它一条命令：`tke doctor --fix --profile ios`。
+
 ## 安卓：看设备日志（App 崩了 / 点了没反应）
 
 ```bash

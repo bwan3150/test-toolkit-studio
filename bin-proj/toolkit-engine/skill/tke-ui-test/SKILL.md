@@ -148,11 +148,16 @@ tke device list
 |---|---|---|
 | 浏览器 | `-d web` | 都能 |
 | 安卓 | `-d <序列号>` | 都能 |
-| iOS | `-d <UDID>` | **只有 macOS** |
+| iOS 真机 | `-d <UDID>` | **只有 macOS** |
+| iOS 模拟器 | `-d sim:<UDID>` | **只有 macOS** |
 
-**iOS 只能在 macOS 上做**——设备上的 WebDriverAgent 必须先用 Xcode 装一次，而 Xcode 只有
-mac 有。在 Windows/Linux 上碰 iOS 设备，tke 会直接拦下并说明，别把时间花在那儿。
-（`tke doctor` 会告诉你这台机器能做什么。）
+**iOS 只能在 macOS 上做**（模拟器本身就是 Xcode 装的）。在 Windows/Linux 上碰 iOS，
+tke 会直接拦下并说明，别把时间花在那儿。（`tke doctor` 会告诉你这台机器能做什么。）
+
+- **模拟器**：`tke doctor --fix --profile ios` 一条命令装好，之后 tke 自己把
+  WebDriverAgent 拉进去，**不用你碰 Xcode**。第一次先 `启动 [BundleID]`——
+  见 `reference/tke-commands.md` 的「iOS 模拟器」
+- **真机**：设备上的 WebDriverAgent 得先用 Xcode 装一次（Apple 要求签名，绕不过）
 
 **安卓要启动 App 得知道包名 + Activity，不知道就查、别猜**：
 
