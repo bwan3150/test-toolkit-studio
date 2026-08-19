@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · `tke device` 的帮助文案跟上四端
+`--help` 里还写着老的「[工具] 设备详细信息」,看不出 `list` 的存在。
+- 顶层改成「list 看有哪些能测 / info 看某台的详情 / prop 读安卓属性」
+- `info` 写明**四端都能用**、`prop` 写明**仅安卓**（它就是 `adb getprop`）
+- skill 的 tke-commands 里三条并成一处（原先 info/prop 各写了两遍）
+
 ### 2026-08-19 · `install.sh` 也装 WebDriverAgent（两条路装出来的环境要一样）
 用户看 `tke update` 的输出:DEPENDENCY 段里有 tke/chromedriver/adb/aapt/go-ios/chrome,
 **唯独没有 WDA**——因为它只有 `tke doctor --fix --profile ios` 那条路装得上。

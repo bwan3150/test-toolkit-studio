@@ -97,8 +97,9 @@ tke -d <序列号> app stop <包名>
 ```bash
 tke device list                       # ★ 有哪些可测目标（安卓/iOS真机/iOS模拟器/浏览器）
                                       #   第一列就是 -d 要填的值；查不了的那类会说明原因
-tke -d <序列号> device info           # 硬件/电池/网络等完整信息
-tke -d <序列号> device prop <属性名>   # 单个 prop
+tke -d <ID> device info               # 某台的详情：型号/屏幕尺寸/系统版本
+                                      #   四端都能用；安卓另有硬件/电池/网络
+tke -d <序列号> device prop <属性名>   # 安卓系统属性（adb getprop，仅安卓）
 ```
 
 ## 安卓文件系统（需要看日志/配置文件时）

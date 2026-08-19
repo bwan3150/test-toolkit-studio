@@ -183,7 +183,7 @@ enum Commands {
         #[command(subcommand)]
         action: AppCommands,
     },
-    /// [工具] 设备详细信息
+    /// [工具] 设备：list 看有哪些能测 / info 看某台的详情 / prop 读安卓属性
     Device {
         #[command(subcommand)]
         action: DeviceCommands,
