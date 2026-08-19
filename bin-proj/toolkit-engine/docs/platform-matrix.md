@@ -22,27 +22,27 @@
 
 ## 通用动作（三端都有）
 
-| 动作 | tks 指令 | Android | iOS | Web | 说明 |
-|---|---|---|---|---|---|
-| 点击 | `点击` | ✅ | ✅ | ✅ | 坐标一律是**截图像素**；web 内部按 dpr 换算成 CSS 坐标 |
-| 长按 | `按压` | ≈ | ✅ | ✅ | Android 用「同点 swipe」模拟，没有真正的 longpress |
-| 滑动 | `滑动` / `定向滑动` | ✅ | ✅ | ✅ | web 是滚动容器，不是触摸拖拽 |
-| 输入 | `输入` | ≈ | ✅ | ≈ | 见下方「同名不同义」 |
-| 清空输入 | `清理` | ✅ | ≈ | ✅ | iOS 是发 50 个退格 |
-| 按键 | `按键` | ✅ | ≈ | ≈ | Android 认全部 keycode；iOS 只认 ENTER/BACK；web 认 ENTER/TAB/ESC/BACKSPACE/BACK **+ 单个字符**。三端都**认不出就报错**，不静默跳过 |
-| 返回 | `返回` | ✅ | ≈ | ≈ | Android=BACK 键 / iOS=边缘拖拽手势 / web=浏览器后退 |
-| 主页 | （无） | ✅ | ✅ | ≈ | web 的"主页"= `about:blank` |
-| 启动 | `启动` | ≈ | ≈ | ≈ | 参数完全不同，见下 |
-| 关闭 | `关闭` | ≈ | ≈ | ≈ | 移动端杀 App / web 销毁整个会话 |
-| 切换 | `切换` | ≈ | ≈ | ≈ | 移动端切 App 到前台 / web 切标签页或开新标签 |
-| 隐藏键盘 | `隐藏键盘` | ≈ | ✅ | — | Android 是按 BACK；web 无软键盘，**空操作** |
-| 采集页面 | `fetch` / `refresh` | ✅ | ✅ | ✅ | 统一成 uiautomator 风格 XML（web 由 DOM 归一化而来） |
+| 动作 | tks 指令 | Android | iOS 真机 | iOS 模拟器 | Web | 说明 |
+|---|---|---|---|---|---|---|
+| 点击 | `点击` | ✅ | ✅ | ✅ | ✅ | 坐标一律是**截图像素**；web 内部按 dpr 换算成 CSS 坐标 |
+| 长按 | `按压` | ≈ | ✅ | ✅ | ✅ | Android 用「同点 swipe」模拟，没有真正的 longpress |
+| 滑动 | `滑动` / `定向滑动` | ✅ | ✅ | ✅ | ✅ | web 是滚动容器，不是触摸拖拽 |
+| 输入 | `输入` | ≈ | ✅ | ✅ | ≈ | 见下方「同名不同义」 |
+| 清空输入 | `清理` | ✅ | ≈ | ≈ | ✅ | iOS 两边都是连发 50 个退格（没有"全选删除"这种整体操作） |
+| 按键 | `按键` | ✅ | ≈ | ≈ | ≈ | Android 认全部 keycode；**iOS 真机只认 ENTER/BACK**；iOS 模拟器认 ENTER/ESC/BACKSPACE/TAB/HOME（走 HID keycode）；web 认 ENTER/TAB/ESC/BACKSPACE/BACK + 单个字符。**认不出一律报错**，不静默跳过（P-40） |
+| 返回 | `返回` | ✅ | ≈ | ≈ | ≈ | Android=BACK 键 / **iOS 两边都是左边缘右滑手势**（App 能拦截它，所以未必生效）/ web=浏览器后退 |
+| 主页 | （无） | ✅ | ✅ | ✅ | ≈ | 模拟器走 `idb ui button HOME`；web 的"主页"= `about:blank` |
+| 启动 | `启动` | ≈ | ≈ | ≈ | ≈ | 参数完全不同，见下 |
+| 关闭 | `关闭` | ≈ | ≈ | ≈ | ≈ | 安卓 force-stop / iOS 真机 WDA terminate（空参=销毁会话）/ 模拟器 `simctl terminate`（模拟器没有"会话"）/ web 销毁整个会话 |
+| 切换 | `切换` | ≈ | ≈ | ≈ | ≈ | 移动端切 App 到前台 / web 切标签页或开新标签 |
+| 隐藏键盘 | `隐藏键盘` | ≈ | ✅ | ✅ | — | Android 是按 BACK；web 无软键盘，**空操作** |
+| 采集页面 | `fetch` / `refresh` | ✅ | ✅ | ✅ | ✅ | 统一成 uiautomator 风格 XML（web 由 DOM 归一化而来） |
 
 ## 平台独有
 
 | 动作 | 谁有 | 说明 |
 |---|---|---|
-| 悬停 `悬停` | **Web** | 触摸屏没有 hover 这回事；Android/iOS 调用**明确报错** |
+| 悬停 `悬停` | **Web** | 触摸屏没有 hover 这回事；Android / iOS 真机 / iOS 模拟器调用一律**明确报错** |
 | 下拉选择 `选择` | **Web** | 原生 `<select>` 展开后由浏览器绘制，DOM 里看不见，点不到，只能 DOM 设值 + 派事件 |
 | `control browser-reset` | **Web** | 清 cookie / localStorage / sessionStorage / IndexedDB / 缓存 |
 | `control browser-eval` | **Web** | 在页面里跑 JS |
@@ -96,19 +96,27 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 
 ## iOS：真机与模拟器是两条接入路
 
-| | 真机 | 模拟器（`-d sim:<udid>`） |
+| | 真机（`-d <UDID>`） | 模拟器（`-d sim:<UDID>`） |
 |---|---|---|
-| 怎么连 | go-ios 建隧道 + USB 端口转发 → `127.0.0.1:<随机端口>` | 与主机**共享网络**，WDA 直接在 `127.0.0.1:8100` |
-| WDA 谁拉起 | **tke 自己拉**（go-ios `runwda` 走 testmanagerd，免 Xcode） | **tke 拉不了**——go-ios 只对真机有效（模拟器没有 lockdown 通道）；要人先跑起来 |
-| WDA 怎么装 | 一次性 Xcode 安装，**必须签名**（Apple 的限制，绕不开） | `simctl install` 一个 .app，**不需要签名** |
-| 之后的一切 | 完全一样 —— 点击、元素采集、XCUI 归一化、截图都是同一套 WDA 协议代码 | 同左 |
+| 靠什么 | go-ios + **WebDriverAgent**（HTTP 协议） | **idb**（`idb_companion` 直调 CoreSimulator） |
+| 设备上要不要跑 runner | 要，**且必须签名**（Apple 的硬要求） | **不要** |
+| 装起来 | 一次性 Xcode 装 WDA；go-ios 随 `tke doctor --fix` 下载 | `brew tap facebook/fb && brew trust facebook/fb`<br>`brew install idb-companion && pip3 install fb-idb` |
+| 元素树 | XCUI（`GET /source`） | AX 树（`idb ui describe-all`，扁平 JSON） |
+| 坐标单位 | 点，÷scale 由 `/wda/screen` 给 | 点，scale = **截图宽 ÷ AXApplication 宽**（自己算得出，不用再问一次） |
+| 截图 | WDA `/screenshot` | `xcrun simctl io screenshot` |
+| 归一化之后 | **完全一样**——同一份 uiautomator 风格 XML，上层（元素表/语义定位/steps/报告/harness）一个字都不用改 | 同左 |
 
-**为什么非 WDA 不可**：模拟器上 `simctl` 能装 App、能起、能截图，但**点不了、也读不到元素树**。
-不用 WDA 的替代品是 Meta 的 idb（`idb ui tap` / `describe-all`，走 CoreSimulator 私有框架），
-但那是**另一套重依赖**，且真机侧能力不如 WDA——真机已经通了，为模拟器再引一套等于维护两份。
+**为什么真机不用 idb**：idb 在真机上照样要往设备里装一个签名过的 XCTest runner——
+跟 WDA 面对的是同一堵墙，换不来任何好处，却要多维护一份元素归一化。真机那条已经通了。
 
-**tke 不需要内置 WDA 源码**：它只说 WDA 的 HTTP 协议。谁把 WDA 跑起来是接入层的事——
-真机交给 go-ios，模拟器目前交给人。
+**为什么模拟器不用 WDA**：模拟器上 WDA 要你编译一个 Xcode 工程，而 idb 是 `brew install`
+一条命令、免签名。反过来了。
+
+**tke 不需要内置 WDA 源码**：它只说 WDA 的 HTTP 协议。谁把 runner 跑起来是接入层的事。
+
+**`Platform` 仍然只有三个**（Android/iOS/Web）：模拟器跑的是同一套 iOS App，
+元素库的 ios 通道、定位策略、归一化目标格式全都复用。多出来的只是**驱动**
+（`Driver::IosSim`），跟 `Driver::Fake` 一样——有驱动，没平台。
 
 ## 加新动作时的检查单
 

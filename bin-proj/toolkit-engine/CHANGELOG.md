@@ -7,6 +7,29 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · iOS 模拟器改走 idb（ADR-0017）
+上一条(5dd97961)让模拟器也走 WDA,但那要求用户自己编译一个 WDA 的 Xcode 工程。
+看到用户另一个会话的实跑记录后改了路线:**模拟器走 idb,真机继续 WDA**。
+判据只有一件事——设备上要不要跑一个**签名过的** runner:真机两边都要(换不来好处),
+模拟器 idb 完全不要(`idb_companion` 直调 CoreSimulator)。
+- **feat** 新增 `Driver::IosSim`(`drivers/idb/`):点击/长按/滑动/输入/清空/按键/返回/
+  主页/启动/关闭/采集全部落到 `idb ui *` 与 `xcrun simctl`
+- **feat** AX 树 → uiautomator XML 归一化(约 80 行)。**拿用户实采的真实数据当夹具**,
+  4 个单测:文字提取、坐标换算、密码框识别、以及「**traits 不能判可点击**」
+  ——实测 `Scrollable` 连 StaticText 都带,一律当可点会把满屏文字标成能点的
+- 坐标 scale = **截图宽 ÷ AXApplication 宽**(实测 1206÷402=3),自己算得出来,
+  不用像 WDA 那样再问一次接口。换算在驱动层做完——让调用方 AI 自己乘 dpr 是把工具的活
+  推给它,迟早算错
+- `subrole: AXSecureTextField` 直接对上 `is_password`,证据打码无缝接上
+- `has_soft_keyboard` **不含模拟器**(有意):它用电脑键盘、软键盘不弹,
+  而 `idb ui text` 本来也不依赖键盘——白等一次就是白等几百毫秒 × 每个输入框
+- `tke device list` 在「列得出模拟器但没装 idb」时明说**列得出来但操作不了**,
+  并给出 brew 那三条命令
+- **docs** platform-matrix 扩成四列(安卓/iOS真机/iOS模拟器/网页)+ 两条接入路对照;
+  skill 的 steps-syntax 同步
+- ⚠️ 本机 Linux,**模拟器实跑验不了**:归一化(有真实夹具)和平台路由已验,
+  点击/采集要在 mac 上跑一次
+
 ### 2026-08-19 · iOS 模拟器接入（`-d sim:<udid>`，tke 侧已通,待 mac 实测）
 - **feat** `-d sim:<udid>` 识别为 iOS 并走**模拟器路径**:模拟器与主机共享网络,
   WDA 就在 `127.0.0.1:8100`,不建隧道、不做端口转发。**WDA 协议那一整套(点击/采集/

@@ -131,6 +131,16 @@ fn ios_simulators(d: &mut Discovery) {
         d.skipped.push(Skipped { kind: "ios-sim", why: "simctl 输出解析不了".into() });
         return;
     };
+    // 列得出来 ≠ 操作得了：模拟器的点击/采集要靠 idb，没装就先说清楚
+    if crate::ToolManager::resolve("idb").is_err() && which::which("idb").is_err() {
+        d.skipped.push(Skipped {
+            kind: "ios-sim",
+            why: "模拟器列得出来但操作不了：没装 idb。\n\
+                  　brew tap facebook/fb && brew trust facebook/fb\n\
+                  　brew install idb-companion && pip3 install fb-idb"
+                .into(),
+        });
+    }
     let Some(runtimes) = v["devices"].as_object() else { return };
     for (runtime, list) in runtimes {
         // "com.apple.CoreSimulator.SimRuntime.iOS-26-0" → "iOS 26.0"
