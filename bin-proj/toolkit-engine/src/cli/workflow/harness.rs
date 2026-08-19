@@ -280,7 +280,7 @@ async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<Set
             "ios-sim" => "iOS 模拟器",
             _ => "Web",
         };
-        opts.push(format!("{}\t{}　{}", group, t.name, t.id));
+        opts.push(format!("{}\t{} {}　{}", group, t.model, t.os, t.id));
         kinds.push(Kind::Target(t.id.clone()));
     }
     // 某一类**没查成**也要摆出来（INV-9）：不然人只会以为"设备没连"，

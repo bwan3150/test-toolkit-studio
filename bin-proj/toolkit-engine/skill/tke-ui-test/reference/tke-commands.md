@@ -95,13 +95,16 @@ tke -d <序列号> app stop <包名>
 ## 设备信息
 
 ```bash
-tke device list                       # ★ 有哪些可测目标（安卓/iOS真机/iOS模拟器/浏览器）
-                                      #   第一列就是 -d 要填的值；查不了的那类会说明原因
+tke device                            # ★ 列出可测目标（= device list，最常用的那次不用多打一个词）
+                                      #   四列：ID / 系统 / 型号 / 状态；第一列就是 -d 要填的值
+                                      #   安卓绿·苹果蓝·网页黄；用不了的整行置灰
                                       #   模拟器**默认只列在跑的**（mac 上动辄二三十台）
-tke device list --all                 # 连没启动的模拟器一起列（要挑一台来启动时用）
-tke -d <ID> device info               # 某台的详情：型号/屏幕尺寸/系统版本
-                                      #   四端都能用；安卓另有硬件/电池/网络
+tke device --all                      # 连没启动的模拟器一起列（要挑一台来启动时用）
+tke -d <ID> device info               # 某台的详情（四端都能用；安卓另有硬件/电池/网络）
 tke -d <序列号> device prop <属性名>   # 安卓系统属性（adb getprop，仅安卓）
+
+# 给脚本/AI 接的时候加 --json（或者直接管道走，它自己会切 JSON）
+tke device --json | python3 -c "import json,sys; print([t['id'] for t in json.load(sys.stdin)['targets']])"
 ```
 
 ## 安卓文件系统（需要看日志/配置文件时）

@@ -12,6 +12,7 @@ pub mod scroll;
 pub mod xml;
 pub mod update;
 pub mod redact;
+pub mod text;
 
 pub use json_output::JsonOutput;
 pub use workarea::Workarea;

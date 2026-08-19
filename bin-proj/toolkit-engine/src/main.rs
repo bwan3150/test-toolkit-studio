@@ -185,8 +185,10 @@ enum Commands {
     },
     /// [工具] 设备：list 看有哪些能测 / info 看某台的详情 / prop 读安卓属性
     Device {
+        /// 不给子命令就等于 `list`——**问"有哪些设备"是最常见的那次**，
+        /// 不该让人多打一个词（`tke device` 直接列出来）
         #[command(subcommand)]
-        action: DeviceCommands,
+        action: Option<DeviceCommands>,
     },
     /// [工具] 元素库管理（按坐标取元素落库）
     Element {
@@ -322,6 +324,7 @@ async fn main() -> tke::Result<()> {
             tools::app::handle(action, params.clone()).await
         }
         Commands::Device { action } => {
+            let action = action.unwrap_or(cli::tools::DeviceCommands::List { all: false });
             tools::device::handle(action, params.clone())
         }
         Commands::Element { action } => {

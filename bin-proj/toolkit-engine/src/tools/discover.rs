@@ -8,20 +8,22 @@
 
 use std::process::Command;
 
-/// 一个可测目标
+/// 一个可测目标。四列：`id` / `os` / `model` / `state`——
+/// 拆成四列是因为混在一起没法对齐（`CPH2305` 与 `iPhone 17 Pro · iOS 26.2` 长度差太多）
 #[derive(Debug, serde::Serialize)]
 pub struct Target {
-    /// `-d` 直接填这个
+    /// **`-d` 直接填这个**（浏览器有头那行连参数一起给，复制就能用）
     pub id: String,
     /// android / ios / ios-sim / web —— **机器读的**（JSON 输出、脚本判断用）
     pub kind: &'static str,
-    /// 给人看的类别（安卓 / iOS真机 / iOS模拟器 / 浏览器）。
-    /// `ios-sim` 这种是内部叫法，不该摆到人面前
-    pub kind_label: &'static str,
-    /// 给人看的名字（机型/浏览器）
-    pub name: String,
-    /// 状态：安卓的 device/offline、模拟器的 Booted/Shutdown
+    /// 系统：`Android 15` / `iOS 26.2` / `—`
+    pub os: String,
+    /// 机型：`CPH2305` / `iPhone 17 Pro` / `Chrome 无头`
+    pub model: String,
+    /// 状态：`已连接` / `已启动` / `未启动` / `可用`
     pub state: String,
+    /// **能不能马上用**。false = 这一行整行置灰（没启动的模拟器、离线的安卓）
+    pub ready: bool,
 }
 
 /// 某一类没查成的原因（缺工具 / 平台不支持）——**必须跟结果一起返回**
@@ -46,14 +48,27 @@ pub fn discover() -> Discovery {
 /// `all=true` 连没启动的模拟器一起列（要挑一台来启动时用）
 pub fn discover_with(all: bool) -> Discovery {
     let mut d = Discovery::default();
-    // 浏览器：不需要连什么，装了 chromedriver 就能跑
+    // 浏览器：不需要连什么，装了 chromedriver 就能跑。
+    // **有头/无头是两种用法**，都列出来——第一列连参数一起给，复制就能用
     d.targets.push(Target {
         id: "web".into(),
         kind: "web",
-        kind_label: "浏览器",
-        name: "Chrome（无头）".into(),
-        state: "ready".into(),
+        os: "—".into(),
+        model: "Chrome 无头".into(),
+        state: "可用".into(),
+        ready: true,
     });
+    // 这台机器开不了窗口就别摆有头那行——选了必然失败的选项不该出现（同 iOS 的门禁）
+    if crate::utils::params::desktop_available() {
+        d.targets.push(Target {
+            id: "web --headless=off".into(),
+            kind: "web",
+            os: "—".into(),
+            model: "Chrome 有窗口".into(),
+            state: "可用".into(),
+            ready: true,
+        });
+    }
     android(&mut d);
     ios_devices(&mut d);
     ios_simulators(&mut d, all);
@@ -84,12 +99,26 @@ fn android(d: &mut Discovery) {
             .split_whitespace()
             .find_map(|kv| kv.strip_prefix("model:"))
             .unwrap_or("Android 设备");
+        // 系统版本要单独问一次（`adb devices -l` 不给）。离线设备问不到，留空
+        let os = if state == "device" {
+            Command::new(&adb)
+                .args(["-s", serial, "shell", "getprop", "ro.build.version.release"])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|v| !v.is_empty())
+                .map(|v| format!("Android {}", v))
+                .unwrap_or_else(|| "Android".into())
+        } else {
+            "Android".into()
+        };
         d.targets.push(Target {
             id: serial.to_string(),
             kind: "android",
-            kind_label: "安卓",
-            name: model.replace('_', " "),
-            state: state.to_string(),
+            os,
+            model: model.replace('_', " "),
+            state: if state == "device" { "已连接".into() } else { state.to_string() },
+            ready: state == "device",
         });
     }
 }
@@ -120,9 +149,10 @@ fn ios_devices(d: &mut Discovery) {
             d.targets.push(Target {
                 id: udid.to_string(),
                 kind: "ios",
-                kind_label: "iOS真机",
-                name: "iPhone / iPad".into(),
-                state: "connected".into(),
+                os: "iOS".into(),
+                model: "iPhone / iPad".into(),
+                state: "已连接".into(),
+                ready: true,
             });
         }
     }
@@ -171,17 +201,18 @@ fn ios_simulators(d: &mut Discovery, all: bool) {
             let (Some(udid), Some(name)) = (dev["udid"].as_str(), dev["name"].as_str()) else {
                 continue;
             };
-            let state = dev["state"].as_str().unwrap_or("?").to_string();
+            let booted = dev["state"].as_str() == Some("Booted");
             let t = Target {
                 // **必须带 sim: 前缀**：模拟器 UDID 是标准 UUID（36 位），
                 // 而 tke 认 iOS 靠的是真机 UDID 的形状（25 位），不加前缀会被当成安卓序列号
                 id: format!("sim:{}", udid),
                 kind: "ios-sim",
-                kind_label: "iOS模拟器",
-                name: format!("{} · {}", name, ver),
-                state,
+                os: ver.trim().to_string(),
+                model: name.to_string(),
+                state: if booted { "已启动".into() } else { "未启动".into() },
+                ready: booted,
             };
-            if all || t.state == "Booted" {
+            if all || t.ready {
                 d.targets.push(t);
             } else {
                 idle.push(t);
