@@ -121,6 +121,20 @@ impl RunArtifacts {
     /// 保存单步产物：从工作区复制截图（标注后）和页面结构文件
     /// label 为本步操作描述（如 "返回" / "点击 [{Devices入口}]"），画在截图顶部横幅
     /// 返回 (截图相对路径, 结构文件相对路径)
+    /// 工作区里那份「驱动直给的原文」——按 `current_raw_page.*` 前缀找，
+    /// **不认扩展名**：驱动想用什么后缀是它的事，收集方不该有一份需要维护的清单
+    fn find_raw_page_impl(dir: &std::path::Path) -> Option<PathBuf> {
+        std::fs::read_dir(dir)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .find(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("current_raw_page."))
+            })
+    }
+
     pub fn save_step(
         &self,
         workarea: &Workarea,
@@ -175,16 +189,18 @@ impl RunArtifacts {
             None
         };
 
-        // **驱动直给的原文**（web=.html / 移动端=.xml）另存一份。
+        // **驱动直给的原文**另存一份（web=.html / 安卓与 iOS 真机=.xml / iOS 模拟器=.json）。
         // `pages/` 里是 tke 筛选归一化后的元素表——好读、能直接拿来定位；
-        // `raw_pages/` 是没动过的原始页面——用来回答"这个元素是被我们筛掉了，
-        // 还是压根没采到"，也是将来页面改版时做脚本持久化的底料。
-        // 拿不到就跳过：它是参照物，缺了不影响这一步。
-        for ext in ["html", "xml"] {
-            let src_raw = workarea.raw_page_path(ext);
-            if src_raw.exists() && std::fs::create_dir_all(&self.raw_page_dir).is_ok() {
+        // `raw_pages/` 是没动过的原文——用来回答"这个元素是被我们筛掉了，还是压根没采到"，
+        // 也是将来页面改版时做脚本持久化的底料。拿不到就跳过：它是参照物，缺了不影响这一步。
+        //
+        // ⚠️ **按前缀扫，不要写扩展名白名单**。早先是 `for ext in ["html","xml"]`，
+        // 于是 iOS 模拟器的 `.json` 原文**静静地没了**——不报错、不提示，
+        // 只有人对着报告数目录才发现。新驱动用什么后缀都不该由这里来记。
+        if let Some(src_raw) = Self::find_raw_page_impl(workarea.dir()) {
+            if std::fs::create_dir_all(&self.raw_page_dir).is_ok() {
+                let ext = src_raw.extension().and_then(|e| e.to_str()).unwrap_or("txt");
                 let _ = std::fs::copy(&src_raw, self.raw_page_dir.join(format!("step_{:03}.{}", seq, ext)));
-                break;
             }
         }
 
@@ -429,5 +445,37 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&legacy);
+    }
+}
+
+#[cfg(test)]
+mod raw_page_tests {
+    use super::*;
+
+    /// 原文收集**不能认扩展名**：认了就得维护一份清单，而漏掉的那次是静默的
+    /// （iOS 模拟器的 `.json` 就这么没进过报告，`raw_pages/` 空着也不报错）
+    #[test]
+    fn picks_up_raw_page_whatever_the_extension_is() {
+        for ext in ["html", "xml", "json", "以后某个新驱动的后缀"] {
+            let tmp = std::env::temp_dir().join(format!("tke-rawpage-test-{}", ext.len()));
+            let _ = std::fs::remove_dir_all(&tmp);
+            std::fs::create_dir_all(&tmp).unwrap();
+            std::fs::write(tmp.join(format!("current_raw_page.{}", ext)), "原文").unwrap();
+
+            let found = RunArtifacts::find_raw_page_impl(&tmp);
+            assert!(found.is_some(), "扩展名 .{} 的原文没被找到", ext);
+            assert_eq!(std::fs::read_to_string(found.unwrap()).unwrap(), "原文");
+            let _ = std::fs::remove_dir_all(&tmp);
+        }
+    }
+
+    /// 没有原文时安静跳过——它是参照物，缺了不该让这一步失败
+    #[test]
+    fn no_raw_page_is_fine() {
+        let tmp = std::env::temp_dir().join("tke-rawpage-test-none");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        assert!(RunArtifacts::find_raw_page_impl(&tmp).is_none());
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
