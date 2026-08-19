@@ -9,7 +9,12 @@
 #   ③ 坐标换算对不对（按文字点一下，看页面**真的变了没有**）  ← 最关键
 #   ④ 证据落没落盘（截图/元素表/报告）
 set -uo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# ⚠️ **先把路径解析成绝对的,再 cd**。`$BASH_SOURCE` 是调用时的相对路径
+# （`bash bin-proj/.../verify-ios-sim.sh`），cd 走之后它就指不到地方了——
+# 实测就这么炸的：`cd: bin-proj/toolkit-engine/scripts/../../..: No such file`
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+cd "$SCRIPT_DIR/.."
 
 WANT="${1:-}"
 BUNDLE="${2:-}"
@@ -25,7 +30,7 @@ note(){ printf '%s  %s%s\n' "$D" "$1" "$N"; }
 # 刚改的代码（实测踩过：编译成功、跑的还是旧版，新子命令报 unrecognized subcommand）。
 # 这里也**不去覆盖**那个 tke：它是日常在用的，验证脚本没资格替人换掉。
 ARCH=$([ "$(uname -m)" = arm64 ] && echo arm64 || echo amd64)
-TKE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/bin/darwin-$ARCH/tke"
+TKE="$REPO_ROOT/bin/darwin-$ARCH/tke"
 [ -x "$TKE" ] || { bad "找不到构建产物: $TKE"; note "先跑 ./bin-proj/toolkit-engine/build-mac.sh"; exit 1; }
 note "用的是 $TKE"
 note "版本 $("$TKE" --version 2>&1 | head -1)"

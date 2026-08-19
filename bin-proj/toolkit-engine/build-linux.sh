@@ -133,10 +133,11 @@ say "Size:      $(du -h "$TARGET_BINARY" | cut -f1)"
 # 构建产物落在仓库的 bin/<platform>/，日常敲的 `tke` 多半是 ~/.tke/bin/ 那个。
 # **只提示，不覆盖**——那是用户日常在用的，构建脚本没资格替他换掉。
 INSTALLED="$(command -v tke 2>/dev/null || true)"
-if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$TARGET_BINARY" ]; then
+TARGET_ABS="$(cd "$(dirname "$TARGET_BINARY")" && pwd)/$(basename "$TARGET_BINARY")"
+if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$TARGET_ABS" ]; then
     say ""
-    say "注意: 你敲 tke 用的是 $INSTALLED（不是刚构建的这个）"
-    say "      要用新的: $TARGET_BINARY"
+    say "注意: 你敲 tke 用的是 ${INSTALLED}（不是刚构建的这个）"
+    say "      要用新的: ${TARGET_ABS}"
 fi
 
 # —— 验证 ——（产物跑不起来就是构建失败，别让它悄悄进 bin/）

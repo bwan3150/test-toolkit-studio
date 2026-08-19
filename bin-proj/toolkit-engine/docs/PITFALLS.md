@@ -700,3 +700,31 @@ build-*.sh 拷到  →  <repo>/bin/<platform>/tke
 > 提示 + 验证脚本自己找产物，两边都不越界。
 
 **自查**：改完编译完，别只看 `--version`——敲一条**这次新加的子命令**。它认得，才算真生效。
+
+### 顺带踩的两个（都在"验证工具本身"里）
+
+**① `$BASH_SOURCE` 是相对路径，`cd` 走之后就指不到了**
+
+```bash
+cd "$(dirname "${BASH_SOURCE[0]}")/.."          # ← 先 cd 了
+TKE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/..."   # ← 这里已经找不到
+# cd: bin-proj/toolkit-engine/scripts/../../..: No such file or directory
+```
+
+用 `bash path/to/x.sh` 调用时 `$BASH_SOURCE` 就是那串相对路径。**先解析成绝对路径再 cd**：
+
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+cd "$SCRIPT_DIR/.."
+```
+
+**② `"$VAR（中文）"` 在 macOS 自带的 bash 3.2 下会吃字节**
+
+```
+注意: 你敲 tke 用的是 ��不是刚构建的这个）        ← 路径没了，全角括号也烂了
+```
+
+变量名后面紧跟多字节字符时，老 bash 的边界判断不可靠（Linux 的 bash 5 不复现，
+**恰恰因此最容易漏**——本机测着好好的，用户机器上是乱码）。
+中文文案里一律写 `${VAR}`，别省那对花括号。
