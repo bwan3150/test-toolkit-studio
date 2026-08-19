@@ -100,6 +100,9 @@ for RC in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile";
 done
 
 [ "$DEL_LOGS" = 1 ] && rm_path "$HOME/.tke/logs" "logs      "
+# iOS 模拟器用的 WebDriverAgent（21MB）。跟 tke 一起装的,就跟 tke 一起删——
+# 留着它既占地方又会让下次 doctor 误判成"已装"
+rm_path "$HOME/.tke/wda" "wda       "
 if [ "$DEL_CHROME" = 1 ]; then
     for d in "$CHROME_DIR"/chrome-*; do
         rm_path "$d" "chrome    "

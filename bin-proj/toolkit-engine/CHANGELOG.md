@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · `install.sh` 也装 WebDriverAgent（两条路装出来的环境要一样）
+用户看 `tke update` 的输出:DEPENDENCY 段里有 tke/chromedriver/adb/aapt/go-ios/chrome,
+**唯独没有 WDA**——因为它只有 `tke doctor --fix --profile ios` 那条路装得上。
+两条路装出来的环境不一样,人只会以为是漏了。
+- **feat** `install.sh` 加 3.5 段:macOS + ios/all profile 时下 WDA runner 到 `~/.tke/wda/`,
+  跟 chromedriver/Chrome 同级显示。解压后**验 `.app` 真的在**(半个解压出来的目录也是目录),
+  并 `xattr -cr` 清隔离属性——不清的话 `simctl install` 会被拦
+- **feat** `uninstall.sh` 跟着删 `~/.tke/wda`:跟 tke 一起装的就跟 tke 一起删,
+  留着既占地方又会让下次 doctor 误判成"已装"
+- `tke uninstall` 的确认清单也列上它,**但只在装了的时候列**——没装的东西列出来是噪音
+
 ### 2026-08-19 · 设备显示改成给人看的名字；device 命令补齐四端
 - **删** 「正在把 WebDriverAgent 拉进模拟器」那行提示。正常流程里 `启动 [BundleID]`
   紧接着就把 App 拉回来了,那行字对用户没有任何可做的事;真出问题时 attach_foreground

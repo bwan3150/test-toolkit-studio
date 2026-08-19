@@ -86,6 +86,14 @@ pub async fn uninstall(args: UninstallArgs) -> Result<()> {
             println!("  skill      {}", d.display());
         }
         println!("  tke 与驱动  {}", tke_home().display());
+        // WebDriverAgent 跟 tke 一起装的（install.sh 的 3.5 段），就跟 tke 一起删。
+        // 只在**装了**的时候提——没装的东西列出来是噪音
+        if std::env::var_os("HOME")
+            .map(|h| PathBuf::from(h).join(".tke/wda/WebDriverAgentRunner-Runner.app"))
+            .is_some_and(|p| p.exists())
+        {
+            println!("  WebDriverAgent（iOS 模拟器用）");
+        }
         println!("  PATH 里 tke 的那一行");
         if del_logs {
             println!("  日志        {}", logs_dir().display());

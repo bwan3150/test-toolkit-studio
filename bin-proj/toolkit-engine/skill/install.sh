@@ -4,7 +4,8 @@
 #   curl -fsSL <BASE_URL>/install.sh | bash
 #   curl -fsSL <BASE_URL>/install.sh | bash -s -- --profile web --project
 #
-# 干三件事：装 skill 文件 → 装 tke 及同目录驱动 → 装 Chrome for Testing（web profile）。
+# 干四件事：装 skill 文件 → 装 tke 及同目录驱动 → 装 Chrome for Testing（web profile）
+# → 装 WebDriverAgent（macOS + ios profile，iOS 模拟器用）。
 # 全程幂等：重复跑只会覆盖同名文件，不会装重。
 #
 # 环境变量：
@@ -258,6 +259,36 @@ if [ "$PROFILE" = "web" ] || [ "$PROFILE" = "all" ]; then
         printf '  %s %s\n' "$S_OK" "$CHROME_PKG"
     else
         printf '  %s %s 下载失败，网页检查会用不了\n' "$S_WARN" "$CHROME_PKG"
+        [ -n "$FETCH_ERR" ] && printf '      %s%s%s\n' "$C_DIM" "$FETCH_ERR" "$C_R"
+    fi
+fi
+
+# —— 3.5 WebDriverAgent（iOS 模拟器）——
+#
+# 装 tke 时就一起装上，跟 chromedriver / Chrome 同级。
+# 早先只有 `tke doctor --fix --profile ios` 装得上,于是 `tke update` 跑完
+# DEPENDENCY 里没有它——**两条路装出来的环境不一样**,人会以为是漏了。
+#
+# 只在 macOS：iOS 只能在 mac 上测（模拟器本身就是 Xcode 装的）。
+# 那个 .app 是 arm64+x86_64 fat 包，**Intel 与 Apple Silicon 共用一份**。
+# 真机不靠它（真机的 WDA 要签名，得走 Xcode，见 ADR-0017）。
+if [ "$OS" = "Darwin" ] && { [ "$PROFILE" = "ios" ] || [ "$PROFILE" = "all" ]; }; then
+    WDA_DIR="$HOME/.tke/wda"
+    if [ -d "$WDA_DIR/WebDriverAgentRunner-Runner.app" ]; then
+        printf '  %s %s\n' "$S_OK" "WebDriverAgent"
+    elif fetch "$BASE_URL/wda/WebDriverAgentRunner-Runner-sim.zip$Q" "$TMP/wda.zip" zip bar "WebDriverAgent"; then
+        mkdir -p "$WDA_DIR"
+        unzip -q -o "$TMP/wda.zip" -d "$WDA_DIR"
+        xattr -cr "$WDA_DIR" 2>/dev/null   # 清隔离属性,否则 simctl install 会被拦
+        # 解开了不等于装好了:半个解压出来的目录也是目录
+        if [ -d "$WDA_DIR/WebDriverAgentRunner-Runner.app" ]; then
+            printf '  %s %s\n' "$S_OK" "WebDriverAgent"
+        else
+            rm -rf "$WDA_DIR"
+            printf '  %s %s 包结构不对，iOS 模拟器会用不了\n' "$S_WARN" "WebDriverAgent"
+        fi
+    else
+        printf '  %s %s 下载失败，iOS 模拟器会用不了\n' "$S_WARN" "WebDriverAgent"
         [ -n "$FETCH_ERR" ] && printf '      %s%s%s\n' "$C_DIM" "$FETCH_ERR" "$C_R"
     fi
 fi
