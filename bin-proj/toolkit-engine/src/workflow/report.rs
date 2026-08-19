@@ -579,7 +579,7 @@ fn render(run_dir: &Path, r: &ExecutionResult) -> String {
     );
 
     let meta_rows = [
-        ("设备", r.device.clone().unwrap_or_else(|| "—".into())),
+        ("设备", r.device_label.clone().or_else(|| r.device.clone()).unwrap_or_else(|| "—".into())),
         ("脚本", r.script_path.clone().unwrap_or_else(|| "—".into())),
         ("开始", hhmmss(&r.start_time)),
         ("结束", hhmmss(&r.end_time)),
@@ -790,7 +790,14 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
     for (i, b) in batches.iter().enumerate() {
         let plat = platform_tag(b.result.device.as_deref());
         let ctx = Ctx { run_dir: &b.dir, prefix: &b.prefix, img };
-        let dev = b.result.device.clone().unwrap_or_else(|| "—".into());
+        // ⚠️ **显示用名字，判断用 ID**，两者不能混：
+        // 两台同型号的模拟器 label 一模一样（都叫 `iPhone 17 Pro · iOS 26.0（模拟器）`），
+        // 拿 label 判"换没换设备"就会把跨设备那一跳吞掉——而那正是跨设备检查
+        // 最需要在报告里还原的东西（单测 task_report_separator_only_when_meaningful 钉着）
+        let dev_key = b.result.device.clone().unwrap_or_default();
+        let dev = b.result.device_label.clone()
+            .or_else(|| b.result.device.clone())
+            .unwrap_or_else(|| "—".into());
         let link = if batch_links {
             format!(
                 r#"<a class="b-link" href="{href}">单独看这一批</a>"#,
@@ -804,7 +811,7 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
         // 那是工具的实现细节，不是这次检查发生了什么。
         // 真正值得标出来的只有两件事：**换设备了**、**中间停了很久**（多半是人在手动登录/操作）。
         // 第一批不算"换设备"——顶部摘要已经写了设备，再插一行是重复
-        let dev_changed = prev_dev.is_some() && prev_dev.as_deref() != Some(dev.as_str());
+        let dev_changed = prev_dev.is_some() && prev_dev.as_deref() != Some(dev_key.as_str());
         let gap = prev_end
             .as_deref()
             .and_then(|p| gap_secs(p, &b.result.start_time))
@@ -828,7 +835,7 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
                 link = link,
             ));
         }
-        prev_dev = Some(dev.clone());
+        prev_dev = Some(dev_key.clone());
         prev_end = Some(if b.result.end_time.is_empty() {
             b.result.start_time.clone()
         } else {
@@ -1070,6 +1077,7 @@ mod tests {
             run_dir: None,
             launched_packages: vec![],
             device: Some("web".into()),
+            device_label: Some("Chrome（无头）".into()),
         }
     }
 
@@ -1151,9 +1159,12 @@ mod tests {
     /// 人看到的全是"AI 分几次调的"，那是工具的实现细节，不是这次检查发生了什么。
     #[test]
     fn task_report_separator_only_when_meaningful() {
+        // ⚠️ label 故意**全都一样**：换设备的判断必须看 `device` 那个 ID，
+        // 不能看显示名——两台同型号模拟器的名字一模一样，混用就会把跨设备那一跳吞掉
         let mk = |dev: &str, start: &str, end: &str| {
             let mut r = mk_result(vec![step(0, "点击 [\"X\"]", None)]);
             r.device = Some(dev.into());
+            r.device_label = Some("同一个显示名".into());
             r.start_time = start.into();
             r.end_time = end.into();
             r
@@ -1198,7 +1209,10 @@ mod tests {
             "dev",
         );
         assert_eq!(html.matches(r#"<div class="batch">"#).count(), 1);
-        assert!(html.contains("phone-1"), "分隔行要写明换到了哪台设备");
+assert!(
+            html.contains("同一个显示名"),
+            "分隔行写的是**给人看的设备名**"
+        );
 
         // ③ 中间停了很久：多半是人在手动登录/改配置，那件事在证据里只剩这个空档
         let html = render(

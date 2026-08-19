@@ -363,6 +363,21 @@ impl Controller {
         }
     }
 
+    /// 「我是谁」——给人看的一句话（`iPhone 17 Pro · iOS 26.0（模拟器）` /
+    /// `Pixel 7（安卓 14）` / `Chrome（无头）`）。
+    ///
+    /// 报告和设备列表显示这个而不是设备 ID：**那串 UUID/序列号对人没有意义**，
+    /// 而"这次跑在哪台机器上"恰恰是读报告的人最先要知道的。查不到就退回设备 ID
+    /// ——查询本身失败不该让整件事失败。
+    pub fn describe(&self) -> String {
+        match &self.driver {
+            Driver::Adb(d) => d.describe(),
+            Driver::Web(d) => d.describe(),
+            Driver::Wda(d) => d.describe(),
+            Driver::Fake(d) => d.describe(),
+        }
+    }
+
     // ===== 信息 =====
 
     pub fn get_device_info(&self) -> Result<DeviceInfo> {

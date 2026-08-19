@@ -121,3 +121,32 @@ adb / wda 两条驱动**没查过**有没有类似的静默退化或固定 sleep
 - 发现不一致**只提醒 + 给命令**,不自己覆盖二进制(三平台各有各的坑,install.sh 已踩平)
 - 实测:模拟 08-13 的旧 skill → doctor 与 steps 都如实报出并给更新命令;
   没有版本文件的老安装 → 报"没有版本信息",**不误报过期**
+
+## Q-12 (2026-08-19) iOS **真机**的 WDA 还要人工过一次 Xcode
+
+模拟器已经全自动（`doctor --fix` 下预编译 runner，tke 自己 `simctl install/launch`）。
+真机卡在**签名**：
+
+| | 能不能自动 |
+|---|---|
+| 证书（Apple Development） | ✅ 本机 Keychain 里有就能用（`security find-identity` 查得到） |
+| **provisioning profile**（必须含目标设备 UDID） | ❌ **生成它必须联 Apple**，要开发者账号凭据 |
+
+tke 不该去碰用户的 Apple ID。所以真机能砍掉的是「clone + 编译 WDA 工程」（我们分发未签名产物、
+自动 `codesign` + `go-ios install`），**砍不掉「让 Xcode 往那台设备装一次任意 App 以生成 profile」**。
+
+要做的前提：用户机器上有证书**且**有覆盖目标设备的 profile。已知用户那台有 3 个 Apple Development
+证书，profile 目录待确认（Xcode 16+ 挪到了 `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`）。
+
+## Q-13 (2026-08-19) 模拟器端口写死 8100，多台并行会撞
+
+模拟器与主机共享网络，所有实例的 WDA 都监听 8100。单台够用，**并行跑多台模拟器会互相抢**。
+解法是给每台传 `USE_PORT`（`simctl launch --env`），并把端口记进状态文件——
+现在的 `WdaState.port` 已经有这个字段，只是模拟器分支写死了常量。
+
+## Q-14 (2026-08-19) `tke harness` 在四端的实跑没验过
+
+驱动层四端都通了（`tke steps` / `fetch` 用户在 web + iOS 模拟器上验过），
+但 **harness 的 AI 探索闭环**只在 web 上跑过。它用的是同一套驱动，理论上换 `-d` 就行，
+但「AI 看着 iOS 元素表能不能做对决策」是另一回事（XCUI 的 `resource_id` 往往就是可见文字，
+跟安卓/web 的语义不同）。需要有 AI key 的环境实跑。

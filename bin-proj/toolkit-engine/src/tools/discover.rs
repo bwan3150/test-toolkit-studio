@@ -13,8 +13,11 @@ use std::process::Command;
 pub struct Target {
     /// `-d` 直接填这个
     pub id: String,
-    /// android / ios / ios-sim / web
+    /// android / ios / ios-sim / web —— **机器读的**（JSON 输出、脚本判断用）
     pub kind: &'static str,
+    /// 给人看的类别（安卓 / iOS真机 / iOS模拟器 / 浏览器）。
+    /// `ios-sim` 这种是内部叫法，不该摆到人面前
+    pub kind_label: &'static str,
     /// 给人看的名字（机型/浏览器）
     pub name: String,
     /// 状态：安卓的 device/offline、模拟器的 Booted/Shutdown
@@ -40,7 +43,8 @@ pub fn discover() -> Discovery {
     d.targets.push(Target {
         id: "web".into(),
         kind: "web",
-        name: "浏览器（无头）".into(),
+        kind_label: "浏览器",
+        name: "Chrome（无头）".into(),
         state: "ready".into(),
     });
     android(&mut d);
@@ -76,6 +80,7 @@ fn android(d: &mut Discovery) {
         d.targets.push(Target {
             id: serial.to_string(),
             kind: "android",
+            kind_label: "安卓",
             name: model.replace('_', " "),
             state: state.to_string(),
         });
@@ -108,7 +113,8 @@ fn ios_devices(d: &mut Discovery) {
             d.targets.push(Target {
                 id: udid.to_string(),
                 kind: "ios",
-                name: "iOS 真机".into(),
+                kind_label: "iOS真机",
+                name: "iPhone / iPad".into(),
                 state: "connected".into(),
             });
         }
@@ -159,7 +165,8 @@ fn ios_simulators(d: &mut Discovery) {
                 // 而 tke 认 iOS 靠的是真机 UDID 的形状（25 位），不加前缀会被当成安卓序列号
                 id: format!("sim:{}", udid),
                 kind: "ios-sim",
-                name: format!("{}（{}）", name, ver),
+                kind_label: "iOS模拟器",
+                name: format!("{} · {}", name, ver),
                 state: dev["state"].as_str().unwrap_or("?").to_string(),
             });
         }

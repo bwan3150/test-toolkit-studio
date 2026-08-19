@@ -514,6 +514,56 @@ impl WdaDriver {
 
     // ===== 信息 =====
 
+    /// 「我是谁」——给人看的一句话（`iPhone 17 Pro（模拟器）`）。
+    ///
+    /// 报告和设备列表里显示这个，而不是那串 UUID：**UUID 对人没有任何意义**，
+    /// 而"这次跑在哪台机器上"恰恰是读报告的人最先要知道的。
+    pub fn describe(&self) -> String {
+        if self.simulator {
+            let name = self.simctl_name().unwrap_or_else(|| "iOS 模拟器".into());
+            return format!("{}（模拟器）", name);
+        }
+        // 真机：WDA 的 /status 里有机型与系统版本
+        let info = self
+            .ensure_existing()
+            .ok()
+            .and_then(|c| {
+                ureq::get(&format!("{}/status", c.base))
+                    .timeout(Duration::from_secs(5))
+                    .call()
+                    .ok()?
+                    .into_json::<serde_json::Value>()
+                    .ok()
+            })
+            .and_then(|v| {
+                let os = v["value"]["os"].clone();
+                let name = os["name"].as_str().unwrap_or("iOS").to_string();
+                let ver = os["version"].as_str().unwrap_or_default().to_string();
+                Some(if ver.is_empty() { name } else { format!("{} {}", name, ver) })
+            })
+            .unwrap_or_else(|| "iOS".into());
+        format!("{}（真机）", info)
+    }
+
+    /// 从 `simctl list` 里查这台模拟器的机型名（"iPhone 17 Pro"）
+    fn simctl_name(&self) -> Option<String> {
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "list", "devices", "--json"])
+            .output()
+            .ok()?;
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).ok()?;
+        for (rt, list) in v["devices"].as_object()? {
+            for d in list.as_array()? {
+                if d["udid"].as_str() == Some(&self.udid) {
+                    let ver = rt.rsplit('.').next().unwrap_or("").replacen('-', " ", 1).replace('-', ".");
+                    let name = d["name"].as_str().unwrap_or("iPhone");
+                    return Some(if ver.is_empty() { name.into() } else { format!("{} · {}", name, ver) });
+                }
+            }
+        }
+        None
+    }
+
     pub fn get_device_info(&self) -> Result<DeviceInfo> {
         let conn = self.ensure_existing()?;
         let (w, h) = self.window_size().unwrap_or((0.0, 0.0));

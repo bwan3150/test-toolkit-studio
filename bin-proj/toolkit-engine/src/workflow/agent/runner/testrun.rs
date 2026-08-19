@@ -494,6 +494,9 @@ impl TestRun {
             run_dir: Some(self.run_dir.to_string_lossy().to_string()),
             launched_packages: Vec::new(),
             device: Some(self.device.clone()),
+            // harness 这条链路的设备名由 ScriptRunner 那边写（它建了驱动）；
+            // 这里补不到就留空，报告会退回显示设备 ID
+            device_label: None,
         };
         let _ = self.artifacts.write_log(&exec_result);
 

@@ -241,6 +241,8 @@ impl FlowRunner {
                     run_dir: None,
                     launched_packages: Vec::new(),
                     device: item.device().map(String::from).or_else(|| self.params.device()),
+                    // 这条是"脚本都没跑起来"的记录，连驱动都没建，问不出设备名
+                    device_label: None,
                 });
             }
 

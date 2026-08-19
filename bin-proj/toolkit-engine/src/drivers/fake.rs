@@ -76,6 +76,11 @@ pub struct FakeDriver {
 }
 
 impl FakeDriver {
+    /// 「我是谁」——测试用的假设备
+    pub fn describe(&self) -> String {
+        "假设备（测试用）".to_string()
+    }
+
     pub fn new(id: String) -> Self {
         Self { id }
     }

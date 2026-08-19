@@ -185,6 +185,9 @@ impl ScriptRunner {
             run_dir: artifacts.as_ref().map(|_| run_dir_str.clone()),
             launched_packages: Vec::new(),
             device: self.params.device(),
+            // 问一次驱动"你是谁"。**只问一次**：它可能要跑 adb/simctl 子进程，
+            // 每步都问就是每步多花几十毫秒
+            device_label: Some(interpreter.describe()),
         };
 
         on_event(&RunEvent::RunStart {

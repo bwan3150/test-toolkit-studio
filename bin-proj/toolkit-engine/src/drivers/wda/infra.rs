@@ -167,11 +167,9 @@ impl WdaDriver {
             )
         })?;
 
-        // ⚠️ 这一下会**把当前前台 App 挤走**（simctl launch 必然带到前台，没有后台启动选项）。
-        // 说一声，不然人只会看到"我的 App 怎么没了"。只有第一次会这样——
-        // WDA 起来之后就一直跑着。
-        eprintln!("  · 正在把 WebDriverAgent 拉进模拟器（会暂时挤掉前台 App，用 `启动 [BundleID]` 拉回来）");
-
+        // 注：这一下会把当前前台 App 挤走（simctl launch 必然带到前台，没有后台启动
+        // 选项）。**不打提示**——正常流程里 `启动 [BundleID]` 紧接着就把 App 拉回来了，
+        // 那行字对用户没有任何可做的事；真出问题时 attach_foreground 会报得很清楚。
         // install 幂等：装过也不报错，省得先查一遍
         let _ = Command::new("xcrun")
             .args(["simctl", "install", &self.udid])

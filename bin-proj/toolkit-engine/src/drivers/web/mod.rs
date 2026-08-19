@@ -701,7 +701,16 @@ return false;
 
     // ===== 信息 =====
 
+    /// 「我是谁」——`Chrome（无头）`。有头无头对读报告的人是有意义的信息
+    pub fn describe(&self) -> String {
+        let headless = crate::utils::params::web_headless().resolve();
+        format!("Chrome（{}）", if headless { "无头" } else { "有窗口" })
+    }
+
     pub fn get_device_info(&self) -> Result<DeviceInfo> {
+        // ⚠️ 查不到就**报错**，别兜底成 0。`Chrome for Testing · 0×0` 看起来像个
+        // 合法回答，实际意思是"根本没有会话"——那种输出比报错更耽误人（同 P-27:
+        // 静默退化成兜底值最难查）
         let (w, h) = self
             .execute(
                 "const d=window.devicePixelRatio||1; return [Math.round(innerWidth*d), Math.round(innerHeight*d)];",
@@ -712,7 +721,11 @@ return false;
                 let a = v.as_array()?;
                 Some((a[0].as_u64()? as u32, a[1].as_u64()? as u32))
             })
-            .unwrap_or((0, 0));
+            .ok_or_else(|| {
+                TkeError::DeviceError(
+                    "读不到浏览器窗口尺寸——多半是还没有会话，先 `启动 [\"URL\"]`".into(),
+                )
+            })?;
 
         Ok(DeviceInfo {
             id: self.device_id.clone(),

@@ -1,6 +1,6 @@
 ---
-Last-Updated: 2026-08-18
-Last-Commit: 61a9752a
+Last-Updated: 2026-08-19
+Last-Commit: PENDING
 ---
 
 # 当前状态
@@ -31,8 +31,12 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | **自我管理 `tke update`/`uninstall`** | ✅ 本机实测 | ADR-0014 补充:**就是去跑官方 install.sh/uninstall.sh**;Unix 用 **exec 把自己替换掉**(放手,不占着自己的二进制),Windows spawn+改名兜底;**先验文件头再执行**(不用 `curl \| bash`,P-19 会喂 HTML 给 bash) |
 | **版本新鲜度 `tke doctor`** | ✅ 本机实测 | **Q-11 已关闭**(ADR-0014):`tke fix`→`tke doctor`(fix 保留别名);比 **build 戳**而非版本号;`steps` 每批提醒(缓存 4h/stderr/--json 闭嘴);只提醒不自更新。⚠️ **要等下一次发布把 VERSION 打进 skill 包后才对用户生效** |
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
+| **iOS 模拟器** | ✅ **端到端跑通并已分发**(2026-08-19 用户实测) | ADR-0017。`-d sim:<UDID>`,与真机**同一套 WDA**,只有"怎么连上"不同(真机 USB 隧道 / 模拟器直连 8100)。`doctor --fix --profile ios` 下预编译 runner(21MB,arm64+x86_64 fat 包)到 `~/.tke/wda/`,tke 自己 `simctl install/launch`——**不碰 Xcode、不装 brew、不编译**。路线拐过一次弯(WDA→idb→WDA),原因见 ADR-0017「修订」 |
+| **设备发现 `tke device list`** | ✅ 本机+用户实测 | 四端统一(安卓/iOS真机/iOS模拟器/浏览器),第一列就是 `-d` 的值;**查不了的那类单独说明原因**("没装 adb 是没查不是没连")。harness 向导也改走它——同一个问题不该有两套答案 |
+| **设备显示名** | ✅ 本机实测 | `Controller::describe()`:`iPhone 17 Pro · iOS 26.0（模拟器）`/`Pixel 7（安卓 14）`/`Chrome（无头）`。报告显示它而不是 UUID;**换设备的判断仍用设备 ID**——同型号模拟器 label 会撞(单测钉着) |
 | 跨设备/跨平台测试 | ✅ 已实现,**AI 侧真机未验** | ADR-0011 全套:flow per-script device / 重试断言 / 设备成为工具参数 + list_devices;动态值传递未做(Q-7) |
 | 宿主机能力门禁 | ✅ 本机实测 | iOS 只在 macOS 放行(门禁在 `Controller::new`,control/run/steps/harness 一处覆盖);留 `TKE_ALLOW_IOS=1` 逃生口——界线是产品决策不是技术极限 |
+| **CLI 直通** | ❌ **已删除**(2026-08-19) | ADR-0016(用户拍板):它是操作设备的第二条路,绕过证据留存/坐标换算/唯一动作映射。保留 `ToolManager::resolve`(内部定位 adb/chromedriver/go-ios)与 `tke <path.tks>` 便捷路由;删前盘出唯一缺口 logcat,补了 `tke app log` |
 | 分发源六平台齐备 | ✅ 依赖全 / ⏳ 二进制待 CI | 依赖六平台已手工补齐(linux-arm64 只有 go-ios、win32 没有 go-ios——上游就没有),**一次性活不再动**;tke 二进制只有 mac-arm64+linux-amd64,darwin-amd64/windows 等 CI 跑 |
 | 依赖补齐 `tke fix` | ✅ 本机端到端实测 | ADR-0012:唯一会联网下载的命令;普通命令缺依赖只报错指路。空目录只放 tke → fix → 跑通网页检查 |
 | 两件套自包含（拷走即跑） | ✅ 本机实测通过 | Q-6 关闭:缺 `-d` 时从 tklib 的 meta.json 读平台兜底(web 零参数回放/android 走默认设备/ios 仍需显式) |

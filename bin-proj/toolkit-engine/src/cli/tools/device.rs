@@ -26,8 +26,12 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
         return list();
     }
     let device_id = params.device();
-    // 非 Android 设备（iOS/Web）：prop 是 adb 专属；info 走驱动给基础信息（型号/屏幕尺寸）
-    if tke::Platform::from_device(device_id.as_deref()) != tke::Platform::Android {
+    // 只有**真安卓**才走 DeviceManager（它是 adb 专属）。
+    // ⚠️ `fake:` 前缀在 Platform 上算 Android（没有 Fake 这个平台），
+    // 直接按平台判会让它去连 adb，然后报「缺少 adb」——测试设备要能离线跑才有意义
+    let via_driver = tke::Platform::from_device(device_id.as_deref()) != tke::Platform::Android
+        || device_id.as_deref().is_some_and(|d| d.starts_with("fake:"));
+    if via_driver {
         match action {
             DeviceCommands::Info => {
                 let controller = tke::Controller::new(device_id)?;
@@ -78,16 +82,20 @@ fn list() -> Result<()> {
     // 只对**ASCII 的前两列**做对齐。中文一律靠后、不参与列宽——
     // `{:<w$}` 按**字符数**填充，而中文在终端里占两格，混进来必然错位（TUI 那次的老账）
     let w_id = d.targets.iter().map(|t| t.id.len()).max().unwrap_or(3).max(3);
-    let w_kind = d.targets.iter().map(|t| t.kind.len()).max().unwrap_or(7);
+    // 中文类别按**显示宽度**算（一个汉字占两格），不能按字符数——
+    // `{:<w$}` 是按字符数填充的，混着算必然错位
+    let w_kind = d.targets.iter().map(|t| t.kind_label.chars().count() * 2).max().unwrap_or(8);
 
     println!();
     if d.targets.is_empty() {
         println!("  {}", dim("一个可测目标都没有"));
     }
     for t in &d.targets {
+        // 类别列自己补空格（中文占两格，交给 `{:<w$}` 会歪）
+        let pad = " ".repeat(w_kind.saturating_sub(t.kind_label.chars().count() * 2));
         println!(
-            "  {:<w_id$}  {:<w_kind$}  {}  {}",
-            t.id, t.kind, t.name, dim(&t.state),
+            "  {:<w_id$}  {}{}  {}  {}",
+            t.id, t.kind_label, pad, t.name, dim(&t.state),
         );
     }
 
@@ -96,7 +104,7 @@ fn list() -> Result<()> {
     if !d.skipped.is_empty() {
         println!();
         for s in &d.skipped {
-            println!("  {} {}", dim(&format!("未检测 {:<w$}", s.kind, w = w_kind)), dim(&s.why));
+            println!("  {} {}", dim(&format!("未检测 {}", s.kind)), dim(&s.why));
         }
     }
     println!("\n  {}", dim("第一列就是 -d 要填的值"));

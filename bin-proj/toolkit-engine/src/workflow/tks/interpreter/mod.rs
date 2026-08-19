@@ -146,6 +146,11 @@ impl ScriptInterpreter {
         self.controller.dialog_text()
     }
 
+    /// 「这次跑在哪台设备上」——给人看的一句话。见 drivers::Controller::describe
+    pub fn describe(&self) -> String {
+        self.controller.describe()
+    }
+
     /// 取走浏览器日志里的错误（只有 web 有）。见 drivers::Controller::console_errors
     pub fn console_errors(&self) -> Vec<String> {
         self.controller.console_errors()

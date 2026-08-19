@@ -428,6 +428,7 @@ mod tests {
             run_dir: None,
             launched_packages: Vec::new(),
             device: Some("web".into()),
+            device_label: Some("Chrome（无头）".into()),
         };
         a.append_task_log(&mk("first")).unwrap();
         a.append_task_log(&mk("second")).unwrap();

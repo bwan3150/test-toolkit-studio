@@ -26,6 +26,19 @@ impl AdbDriver {
     }
     
     // 获取连接的设备列表
+    /// 「我是谁」——`Pixel 7（安卓 14）`。给报告和设备列表用，
+    /// 那串序列号对人没有意义
+    pub fn describe(&self) -> String {
+        let model = self.get_device_prop("ro.product.model").unwrap_or_default();
+        let ver = self.get_device_prop("ro.build.version.release").unwrap_or_default();
+        let model = if model.trim().is_empty() { "安卓设备".to_string() } else { model.trim().to_string() };
+        if ver.trim().is_empty() {
+            format!("{}（安卓）", model)
+        } else {
+            format!("{}（安卓 {}）", model, ver.trim())
+        }
+    }
+
     pub fn get_devices(&self) -> Result<Vec<String>> {
         let output = Command::new(&self.adb_path)
             .arg("devices")

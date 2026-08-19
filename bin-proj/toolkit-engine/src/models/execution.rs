@@ -90,9 +90,16 @@ pub struct ExecutionResult {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub launched_packages: Vec<String>,
     /// 目标设备（报告里要说清"这次是在哪台设备上跑的"——同一份脚本在 web 和真机上
-    /// 结果可能完全不同，光看截图未必分得出）
+    /// 结果可能完全不同，光看截图未必分得出）。这里存的是 `-d` 的**原值**，
+    /// 机器可读、跨批次比对用
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
+    /// 给人看的设备名（`iPhone 17 Pro · iOS 26.0（模拟器）` / `Pixel 7（安卓 14）`）。
+    /// **报告显示这个**——`sim:92AA7443-4027-4CAA-A5F6-543EA24FB3F3` 对读报告的人
+    /// 没有任何意义，而"跑在哪台机器上"恰恰是他最先要知道的。
+    /// 执行时问一次驱动（见 Controller::describe），查不到就退回 `device`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_label: Option<String>,
 }
 
 /// 单步执行结果

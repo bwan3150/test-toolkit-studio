@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · 设备显示改成给人看的名字；device 命令补齐四端
+- **删** 「正在把 WebDriverAgent 拉进模拟器」那行提示。正常流程里 `启动 [BundleID]`
+  紧接着就把 App 拉回来了,那行字对用户没有任何可做的事;真出问题时 attach_foreground
+  会报得很清楚
+- **feat** `Controller::describe()`:四种驱动都回答「我是谁」——
+  `iPhone 17 Pro · iOS 26.0（模拟器）` / `Pixel 7（安卓 14）` / `Chrome（无头）`。
+  执行时问一次(要跑 adb/simctl 子进程,每步问就是每步多花几十毫秒),存进
+  `ExecutionResult.device_label`,**报告显示它而不是那串 UUID**
+- **fix(单测抓到的真 bug)** 换设备的判断**必须用设备 ID,不能用显示名**:
+  两台同型号模拟器的 label 一模一样,混用会把跨设备那一跳吞掉——而那正是跨设备检查
+  最需要在报告里还原的东西。显示用 label、判断用 id,测试夹具特意把 label 设成全一样
+- **fix** `tke device info` 对 **fake 设备**报「缺少 adb」:`fake:` 在 Platform 上算
+  Android(没有 Fake 平台),直接按平台判会让它去连 adb。测试设备要能离线跑才有意义
+- **fix(INV-9)** `device info` 无浏览器会话时返回 `Chrome for Testing · 0×0`——
+  兜底成 0 看着像个合法回答,实际意思是"根本没有会话"。改成报错并指路(同 P-27)
+- `device list` 的类别换成中文(安卓 / iOS真机 / iOS模拟器 / 浏览器),
+  `ios-sim` 那种是内部叫法不该摆到人面前;中文列按**显示宽度**补空格(一个汉字两格),
+  交给 `{:<w$}` 会歪
+
 ### 2026-08-19 · iOS 模拟器**端到端跑通**；修三个体验问题
 用户走完全流程:`doctor --fix --profile ios` 从分发源装 WDA → `启动 [BundleID]` →
 `点击 ["Skip sign in (demo)"]` → `fetch` → `report --open`,**全绿**。
