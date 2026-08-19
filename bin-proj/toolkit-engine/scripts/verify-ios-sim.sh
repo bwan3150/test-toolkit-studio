@@ -19,7 +19,16 @@ bad(){ printf '%s✗%s %s\n' "$R" "$N" "$1"; }
 note(){ printf '%s  %s%s\n' "$D" "$1" "$N"; }
 
 [ "$(uname -s)" = Darwin ] || { bad "这个脚本只在 macOS 上有意义"; exit 1; }
-command -v tke >/dev/null || { bad "PATH 里没有 tke（跑一下 build-mac.sh，或 export PATH=\"\$HOME/.tke/bin:\$PATH\"）"; exit 1; }
+
+# ⚠️ **一律用刚构建出来的产物，不用 PATH 里那个**。
+# `tke` 命令解析到的多半是安装器装到 ~/.tke/bin/ 的发布版——拿它验，验的就不是你
+# 刚改的代码（实测踩过：编译成功、跑的还是旧版，新子命令报 unrecognized subcommand）。
+# 这里也**不去覆盖**那个 tke：它是日常在用的，验证脚本没资格替人换掉。
+ARCH=$([ "$(uname -m)" = arm64 ] && echo arm64 || echo amd64)
+TKE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/bin/darwin-$ARCH/tke"
+[ -x "$TKE" ] || { bad "找不到构建产物: $TKE"; note "先跑 ./bin-proj/toolkit-engine/build-mac.sh"; exit 1; }
+note "用的是 $TKE"
+note "版本 $("$TKE" --version 2>&1 | head -1)"
 [ -n "$WANT" ] || { bad "用法: bash scripts/verify-ios-sim.sh \"屏幕上某个按钮的文字\" [bundle-id]"; exit 1; }
 
 # —— 准备：确保有一台跑着的模拟器 ——
@@ -44,18 +53,23 @@ rm -rf "$LOG"
 
 # ── ① 设备发现 ──
 printf '\n%s① 模拟器列不列得出来%s\n' "$Y" "$N"
-if tke device list | grep -q "sim:$UDID"; then
+if "$TKE" device list | grep -q "sim:$UDID"; then
   ok "device list 列出了 sim:$UDID"
 else
   bad "device list 里没有这台"
-  note "把 \`tke device list\` 的完整输出发我"
+  note "把 \"$TKE device list\" 的完整输出发我"
 fi
-tke device list | grep -i "idb" && note "（上面这行是 idb 的状态）"
+"$TKE" device list | grep -i "idb" && note "（上面这行是 idb 的状态）"
 
 # ── ② 元素采集 ──
 printf '\n%s② 元素采不采得到%s\n' "$Y" "$N"
-OUT=$(tke -d "sim:$UDID" fetch --interactive 2>&1)
-if printf '%s' "$OUT" | python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin) else 1)" 2>/dev/null; then
+OUT=$("$TKE" -d "sim:$UDID" fetch --interactive 2>&1)
+# 必须是**非空数组**。早先只判"非空"，于是 {"success":false,...} 这种错误对象
+# 也被当成"采到了"，然后在下一行 [:6] 上炸出 KeyError——报错还报在无关的地方
+if printf '%s' "$OUT" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+sys.exit(0 if isinstance(d,list) and d else 1)" 2>/dev/null; then
   CNT=$(printf '%s' "$OUT" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
   ok "采到 $CNT 个可交互元素"
   printf '%s' "$OUT" | python3 -c "
@@ -65,7 +79,7 @@ for e in json.load(sys.stdin)[:6]:
     print(f\"    {e.get('class_name',''):<14} {repr(e.get('text'))[:26]:<28} [{b['x1']},{b['y1']}][{b['x2']},{b['y2']}]\")"
   note "上面的坐标应当在**截图像素**量级（iPhone 竖屏约 1179×2556，不是 393×852）"
 else
-  bad "采集失败"
+  bad "采集失败（下面是原样输出）"
   printf '%s\n' "$OUT" | head -5
   note "把这段发我；另外看看 idb ui describe-all 单独跑通不通"
   exit 1
@@ -73,14 +87,14 @@ fi
 
 # ── ③ 坐标换算：点一下，看页面真的变了没有 ──
 printf '\n%s③ 按文字点「%s」——页面变没变（最关键）%s\n' "$Y" "$WANT" "$N"
-BEFORE=$(tke -d "sim:$UDID" fetch 2>/dev/null | python3 -c "
+BEFORE=$("$TKE" -d "sim:$UDID" fetch 2>/dev/null | python3 -c "
 import json,sys
 print('|'.join(sorted(filter(None,(e.get('text') for e in json.load(sys.stdin))))))" 2>/dev/null)
 
-tke -d "sim:$UDID" steps "点击 [\"$WANT\"] # 验证坐标换算：点中了页面就该变" --log "$LOG/" 2>&1 | tail -3
+"$TKE" -d "sim:$UDID" steps "点击 [\"$WANT\"] # 验证坐标换算：点中了页面就该变" --log "$LOG/" 2>&1 | tail -3
 sleep 2
 
-AFTER=$(tke -d "sim:$UDID" fetch 2>/dev/null | python3 -c "
+AFTER=$("$TKE" -d "sim:$UDID" fetch 2>/dev/null | python3 -c "
 import json,sys
 print('|'.join(sorted(filter(None,(e.get('text') for e in json.load(sys.stdin))))))" 2>/dev/null)
 

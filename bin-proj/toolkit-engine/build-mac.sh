@@ -100,6 +100,22 @@ echo "Build successfully"
 echo "Cp to: $TARGET_BINARY"
 echo "Szie: $(du -h "$TARGET_BINARY" | cut -f1)"
 
+# ── 提示：你敲的 `tke` 未必是刚构建的这个 ────────────────────────────────
+#
+# 构建产物落在仓库的 bin/<platform>/，而日常敲的 `tke` 多半是安装器装到 ~/.tke/bin/
+# 的那个——**两个不同的文件**。不说一声就会撞上最坑的组合：编译明明成功了、跑的还是
+# 旧版，而且没有任何迹象（实测浪费过一整轮：新加的 `tke device list` 报
+# unrecognized subcommand，`-d sim:` 被当成安卓序列号）。
+#
+# **这里只提示，不覆盖**：那个 tke 是用户日常在用的，构建脚本没有资格替他换掉。
+# 要验刚构建的产物，直接用上面那个路径（scripts/verify-*.sh 就是这么做的）。
+INSTALLED="$(command -v tke 2>/dev/null || true)"
+if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$TARGET_BINARY" ]; then
+    echo ""
+    echo "注意: 你敲 tke 用的是 $INSTALLED（不是刚构建的这个）"
+    echo "      要用新的: $TARGET_BINARY"
+fi
+
 # 验证二进制文件能否运行
 if "$TARGET_BINARY" --version > /dev/null 2>&1; then
     echo "tke --version successful"

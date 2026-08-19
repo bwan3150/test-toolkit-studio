@@ -44,9 +44,7 @@ impl IdbDriver {
             .or_else(|| which::which("idb").ok())
             .ok_or_else(|| {
                 TkeError::DeviceError(
-                    "没装 idb（iOS 模拟器要靠它操作）：\n\
-                     　brew tap facebook/fb && brew trust facebook/fb\n\
-                     　brew install idb-companion && pip3 install fb-idb"
+                    "没装 idb（iOS 模拟器要靠它操作）：\n\u{3000}brew tap facebook/fb && brew trust facebook/fb\n\u{3000}brew install idb-companion && pip3 install fb-idb"
                         .into(),
                 )
             })?;

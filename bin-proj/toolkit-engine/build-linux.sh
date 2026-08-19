@@ -129,6 +129,16 @@ chmod +x "$TARGET_BINARY"
 say "Copied to: $TARGET_BINARY"
 say "Size:      $(du -h "$TARGET_BINARY" | cut -f1)"
 
+# ── 提示：你敲的 `tke` 未必是刚构建的这个 ────────────────────────────────
+# 构建产物落在仓库的 bin/<platform>/，日常敲的 `tke` 多半是 ~/.tke/bin/ 那个。
+# **只提示，不覆盖**——那是用户日常在用的，构建脚本没资格替他换掉。
+INSTALLED="$(command -v tke 2>/dev/null || true)"
+if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$TARGET_BINARY" ]; then
+    say ""
+    say "注意: 你敲 tke 用的是 $INSTALLED（不是刚构建的这个）"
+    say "      要用新的: $TARGET_BINARY"
+fi
+
 # —— 验证 ——（产物跑不起来就是构建失败，别让它悄悄进 bin/）
 if ! "$TARGET_BINARY" --version >/dev/null 2>&1; then
     echo "Error: 产物无法执行（$TARGET_BINARY --version 失败）" >&2

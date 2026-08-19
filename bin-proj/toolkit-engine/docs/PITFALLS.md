@@ -660,3 +660,43 @@ skill 过期那支放宽到 60 并断言必须含"重读 SKILL.md",只有 tke �
 且断言**不许**提 SKILL.md。阈值可以谈,"这行要短"这件事不能忘。
 
 **自查**：`tke update` 之后,AI 有没有重新读一遍 SKILL.md。
+
+## P-42 (2026-08-19) 构建成功了,但你敲的 `tke` 还是旧的
+
+**现象**（实测，浪费了一整轮）：`build-mac.sh` 打印 "Build successfully"，紧接着——
+
+```
+$ tke device list
+error: unrecognized subcommand 'list'          ← 明明刚加的
+
+$ tke -d sim:<UDID> steps '点击 ["..."]'
+ADB错误: adb: unknown host service '92AA7443-...:features'   ← sim: 被当成安卓序列号
+```
+
+**原因**：两个不同的文件。
+
+```
+build-*.sh 拷到  →  <repo>/bin/<platform>/tke
+日常敲的 tke     →  ~/.tke/bin/tke      ← 安装器装的那个，还是旧版
+```
+
+编译**确实**是新代码（警告里都能看到新文件名），只是跑的不是它。
+这是「装好的东西不自更新」那一族的又一个变种（同 P-33 的 PATH、Q-11 的 skill 过期）：
+**每一步都报成功，合起来什么也没生效**。
+
+**做法**（两条，缺一不可）：
+
+1. **验证脚本一律用构建产物的绝对路径**，不用 `tke` 这个名字。
+   `scripts/verify-*.sh` 自己算出 `<repo>/bin/<platform>/tke` 再调——
+   验的必须是"刚改的这份代码"，不能是碰巧在 PATH 里的那个
+2. **构建脚本只提示，不覆盖**。`command -v tke` 指到的那个是**用户日常在用的**
+   （可能还给别的项目用着），构建脚本没有资格替他换掉。所以只打一行：
+   ```
+   注意: 你敲 tke 用的是 /Users/x/.tke/bin/tke（不是刚构建的这个）
+         要用新的: /path/to/repo/bin/darwin-arm64/tke
+   ```
+
+> 一开始我写成了「构建完自动同步过去」，被用户当场拦下——**开发产物不该覆盖人家在用的东西**。
+> 提示 + 验证脚本自己找产物，两边都不越界。
+
+**自查**：改完编译完，别只看 `--version`——敲一条**这次新加的子命令**。它认得，才算真生效。

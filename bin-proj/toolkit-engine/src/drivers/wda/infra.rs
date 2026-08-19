@@ -44,9 +44,7 @@ impl WdaDriver {
             }
             return Err(TkeError::DeviceError(format!(
                 "模拟器 {} 上的 WebDriverAgent 没在跑（{} 连不上）。\n\
-                 先把 WDA 跑进模拟器再回来——模拟器不需要签名，装一次就行：\n\
-                 　xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n\
-                 　  -destination 'id={}' test-without-building\n\
+                 先把 WDA 跑进模拟器再回来——模拟器不需要签名，装一次就行：\n\u{3000}xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n\u{3000}  -destination 'id={}' test-without-building\n\
                  （tke 暂不自动拉起模拟器上的 WDA：go-ios 只对真机有效，模拟器没有 lockdown 通道）",
                 self.udid, base, self.udid
             )));

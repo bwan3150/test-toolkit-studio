@@ -135,9 +135,7 @@ fn ios_simulators(d: &mut Discovery) {
     if crate::ToolManager::resolve("idb").is_err() && which::which("idb").is_err() {
         d.skipped.push(Skipped {
             kind: "ios-sim",
-            why: "模拟器列得出来但操作不了：没装 idb。\n\
-                  　brew tap facebook/fb && brew trust facebook/fb\n\
-                  　brew install idb-companion && pip3 install fb-idb"
+            why: "模拟器列得出来但操作不了：没装 idb。\n\u{3000}brew tap facebook/fb && brew trust facebook/fb\n\u{3000}brew install idb-companion && pip3 install fb-idb"
                 .into(),
         });
     }

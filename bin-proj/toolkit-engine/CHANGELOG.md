@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · 构建完不同步 → 敲的还是旧 tke（P-42）
+用户实跑撞到:`build-mac.sh` 报 Build successfully,紧接着 `tke device list` 说
+"unrecognized subcommand",`-d sim:` 被当成安卓序列号去连 adb。**编译的确实是新代码**
+(警告里都能看到新文件名),只是敲的 `tke` 是另一个文件——构建产物落在仓库
+`bin/<platform>/`,而 PATH 里是安装器装的 `~/.tke/bin/tke`。
+- **fix(验证脚本用产物路径)** `verify-ios-sim.sh` 自己算出 `<repo>/bin/<platform>/tke` 再调,
+  不用 `tke` 这个名字——验的必须是"刚改的这份代码",不能是碰巧在 PATH 里的那个
+- **fix(构建脚本只提示不覆盖)** `build-mac.sh` / `build-linux.sh` 打一行
+  「你敲的 tke 不是刚构建的这个」。**先写成了自动同步过去,被用户当场拦下**:
+  `command -v tke` 那个是用户日常在用的,构建脚本没资格替他换掉
+- **fix(验证脚本)** `verify-ios-sim.sh` 把 `{"success":false,…}` 这种错误对象也当成
+  "采到元素了",然后在下一行 `[:6]` 炸出 KeyError——报错报在无关的地方。改成必须是非空数组
+- 清掉 6 条 `whitespace symbol '\u{3000}' is not skipped` 警告(字符串续行后的全角空格
+  不会被跳过,改用 `\u{3000}` 显式写)
+
 ### 2026-08-19 · 把「四种设备」这件事查漏补齐
 用户问 fetch/refresh 是不是也同步到四种设备了。**采集/操作是通的**——它们全走
 `Controller` 的穷尽匹配,漏一个编译都过不去。但**按 Platform 分叉或 `_ =>` 兜底的地方
