@@ -1,7 +1,7 @@
 # ADR-0017 iOS 模拟器走 idb，不走 WebDriverAgent
 
 - 日期：2026-08-19
-- 状态：已落地（tke 侧；**模拟器实跑待 mac 验证**）
+- 状态：**已落地并在 mac 上实跑验通**（2026-08-19）
 - 关联：ADR-0011（设备是工具的参数）、`docs/platform-matrix.md`
 
 ## 背景
@@ -58,8 +58,13 @@
 - idb 是外部依赖（brew 装，77MB）。`tke device list` 会在**列得出模拟器但没装 idb** 时
   明说「列得出来但操作不了」——这两件事看起来一样，不说清楚人会以为是设备问题
 
-## 自查
+## 自查（`scripts/verify-ios-sim.sh` 一条命令跑完）
 
-- `tke device list` 列出 `sim:<udid>`
-- `tke -d sim:<udid> fetch --interactive` 出元素表，文字与屏幕对得上
-- `tke -d sim:<udid> steps '点击 ["某个按钮"]'` 真的点中（**坐标换算对不对全看这一步**）
+- `tke device list` 列出 `sim:<udid>` ✅
+- `fetch --interactive` 出元素表，**坐标在截图像素量级**（实测 366pt × 3 = 1098）✅
+- `steps '点击 ["某个按钮"]'` 后页面真的变了（**坐标换算对不对全看这一步**）✅
+- 证据四件套落盘 ✅（`raw_pages/` 起初是空的，见 P-43——收集方认扩展名白名单，
+  而 AX 原文是 `.json`）
+
+验证脚本**用仓库里的构建产物**，不用 PATH 里那个 tke：拿装好的发布版去验，
+验的就不是刚改的代码（P-42）。
