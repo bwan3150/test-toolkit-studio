@@ -28,7 +28,9 @@ impl Platform {
     pub fn from_device(device_id: Option<&str>) -> Self {
         match device_id {
             Some(d) if d == "web" || d.starts_with("web:") => Platform::Web,
-            Some(d) if d.starts_with("wda:") || is_ios_udid(d) => Platform::Ios,
+            // `sim:<UUID>` = iOS 模拟器。**必须靠前缀认**：模拟器 UDID 是标准 UUID（36 位），
+            // 跟下面 is_ios_udid 认的真机形状（25 位）完全不同，不加前缀会被当成安卓序列号
+            Some(d) if d.starts_with("wda:") || d.starts_with("sim:") || is_ios_udid(d) => Platform::Ios,
             _ => Platform::Android,
         }
     }
@@ -221,4 +223,37 @@ impl Locator {
 pub struct ElementLibrary {
     #[serde(default)]
     pub elements: std::collections::HashMap<String, Locator>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 设备 ID 决定走哪个驱动——认错了就会拿 adb 去戳一台 iPhone
+    #[test]
+    fn routes_device_ids_to_platforms() {
+        assert_eq!(Platform::from_device(Some("web")), Platform::Web);
+        assert_eq!(Platform::from_device(Some("web:2")), Platform::Web);
+        // 真机 UDID：25 位、第 9 位是连字符
+        assert_eq!(
+            Platform::from_device(Some("00008101-000C75842192001E")),
+            Platform::Ios
+        );
+        assert_eq!(Platform::from_device(Some("wda:whatever")), Platform::Ios);
+        assert_eq!(Platform::from_device(Some("f64b3b4d")), Platform::Android);
+        assert_eq!(Platform::from_device(None), Platform::Android);
+    }
+
+    /// 模拟器 UDID 是**标准 UUID（36 位）**，跟真机那个 25 位的形状对不上——
+    /// 不靠 `sim:` 前缀的话会被一路认成安卓序列号，然后拿 adb 去连它
+    #[test]
+    fn simulator_needs_the_sim_prefix() {
+        let uuid = "A1B2C3D4-1111-2222-3333-444455556666";
+        assert_eq!(Platform::from_device(Some(uuid)), Platform::Android, "裸 UUID 认不出来是预期的");
+        assert_eq!(
+            Platform::from_device(Some(&format!("sim:{}", uuid))),
+            Platform::Ios,
+            "带前缀必须认成 iOS"
+        );
+    }
 }

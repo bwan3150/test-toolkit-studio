@@ -47,15 +47,30 @@ struct Conn {
 
 /// iOS 驱动（惰性会话：仅 启动 指令可创建，其余操作要求已有会话）
 pub struct WdaDriver {
-    /// 设备 UDID（已去除 wda: 前缀）
+    /// 设备 UDID（已去除 wda: / sim: 前缀）
     udid: String,
+    /// 模拟器（`-d sim:<udid>`）——不走 go-ios，直连 127.0.0.1:8100
+    simulator: bool,
     conn: std::sync::Mutex<Option<Conn>>,
 }
 
 impl WdaDriver {
     pub fn new(device_id: String) -> Result<Self> {
-        let udid = device_id.strip_prefix("wda:").unwrap_or(&device_id).to_string();
-        Ok(Self { udid, conn: std::sync::Mutex::new(None) })
+        // `sim:<udid>` = 模拟器。它和真机是**两条完全不同的接入路**：
+        // 真机要 go-ios 建隧道 + USB 端口转发；模拟器与主机共享网络，WDA 就在
+        // 127.0.0.1:8100 上，一步都不用绕。WDA 协议本身（点击/采集/截图）两边一模一样。
+        let simulator = device_id.starts_with("sim:");
+        let udid = device_id
+            .strip_prefix("sim:")
+            .or_else(|| device_id.strip_prefix("wda:"))
+            .unwrap_or(&device_id)
+            .to_string();
+        Ok(Self { udid, simulator, conn: std::sync::Mutex::new(None) })
+    }
+
+    /// 这是模拟器吗（决定走不走 go-ios）
+    pub(super) fn is_simulator(&self) -> bool {
+        self.simulator
     }
 
     // ===== 状态文件 =====

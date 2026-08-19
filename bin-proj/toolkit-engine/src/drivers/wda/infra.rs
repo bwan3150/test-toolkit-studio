@@ -26,6 +26,32 @@ impl WdaDriver {
     /// 确保 USB 转发就绪且 WDA 可达，返回 (base_url, 已有状态)
     /// WDA 不可达时自动经 go-ios（隧道 + runwda）拉起
     pub(super) fn ensure_forward(&self) -> Result<(String, WdaState)> {
+        // ── 模拟器：没有 USB，也就没有隧道和转发这回事 ──
+        // 模拟器与主机共享网络，跑在里面的 WDA 直接就在 127.0.0.1:8100 上。
+        // 拉起 WDA 这一步**不归 tke 管**（go-ios 只能对真机做，模拟器没有 lockdown）——
+        // 所以这里只连、连不上就如实说清楚该怎么把它跑起来。
+        if self.is_simulator() {
+            let base = format!("http://127.0.0.1:{}", WDA_DEVICE_PORT);
+            if Self::wda_ready(&base) {
+                let state = Self::load_state(&self.udid).unwrap_or(WdaState {
+                    port: WDA_DEVICE_PORT,
+                    forward_pid: 0,   // 模拟器没有转发进程
+                    runwda_pid: None, // 也没有 runwda
+                    session_id: None,
+                    scale: None,
+                });
+                return Ok((base, WdaState { port: WDA_DEVICE_PORT, ..state }));
+            }
+            return Err(TkeError::DeviceError(format!(
+                "模拟器 {} 上的 WebDriverAgent 没在跑（{} 连不上）。\n\
+                 先把 WDA 跑进模拟器再回来——模拟器不需要签名，装一次就行：\n\
+                 　xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \\\n\
+                 　  -destination 'id={}' test-without-building\n\
+                 （tke 暂不自动拉起模拟器上的 WDA：go-ios 只对真机有效，模拟器没有 lockdown 通道）",
+                self.udid, base, self.udid
+            )));
+        }
+
         // 复用已有转发
         if let Some(state) = Self::load_state(&self.udid) {
             let base = format!("http://127.0.0.1:{}", state.port);
