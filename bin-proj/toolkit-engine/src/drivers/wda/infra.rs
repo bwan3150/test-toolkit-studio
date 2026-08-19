@@ -148,6 +148,16 @@ impl WdaDriver {
     /// ⚠️ 端口写死 8100：模拟器与主机共享网络，**多台模拟器同时跑会撞端口**。
     /// 单台够用；真要并行得给每台传 `USE_PORT`，那时再说。
     fn launch_wda_on_simulator(&self) -> Result<()> {
+        // **一次运行只试一次**。ensure_forward 在一步里会被调好几次
+        // （launch_app → ensure_create → ensure_existing → …），不拦的话那行提示
+        // 打四遍，失败时还要一遍遍等满 15 秒超时（实测:一步里打了 4 次）
+        static TRIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if TRIED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            return Err(TkeError::DeviceError(
+                "这次运行已经试过把 WebDriverAgent 拉起来了，没成功——不再重试".into(),
+            ));
+        }
+
         let app = Self::find_wda_app().ok_or_else(|| {
             TkeError::DeviceError(
                 "模拟器要用 WebDriverAgent，但本机没有它：\n\

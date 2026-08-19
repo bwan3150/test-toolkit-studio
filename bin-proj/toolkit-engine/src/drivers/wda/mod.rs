@@ -65,6 +65,17 @@ impl WdaDriver {
             .or_else(|| device_id.strip_prefix("wda:"))
             .unwrap_or(&device_id)
             .to_string();
+        // 前缀后面空着（`-d sim:`，多半是 shell 变量没展开）——**在这儿拦下**。
+        // 不拦的话会一路传到 simctl，回一句光秃秃的 `Invalid device:`，
+        // 没人看得出是自己的 $UDID 是空的（实测撞过）
+        if udid.trim().is_empty() {
+            return Err(TkeError::InvalidArgument(format!(
+                "设备 ID 是空的（`-d {}` 后面什么都没有）——是不是 shell 变量没展开？\n\
+                 {}用 `tke device list` 查一个填进去",
+                device_id,
+                "\u{3000}"
+            )));
+        }
         Ok(Self { udid, simulator, conn: std::sync::Mutex::new(None) })
     }
 

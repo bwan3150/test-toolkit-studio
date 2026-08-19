@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### 2026-08-19 · iOS 模拟器**端到端跑通**；修三个体验问题
+用户走完全流程:`doctor --fix --profile ios` 从分发源装 WDA → `启动 [BundleID]` →
+`点击 ["Skip sign in (demo)"]` → `fetch` → `report --open`,**全绿**。
+元素表质量很好(resource_id/xpath 都有,坐标是截图像素)。同一趟暴露三处:
+- **fix** `-d sim:`(shell 变量没展开)会一路传到 simctl,回一句光秃秃的
+  `Invalid device:`——没人看得出是自己的 `$UDID` 空了。改成在驱动构造时拦下并讲人话
+- **fix** 「正在把 WebDriverAgent 拉进模拟器」那行**打了 4 次**:ensure_forward 在一步里
+  会被调好几次(launch_app → ensure_create → ensure_existing → …)。加 `TRIED` 标志,
+  **一次运行只试一次**——顺带解决"失败时一遍遍等满 15 秒超时"
+- 报告里设备栏出现 `sim: · sim:xxx`(两批设备不同)是**正确行为**(跨设备要标出来),
+  修掉空 UDID 之后自然就没了
+
 ### 2026-08-19 · `$VAR中文` 那个坑又犯了一次 → 加守卫拦死
 打包脚本第一行就崩:`step "① 取源码（锁定 $WDA_REF）"` → `WDA_REF�: unbound variable`。
 **P-42 刚记完半小时就又犯**——因为 Linux 的 bash 5 两种写法都对,本机永远测不出来。
