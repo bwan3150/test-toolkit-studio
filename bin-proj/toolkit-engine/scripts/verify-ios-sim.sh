@@ -66,8 +66,19 @@ print(cand or '')")
 xcrun simctl boot "$UDID" 2>/dev/null
 open -a Simulator 2>/dev/null
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1
-[ -n "$BUNDLE" ] && { xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1; sleep 3; }
 note "模拟器 $UDID"
+
+# 被测 App 得在前台。**第一次把 WDA 拉起来会挤掉它**（simctl launch 必然带到前台），
+# 于是采到的是桌面那一屏图标，然后"找不到那个按钮"卡满 20 秒超时——实测踩过。
+# 所以:先让 tke 把 WDA 拉起来(顺带挤掉),再把 App 拉回前台。
+if [ -n "$BUNDLE" ]; then
+    "$TKE" -d "sim:$UDID" fetch >/dev/null 2>&1 || true   # 触发 WDA 拉起（第一次会挤掉 App）
+    xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1
+    sleep 3
+    note "已把 $BUNDLE 拉到前台"
+else
+    note "没给 bundle-id：请自己确认被测 App 在前台（第一次拉起 WDA 会挤掉它）"
+fi
 
 LOG="$HOME/.tke/logs/sim-verify"
 rm -rf "$LOG"
@@ -99,6 +110,11 @@ for e in json.load(sys.stdin)[:6]:
     b=e['bounds']
     print(f\"    {e.get('class_name',''):<14} {repr(e.get('text'))[:26]:<28} [{b['x1']},{b['y1']}][{b['x2']},{b['y2']}]\")"
   note "上面的坐标应当在**截图像素**量级（iPhone 竖屏约 1179×2556，不是 393×852）"
+  # 采到桌面/WDA 自己也会"成功"——但那一屏跟被测功能毫无关系，下一步必然超时
+  if printf '%s' "$OUT" | grep -qE '"(Fitness|通讯录|设置|Safari|App Store)"'; then
+      bad "这看着像 **iOS 桌面**，不是你的 App —— 先把 App 拉到前台（给脚本第二个参数 bundle-id）"
+      exit 1
+  fi
 else
   bad "采集失败（下面是原样输出）"
   printf '%s\n' "$OUT" | head -5

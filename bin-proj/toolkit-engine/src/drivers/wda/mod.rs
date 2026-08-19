@@ -170,12 +170,27 @@ impl WdaDriver {
             .and_then(|r| r.into_json::<serde_json::Value>().ok())
             .and_then(|v| v["value"]["bundleId"].as_str().map(String::from))
             .unwrap_or_default();
-        if active.starts_with("com.facebook.WebDriverAgentRunner") {
-            return Err(TkeError::DeviceError(
-                "现在前台是 WebDriverAgent 自己（第一次把它拉起来时会挤掉你的 App）。\n\
-                 \u{3000}用 `启动 [\"你的BundleID\"]` 把 App 拉回来——之后 WDA 一直在跑，不会再挤了"
-                    .into(),
-            ));
+        // **附到"明显不是被测对象"的东西上就报错**。第一次拉起 WDA runner 会把
+        // 用户的 App 挤走,落点有两种:WDA 自己、或者桌面(SpringBoard)——
+        // 两种都附得上、`/status` 也正常,采到的却是一屏跟被测功能毫无关系的东西。
+        // 只判 WDA 不够(实测第二种更常见:采到一堆 Fitness/通讯录/文件 图标,
+        // 然后"找不到那个按钮"超时 20 秒)。
+        let bystander = match active.as_str() {
+            b if b.starts_with("com.facebook.WebDriverAgentRunner") => Some("WebDriverAgent 自己"),
+            "com.apple.springboard" | "com.apple.SpringBoard" => Some("桌面（主屏幕）"),
+            _ => None,
+        };
+        if let Some(what) = bystander {
+            // `\u{3000}` 是全角空格（对齐用）。写成常量而不是直接嵌进 format! ——
+            // 它的花括号会跟占位符打架，而直接写那个字符又会在字符串续行后触发编译警告
+            const IDT: &str = "\u{3000}";
+            return Err(TkeError::DeviceError(format!(
+                "现在前台是{what}，不是你要测的 App。\n\
+                 {IDT}第一次把 WebDriverAgent 拉起来时会挤掉前台 App——\
+                 用 `启动 [\"你的BundleID\"]` 把它拉回来。\n\
+                 {IDT}之后 WDA 一直跑着，不会再挤了\
+                 （包名用 `xcrun simctl listapps <UDID>` 找）"
+            )));
         }
 
         let scale = Self::fetch_scale(base, &session_id)?;
