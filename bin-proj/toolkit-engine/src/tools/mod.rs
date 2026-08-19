@@ -9,6 +9,7 @@ pub mod element;
 pub mod file;
 pub mod app;
 pub mod device;
+pub mod discover;
 
 pub use file::FileManager;
 pub use app::AppManager;

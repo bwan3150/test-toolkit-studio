@@ -127,12 +127,27 @@ tke doctor --fix -y --profile web # 不问直接下
 
 ## 设备怎么给
 
+**先看这台机器有什么**（第一列就是 `-d` 要填的值）：
+
+```bash
+tke device list
+```
+
+```
+  web           web      浏览器（无头）             ready
+  f64b3b4d      android  Pixel 7                    device
+  sim:A1B2…     ios-sim  iPhone 17 Pro（iOS 26.0）  Booted
+```
+
+> 某一类**查不了会单独说明**（"没装 adb —— 是没查，不是没连"）。看到空列表先读那几行，
+> 别急着去插拔数据线。
+
 每条 tke 命令都要 `-d` 指定操作对象——**tke 是无状态 CLI，不带 `-d` 会默认按 Android 处理**：
 
 | 目标 | 参数 | 哪些机器能做 |
 |---|---|---|
 | 浏览器 | `-d web` | 都能 |
-| 安卓 | `-d <序列号>`（`adb devices` 查） | 都能 |
+| 安卓 | `-d <序列号>` | 都能 |
 | iOS | `-d <UDID>` | **只有 macOS** |
 
 **iOS 只能在 macOS 上做**——设备上的 WebDriverAgent 必须先用 Xcode 装一次，而 Xcode 只有

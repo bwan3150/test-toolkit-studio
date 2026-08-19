@@ -90,7 +90,8 @@ tke -d <序列号> app stop <包名>
 ## 设备信息
 
 ```bash
-adb devices                           # 有哪些安卓设备（tke 没有列设备的子命令）
+tke device list                       # ★ 有哪些可测目标（安卓/iOS真机/iOS模拟器/浏览器）
+                                      #   第一列就是 -d 要填的值；查不了的那类会说明原因
 tke -d <序列号> device info           # 硬件/电池/网络等完整信息
 tke -d <序列号> device prop <属性名>   # 单个 prop
 ```

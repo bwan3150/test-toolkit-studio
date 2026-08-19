@@ -5,6 +5,11 @@ use tke::{Result, JsonOutput, DeviceManager};
 /// Device 命令枚举
 #[derive(clap::Subcommand)]
 pub enum DeviceCommands {
+    /// 列出这台机器现在能测什么：安卓 / iOS 真机 / iOS 模拟器 / 浏览器
+    ///
+    /// 输出里的 ID 就是 `-d` 该填的值。**查不了的那类会说明原因**——
+    /// "没装 adb" 和 "没连手机" 在结果上长得一样，不说清楚人只会去插拔数据线
+    List,
     /// 获取完整的设备信息（包括硬件、电池、网络等所有信息）
     Info,
     /// 获取设备的单个 prop 属性值
@@ -16,6 +21,10 @@ pub enum DeviceCommands {
 
 /// 处理 Device 相关命令
 pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Result<()> {
+    // list 是**唯一不需要 -d 的**：它回答的正是"该填什么"
+    if let DeviceCommands::List = action {
+        return list();
+    }
     let device_id = params.device();
     // 非 Android 设备（iOS/Web）：prop 是 adb 专属；info 走驱动给基础信息（型号/屏幕尺寸）
     if tke::Platform::from_device(device_id.as_deref()) != tke::Platform::Android {
@@ -31,6 +40,7 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
                     "device prop 仅支持 Android 设备 (adb getprop)".to_string(),
                 ));
             }
+            DeviceCommands::List => unreachable!("函数开头已处理"),
         }
     }
 
@@ -41,6 +51,7 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
             let device_info = device_manager.get_full_device_info()?;
             JsonOutput::print(serde_json::to_value(device_info).unwrap());
         }
+        DeviceCommands::List => unreachable!("函数开头已处理"),
         DeviceCommands::Prop { name } => {
             let value = device_manager.get_device_prop(&name)?;
             JsonOutput::print(serde_json::json!({
@@ -52,4 +63,50 @@ pub fn handle(action: DeviceCommands, params: std::sync::Arc<tke::Params>) -> Re
     }
 
     Ok(())
+}
+
+/// `tke device list`
+fn list() -> Result<()> {
+    let d = tke::tools::discover::discover();
+
+    // 管道里给 JSON（脚本/AI 好接），终端里给对齐的表（人好读）
+    if !std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        JsonOutput::print(serde_json::to_value(&d).unwrap());
+        return Ok(());
+    }
+
+    // 只对**ASCII 的前两列**做对齐。中文一律靠后、不参与列宽——
+    // `{:<w$}` 按**字符数**填充，而中文在终端里占两格，混进来必然错位（TUI 那次的老账）
+    let w_id = d.targets.iter().map(|t| t.id.len()).max().unwrap_or(3).max(3);
+    let w_kind = d.targets.iter().map(|t| t.kind.len()).max().unwrap_or(7);
+
+    println!();
+    if d.targets.is_empty() {
+        println!("  {}", dim("一个可测目标都没有"));
+    }
+    for t in &d.targets {
+        println!(
+            "  {:<w_id$}  {:<w_kind$}  {}  {}",
+            t.id, t.kind, t.name, dim(&t.state),
+        );
+    }
+
+    // 没查成的单独一段。**混进上面那张表是不行的**：那会读成"这些是设备"，
+    // 而它们恰恰是"这类根本没查"
+    if !d.skipped.is_empty() {
+        println!();
+        for s in &d.skipped {
+            println!("  {} {}", dim(&format!("未检测 {:<w$}", s.kind, w = w_kind)), dim(&s.why));
+        }
+    }
+    println!("\n  {}", dim("第一列就是 -d 要填的值"));
+    Ok(())
+}
+
+fn dim(s: &str) -> String {
+    if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        format!("\x1b[38;5;245m{}\x1b[0m", s)
+    } else {
+        s.to_string()
+    }
 }
