@@ -394,11 +394,32 @@ h1{font-size:17px;font-weight:650;flex:1;min-width:0;word-break:break-all}
 .s-heal{padding:7px 14px;background:var(--warn-bg);color:var(--warn);font-size:11.5px;
   border-bottom:1px solid var(--border)}
 .s-img{padding:14px;background:#141414;display:flex;justify-content:center}
-.s-img img{max-width:100%;height:auto;border-radius:6px;display:block}
+/* 手机竖屏截图 1080×2412，按 max-width 铺开会有两三屏高——一步都看不完整。
+   限到 56vh：一屏内能看见这一步的全貌，要看细节点一下展开成原始尺寸。
+   纯 CSS 的 checkbox hack，**不引 JS**：报告要能离线看、内网看、转 PDF 看。 */
+.s-img img{max-width:100%;max-height:56vh;width:auto;height:auto;border-radius:6px;display:block;cursor:zoom-in}
+.s-zoom{display:none}
+.s-zoom:checked + label img{max-height:none;cursor:zoom-out}
 .s-foot{padding:6px 14px;font-size:11px;color:var(--txt3);font-family:var(--mono)}
 .s-foot a{color:var(--acc);text-decoration:none}
 "##;
 
+
+impl Ctx<'_> {
+    /// 这一步的「原始页面」相对路径（`raw_pages/step_003.json` 之类）。
+    /// **按前缀扫**：扩展名随驱动而异（web=.html / 安卓与 iOS 真机=.xml / 模拟器=.json），
+    /// 写死清单迟早漏一个，而漏了是静默的（P-43 就是这么来的）
+    fn raw_page_rel(&self, seq: usize) -> Option<String> {
+        let dir = self.run_dir.join("raw_pages");
+        let prefix = format!("step_{:03}.", seq);
+        std::fs::read_dir(&dir)
+            .ok()?
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .find(|n| n.starts_with(&prefix))
+            .map(|n| format!("raw_pages/{}", n))
+    }
+}
 
 /// 图片怎么进报告：内嵌成 data URI，还是留一个相对链接。
 ///
@@ -848,10 +869,12 @@ fn render_session_with(batches: &[Batch], img: ImgMode, batch_links: bool, meta:
         }
     }
 
-    // 设备去重（跨设备检查里这一行能一眼看出涉及了哪几台）
+    // 设备去重（跨设备检查里这一行能一眼看出涉及了哪几台）。
+    // **显示给人看的名字**——`sim:92AA7443-4027-4CAA-A5F6-543EA24FB3F3` 对读报告的人
+    // 没有任何意义（下面的分隔行早就用 label 了，这里漏了就成了同一份报告里两套叫法）
     let mut devs: Vec<String> = batches
         .iter()
-        .filter_map(|b| b.result.device.clone())
+        .filter_map(|b| b.result.device_label.clone().or_else(|| b.result.device.clone()))
         .collect();
     devs.dedup();
     devs.sort();
@@ -971,16 +994,18 @@ fn step_card_seq(
     plat: &str,
     seq: Option<usize>,
 ) -> String {
-    // 内嵌的是缩过的图；点一下能看**原始分辨率**那张（证据目录里躺着的）。
-    // 报告发给别人时这个链接会失效，但图本身还在——不影响读，只是点不开大图。
+    // 内嵌的是缩过的图，默认限高 56vh（手机竖屏图不限高会占两三屏）。
+    // 点一下**就地展开**成原始尺寸；要看真正的原图/原始页面，走下面那行链接。
+    // id 用步骤序号：同一份报告里几十张图，checkbox 的 id 不能撞
     let img = s
         .screenshot
         .as_deref()
         .and_then(|rel| ctx.img_src(rel).map(|uri| (rel, uri)))
-        .map(|(rel, uri)| {
+        .map(|(_rel, uri)| {
+            let id = seq.unwrap_or(s.index);
             format!(
-                r#"<div class="s-img"><a href="{href}" title="查看原图"><img src="{uri}" alt="step"></a></div>"#,
-                href = esc(&ctx.href(rel)),
+                r#"<div class="s-img"><input type="checkbox" class="s-zoom" id="z{id}"><label for="z{id}"><img src="{uri}" alt="step" title="点击放大"></label></div>"#,
+                id = id,
                 uri = uri,
             )
         })
@@ -1042,12 +1067,28 @@ fn step_card_seq(
             _ => String::new(),
         },
         img = img,
+        // 图片下面这行才是"去看原件"的入口：原图（未缩放）、元素表、**驱动直给的原始页面**。
+        // 名字用中文而不是路径——路径长且每步都一样，读的人要的是"点哪个能看到什么"
         foot = {
-            let link = |rel: &String| format!(r#"<a href="{}">{}</a>"#, esc(&ctx.href(rel)), esc(rel));
-            match (&s.xml, &s.screenshot) {
-                (Some(x), Some(p)) => format!(r#"<div class="s-foot">{} · {}</div>"#, link(x), link(p)),
-                (Some(x), None) | (None, Some(x)) => format!(r#"<div class="s-foot">{}</div>"#, link(x)),
-                _ => String::new(),
+            let link = |rel: &str, name: &str| {
+                format!(r#"<a href="{}" title="{}">{}</a>"#, esc(&ctx.href(rel)), esc(rel), name)
+            };
+            let mut parts: Vec<String> = Vec::new();
+            if let Some(p) = &s.screenshot {
+                parts.push(link(p, "原图"));
+            }
+            if let Some(x) = &s.xml {
+                parts.push(link(x, "元素表"));
+            }
+            // 原始页面（DOM / uiautomator / XCUI / AX 原文）——**按前缀找**，
+            // 扩展名随驱动而异（html/xml/json），写死清单迟早漏（P-43）
+            if let Some(raw) = seq.and_then(|n| ctx.raw_page_rel(n)) {
+                parts.push(link(&raw, "原始页面"));
+            }
+            if parts.is_empty() {
+                String::new()
+            } else {
+                format!(r#"<div class="s-foot">{}</div>"#, parts.join(" · "))
             }
         },
     )

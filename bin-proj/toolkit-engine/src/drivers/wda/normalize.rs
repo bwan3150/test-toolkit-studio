@@ -66,14 +66,22 @@ pub(super) fn normalize_xcui_xml(source: &str, scale: f64) -> Result<String> {
                         | "XCUIElementTypeTabBar" | "XCUIElementTypeSegmentedControl"
                 ) || accessible;
 
+                // **密码框必须标出来**（同安卓原生的 password="true" / web 归一化后的同名属性）。
+                // 有它，命令原文里的值才会在落盘前打码——log.json、报告、**截图顶部横幅**
+                // 都是要发给别人看的证据。
+                // ⚠️ 这里曾经漏掉，而安卓与 web 都做了，注释还写着"三平台同一条路"——
+                // 于是 iOS 上 `输入 ["Password", "真密码"]` 一路明文写进报告，没人发现（P-45）。
+                let is_password = typ == "XCUIElementTypeSecureTextField";
+
                 let text = if !value.is_empty() { value.as_str() } else { label.as_str() };
                 xml.push_str(&format!(
-                    "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" clickable=\"{}\" enabled=\"true\" bounds=\"[{},{}][{},{}]\" />\n",
+                    "  <node class=\"{}\" resource-id=\"{}\" content-desc=\"{}\" text=\"{}\" clickable=\"{}\" enabled=\"true\"{} bounds=\"[{},{}][{},{}]\" />\n",
                     escape_attr(&typ),
                     escape_attr(&name),
                     escape_attr(&label),
                     escape_attr(text),
                     clickable,
+                    if is_password { " password=\"true\"" } else { "" },
                     (x as f64 * scale) as i64,
                     (y as f64 * scale) as i64,
                     ((x + w) as f64 * scale) as i64,
@@ -93,3 +101,34 @@ pub(super) fn normalize_xcui_xml(source: &str, scale: f64) -> Result<String> {
     Ok(xml)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SRC: &str = r#"<XCUIElementTypeApplication type="XCUIElementTypeApplication" visible="true" x="0" y="0" width="393" height="852">
+  <XCUIElementTypeTextField type="XCUIElementTypeTextField" name="Email" label="Email" visible="true" x="36" y="151" width="330" height="22"/>
+  <XCUIElementTypeSecureTextField type="XCUIElementTypeSecureTextField" name="Password" label="Password" visible="true" x="36" y="213" width="306" height="18"/>
+  <XCUIElementTypeButton type="XCUIElementTypeButton" name="Sign In" label="Sign In" visible="true" x="177" y="273" width="48" height="18"/>
+</XCUIElementTypeApplication>"#;
+
+    /// **密码框必须标出来**：命令原文里的值靠它才会在落盘前打码，
+    /// 而 log.json / 报告 / 截图顶部横幅都是要发给别人看的证据。
+    /// 这条曾经漏了整整一个平台——安卓原生有、web 归一化时对齐了，唯独 iOS 没做，
+    /// 于是真密码一路明文写进报告（P-45）
+    #[test]
+    fn marks_secure_text_field_as_password() {
+        let xml = normalize_xcui_xml(SRC, 3.0).unwrap();
+        let pwd = xml.lines().find(|l| l.contains("SecureTextField")).expect("要有密码框");
+        assert!(pwd.contains(r#"password="true""#), "密码框要标出来:{}", pwd);
+        let mail = xml.lines().find(|l| l.contains(r#"text="Email""#)).unwrap();
+        assert!(!mail.contains("password"), "普通输入框别误标:{}", mail);
+    }
+
+    /// 坐标要 ×scale 换成截图像素——点击全靠它
+    #[test]
+    fn scales_bounds_to_screenshot_pixels() {
+        let xml = normalize_xcui_xml(SRC, 3.0).unwrap();
+        assert!(xml.contains(r#"bounds="[531,819][675,873]""#), "坐标要×3:{}", xml);
+    }
+}
