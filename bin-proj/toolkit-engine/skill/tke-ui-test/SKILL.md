@@ -496,8 +496,11 @@ tke -d <序列号> steps '启动 ["com.x", ".Main"]' --log ~/.tke/logs/scene-syn
 **最后一定要跑这一条**——写上结论并把报告打开给用户看：
 
 ```bash
-# 总结先写成文件（带表格的多行 Markdown 塞进命令行要跟引号搏斗）
-cat > /tmp/summary.md <<'EOF'
+tke report ~/.tke/logs/<任务简称>/ \
+  --task "用户让我验的那件事（写他的原话）" \
+  --verdict pass \
+  --open \
+  --summary - <<'EOF'
 已查看全部 2 个 player，均在线（v0.2.29）。
 
 ## 性能参数对比
@@ -510,12 +513,6 @@ cat > /tmp/summary.md <<'EOF'
 - WS 延迟两台都偏高（327ms / 247ms），是页面里唯一的警示色指标
 - Melbourne 读不到温度传感器
 EOF
-
-tke report ~/.tke/logs/<任务简称>/ \
-  --task "用户让我验的那件事（写他的原话）" \
-  --verdict pass \
-  --summary-file /tmp/summary.md \
-  --open
 ```
 
 > ### 把**你在对话里给用户看的那份总结，原样**写进去
@@ -524,8 +521,19 @@ tke report ~/.tke/logs/<任务简称>/ \
 > 你在对话框里写了表格、列表、对照、注意事项，那就原样进报告：
 > **表格 / 列表 / 小标题 / `**加粗**` / `` `代码` `` 都会被渲染出来**。
 >
-> 短结论用 `--summary "…"` 就行；**长的、带表格的用 `--summary-file`** ——
-> 多行 Markdown 塞进命令行要跟引号和换行搏斗，先写成文件再指过来省事得多。
+> **长文本用 `--summary -`（走标准输入）**，像上面那样接一段 heredoc——
+> **不用先写临时文件**。heredoc 天然处理引号与换行，比拼一条超长命令行稳得多。
+> 短结论直接 `--summary "一句话"` 也行；已经有现成的 .md 就用 `--summary-file x.md`。
+>
+> PowerShell 用 here-string：
+> ```powershell
+> @'
+> ## 结论
+> | 端 | 结果 |
+> '@ | tke report <目录> --verdict pass --summary -
+> ```
+>
+> ⚠️ `--task` 也支持 `-`，但**两个不能同时用**（标准输入只能读一次，tke 会拦下来）。
 >
 > 任务与结论在报告里是**最上面的独立卡片**：人打开第一眼看的就是这两样。
 

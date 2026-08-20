@@ -18,7 +18,8 @@ pub struct ReportArgs {
     /// 任务目录（`--log` 指的那个，如 ~/.tke/logs/<任务简称>/）
     pub dir: PathBuf,
 
-    /// 这次要验的是什么（写用户的原话），显示在报告开头
+    /// 这次要验的是什么（写用户的原话），显示在报告开头。
+    /// 写 `-` 表示从**标准输入**读（长文本用这个，见 `--summary`）
     #[arg(long)]
     pub task: Option<String>,
 
@@ -27,12 +28,24 @@ pub struct ReportArgs {
     #[arg(long, value_parser = ["pass", "fail", "blocked"])]
     pub verdict: Option<String>,
 
-    /// 结论说明。**支持 Markdown**（表格/列表/加粗/小标题都会渲染出来）
+    /// 结论说明。**支持 Markdown**（表格/列表/加粗/小标题都会渲染出来）。
+    ///
+    /// **长文本写 `-`，内容走标准输入**——不用先落一个临时文件：
+    ///
+    ///   tke report <目录> --verdict pass --summary - <<'EOF'
+    ///   ## 结论
+    ///   | 端 | 结果 |
+    ///   |---|---|
+    ///   | 安卓 | 通过 |
+    ///   EOF
+    ///
+    /// heredoc 天然处理引号与换行，比拼一条超长命令行稳得多。
+    /// PowerShell 用 here-string：`@'…'@ | tke report <目录> --summary -`
     #[arg(long)]
     pub summary: Option<String>,
 
-    /// 从文件读结论（内容同 `--summary`）。**总结长、带表格时用这个**——
-    /// 一大段多行 Markdown 塞进命令行要跟引号和换行搏斗，先写成文件再指过来省事得多
+    /// 从文件读结论（内容同 `--summary`）。**已经有现成的 .md 时用这个**；
+    /// 只是想传一段长文本的话用 `--summary -`，省掉写临时文件那一步
     #[arg(long, value_name = "文件")]
     pub summary_file: Option<PathBuf>,
 
@@ -66,8 +79,25 @@ pub async fn handle(args: ReportArgs) -> Result<()> {
         }
         let log = args.dir.join("log.json");
         let mut t = tke::TaskLog::load(&log);
+
+        // `-` = 从标准输入读。**stdin 只能读一次**，所以 task 与 summary 里
+        // 只能有一个用 `-`——两个都写会让第二个拿到空串，那是最难查的那种"成功"
+        let both_stdin = args.task.as_deref() == Some("-") && args.summary.as_deref() == Some("-");
+        if both_stdin {
+            JsonOutput::error("`--task` 和 `--summary` 只能有一个写 `-`（标准输入只能读一次）");
+        }
+        let read_stdin = || {
+            use std::io::Read;
+            let mut buf = String::new();
+            match std::io::stdin().read_to_string(&mut buf) {
+                Ok(_) if !buf.trim().is_empty() => buf.trim().to_string(),
+                Ok(_) => JsonOutput::error("`-` 是从标准输入读，但没读到内容"),
+                Err(e) => JsonOutput::error(format!("读标准输入失败：{}", e)),
+            }
+        };
+
         if let Some(v) = &args.task {
-            t.task = Some(v.clone());
+            t.task = Some(if v == "-" { read_stdin() } else { v.clone() });
         }
         // --summary-file 优先：两个都给时，文件里那份通常才是完整的
         if let Some(f) = &args.summary_file {
@@ -76,7 +106,7 @@ pub async fn handle(args: ReportArgs) -> Result<()> {
                 Err(e) => JsonOutput::error(format!("读不到 {}：{}", f.display(), e)),
             }
         } else if let Some(v) = &args.summary {
-            t.summary = Some(v.clone());
+            t.summary = Some(if v == "-" { read_stdin() } else { v.clone() });
         }
         if let Some(v) = &args.verdict {
             t.verdict = Verdict::parse(v);

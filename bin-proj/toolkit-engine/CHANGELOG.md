@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-20 · `--summary -` 从标准输入读：长结论不用再写临时文件
+用户看到 AI 写长结论时**先落一个 /tmp/summary.md、再 `--summary-file` 指过来**,
+问能不能一步到位。**那个绕路是文档教的**——`--summary-file` 的帮助里写着
+「多行 Markdown 塞进命令行要跟引号搏斗,先写成文件再指过来省事得多」。
+真正的问题不是"要不要文件",是**长文本进命令行难**。
+- **feat** `--summary -` / `--task -` 从**标准输入**读,配 heredoc 一步到位:
+  `tke report DIR --verdict pass --summary - <<'EOF' … EOF`
+  （PowerShell 用 here-string）。heredoc 天然处理引号与换行
+- **两个都写 `-` 直接拦下**:标准输入只能读一次,第二个会拿到空串——
+  那是最难查的那种"成功"
+- `--summary-file` 保留（已经有现成 .md 时用），帮助文案不再引导人去写临时文件
+- **docs(skill)** 交付那节的示例整个换成 heredoc 一步式
+
 ### 2026-08-20 · 跨端检查「只用一个 `--log`」写成硬规矩
 用户那次双端检查交付了**两个报告链接**（cache-mgmt + cache-mgmt-ios）,
 而结论本身是合并写的（"两端功能完整可用"）——AI 做完 A 端把 B 端当成了新任务。
