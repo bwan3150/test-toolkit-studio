@@ -190,11 +190,19 @@ impl Health {
         let n_emu = androids().filter(|t| t.id.starts_with("emulator-")).count();
         let n_real = androids().filter(|t| !t.id.starts_with("emulator-")).count();
 
+        // **一个平台的真机与模拟器挨着**：人是按平台找这张表的（"我的安卓那边怎么样"），
+        // 而不是按"先看所有真机再看所有模拟器"
         if want("android") {
             match (n_real, self.skip_why("android")) {
                 (0, Some(w)) => row("Android真机", "未检测", &w, Tone::Muted),
                 (0, None) => row("Android真机", "不可用", "尚未连接设备", Tone::Muted),
                 (n, _) => row("Android真机", "可用", &format!("{} 台", n), Tone::Ok),
+            }
+            match n_emu {
+                // tke 不管 AVD 的起停（要 SDK 的 emulator + AVD 名），
+                // 但已经跑起来的模拟器 adb 连得上、tke 照常操作——这两件事要分清
+                0 => row("Android模拟器", "不可用", "尚未启动 AVD", Tone::Muted),
+                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Ok),
             }
         }
         if want("ios") {
@@ -209,16 +217,6 @@ impl Health {
                     (n, _) => row("iOS真机", "可用", &format!("{} 台", n), Tone::Ok),
                 }
             }
-        }
-        if want("android") {
-            match n_emu {
-                // **明说不支持启动**：tke 不管 AVD 的起停（要 SDK 的 emulator + AVD 名），
-                // 但已经跑起来的模拟器 adb 连得上、tke 照常操作——这两件事要分清
-                0 => row("Android模拟器", "不可用", "尚未启动 AVD", Tone::Muted),
-                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Ok),
-            }
-        }
-        if want("ios") {
             self.print_ios_sim();
         }
         if want("web") {
