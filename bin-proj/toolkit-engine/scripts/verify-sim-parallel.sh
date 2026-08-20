@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # 双模拟器并行验证（只在 macOS 上有意义）——Q-13 那个修复到底成没成。
 #
-#   bash scripts/verify-sim-parallel.sh
+#   bash scripts/verify-sim-parallel.sh <UDID-A> <UDID-B>
+#
+# 不给参数就列出这台机器上的模拟器让你挑。**两台要型号不同**——同型号分辨率一样、
+# `describe` 的 label 也会撞，串没串台根本看不出来（第③步就是靠这个差异判的）。
 #
 # 验的不是"能不能同时跑",是**命令有没有发到该去的那台**。这两件事很容易混：
 # 两台都在跑、两条命令都报成功、页面也都动了——但动的可能是同一台。
@@ -37,24 +40,47 @@ note "用的是 ${TKE}"
     exit 1
 }
 
-# —— 准备：挑两台**型号不同**的模拟器 ——
-# 型号不同才验得出串台：两台都叫 iPhone 17 Pro 的话，报回来的型号一样，
-# 命令跑到哪台上都看不出来（`Controller::describe` 的 label 会撞，单测里也钉着这条）
-read -r UDID_A NAME_A UDID_B NAME_B <<<"$(xcrun simctl list devices available -j | python3 -c "
+# —— 准备：两台由你指定 ——
+# 不自己挑：哪两台该拿来验、哪台上装着你要看的 App，脚本不知道；
+# 猜错了还得从头再跑一遍。列出来让你选，比替你决定快
+list_sims(){
+    xcrun simctl list devices available -j | python3 -c "
 import json,sys
-d=json.load(sys.stdin)['devices']
-seen={}
-for rt,l in d.items():
+for rt,l in json.load(sys.stdin)['devices'].items():
     if 'iOS' not in rt: continue
+    ver=rt.rsplit('.',1)[-1].replace('iOS-','iOS ').replace('-','.')
     for x in l:
-        if 'iPhone' not in x['name']: continue
-        seen.setdefault(x['name'], x['udid'])
-picks=list(seen.items())[:2]
-print(' '.join(f\"{u} {n.replace(' ','_')}\" for n,u in picks) if len(picks)==2 else '')")"
+        mark='●' if x.get('state')=='Booted' else '○'
+        print(f\"  {mark} {x['udid']}  {x['name']:<22} {ver}\")"
+}
+name_of(){
+    xcrun simctl list devices available -j | python3 -c "
+import json,sys
+u=sys.argv[1]
+for l in json.load(sys.stdin)['devices'].values():
+    for x in l:
+        if x['udid']==u: print(x['name']); raise SystemExit
+print('')" "$1"
+}
 
-[ -n "${UDID_B:-}" ] || { bad "找不到两台型号不同的 iPhone 模拟器"; note "去 Xcode 里加一台别的型号"; exit 1; }
-note "A = ${NAME_A//_/ }  ${UDID_A}"
-note "B = ${NAME_B//_/ }  ${UDID_B}"
+UDID_A="${1:-}"; UDID_B="${2:-}"
+if [ -z "${UDID_A}" ] || [ -z "${UDID_B}" ]; then
+    bad "用法: bash scripts/verify-sim-parallel.sh <UDID-A> <UDID-B>"
+    note "● = 已启动    ○ = 关着（脚本会 boot）"
+    list_sims
+    note "挑**型号不同**的两台——同型号分辨率一样，第③步验不出串台"
+    exit 1
+fi
+NAME_A=$(name_of "${UDID_A}"); NAME_B=$(name_of "${UDID_B}")
+[ -n "${NAME_A}" ] || { bad "找不到这台: ${UDID_A}"; list_sims; exit 1; }
+[ -n "${NAME_B}" ] || { bad "找不到这台: ${UDID_B}"; list_sims; exit 1; }
+[ "${UDID_A}" != "${UDID_B}" ] || { bad "给的是同一台"; exit 1; }
+note "A = ${NAME_A}  ${UDID_A}"
+note "B = ${NAME_B}  ${UDID_B}"
+if [ "${NAME_A}" = "${NAME_B}" ]; then
+    bad "两台是同一个型号（${NAME_A}）—— 第③步分辨率一样，验不出串台"
+    note "换一台别的型号再来；①②照样能验，但最关键的③会是歧义结果"
+fi
 
 for U in "${UDID_A}" "${UDID_B}"; do
     xcrun simctl boot "${U}" 2>/dev/null
@@ -135,8 +161,8 @@ shot_size(){
       | sed -n 's/.*pixel\(Width\|Height\): \([0-9]*\)/\2/p' | paste -sd'x' -
 }
 SIZE_A=$(shot_size "${SHOT_A}"); SIZE_B=$(shot_size "${SHOT_B}")
-note "A ${NAME_A//_/ } → ${SIZE_A:-（没截到图）}"
-note "B ${NAME_B//_/ } → ${SIZE_B:-（没截到图）}"
+note "A ${NAME_A} → ${SIZE_A:-（没截到图）}"
+note "B ${NAME_B} → ${SIZE_B:-（没截到图）}"
 if [ -z "${SIZE_A}" ] || [ -z "${SIZE_B}" ]; then
     fail "有一边没截到图 —— 先单跑 verify-ios-sim.sh 看是哪一步断的"
 elif [ "${SIZE_A}" = "${SIZE_B}" ]; then

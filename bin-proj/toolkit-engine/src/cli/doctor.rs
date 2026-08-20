@@ -17,7 +17,7 @@
 use std::path::{Path, PathBuf};
 
 use tke::tools::discover::{discover_with, Discovery};
-use tke::utils::text::pad_right;
+use tke::utils::text::{disp_width, pad_right};
 use tke::utils::update::Staleness;
 
 // ── 外观 ──（与 install.sh / install.ps1 同一套：符号 + 颜色，**不用 emoji**——
@@ -252,7 +252,7 @@ impl Health {
         if sims.is_empty() {
             row("iOS模拟器", "不可用", "尚未创建模拟器", Tone::Muted);
         } else if !wda {
-            row("iOS模拟器", "操作不了", "缺 WebDriverAgent · tke doctor --fix --profile ios", Tone::Warn);
+            row("iOS模拟器", "操作不了", "缺 WebDriverAgent", Tone::Warn);
         } else if booted == 0 {
             row("iOS模拟器", "待启动", &format!("{} 台可选", sims.len()), Tone::Muted);
         } else {
@@ -275,16 +275,6 @@ impl Health {
 
     /// 结论 + 提醒。**对钩在最后**：上面每行是一项检查，这行才是"到底行不行"
     pub fn print_verdict(&self, missing: usize) {
-        // PATH 没落地的提示紧挨着结论——它正是结论要打折的原因
-        if self.path_persisted == Some(false) {
-            println!();
-            println!("  {} {}", sym_warn(), "PATH 没写进 shell 配置 · 新终端里找不到 tke");
-            println!(
-                "    {}",
-                dim(&format!("补：echo 'export PATH=\"{}:$PATH\"' >> ~/.zshrc", self.exe_dir.display()))
-            );
-        }
-
         println!();
         if missing == 0 && self.path_persisted == Some(false) {
             // 依赖齐了但 PATH 没落地——**不能说"全局已就绪"**，它恰恰只在这个窗口里就绪
@@ -292,21 +282,77 @@ impl Health {
         } else if missing == 0 {
             println!("  {} {}", sym_ok(), "全局已就绪");
         } else {
-            println!(
-                "  {} 环境不完整 · 缺 {} 项{}",
-                sym_err(),
-                missing,
-                dim("　补齐：tke doctor --fix")
-            );
+            println!("  {} 环境不完整 · 缺 {} 项", sym_err(), missing);
+        }
+        if self.path_persisted == Some(false) && missing > 0 {
+            println!("  {} {}", sym_warn(), "PATH 没写进 shell 配置 · 新终端里找不到 tke");
+        }
+        if self.st.as_ref().is_some_and(|s| s.any_stale()) {
+            println!("  {} {}", sym_warn(), "有可用更新");
         }
 
-        // 更新提示只出现一次：tke 和 skill 谁旧都是同一条命令，分开说两遍是噪音
-        if let Some(s) = self.st.as_ref().filter(|s| s.any_stale()) {
-            println!("  {} 有可用更新{}", sym_warn(), dim("　更新：tke update"));
+        self.print_next_steps(missing);
+    }
+
+    /// 该敲的命令**全在这一块**，正文里一条都不留。
+    ///
+    /// 早先是哪行发现问题就在哪行缀一句「· tke doctor --fix」，看着贴心，实际是把
+    /// 一份体检表撒成了几段说明书——用户的原话是「太散乱」。状态归状态、动作归动作，
+    /// 要动手的人往最后看一眼就够了
+    fn print_next_steps(&self, missing: usize) {
+        let mut steps: Vec<(String, String)> = Vec::new();
+        if missing > 0 {
+            steps.push(("tke doctor --fix".into(), format!("补齐缺的 {} 项依赖", missing)));
+        }
+        // 模拟器缺 WDA 不算"环境不完整"（只影响模拟器），但要动手的话是另一条命令
+        if cfg!(target_os = "macos")
+            && matches!(self.profile.as_str(), "ios" | "all")
+            && wda_app_path().is_none()
+            && self.disc.targets.iter().any(|t| t.kind == "ios-sim")
+        {
+            steps.push((
+                "tke doctor --fix --profile ios".into(),
+                "装模拟器要用的 WebDriverAgent".into(),
+            ));
+        }
+        if let Some(st) = self.st.as_ref().filter(|s| s.any_stale()) {
             // skill 旧的时候多说一句：调用方 AI 的上下文里那份是会话开始时加载的，
             // 只换磁盘文件它是不知道的——不重读等于白更新（P-41）
-            if s.skill_stale {
-                println!("    {}", dim("更新后重读 SKILL.md"));
+            let why = if st.skill_stale {
+                "更新 tke 与 skill（更新后重读 SKILL.md）"
+            } else {
+                "更新到最新版"
+            };
+            steps.push(("tke update".into(), why.into()));
+        }
+        if self.path_persisted == Some(false) {
+            steps.push((
+                format!("echo 'export PATH=\"{}:$PATH\"' >> ~/.zshrc", self.exe_dir.display()),
+                "让新终端也找得到 tke".into(),
+            ));
+        }
+        if steps.is_empty() {
+            return;
+        }
+
+        // 一行放得下的（`命令  说明`）对齐成一列；**放不下的自成两行**：说明在上、
+        // 命令缩进在下。那条 export PATH 有八十多个字符，硬排进同一列会把其余几行的
+        // 说明推到屏幕外——为一条长命令破掉整块的队形不值
+        const CMD_W: usize = 34;
+        let w = steps
+            .iter()
+            .map(|(c, _)| disp_width(c))
+            .filter(|n| *n <= CMD_W)
+            .max()
+            .unwrap_or(0);
+        println!();
+        println!("  {}", dim("下一步"));
+        for (cmd, why) in &steps {
+            if disp_width(cmd) <= CMD_W {
+                println!("    {}  {}", pad_right(cmd, w), dim(why));
+            } else {
+                println!("    {}", dim(why));
+                println!("      {}", cmd);
             }
         }
     }
@@ -315,9 +361,16 @@ impl Health {
     /// 「没查」与「没连」在结果上长得一样，不说清楚人只会去插拔数据线（INV-9）
     fn skip_why(&self, kind: &str) -> Option<String> {
         self.disc.skipped.iter().find(|s| s.kind == kind).map(|s| {
-            // discover 的措辞是给 `device list` 那段用的整句（「安卓未检测 · 缺 adb · …」），
-            // 这里已经有"未检测"这个值了，只取后半段的原因
-            s.why.splitn(2, " · ").nth(1).unwrap_or(&s.why).to_string()
+            // discover 的措辞是给 `device list` 那段用的整句
+            //（「安卓未检测 · 缺 adb · tke doctor --fix」）。这里只取**中间那段原因**：
+            // "未检测"已经是这行的值了，而那条命令归最后的「下一步」——
+            // 每行都缀一句命令，一份表就散成了几段说明书
+            let mut parts = s.why.split(" · ").skip(1);
+            match parts.next() {
+                Some(reason) if reason.starts_with("缺 ") => "缺少依赖".to_string(),
+                Some(reason) => reason.to_string(),
+                None => s.why.clone(),
+            }
         })
     }
 }
