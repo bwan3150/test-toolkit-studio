@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-20
-Last-Commit: 9aa79571
+Last-Commit: 50abadda
 ---
 
 # 当前状态
@@ -32,7 +32,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | **doctor 报告排版** | ✅ 本机实测(Linux) | 用户说"信息太多而且顺序混乱"→ **三段分组**:①工具本身(平台/依赖/Engine/Skill 版本)②能测什么(四端+显示器,真机在前)③落点(Engine/Skill/日志);标签列按显示宽度对齐、值统一 `状态 (补充)`;**正文一条命令都不留**,该敲的全收进末尾「下一步」块;**上色是例外**(正常不上色;绿=有更新/红=缺依赖/灰=查不了——"不要绿色泛滥"),队形三条:标签一律 dim、值上色、补充永远 dim。设备探测改走 `tools::discover`(与 `device list` 同一套)。排版拆到 `cli/doctor.rs` |
 | **版本新鲜度 `tke doctor`** | ✅ 本机实测 | **Q-11 已关闭**(ADR-0014):`tke fix`→`tke doctor`(fix 保留别名);比 **build 戳**而非版本号;`steps` 每批提醒(缓存 4h/stderr/--json 闭嘴);只提醒不自更新。⚠️ **要等下一次发布把 VERSION 打进 skill 包后才对用户生效** |
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
-| **iOS 模拟器** | ✅ **端到端跑通并已分发**(2026-08-19 用户实测) | ADR-0017。`-d sim:<UDID>`,与真机**同一套 WDA**,只有"怎么连上"不同(真机 USB 隧道 / 模拟器直连本机端口,**一台一个**,Q-13 已关)。`doctor --fix --profile ios` 下预编译 runner(21MB,arm64+x86_64 fat 包)到 `~/.tke/wda/`,tke 自己 `simctl install/launch`——**不碰 Xcode、不装 brew、不编译**。路线拐过一次弯(WDA→idb→WDA),原因见 ADR-0017「修订」 |
+| **iOS 模拟器** | ✅ **端到端跑通并已分发**;**多台并行已实测通过**(2026-08-20) | ADR-0017。`-d sim:<UDID>`,与真机**同一套 WDA**,只有"怎么连上"不同(真机 USB 隧道 / 模拟器直连本机端口,**一台一个**,Q-13 已关)。`doctor --fix --profile ios` 下预编译 runner(21MB,arm64+x86_64 fat 包)到 `~/.tke/wda/`,tke 自己 `simctl install/launch`——**不碰 Xcode、不装 brew、不编译**。路线拐过一次弯(WDA→idb→WDA),原因见 ADR-0017「修订」 |
 | **设备发现 `tke device list`** | ✅ 本机+用户实测 | 四端统一(安卓/iOS真机/iOS模拟器/浏览器),第一列就是 `-d` 的值;**查不了的那类单独说明原因**("没装 adb 是没查不是没连")。harness 向导也改走它——同一个问题不该有两套答案 |
 | **报告可读性** | ✅ 本机实测 | 手机竖屏图限高 56vh + **点击就地展开**(纯 CSS,不引 JS);图下方三个链接:原图/元素表/**原始页面**;设备栏显示友好名。`--summary -` **从标准输入读**(heredoc 一步给长 Markdown,不用再写临时文件) |
 | **环境起停 boot/shutdown** | ✅ 本机实测 | `control boot [--headless=off]` / `control shutdown`;tks `启动环境 [有头]` / `关闭环境`。**boot 管环境本身,launch 管环境里的东西**——早先浏览器是被第一条 web 命令顺带起来的,脚本里看不出它何时起、以什么模式起。iOS 模拟器 `simctl boot` + bootstatus 等就绪;**安卓模拟器明说不支持**(要 SDK 的 emulator + AVD 名) |
