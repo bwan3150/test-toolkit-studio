@@ -33,6 +33,16 @@ ARCH=$([ "$(uname -m)" = arm64 ] && echo arm64 || echo amd64)
 TKE="${REPO_ROOT}/bin/darwin-${ARCH}/tke"
 [ -x "${TKE}" ] || { bad "找不到构建产物: ${TKE}"; note "先跑 ./bin-proj/toolkit-engine/build-mac.sh"; exit 1; }
 note "用的是 ${TKE}"
+# **产物比代码旧就直接拦下**。P-42 记的是"别用 PATH 里的 tke"，但用了构建产物也可能是
+# 上一轮编的——那时验的还是旧行为，红绿都不作数（这一条就是这么白跑了一轮才加的）
+BIN_TS=$(stat -f %m "${TKE}" 2>/dev/null || echo 0)
+SRC_TS=$(git -C "${SCRIPT_DIR}/.." log -1 --format=%ct -- src 2>/dev/null || echo 0)
+if [ "${BIN_TS}" -lt "${SRC_TS}" ]; then
+    bad "构建产物比 src/ 的最后一次提交还旧 —— 验的会是上一版的行为"
+    note "产物 $(date -r "${BIN_TS}" '+%m-%d %H:%M')   代码 $(date -r "${SRC_TS}" '+%m-%d %H:%M')"
+    note "先跑 ./bin-proj/toolkit-engine/build-mac.sh 再来"
+    exit 1
+fi
 
 [ -d "${HOME}/.tke/wda/WebDriverAgentRunner-Runner.app" ] || [ -n "${TKE_WDA_APP:-}" ] || {
     bad "没有 WebDriverAgent —— 模拟器操作不了"
@@ -90,9 +100,14 @@ for U in "${UDID_A}" "${UDID_B}"; do
     xcrun simctl bootstatus "${U}" -b >/dev/null 2>&1
 done
 
-# 各自把 WDA 拉起来（第一次会挤掉前台 App，这里不在意——验的是链路不是业务）
+# 各自把 WDA 拉起来（第一次会挤掉前台 App，这里不在意——验的是链路不是业务）。
+# **失败要看得见**（INV-9）：早先这里 `>/dev/null 2>&1`，于是后面三步全红，
+# 而真正的原因（WDA 没起来）被吞在这一行里
 for U in "${UDID_A}" "${UDID_B}"; do
-    "${TKE}" -d "sim:${U}" fetch >/dev/null 2>&1 || true
+    if ! "${TKE}" -d "sim:${U}" fetch >/dev/null 2>"${TMPDIR:-/tmp}/tke-boot-${U}.err"; then
+        bad "把 WDA 拉进 ${U} 失败："
+        sed 's/^/      /' "${TMPDIR:-/tmp}/tke-boot-${U}.err" | head -6
+    fi
 done
 
 STATE_DIR="${TMPDIR:-/tmp}/tke/ios"
@@ -117,8 +132,11 @@ fi
 # ── ② 端口归属：谁在监听，是不是那台的 WDA ──
 printf '\n%s② 每个端口的监听进程属于对应的模拟器%s\n' "${Y}" "${N}"
 BUNDLE=com.facebook.WebDriverAgentRunner.xctrunner
-wda_pid(){ xcrun simctl spawn "$1" launchctl list "${BUNDLE}" 2>/dev/null \
-             | sed -n 's/.*"PID" = \([0-9]*\);.*/\1/p' | head -1; }
+# ⚠️ 不能 `launchctl list <bundle>`：iOS 里 App 的 label 是
+# `UIKitApplication:com.facebook.…[0x…][rb-legacy]`，精确查永远查不到
+# （第一版就栽在这儿：两边 PID 都报 ?，归属校验形同虚设）。列全表按子串找
+wda_pid(){ xcrun simctl spawn "$1" launchctl list 2>/dev/null \
+             | grep -F "${BUNDLE}" | awk '{print $1}' | grep -E '^[0-9]+$' | head -1; }
 lsof_pid(){ lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null | head -1; }
 for pair in "A:${UDID_A}:${PORT_A}" "B:${UDID_B}:${PORT_B}"; do
     TAG="${pair%%:*}"; REST="${pair#*:}"; U="${REST%%:*}"; P="${REST##*:}"
@@ -149,9 +167,10 @@ SHOT_A="${WORKAREA}/$(sanitize "sim:${UDID_A}")/current_screenshot.png"
 SHOT_B="${WORKAREA}/$(sanitize "sim:${UDID_B}")/current_screenshot.png"
 rm -f "${SHOT_A}" "${SHOT_B}"
 
-"${TKE}" -d "sim:${UDID_A}" refresh >/dev/null 2>&1 &
+ERR_A="${TMPDIR:-/tmp}/tke-ref-a.err"; ERR_B="${TMPDIR:-/tmp}/tke-ref-b.err"
+"${TKE}" -d "sim:${UDID_A}" refresh >/dev/null 2>"${ERR_A}" &
 PID_A=$!
-"${TKE}" -d "sim:${UDID_B}" refresh >/dev/null 2>&1 &
+"${TKE}" -d "sim:${UDID_B}" refresh >/dev/null 2>"${ERR_B}" &
 PID_B=$!
 wait "${PID_A}"; wait "${PID_B}"
 
@@ -164,7 +183,11 @@ SIZE_A=$(shot_size "${SHOT_A}"); SIZE_B=$(shot_size "${SHOT_B}")
 note "A ${NAME_A} → ${SIZE_A:-（没截到图）}"
 note "B ${NAME_B} → ${SIZE_B:-（没截到图）}"
 if [ -z "${SIZE_A}" ] || [ -z "${SIZE_B}" ]; then
-    fail "有一边没截到图 —— 先单跑 verify-ios-sim.sh 看是哪一步断的"
+    fail "有一边没截到图 —— refresh 的报错在下面"
+    for E in "${ERR_A}" "${ERR_B}"; do
+        [ -s "${E}" ] && sed 's/^/      /' "${E}" | head -5
+    done
+    note "找不到的话看看工作区在不在：ls ${WORKAREA}"
 elif [ "${SIZE_A}" = "${SIZE_B}" ]; then
     bad "两边分辨率一样（${SIZE_A}）—— **可能串台，也可能这两台本来就同尺寸**"
     note "换一台屏幕明显不同的再验（比如 iPhone SE 配 iPhone 17 Pro Max）"

@@ -151,6 +151,11 @@ tke 不该去碰用户的 Apple ID。所以真机能砍掉的是「clone + 编�
 每步都报成功而动的是别人。校验靠 `simctl spawn <udid> launchctl list` 的 PID 与 `lsof`
 的监听 PID 相等（模拟器里的进程就是 macOS 进程）；两边有一边问不出来就放行，退回旧行为。
 
+⚠️ **2026-08-20 用户实测跑出两个洞并已修**：①端口从状态文件继承 → 旧状态里两台都是 8100，
+于是又都挑了 8100（现在只认 UDID 算出来的，且一律不复用 8100）②归属校验用 bundle id
+精确查 launchctl → iOS 的 label 带 `UIKitApplication:` 前缀，永远查不到，校验形同虚设，
+第二台直接复用了第一台的 WDA（现在列全表按子串找）。**修完待重验**
+
 ⚠️ **mac 上多台模拟器并行待真机验**（本机 Linux 只能验端口分配的单测）。
 验法：`bash scripts/verify-sim-parallel.sh <UDID-A> <UDID-B>`（不给参数会列出可选的）
 ——两台要**型号不同**，

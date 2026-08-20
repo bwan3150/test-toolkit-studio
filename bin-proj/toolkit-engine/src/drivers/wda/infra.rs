@@ -153,8 +153,10 @@ impl WdaDriver {
 
         let prev = Self::load_state(&self.udid);
         // 复用：状态文件记着端口、端口通、**并且那个端口确实是这台的**。
-        // 少了最后一条就会误连——两台模拟器都在跑时，8100 上应答的可能是任何一台
-        if let Some(state) = prev.as_ref().filter(|s| s.port != 0) {
+        // 少了最后一条就会误连——两台模拟器都在跑时，8100 上应答的可能是任何一台。
+        // 8100 一律不复用：那是 WDA 的出厂默认，**任何一台**没带 USE_PORT 起来的都在那儿，
+        // 旧状态文件里记的也是它——认它等于认了一个公共端口
+        if let Some(state) = prev.as_ref().filter(|s| s.port != 0 && s.port != WDA_DEVICE_PORT) {
             let base = format!("http://127.0.0.1:{}", state.port);
             if Self::wda_ready(&base) && self.owns_port(state.port) {
                 let hit = (base, state.clone());
@@ -165,11 +167,13 @@ impl WdaDriver {
             }
         }
 
-        // 端口：先用上次那个（同一台每次都是同一个端口，日志和抓包好对上），
-        // 被占了就按 UDID 算一个，再被占就让系统随便给一个
-        let port = [prev.as_ref().map(|s| s.port).unwrap_or(0), Self::sim_port(&self.udid)]
-            .into_iter()
-            .find(|p| *p != 0 && Self::port_free(*p))
+        // 端口**只认 UDID 算出来的那个**，不从状态文件继承。
+        // 继承过一次就出事了（用户实测）：旧版留下的状态文件里两台都写着 8100，
+        // 于是两台又都挑了 8100——「沿用上次」听着稳，实际是把历史包袱一路带下去。
+        // 算出来的被别人占了就往后挪，挪到空的为止
+        let want = Self::sim_port(&self.udid);
+        let port = (want..want.saturating_add(20))
+            .find(|p| Self::port_free(*p))
             .unwrap_or_else(Self::free_port);
 
         self.launch_wda_on_simulator(port)?;
@@ -202,24 +206,26 @@ impl WdaDriver {
         mine == listening
     }
 
-    /// 这台模拟器里 WDA runner 的进程号（没跑 → None）
+    /// 这台模拟器里 WDA runner 的进程号（没跑 → None）。
+    ///
+    /// ⚠️ **不能用 `launchctl list <bundle-id>`**：iOS 里 App 进程在 launchd 里的 label
+    /// 是 `UIKitApplication:com.facebook.…[0x…][rb-legacy]` 这种带前缀和随机后缀的东西，
+    /// 拿 bundle id 精确查永远查不到——用户实测就卡在这儿：两边 PID 都报 `?`，
+    /// 归属校验一路放行，于是第二台**直接复用了第一台的 WDA**（这正是要防的误连）。
+    /// 所以列全表再按 bundle id 找子串
     fn sim_wda_pid(&self) -> Option<u32> {
         let out = Command::new("xcrun")
-            .args(["simctl", "spawn", &self.udid, "launchctl", "list", WDA_SIM_BUNDLE])
+            .args(["simctl", "spawn", &self.udid, "launchctl", "list"])
             .output()
             .ok()?;
         if !out.status.success() {
             return None;
         }
-        // launchctl 的 plist 文本里有一行 `"PID" = 12345;`
-        String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
-            l.trim()
-                .strip_prefix("\"PID\" = ")?
-                .trim_end_matches(';')
-                .trim()
-                .parse()
-                .ok()
-        })
+        // 表格式：`PID\tStatus\tLabel`，没在跑的 PID 那列是 `-`
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find(|l| l.contains(WDA_SIM_BUNDLE))
+            .and_then(|l| l.split_whitespace().next()?.parse().ok())
     }
 
     /// 谁在监听这个端口
@@ -249,7 +255,10 @@ impl WdaDriver {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         udid.hash(&mut h);
-        WDA_DEVICE_PORT + (h.finish() % 100) as u16
+        // 从 8101 起，**有意跳过 8100**：那是 WDA 的出厂默认端口，
+        // 任何一台没带 USE_PORT 起来的 WDA 都在那儿（外部起的、旧版起的），
+        // 分到它就等于自愿跟所有人共用一个端口
+        WDA_DEVICE_PORT + 1 + (h.finish() % 99) as u16
     }
 
     /// 把 WebDriverAgent 拉进**模拟器**：装（幂等）→ 起在指定端口 → 等就绪。
@@ -312,6 +321,19 @@ impl WdaDriver {
             if Self::wda_ready(&base) {
                 return Ok(());
             }
+        }
+        // 指定端口不通、而**出厂默认的 8100 通**，几乎只有一个解释：
+        // 这个 runner 不认 USE_PORT，仍旧监听在 8100 上。这时候不说清楚，
+        // 人会一路去查模拟器锁屏、防火墙、WDA 版本——查的全是别的地方
+        if port != WDA_DEVICE_PORT
+            && Self::wda_ready(&format!("http://127.0.0.1:{}", WDA_DEVICE_PORT))
+        {
+            return Err(TkeError::DeviceError(format!(
+                "指定的端口 {} 不通，但默认的 {} 通了——这个 WebDriverAgent runner \
+                 不认 SIMCTL_CHILD_USE_PORT，还监听在出厂默认端口上。\
+                 多台模拟器并行会撞；单台跑不受影响。请把这条报回来（换个 runner 版本才能解）",
+                port, WDA_DEVICE_PORT
+            )));
         }
         Err(TkeError::DeviceError(format!(
             "WDA 起来了但 {} 一直不通（15 秒）。模拟器锁屏了？或者上一个 WDA 还占着这个端口",
@@ -398,12 +420,13 @@ mod tests {
         assert!(ports.len() >= 15, "20 台只分到 {} 个端口，太挤了", ports.len());
     }
 
-    /// 端口必须落在 8100..8200：再往上就撞进别人常用的段了
+    /// 端口必须落在 8101..8200，**且永远不是 8100**——
+    /// 那是 WDA 的出厂默认，分到它就等于跟所有外部起的 WDA 共用一个口
     #[test]
-    fn sim_port_stays_in_range() {
-        for i in 0..200 {
+    fn sim_port_stays_in_range_and_skips_default() {
+        for i in 0..300 {
             let p = WdaDriver::sim_port(&format!("sim-{}", i));
-            assert!((8100..8200).contains(&p), "端口 {} 越界", p);
+            assert!((8101..8200).contains(&p), "端口 {} 越界", p);
         }
     }
 }
