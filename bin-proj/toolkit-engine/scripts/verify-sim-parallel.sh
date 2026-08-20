@@ -12,7 +12,7 @@
 # 四件事，每件单独报成败：
 #   ① 两台各自拿到**不同端口**（状态文件里记着）
 #   ② 每个端口的监听进程 = 那台模拟器里 WDA 的进程（`lsof` PID vs `launchctl` PID）
-#   ③ 两个端口各要一张截图，分辨率各是各的（直接问 WDA，绕开会话）  ← 最关键
+#   ③ 给两台开不同 App，各端口报的前台各是各的（内容层面的证据）  ← 最关键
 #   ④ tke 层并发跑一步，证据各落各的目录
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -154,37 +154,52 @@ for pair in "A:${UDID_A}:${PORT_A}" "B:${UDID_B}:${PORT_B}"; do
     fi
 done
 
-# ── ③ 直接问各自的端口要一张截图，看是不是各自那台 ──（最关键）
+# ── ③ 给两台开**不同的 App**，再问各自的端口"你前台是谁" ──（最关键）
 #
 # ⚠️ **不能用 `device info` 验这件事**：模拟器的机型/系统 tke 是问 simctl 拿的，
 # 压根不经过 WDA——两台串了台它也照样报得对，等于什么都没验。
 #
-# 这里直接 curl WDA 的 `/screenshot`，**绕开 tke 的会话逻辑**：要验的是
-# 「这个端口背后是哪台设备」，不该被"前台有没有 App""会话建没建起来"干扰。
-# 型号不同 → 分辨率不同 → 串台一眼看得出来。
-printf '\n%s③ 两个端口各给一张截图，分辨率各是各的%s\n' "${Y}" "${N}"
+# ⚠️ **也不能只比分辨率**：用户实测 iPhone 17 Pro 与 16 Pro 都是 1206×2622，
+# 两边一样根本判不出是串台还是本来就同尺寸。改成给两台开不同的 App——
+# 一台设置、一台 Safari，然后问每个端口的 WDA「你前台是哪个 bundle id」。
+# 这是**内容层面**的证据，跟型号、尺寸都无关。
+printf '\n%s③ 两台开不同 App，各端口报的前台各是各的%s\n' "${Y}" "${N}"
+APP_A=com.apple.Preferences      # 设置
+APP_B=com.apple.mobilesafari     # Safari
+xcrun simctl launch "${UDID_A}" "${APP_A}" >/dev/null 2>&1
+xcrun simctl launch "${UDID_B}" "${APP_B}" >/dev/null 2>&1
+sleep 2
+
+active_of(){
+    curl -s --max-time 15 "http://127.0.0.1:$1/wda/activeAppInfo" | python3 -c "
+import json,sys
+try: print(json.load(sys.stdin)['value'].get('bundleId',''))
+except Exception: print('')"
+}
+FG_A=$(active_of "${PORT_A}"); FG_B=$(active_of "${PORT_B}")
+note "A 端口 ${PORT_A} 前台 → ${FG_A:-（问不到）}   期望 ${APP_A}"
+note "B 端口 ${PORT_B} 前台 → ${FG_B:-（问不到）}   期望 ${APP_B}"
+if [ -z "${FG_A}" ] || [ -z "${FG_B}" ]; then
+    fail "有一边问不到前台 —— WDA 没起来？先看 ②"
+elif [ "${FG_A}" = "${FG_B}" ]; then
+    fail "两个端口报的是同一个 App（${FG_A}）—— **串台了**"
+elif [ "${FG_A}" = "${APP_A}" ] && [ "${FG_B}" = "${APP_B}" ]; then
+    ok "各端口连着自己那台（设置 / Safari）—— 没串台"
+else
+    bad "前台跟期望对不上，自己看上面两行判断（App 可能没起来）"
+fi
+
+# 附带一条：分辨率。同尺寸机型上它判不了串台，但截图能不能要得到本身也是个信息
 shot_size_via_wda(){
     curl -s --max-time 20 "http://127.0.0.1:$1/screenshot" | python3 -c "
 import base64,json,struct,sys
 try:
     b=base64.b64decode(json.load(sys.stdin)['value'])
-    # PNG 的 IHDR 就在头 24 字节里：宽高各一个大端 u32
-    w,h=struct.unpack('>II', b[16:24])
+    w,h=struct.unpack('>II', b[16:24])   # PNG 的宽高就在头 24 字节的 IHDR 里
     print(f'{w}x{h}')
 except Exception: print('')"
 }
-SIZE_A=$(shot_size_via_wda "${PORT_A}")
-SIZE_B=$(shot_size_via_wda "${PORT_B}")
-note "A ${NAME_A} (端口 ${PORT_A}) → ${SIZE_A:-（要不到截图）}"
-note "B ${NAME_B} (端口 ${PORT_B}) → ${SIZE_B:-（要不到截图）}"
-if [ -z "${SIZE_A}" ] || [ -z "${SIZE_B}" ]; then
-    fail "有一边要不到截图 —— WDA 没起来？先看 ② 的 PID 有没有"
-elif [ "${SIZE_A}" = "${SIZE_B}" ]; then
-    bad "两边分辨率一样（${SIZE_A}）—— **可能串台，也可能这两台本来就同尺寸**"
-    note "换一台屏幕明显不同的再验（比如 iPhone SE 配 iPhone 17 Pro Max）"
-else
-    ok "两个端口各连着自己那台（${SIZE_A} / ${SIZE_B}）—— 没串台"
-fi
+note "截图尺寸 A $(shot_size_via_wda "${PORT_A}")  B $(shot_size_via_wda "${PORT_B}")"
 
 # ── ④ tke 层并发：两条命令同时跑，各自出各自的产物 ──
 printf '\n%s④ tke 并发跑一步，证据各落各的目录%s\n' "${Y}" "${N}"
@@ -198,8 +213,13 @@ PID_B=$!
 wait "${PID_A}"; wait "${PID_B}"
 for pair in "par-a:${LOG_A}:${OUT_A}" "par-b:${LOG_B}:${OUT_B}"; do
     TAG="${pair%%:*}"; REST="${pair#*:}"; L="${REST%%:*}"; O="${REST##*:}"
-    if [ -e "${L}/report.html" ]; then
-        ok "${TAG} 有报告"
+    if [ -e "${L}/screenshots" ]; then
+        ok "${TAG} 有报告与截图"
+    elif [ -e "${L}/report.html" ]; then
+        # 报告有、截图没有 = 采集那步失败了。③ 已经把两台的前台都拉成真 App，
+        # 这时还没截图，就不是"前台是桌面"那个老原因了
+        fail "${TAG} 有报告但**没有截图**，输出："
+        sed 's/^/      /' "${O}" | head -6
     else
         fail "${TAG} 没有报告，输出："
         sed 's/^/      /' "${O}" | head -6

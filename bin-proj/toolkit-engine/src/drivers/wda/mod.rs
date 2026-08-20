@@ -143,14 +143,23 @@ impl WdaDriver {
         // 没有会话就**附着当前前台 App** 建一个。
         // 「App 已经开着，我只想看看这一页」是最常见的诉求，不该逼人先 `启动 [BundleID]`
         // ——那会重启 App，把要看的现场毁掉。
+        //
+        // ⚠️ **失败的原因要原样透出去**（INV-9）。这里原来是 `if let Ok(..)`，把 attach 的
+        // 真实错误吞掉、换成一句泛泛的"无活动 WDA 会话"——而被吞的那句恰恰是有用的那句
+        //（"现在前台是桌面（主屏幕）…用 `启动 [你的BundleID]` 把它拉回来"）。
+        // 用户实测撞上：两台模拟器里前台没 App 的那台只报"无活动会话"，
+        // 看不出到底是没建成会话，还是附到了旁观者身上
         drop(guard);
-        if let Ok(conn) = self.attach_foreground(&base, state) {
-            return Ok(conn);
-        }
-
-        Err(TkeError::DeviceError(
-            "无活动 WDA 会话，请先执行 启动 [BundleID] 或 control launch <BundleID>".to_string(),
-        ))
+        self.attach_foreground(&base, state).map_err(|e| match &e {
+            // 连 /session 都没建起来，才是真的"没有会话"，这时才补下一步该敲什么
+            TkeError::DeviceError(msg) if msg.starts_with("附着当前 App 失败") => {
+                TkeError::DeviceError(format!(
+                    "{}{}没有活动会话——用 `启动 [BundleID]` 或 `control launch <BundleID>` 起一个",
+                    msg, "\n\u{3000}"
+                ))
+            }
+            _ => e,
+        })
     }
 
     /// 取活动会话，不存在则新建（仅供 启动 使用）
