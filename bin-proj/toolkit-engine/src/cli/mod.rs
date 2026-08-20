@@ -4,6 +4,8 @@
 // --help 总览渲染
 pub mod help;
 
+/// tke doctor：体检报告的排版（分组 + 对齐；采集在这里，下载在 fix）
+pub mod doctor;
 /// tke fix：补齐缺失的运行依赖（唯一会联网下载的命令）
 pub mod fix;
 

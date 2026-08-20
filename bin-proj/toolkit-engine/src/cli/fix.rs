@@ -20,25 +20,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::cli::doctor::{dim, section, sym_dot, sym_err, sym_ok, sym_warn, wda_app_dir, wda_app_path, Dep, Health};
 use tke::utils::deps;
 use tke::{Result, TkeError};
-
-// ── 外观 ──（与 install.sh / install.ps1 同一套：符号 + 颜色，**不用 emoji**——
-// 等宽终端里对不齐，SSH/CI 日志里还常变成方块）
-fn tty() -> bool {
-    std::io::IsTerminal::is_terminal(&std::io::stdout())
-}
-fn c(code: &str) -> String {
-    if tty() { format!("\x1b[{}m", code) } else { String::new() }
-}
-fn sym_ok() -> String { format!("{}✓{}", c("38;5;42"), c("0")) }
-fn sym_warn() -> String { format!("{}!{}", c("38;5;214"), c("0")) }
-fn sym_err() -> String { format!("{}✗{}", c("38;5;203"), c("0")) }
-fn sym_dot() -> String { format!("{}·{}", c("38;5;245"), c("0")) }
-fn dim(s: &str) -> String { format!("{}{}{}", c("38;5;245"), s, c("0")) }
-fn section(title: &str) {
-    println!("\n{}{}▸ {}{}", c("1"), c("38;5;39"), title, c("0"));
-}
 
 const DEFAULT_BASE_URL: &str = "https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke";
 
@@ -77,17 +61,6 @@ impl FixArgs {
     }
 }
 
-/// 一件缺失的依赖
-struct Missing {
-    /// 分发源上的名字（bin/<platform>/<name>.gz）
-    name: &'static str,
-    /// 给人看的说明
-    what: &'static str,
-    /// 大概多大（分发源不一定支持 HEAD，写死一个量级让人有预期）
-    size: &'static str,
-    /// true=zip 包（Chrome），false=单文件 gz
-    is_chrome: bool,
-}
 
 pub async fn handle(args: FixArgs) -> Result<()> {
     handle_as(args, false).await
@@ -104,72 +77,51 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
 
     let exe_dir = tke_dir()?;
     let platform = platform_tag()?;
+    let deps_now = detect_deps(&exe_dir, &args.profile);
+    let health = Health::probe(&exe_dir, &platform, &args.profile);
 
+    // 报告先整张打出来（分组 + 对齐，排版规则见 doctor.rs），
+    // 下载与否都从**同一张体检表**出发——`--fix` 不该给人另一套面貌
     section("DOCTOR");
-    println!("  {} {}", dim("平台    "), platform);
-    println!("  {} {}", dim("落点    "), exe_dir.display());
-    report_shell_path(&exe_dir);
+    health.print(&deps_now);
 
-    let missing = detect_missing(&exe_dir, &args.profile);
-    let wants_ios = args.profile == "ios" || args.profile == "all";
-    let ios_blocked = wants_ios && !tke::utils::capability::ios_supported();
-
-    // iOS 门禁要说出来：被挡住时 missing 是空的，光看"依赖已就绪"会以为这台机器什么都能做
-    let ios_note = || {
-        if ios_blocked {
-            println!("  {} {}", dim("iOS     "), dim("不支持 · 需 macOS"));
-        } else if wants_ios && !upstream_has_go_ios() {
-            println!("  {} {}", dim("iOS     "), dim("不支持 · go-ios 无 32 位 Windows 版"));
-        }
-    };
-
-    if missing.is_empty() {
-        // 依赖状态是**一项检查**，不是结论——结论统一放最后那行（见 print_health 收尾）
-        if args.profile == "ios" && (ios_blocked || !upstream_has_go_ios()) {
-            println!("  {} {}", dim("依赖    "), dim("无需补齐 · 此机型不支持 iOS"));
-        } else {
-            println!("  {} {} {}", dim("依赖    "), "已就绪", dim(&format!("· {}", args.profile)));
-        }
-        ios_note();
-        if download {
-            // 二进制都齐了不代表没事干：模拟器还要 WDA runner
-            let nonce = std::process::id();
-            let tmp = std::env::temp_dir().join(format!("tke-fix-{}", nonce));
-            let _ = std::fs::create_dir_all(&tmp);
-            fix_sim_wda(&base_url, &format!("?t={}", nonce), &tmp, &args.profile);
-            let _ = std::fs::remove_dir_all(&tmp);
-        } else {
-            print_health(&exe_dir, 0, &args.profile);
-        }
-        return Ok(());
-    }
-
-    println!("  {} {} {}", dim("依赖    "), format!("缺 {} 项", missing.len()), dim(&format!("· {}", args.profile)));
-    for m in &missing {
-        println!("    {} {:<16} {}{}", sym_err(), m.name, m.what, dim(&format!("（约 {}）", m.size)));
-    }
-    ios_note();
+    let missing: Vec<&Dep> = deps_now.iter().filter(|d| !d.present).collect();
 
     // arm64 Linux：浏览器与安卓那套驱动上游就没有官方包，下了也是白下
-    if !upstream_has_drivers() {
+    if !missing.is_empty() && !upstream_has_drivers() {
         let need_drivers = missing.iter().any(|m| m.is_chrome || m.name != "go-ios");
         if need_drivers {
-            println!("⚠️  arm64 Linux 上游没有官方驱动包（Chrome for Testing 与 Google 的");
+            println!();
+            println!("  {} arm64 Linux 上游没有官方驱动包（Chrome for Testing 与 Google 的", sym_warn());
             println!("    platform-tools 都不出这个架构），分发源自然也没有。请改用发行版自带的：");
             println!("      sudo apt install -y chromium chromium-driver adb");
             println!("    再把 chromium-driver 的 chromedriver 软链到 tke 同目录（tke 只在那儿找）：");
             println!("      ln -sf \"$(command -v chromedriver)\" \"{}/chromedriver\"", exe_dir.display());
             println!("    go-ios 有 arm64 版，`tke fix --profile ios` 照常能补。");
-            println!();
         }
     }
 
     if !download {
-        print_health(&exe_dir, missing.len(), &args.profile);
-        // 只体检不下载：退出码非 0，CI 可以据此判断环境是否就绪
-        std::process::exit(1);
+        health.print_verdict(missing.len());
+        if !missing.is_empty() {
+            // 只体检不下载：退出码非 0，CI 可以据此判断环境是否就绪
+            std::process::exit(1);
+        }
+        return Ok(());
     }
 
+    // ── 以下是 `--fix`：真的要联网下载了 ──
+    if missing.is_empty() {
+        // 二进制都齐了不代表没事干：模拟器还要 WDA runner
+        let nonce = std::process::id();
+        let tmp = std::env::temp_dir().join(format!("tke-fix-{}", nonce));
+        let _ = std::fs::create_dir_all(&tmp);
+        fix_sim_wda(&base_url, &format!("?t={}", nonce), &tmp, &args.profile);
+        let _ = std::fs::remove_dir_all(&tmp);
+        return Ok(());
+    }
+
+    println!();
     if !args.yes && !confirm("  要现在下载补齐吗？")? {
         println!("  {}", dim("已取消；需要时再跑 tke doctor --fix"));
         return Ok(());
@@ -216,7 +168,8 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
 
     println!();
     // 复验：以"现在还缺不缺"为准，而不是以"下载有没有报错"为准
-    let still = detect_missing(&exe_dir, &args.profile);
+    let still: Vec<Dep> =
+        detect_deps(&exe_dir, &args.profile).into_iter().filter(|d| !d.present).collect();
     if still.is_empty() {
         println!("  {} 补齐了", sym_ok());
         Ok(())
@@ -232,181 +185,6 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
             println!("   手动装的办法见 skill 的 README，或换 --base-url 指向你自己的源。");
         }
         std::process::exit(1);
-    }
-}
-
-/// 新开的终端里还能不能直接敲 `tke`——**只看 shell rc 文件的内容**。
-///
-/// 为什么不看 `command -v tke` / 当前 PATH：**当前进程能跑，什么都证明不了**。
-/// PATH 可能是刚才手动 `export` 的，也可能是安装脚本临时加的，窗口一关就没了。
-/// 用户真踩过（P-33）：doctor 一路绿灯说"全局已就绪"，开个新 tab 就 `tke: command not found`。
-/// 体检报的是"这台机器行不行"，不是"这个窗口行不行"。
-///
-/// 返回 `None` = 无从判断（Windows 的 PATH 在注册表里，不归 rc 文件管）。
-fn path_persisted(exe_dir: &Path) -> Option<bool> {
-    if cfg!(windows) {
-        return None;
-    }
-    // 装进系统默认目录的（比如自己 cp 到 /usr/local/bin），rc 里当然不会有，但它本来就持久
-    let dir = exe_dir.to_string_lossy().to_string();
-    if matches!(
-        dir.as_str(),
-        "/usr/local/bin" | "/usr/bin" | "/bin" | "/opt/homebrew/bin" | "/usr/local/sbin"
-    ) {
-        return Some(true);
-    }
-    let home = PathBuf::from(std::env::var_os("HOME")?);
-    // 覆盖 zsh / bash / sh 三种；任一命中就算数（新终端只会读其中之一）
-    let hit = [".zshrc", ".zprofile", ".bashrc", ".bash_profile", ".profile"]
-        .iter()
-        .any(|f| {
-            std::fs::read_to_string(home.join(f))
-                .map(|s| s.contains(&dir))
-                .unwrap_or(false)
-        });
-    Some(hit)
-}
-
-/// 体检里那一行。只有**不持久**时才出声——正常状态多一行就是噪音。
-fn report_shell_path(exe_dir: &Path) {
-    if path_persisted(exe_dir) == Some(false) {
-        println!("  {} {}", dim("新终端  "), "找不到 tke · PATH 没写进 shell 配置");
-        println!(
-            "    {}",
-            dim(&format!("补：echo 'export PATH=\"{}:$PATH\"' >> ~/.zshrc", exe_dir.display()))
-        );
-    }
-}
-
-/// 依赖之外的环境状况——设备连没连、版本跟不跟得上、证据落哪儿、跑有头还是无头。
-///
-/// 放进 `tke fix --check` 而不是再写一个体检脚本：**一份 Rust 实现三平台通用**。
-/// 早先的 `check-env.sh` 是 bash，Windows 用户根本跑不了，而 Windows 恰恰是
-/// 「同事跑完 Claude Code 要验一遍」的主力平台。
-fn print_health(exe_dir: &Path, missing: usize, profile: &str) {
-
-    // 安卓设备：adb 在才问它，不然徒增一条看不懂的报错
-    if deps::present_in(exe_dir, "adb") {
-        let adb = exe_dir.join(if cfg!(windows) { "adb.exe" } else { "adb" });
-        match Command::new(&adb).arg("devices").output() {
-            Ok(o) => {
-                let list: Vec<String> = String::from_utf8_lossy(&o.stdout)
-                    .lines()
-                    .skip(1)
-                    .filter_map(|l| {
-                        let mut it = l.split_whitespace();
-                        match (it.next(), it.next()) {
-                            (Some(id), Some("device")) => Some(id.to_string()),
-                            _ => None,
-                        }
-                    })
-                    .collect();
-                if list.is_empty() {
-                    println!("  {} {}", dim("设备    "), dim("未连接"));
-                } else {
-                    println!("  {} {}", dim("设备    "), list.join(" · "));
-                }
-            }
-            Err(e) => println!("  {} {}", dim("设备    "), dim(&format!("adb 不可用：{}", e))),
-        }
-    }
-
-    // 版本：跟分发源比一下，免得一直用着旧的。取不到就静默跳过（离线/内网照常用）。
-    // max_age=0 = 手动跑 doctor 时**强制联网**，不吃缓存——人特地来问，就给他最新的答案。
-    // 只报"不一致"，不摆箭头暗示方向——本地可能是刚编出来的、比分发源还新。
-    let local = env!("BUILD_VERSION");
-    let st = tke::utils::update::check(0);
-    match &st {
-        None => println!("  {} {} {}", dim("版本    "), local, dim("· 离线，未校验")),
-        Some(s) if s.tke_stale => {
-            // 只说"有新的"，版本号细节走 dim——人要的是"该不该动手"，不是两串数字对比
-            println!(
-                "  {} {} {}",
-                dim("版本    "),
-                "可用更新",
-                dim(&format!("· {} → {}", local, s.remote.tke))
-            );
-        }
-        Some(_) => println!("  {} {} {}", dim("版本    "), "已是最新", dim(&format!("· {}", local))),
-    }
-
-    // skill 新鲜度：**这条是这次体检最要紧的一行**。tke 二进制版本号只在 bump 时才变，
-    // 而 SKILL.md 天天改——只比版本号的话，用户抱着两天前的旧文档，体检照样说"一致"
-    // （Q-11 就是这么发生的：改完的四个修复根本没送到用户手上）。
-    if let Some(s) = &st {
-        match (&s.skill_dir, &s.local_skill_build) {
-            (Some(_), Some(_)) if s.skill_stale => {
-                println!(
-                    "  {} {} {}",
-                    dim("skill   "),
-                    "可用更新",
-                    dim(&format!("· {}", s.remote.build))
-                );
-            }
-            (Some(_), Some(_)) => println!("  {} {}", dim("skill   "), "已是最新"),
-            // 老安装器装的没写版本文件——不当成过期（无从判断），但要说清为什么看不出来
-            (Some(dir), None) => {
-                println!("  {} {}", dim("skill   "), dim("无版本信息 · 由旧安装器安装"));
-                println!("    {}", dim(&format!("{}", dir.display())));
-            }
-            (None, _) => println!("  {} {}", dim("skill   "), dim("未安装")),
-        }
-    }
-
-    // 模拟器要有 WDA runner 才操作得了。**只报状态、不进"缺 N 项"**：
-    // 它只影响模拟器，安卓/网页/iOS 真机都不靠它，算进"环境不完整"会误导。
-    // 但不说的话就是那个最难查的组合：模拟器列得出来、命令也不报错，就是点不动
-    if cfg!(target_os = "macos") && matches!(profile, "ios" | "all") {
-        if wda_app_path().is_some() {
-            println!("  {} {}", dim("iOS模拟器"), "可操作 · WebDriverAgent 已装");
-        } else {
-            println!(
-                "  {} {}",
-                dim("iOS模拟器"),
-                "缺 WebDriverAgent · tke doctor --fix --profile ios"
-            );
-        }
-    }
-
-    // 日志落点：人找报告时不用回头问 AI
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        let logs = PathBuf::from(home).join(".tke").join("logs");
-        println!("  {} {}", dim("日志落点"), logs.display());
-    }
-
-    // 体检只报**状态**，不教用法（怎么开窗口是 `--help` 的事）。
-    // 无桌面时补一句环境事实——那不是用法，是"这台机器开不了窗口"这个约束本身。
-    if tke::utils::params::desktop_available() {
-        println!("  {} {}", dim("浏览器  "), "无头运行");
-    } else {
-        println!("  {} {} {}", dim("浏览器  "), "无头运行", dim("· 本机无图形界面"));
-    }
-
-    // ── 结论 ──（对钩在最后：上面每行是一项检查，这行才是"到底行不行"）
-    println!();
-    if missing == 0 && path_persisted(exe_dir) == Some(false) {
-        // 依赖齐了但 PATH 没落地——**不能说"全局已就绪"**，它恰恰只在这个窗口里就绪
-        println!("  {} {}", sym_warn(), "当前窗口可用 · 新终端里还找不到 tke");
-    } else if missing == 0 {
-        println!("  {} {}", sym_ok(), "全局已就绪");
-    } else {
-        println!(
-            "  {} 环境不完整 · 缺 {} 项{}",
-            sym_err(),
-            missing,
-            dim("　补齐：tke doctor --fix")
-        );
-    }
-    // 更新提示只出现一次：tke 和 skill 谁旧都是同一条命令，分开说两遍是噪音
-    if let Some(s) = st.as_ref().filter(|s| s.any_stale()) {
-        println!("  {} 有可用更新{}", sym_warn(), dim("　更新：tke update"));
-        // skill 旧的时候多说一句：调用方 AI 的上下文里那份是会话开始时加载的，
-        // 只换磁盘文件它是不知道的——不重读等于白更新
-        if s.skill_stale {
-            // 给调用方 AI 的指示（P-41）。**只说做什么,不解释为什么**——
-            // 理由写在 SKILL.md 里,这一行是提醒不是教程
-            println!("    {}", dim("更新后重读 SKILL.md"));
-        }
     }
 }
 
@@ -428,17 +206,6 @@ fn fix_sim_wda(base_url: &str, q: &str, tmp: &Path, profile: &str) {
             println!("  {}", dim("（不影响安卓 / 网页 / iOS 真机——只是模拟器还操作不了）"));
         }
     }
-}
-
-/// 模拟器用的 WDA runner 装在哪（`~/.tke/wda/WebDriverAgentRunner-Runner.app`）。
-/// **与 drivers/wda/infra.rs 的 find_wda_app 必须同一口径**
-fn wda_app_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".tke").join("wda"))
-}
-
-fn wda_app_path() -> Option<PathBuf> {
-    let p = wda_app_dir()?.join("WebDriverAgentRunner-Runner.app");
-    p.exists().then_some(p)
 }
 
 /// 下载并解开模拟器版 WDA。
@@ -496,9 +263,14 @@ fn install_sim_wda(base: &str, q: &str, tmp: &Path) -> Result<()> {
     Ok(())
 }
 
+
 // ── 检测 ────────────────────────────────────────────────────────────────
 
-fn detect_missing(exe_dir: &Path, profile: &str) -> Vec<Missing> {
+
+/// 这个 profile 该有哪些依赖，以及**每一项现在在不在**。
+///
+/// 返回全量而不是只返回缺的：体检要说得出「7 项已就绪」，光有缺失列表数不出分母。
+fn detect_deps(exe_dir: &Path, profile: &str) -> Vec<Dep> {
     let mut out = Vec::new();
     let want_web = profile == "web" || profile == "all";
     let want_android = profile == "android" || profile == "all";
@@ -507,52 +279,51 @@ fn detect_missing(exe_dir: &Path, profile: &str) -> Vec<Missing> {
     if want_web {
         // chromedriver 必须与 tke 同目录：ToolManager 只搜同目录、不回退 PATH，
         // 版本配对就靠这个约束
-        if !deps::present_in(exe_dir, "chromedriver") {
-            out.push(Missing {
-                name: "chromedriver",
-                what: "驱动浏览器所需",
-                size: "20MB",
-                is_chrome: false,
-            });
-        }
-        if deps::chrome_for_testing_bin().is_none() {
-            out.push(Missing {
-                name: "chrome",
-                what: "Chrome for Testing 浏览器本体",
-                size: "600MB",
-                is_chrome: true,
-            });
-        }
+        out.push(Dep {
+            name: "chromedriver",
+            what: "驱动浏览器所需",
+            size: "20MB",
+            is_chrome: false,
+            present: deps::present_in(exe_dir, "chromedriver"),
+        });
+        out.push(Dep {
+            name: "chrome",
+            what: "Chrome for Testing 浏览器本体",
+            size: "600MB",
+            is_chrome: true,
+            present: deps::chrome_for_testing_bin().is_some(),
+        });
     }
     if want_android {
-        if !deps::present_in(exe_dir, "adb") {
-            out.push(Missing {
-                name: "adb",
-                what: "连接安卓设备所需",
-                size: "10MB",
-                is_chrome: false,
-            });
-        } else if cfg!(windows) && !exe_dir.join("AdbWinApi.dll").is_file() {
-            // adb.exe 在、DLL 不在：一样跑不起来，而且报错很难懂
-            // （从别处拷 adb.exe 过来最容易出现这种半装状态）
-            out.push(Missing {
+        let adb = deps::present_in(exe_dir, "adb");
+        out.push(Dep {
+            name: "adb",
+            what: "连接安卓设备所需",
+            size: "10MB",
+            is_chrome: false,
+            present: adb,
+        });
+        // adb.exe 在、DLL 不在：一样跑不起来，而且报错很难懂
+        // （从别处拷 adb.exe 过来最容易出现这种半装状态）
+        if cfg!(windows) && adb {
+            out.push(Dep {
                 name: "AdbWinApi.dll",
                 what: "adb.exe 缺了它起不来",
                 size: "0.1MB",
                 is_chrome: false,
+                present: exe_dir.join("AdbWinApi.dll").is_file(),
             });
         }
     }
-    // 上游没这个平台的包时不报"缺"——报了也补不上，只会让人反复试
-    // 宿主机做不了 iOS 就不报"缺 go-ios"——补上也用不了（门禁在 Controller 那层）
-    if want_ios && tke::utils::capability::ios_supported() && upstream_has_go_ios()
-        && !deps::present_in(exe_dir, "go-ios")
-    {
-        out.push(Missing {
+    // 上游没这个平台的包时不列——报了也补不上，只会让人反复试。
+    // 宿主机做不了 iOS 也不列（门禁在 Controller 那层，补上也用不了）
+    if want_ios && tke::utils::capability::ios_supported() && upstream_has_go_ios() {
+        out.push(Dep {
             name: "go-ios",
             what: "连接 iOS 设备所需",
             size: "23MB",
             is_chrome: false,
+            present: deps::present_in(exe_dir, "go-ios"),
         });
     }
     out
@@ -809,3 +580,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
