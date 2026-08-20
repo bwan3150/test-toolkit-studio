@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-20
-Last-Commit: 49e9b9c1
+Last-Commit: e79b4065
 ---
 
 # 当前状态
@@ -33,6 +33,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | skill（给 AI 设备操控+证据） | ✅ 可用,**跨设备待用户 mac 实测** | **ADR-0010**。**只做一次性检查+留证据,不产 .tks/.tklib、不回放**(与 harness 是两个东西)。`skill/tke-ui-test/`:主文件精干 + `reference/pitfalls.md` 踩坑册(新坑往里加,别撑大主文件)。`/tke-ui-test` 斜杠可调 |
 | **iOS 模拟器** | ✅ **端到端跑通并已分发**(2026-08-19 用户实测) | ADR-0017。`-d sim:<UDID>`,与真机**同一套 WDA**,只有"怎么连上"不同(真机 USB 隧道 / 模拟器直连 8100)。`doctor --fix --profile ios` 下预编译 runner(21MB,arm64+x86_64 fat 包)到 `~/.tke/wda/`,tke 自己 `simctl install/launch`——**不碰 Xcode、不装 brew、不编译**。路线拐过一次弯(WDA→idb→WDA),原因见 ADR-0017「修订」 |
 | **设备发现 `tke device list`** | ✅ 本机+用户实测 | 四端统一(安卓/iOS真机/iOS模拟器/浏览器),第一列就是 `-d` 的值;**查不了的那类单独说明原因**("没装 adb 是没查不是没连")。harness 向导也改走它——同一个问题不该有两套答案 |
+| **报告可读性** | ✅ 本机实测 | 手机竖屏图限高 56vh + **点击就地展开**(纯 CSS,不引 JS);图下方三个链接:原图/元素表/**原始页面**;设备栏显示友好名。`--summary -` **从标准输入读**(heredoc 一步给长 Markdown,不用再写临时文件) |
 | **环境起停 boot/shutdown** | ✅ 本机实测 | `control boot [--headless=off]` / `control shutdown`;tks `启动环境 [有头]` / `关闭环境`。**boot 管环境本身,launch 管环境里的东西**——早先浏览器是被第一条 web 命令顺带起来的,脚本里看不出它何时起、以什么模式起。iOS 模拟器 `simctl boot` + bootstatus 等就绪;**安卓模拟器明说不支持**(要 SDK 的 emulator + AVD 名) |
 | **iOS 密码脱敏** | ✅ 已修(P-45) | XCUI 归一化**从来没输出 password 属性**,于是 iOS 上密码明文进 log/报告/截图横幅——而注释还写着"三平台同一条路"。安卓原生有、web 已对齐,**唯独 iOS 漏了整整一个平台**。两个单测钉住 |
 | **设备显示名** | ✅ 本机实测 | `Controller::describe()`:`iPhone 17 Pro · iOS 26.0（模拟器）`/`Pixel 7（安卓 14）`/`Chrome（无头）`。报告显示它而不是 UUID;**换设备的判断仍用设备 ID**——同型号模拟器 label 会撞(单测钉着) |
