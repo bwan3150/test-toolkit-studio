@@ -163,6 +163,19 @@ impl WebDriver {
         // (`--headless` 老实现) 是另一套精简渲染，截图会和有头对不上。
         // **窗口尺寸/缩放因子照旧固定**：脚本里的像素坐标要在有头录、无头回放之间可移植。
         let headless = crate::utils::params::web_headless().resolve();
+        // 要开窗口但这台机器根本没有图形界面 → **在这儿拦下并说清楚**。
+        // 不拦的话 Chrome 会起来立刻退出,chromedriver 只回一句
+        // 「Chrome instance exited. Examine ChromeDriver verbose log」——
+        // 人得去翻日志才知道是没有 DISPLAY,而那跟"要开窗口"隔着好几层
+        if !headless && !crate::utils::params::desktop_available() {
+            return Err(TkeError::DeviceError(
+                concat!(
+                    "这台机器没有图形界面（没有 DISPLAY / WAYLAND_DISPLAY），开不了有窗口的浏览器。\n",
+                    "\u{3000}去掉 --headless=off，用无头跑（渲染结果与有头一致）"
+                )
+                    .into(),
+            ));
+        }
         if headless {
             args.push("--headless=new".to_string());
             args.push("--disable-gpu".to_string());

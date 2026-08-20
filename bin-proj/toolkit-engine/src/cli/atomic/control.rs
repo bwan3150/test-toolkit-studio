@@ -137,15 +137,13 @@ pub enum ControlCommands {
     ///
     /// 跟 `launch` 是两件事：launch 是"在环境里打开某个 App/网址"，
     /// boot 是"把环境本身弄起来"。写在脚本第一行，读的人一眼知道它需要什么
-    Boot {
-        /// 开窗口（默认：浏览器无头 / 模拟器显示窗口）
-        ///
-        /// ⚠️ **没有 `--headless`**：无头本来就是默认，而且**全局已经有一个
-        /// `--headless=<mode>`**——子命令再定义同名开关会直接 panic
-        /// （clap 的定义与访问类型对不上，`--cache` 撞过同一个坑）
-        #[arg(long)]
-        headed: bool,
-    },
+    /// 有头/无头用**全局的** `--headless=<auto|on|off>`（可以写在这条子命令后面）：
+    ///   tke -d web control boot                    # 默认无头
+    ///   tke -d web control boot --headless=off     # 开窗口
+    ///
+    /// ⚠️ 这里**不再单开 `--headed`**：同一件事两个开关，用的人要先想用哪个；
+    /// 而且子命令定义同名参数会直接 panic（P-44）
+    Boot,
     /// 关掉运行环境: 关浏览器进程 / 模拟器关机
     ///
     /// 与 `close` 分开：close 关的是环境**里面**的东西（App / 标签页）
@@ -214,10 +212,8 @@ fn to_action(cmd: ControlCommands, device: &str) -> Result<ControlAction> {
             }),
         },
         ControlCommands::Key { code } => ControlAction::Key { code },
-        // 不加 --headed 就用全局设置（浏览器默认无头；要强制无头用全局 --headless=on）
-        ControlCommands::Boot { headed } => {
-            ControlAction::Boot { headed: headed.then_some(true) }
-        }
+        // 模式一律看全局 --headless（写在子命令后面也认）——见 Boot 的文档注释
+        ControlCommands::Boot => ControlAction::Boot { headed: None },
         ControlCommands::Shutdown => ControlAction::Shutdown,
         ControlCommands::BrowserReset => ControlAction::BrowserReset,
         ControlCommands::BrowserEval { script } => ControlAction::BrowserEval { script },

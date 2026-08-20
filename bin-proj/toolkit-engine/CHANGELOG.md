@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-20 · 有头/无头统一到一个开关
+用户:「为啥有的用 --headed 有的用 --headless,统一一下」。
+- **删掉 `control boot --headed`**。全局的 `--headless=<auto|on|off>` **可以写在子命令
+  后面**（实测 `control boot --headless=on -d web` 就能跑），所以那个开关纯属多余——
+  同一件事两个写法，用的人得先想用哪个
+- tks 脚本里仍是中文参数 `启动环境 [有头]`（脚本里写 `--headless=off` 很怪），
+  但走的是同一条实现
+- **fix** 要开窗口而机器没有图形界面时，chromedriver 只回一句
+  「Chrome instance exited. Examine ChromeDriver verbose log」——人得去翻日志才知道
+  是没有 DISPLAY。改成**建会话前就拦下**并说清楚该怎么办
+
 ### 2026-08-20 · `boot` / `shutdown`：环境的起停从「魔法」变成显式一步
 用户提出:浏览器现在是**第一条 web 命令顺带起来的**,脚本里看不出它什么时候起的、
 以什么模式起的,AI 也无从判断"现在有没有环境";而且 `close` 语义重载

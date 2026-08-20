@@ -46,8 +46,8 @@ tke 已经归一化掉了，你不用关心。
 ## 环境：起 / 关
 
 ```bash
-tke -d web control boot                  # 起浏览器（无头）
-tke -d web control boot --headed         # 开窗口
+tke -d web control boot                     # 起浏览器（无头）
+tke -d web control boot --headless=off      # 开窗口（要人手动登录时用）
 tke -d sim:<UDID> control boot           # 开 iOS 模拟器（并等它就绪）
 tke -d <设备> control shutdown           # 关浏览器进程 / 模拟器关机
 ```
