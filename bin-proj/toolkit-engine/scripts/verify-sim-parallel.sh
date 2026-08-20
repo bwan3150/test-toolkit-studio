@@ -12,8 +12,8 @@
 # 四件事，每件单独报成败：
 #   ① 两台各自拿到**不同端口**（状态文件里记着）
 #   ② 每个端口的监听进程 = 那台模拟器里 WDA 的进程（`lsof` PID vs `launchctl` PID）
-#   ③ **并发** refresh，两边的分辨率各是各的（必须走 WDA 那个端口的路）  ← 最关键
-#   ④ 两边的证据各落各的目录
+#   ③ 两个端口各要一张截图，分辨率各是各的（直接问 WDA，绕开会话）  ← 最关键
+#   ④ tke 层并发跑一步，证据各落各的目录
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -104,9 +104,11 @@ done
 # **失败要看得见**（INV-9）：早先这里 `>/dev/null 2>&1`，于是后面三步全红，
 # 而真正的原因（WDA 没起来）被吞在这一行里
 for U in "${UDID_A}" "${UDID_B}"; do
-    if ! "${TKE}" -d "sim:${U}" fetch >/dev/null 2>"${TMPDIR:-/tmp}/tke-boot-${U}.err"; then
+    # `>file 2>&1` 而不是只收 stderr：**tke 的错误走的是 stdout**
+    #（`{"success":false,"error":…}`）。上一版只留 stderr，于是报错行后面空空如也
+    if ! "${TKE}" -d "sim:${U}" fetch >"${TMPDIR:-/tmp}/tke-boot.log" 2>&1; then
         bad "把 WDA 拉进 ${U} 失败："
-        sed 's/^/      /' "${TMPDIR:-/tmp}/tke-boot-${U}.err" | head -6
+        sed 's/^/      /' "${TMPDIR:-/tmp}/tke-boot.log" | head -6
     fi
 done
 
@@ -152,61 +154,56 @@ for pair in "A:${UDID_A}:${PORT_A}" "B:${UDID_B}:${PORT_B}"; do
     fi
 done
 
-# ── ③ 并发跑，看两边拿回来的屏幕是不是各自那台 ──（最关键）
+# ── ③ 直接问各自的端口要一张截图，看是不是各自那台 ──（最关键）
 #
 # ⚠️ **不能用 `device info` 验这件事**：模拟器的机型/系统 tke 是问 simctl 拿的，
 # 压根不经过 WDA——两台串了台它也照样报得对，等于什么都没验。
-# 要挑一条**必须走 WDA 那个端口**的路：`refresh`（采截图 + 元素树）。
-# 型号不同 → 截图分辨率不同 → 串台一眼看得出来。
-# 工作区按设备分目录（`$TMPDIR/tke/workarea/<设备id>/`），所以两边各读各的。
-printf '\n%s③ 并发 refresh，两边的分辨率各是各的%s\n' "${Y}" "${N}"
-WORKAREA="${TMPDIR:-/tmp}/tke/workarea"
-# 目录名是设备 id 把非字母数字换成 `_`：sim:ABC-123 → sim_ABC-123
-sanitize(){ printf '%s' "$1" | sed 's/[^A-Za-z0-9_-]/_/g'; }
-SHOT_A="${WORKAREA}/$(sanitize "sim:${UDID_A}")/current_screenshot.png"
-SHOT_B="${WORKAREA}/$(sanitize "sim:${UDID_B}")/current_screenshot.png"
-rm -f "${SHOT_A}" "${SHOT_B}"
-
-ERR_A="${TMPDIR:-/tmp}/tke-ref-a.err"; ERR_B="${TMPDIR:-/tmp}/tke-ref-b.err"
-"${TKE}" -d "sim:${UDID_A}" refresh >/dev/null 2>"${ERR_A}" &
-PID_A=$!
-"${TKE}" -d "sim:${UDID_B}" refresh >/dev/null 2>"${ERR_B}" &
-PID_B=$!
-wait "${PID_A}"; wait "${PID_B}"
-
-shot_size(){
-    [ -f "$1" ] || { echo ""; return; }
-    sips -g pixelWidth -g pixelHeight "$1" 2>/dev/null \
-      | sed -n 's/.*pixel\(Width\|Height\): \([0-9]*\)/\2/p' | paste -sd'x' -
+#
+# 这里直接 curl WDA 的 `/screenshot`，**绕开 tke 的会话逻辑**：要验的是
+# 「这个端口背后是哪台设备」，不该被"前台有没有 App""会话建没建起来"干扰。
+# 型号不同 → 分辨率不同 → 串台一眼看得出来。
+printf '\n%s③ 两个端口各给一张截图，分辨率各是各的%s\n' "${Y}" "${N}"
+shot_size_via_wda(){
+    curl -s --max-time 20 "http://127.0.0.1:$1/screenshot" | python3 -c "
+import base64,json,struct,sys
+try:
+    b=base64.b64decode(json.load(sys.stdin)['value'])
+    # PNG 的 IHDR 就在头 24 字节里：宽高各一个大端 u32
+    w,h=struct.unpack('>II', b[16:24])
+    print(f'{w}x{h}')
+except Exception: print('')"
 }
-SIZE_A=$(shot_size "${SHOT_A}"); SIZE_B=$(shot_size "${SHOT_B}")
-note "A ${NAME_A} → ${SIZE_A:-（没截到图）}"
-note "B ${NAME_B} → ${SIZE_B:-（没截到图）}"
+SIZE_A=$(shot_size_via_wda "${PORT_A}")
+SIZE_B=$(shot_size_via_wda "${PORT_B}")
+note "A ${NAME_A} (端口 ${PORT_A}) → ${SIZE_A:-（要不到截图）}"
+note "B ${NAME_B} (端口 ${PORT_B}) → ${SIZE_B:-（要不到截图）}"
 if [ -z "${SIZE_A}" ] || [ -z "${SIZE_B}" ]; then
-    fail "有一边没截到图 —— refresh 的报错在下面"
-    for E in "${ERR_A}" "${ERR_B}"; do
-        [ -s "${E}" ] && sed 's/^/      /' "${E}" | head -5
-    done
-    note "找不到的话看看工作区在不在：ls ${WORKAREA}"
+    fail "有一边要不到截图 —— WDA 没起来？先看 ② 的 PID 有没有"
 elif [ "${SIZE_A}" = "${SIZE_B}" ]; then
     bad "两边分辨率一样（${SIZE_A}）—— **可能串台，也可能这两台本来就同尺寸**"
     note "换一台屏幕明显不同的再验（比如 iPhone SE 配 iPhone 17 Pro Max）"
-    note "或者肉眼比这两张：open ${SHOT_A} ${SHOT_B}"
 else
-    ok "两边各拿到自己那台的屏幕（${SIZE_A} / ${SIZE_B}）—— 并发下没串台"
+    ok "两个端口各连着自己那台（${SIZE_A} / ${SIZE_B}）—— 没串台"
 fi
 
-# ── ④ 证据各落各的 ──
-printf '\n%s④ 并发跑一步，两边的证据各落各的目录%s\n' "${Y}" "${N}"
+# ── ④ tke 层并发：两条命令同时跑，各自出各自的产物 ──
+printf '\n%s④ tke 并发跑一步，证据各落各的目录%s\n' "${Y}" "${N}"
 LOG_A="${HOME}/.tke/logs/par-a"; LOG_B="${HOME}/.tke/logs/par-b"
+OUT_A="${TMPDIR:-/tmp}/tke-par-a.log"; OUT_B="${TMPDIR:-/tmp}/tke-par-b.log"
 rm -rf "${LOG_A}" "${LOG_B}"
-"${TKE}" -d "sim:${UDID_A}" steps "等待 [1s]" --log "${LOG_A}/" >/dev/null 2>&1 &
+"${TKE}" -d "sim:${UDID_A}" steps "等待 [1s]" --log "${LOG_A}/" >"${OUT_A}" 2>&1 &
 PID_A=$!
-"${TKE}" -d "sim:${UDID_B}" steps "等待 [1s]" --log "${LOG_B}/" >/dev/null 2>&1 &
+"${TKE}" -d "sim:${UDID_B}" steps "等待 [1s]" --log "${LOG_B}/" >"${OUT_B}" 2>&1 &
 PID_B=$!
 wait "${PID_A}"; wait "${PID_B}"
-for L in "${LOG_A}" "${LOG_B}"; do
-    if [ -e "${L}/report.html" ]; then ok "$(basename "${L}") 有报告"; else fail "$(basename "${L}") 没有报告"; fi
+for pair in "par-a:${LOG_A}:${OUT_A}" "par-b:${LOG_B}:${OUT_B}"; do
+    TAG="${pair%%:*}"; REST="${pair#*:}"; L="${REST%%:*}"; O="${REST##*:}"
+    if [ -e "${L}/report.html" ]; then
+        ok "${TAG} 有报告"
+    else
+        fail "${TAG} 没有报告，输出："
+        sed 's/^/      /' "${O}" | head -6
+    fi
 done
 note "两份报告：open ${LOG_A}/report.html ${LOG_B}/report.html"
 
