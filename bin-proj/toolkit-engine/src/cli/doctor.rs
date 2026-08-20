@@ -42,31 +42,40 @@ pub fn section(title: &str) {
 /// 三段就会各自对齐到不同位置，整张表反而更乱
 const LABEL_W: usize = 15;
 
-/// 一行：`  标签      值 (补充)`。`note` 走 dim，因为它是补充不是结论。
-/// `ready=false` 整行置灰——一眼看出这条用不了（同 `device list` 的处理）
-fn row(label: &str, value: &str, note: &str, ready: bool) {
+/// 一行的语气。**颜色只用来分轻重**，不额外表意——四个色跟结论行那三个符号同一套：
+/// 绿=好、黄=该动手了、红=坏了、灰=这条用不了/无从判断
+#[derive(Clone, Copy, PartialEq)]
+pub enum Tone {
+    /// 就绪、可用、已是最新
+    Ok,
+    /// 有更新、装了但用不了——**不拦路，但要显眼**
+    Warn,
+    /// 缺依赖，环境跑不起来
+    Bad,
+    /// 没有 / 查不了 / 不支持——整行置灰，一眼跳过
+    Muted,
+    /// 纯事实（平台、路径），不该抢眼
+    Plain,
+}
+
+/// 一行：`  标签      值 (补充)`。
+///
+/// 标签一律 dim、值按语气上色、补充永远 dim——**队形靠这三条固定下来**。
+/// 补充不跟着值一起上色是有意的：一行里两段亮色，扫下来就分不出哪个是状态了
+fn row(label: &str, value: &str, note: &str, tone: Tone) {
+    let value = match tone {
+        Tone::Ok => format!("{}{}{}", c("38;5;42"), value, c("0")),
+        Tone::Warn => format!("{}{}{}", c("38;5;214"), value, c("0")),
+        Tone::Bad => format!("{}{}{}", c("38;5;203"), value, c("0")),
+        Tone::Muted => dim(value),
+        Tone::Plain => value.to_string(),
+    };
     let text = if note.is_empty() {
-        value.to_string()
+        value
     } else {
         format!("{} {}", value, dim(&format!("({})", note)))
     };
-    let text = if ready { text } else { dim(&strip(&text)) };
     println!("  {}{}", dim(&pad_right(label, LABEL_W)), text);
-}
-
-/// 置灰整行前先把里面的颜色码去掉——嵌套的 reset 会把外层的灰提前关掉
-fn strip(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut in_esc = false;
-    for ch in s.chars() {
-        match ch {
-            '\x1b' => in_esc = true,
-            'm' if in_esc => in_esc = false,
-            _ if in_esc => {}
-            _ => out.push(ch),
-        }
-    }
-    out
 }
 
 /// 一项依赖的现状（fix.rs 检测出来，这里只管怎么说）
@@ -117,16 +126,16 @@ impl Health {
 
     // ── 段一：这套工具本身 ──
     fn print_basics(&self, deps: &[Dep]) {
-        row("平台", &friendly_os(), &self.platform, true);
+        row("平台", &friendly_os(), &self.platform, Tone::Plain);
 
         let missing: Vec<&Dep> = deps.iter().filter(|d| !d.present).collect();
         let scope = if self.profile == "all" { String::new() } else { format!("仅 {}", self.profile) };
         if deps.is_empty() {
-            row("依赖", "无需补齐", "此机型不支持该平台", false);
+            row("依赖", "无需补齐", "此机型不支持该平台", Tone::Muted);
         } else if missing.is_empty() {
-            row("依赖", &format!("{} 项已就绪", deps.len()), &scope, true);
+            row("依赖", &format!("{} 项已就绪", deps.len()), &scope, Tone::Ok);
         } else {
-            row("依赖", &format!("缺 {} 项 / 共 {} 项", missing.len(), deps.len()), &scope, true);
+            row("依赖", &format!("缺 {} 项 / 共 {} 项", missing.len(), deps.len()), &scope, Tone::Bad);
             for m in &missing {
                 println!(
                     "  {}{} {:<16} {}",
@@ -141,26 +150,26 @@ impl Health {
         // 版本只报"一致/不一致"，不摆箭头暗示方向——本地可能是刚编出来的、比分发源还新
         let local = env!("BUILD_VERSION");
         match &self.st {
-            None => row("Engine版本", local, "离线，未校验", true),
+            None => row("Engine版本", local, "离线，未校验", Tone::Muted),
             Some(s) if s.tke_stale => {
-                row("Engine版本", "有可用更新", &format!("{} → {}", local, s.remote.tke), true)
+                row("Engine版本", "有可用更新", &format!("{} → {}", local, s.remote.tke), Tone::Warn)
             }
-            Some(_) => row("Engine版本", "已是最新", local, true),
+            Some(_) => row("Engine版本", "已是最新", local, Tone::Ok),
         }
 
         // skill 新鲜度比的是 **build 戳**而不是版本号：SKILL.md 天天改，
         // 而版本号只在 bump 时才动——只比版本号的话，用户抱着两天前的旧文档，
         // 体检照样说"一致"（Q-11 就是这么发生的）
         match &self.st {
-            None => row("Skill版本", "未校验", "离线", false),
+            None => row("Skill版本", "未校验", "离线", Tone::Muted),
             Some(s) => match (&s.skill_dir, &s.local_skill_build) {
                 (Some(_), Some(local_b)) if s.skill_stale => {
-                    row("Skill版本", "有可用更新", &format!("{} → {}", local_b, s.remote.build), true)
+                    row("Skill版本", "有可用更新", &format!("{} → {}", local_b, s.remote.build), Tone::Warn)
                 }
-                (Some(_), Some(local_b)) => row("Skill版本", "已是最新", local_b, true),
+                (Some(_), Some(local_b)) => row("Skill版本", "已是最新", local_b, Tone::Ok),
                 // 老安装器装的没写版本文件——不当成过期（无从判断），但要说清为什么看不出来
-                (Some(_), None) => row("Skill版本", "无版本信息", "由旧安装器安装", false),
-                (None, _) => row("Skill版本", "未安装", "", false),
+                (Some(_), None) => row("Skill版本", "无版本信息", "由旧安装器安装", Tone::Muted),
+                (None, _) => row("Skill版本", "未安装", "", Tone::Muted),
             },
         }
     }
@@ -183,21 +192,21 @@ impl Health {
 
         if want("android") {
             match (n_real, self.skip_why("android")) {
-                (0, Some(w)) => row("Android真机", "未检测", &w, false),
-                (0, None) => row("Android真机", "不可用", "没有已连接的设备", false),
-                (n, _) => row("Android真机", "可用", &format!("{} 台", n), true),
+                (0, Some(w)) => row("Android真机", "未检测", &w, Tone::Muted),
+                (0, None) => row("Android真机", "不可用", "尚未连接设备", Tone::Muted),
+                (n, _) => row("Android真机", "可用", &format!("{} 台", n), Tone::Ok),
             }
         }
         if want("ios") {
             // 宿主机做不了 iOS 时说"不可用"而不是"未检测"——那不是没查，是这台机器不行
             let n = self.disc.targets.iter().filter(|t| t.kind == "ios").count();
             if !tke::utils::capability::ios_supported() {
-                row("iOS真机", "不可用", "需 macOS", false);
+                row("iOS真机", "不可用", "需 macOS", Tone::Muted);
             } else {
                 match (n, self.skip_why("ios")) {
-                    (0, Some(w)) => row("iOS真机", "未检测", &w, false),
-                    (0, None) => row("iOS真机", "不可用", "没有已连接的设备", false),
-                    (n, _) => row("iOS真机", "可用", &format!("{} 台", n), true),
+                    (0, Some(w)) => row("iOS真机", "未检测", &w, Tone::Muted),
+                    (0, None) => row("iOS真机", "不可用", "尚未连接设备", Tone::Muted),
+                    (n, _) => row("iOS真机", "可用", &format!("{} 台", n), Tone::Ok),
                 }
             }
         }
@@ -205,8 +214,8 @@ impl Health {
             match n_emu {
                 // **明说不支持启动**：tke 不管 AVD 的起停（要 SDK 的 emulator + AVD 名），
                 // 但已经跑起来的模拟器 adb 连得上、tke 照常操作——这两件事要分清
-                0 => row("Android模拟器", "不可用", "没有已启动的 AVD · tke 不负责启动", false),
-                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), true),
+                0 => row("Android模拟器", "不可用", "尚未启动 AVD", Tone::Muted),
+                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Ok),
             }
         }
         if want("ios") {
@@ -217,56 +226,52 @@ impl Health {
             let driver = tke::utils::deps::present_in(&self.exe_dir, "chromedriver");
             // 缺哪几样就都说出来：只报第一个，人补完还得再跑一次才知道另一个也缺
             match (chrome, driver) {
-                (true, true) => row("Web浏览器", "可用", "Chrome for Testing", true),
+                (true, true) => row("Web浏览器", "可用", "Chrome for Testing", Tone::Ok),
                 _ => {
                     let mut lack = Vec::new();
                     if !chrome { lack.push("Chrome for Testing") }
                     if !driver { lack.push("chromedriver") }
-                    row("Web浏览器", "不可用", &format!("缺 {}", lack.join(" / ")), false)
+                    row("Web浏览器", "不可用", &format!("缺 {}", lack.join(" / ")), Tone::Muted)
                 }
             }
         }
 
-        // 体检只报**状态**，不教用法（怎么开窗口是 --help 的事）。
-        // 无桌面时说的是"这台机器开不了窗口"这个约束本身，那不是用法
-        if tke::utils::params::desktop_available() {
-            row("显示器环境", "有头", "浏览器默认仍跑无头", true);
-        } else {
-            row("显示器环境", "无头", "本机无图形界面", true);
-        }
+        // 体检只报**状态**，不教用法（怎么开窗口是 --help 的事），也不解释这意味着什么
+        let headed = tke::utils::params::desktop_available();
+        row("显示器环境", if headed { "有头" } else { "无头" }, "", Tone::Plain);
     }
 
     /// 模拟器这行要同时说清两件事：**有没有**（simctl）和**操作得了吗**（WDA）。
     /// 少说哪一件都会撞上那个最难查的组合：列得出来、命令也不报错，就是点不动
     fn print_ios_sim(&self) {
         if !cfg!(target_os = "macos") {
-            row("iOS模拟器", "不可用", "需 macOS", false);
+            row("iOS模拟器", "不可用", "需 macOS", Tone::Muted);
             return;
         }
         let sims: Vec<_> = self.disc.targets.iter().filter(|t| t.kind == "ios-sim").collect();
         let booted = sims.iter().filter(|t| t.ready).count();
         let wda = wda_app_path().is_some();
         if sims.is_empty() {
-            row("iOS模拟器", "不可用", "没有可用的模拟器", false);
+            row("iOS模拟器", "不可用", "尚未创建模拟器", Tone::Muted);
         } else if !wda {
-            row("iOS模拟器", "操作不了", "缺 WebDriverAgent · tke doctor --fix --profile ios", false);
+            row("iOS模拟器", "操作不了", "缺 WebDriverAgent · tke doctor --fix --profile ios", Tone::Warn);
         } else if booted == 0 {
-            row("iOS模拟器", "待启动", &format!("{} 台可选 · tke device list --all", sims.len()), false);
+            row("iOS模拟器", "待启动", &format!("{} 台可选", sims.len()), Tone::Muted);
         } else {
-            row("iOS模拟器", "可用", &format!("{} 台已启动 · Simulator + WebDriverAgent", booted), true);
+            row("iOS模拟器", "可用", &format!("{} 台已启动", booted), Tone::Ok);
         }
     }
 
     // ── 段三：东西落在哪 ──（人找报告时不用回头问 AI）
     fn print_paths(&self) {
-        row("Engine落点", &self.exe_dir.display().to_string(), "", true);
+        row("Engine落点", &self.exe_dir.display().to_string(), "", Tone::Plain);
         match self.st.as_ref().and_then(|s| s.skill_dir.clone()).or_else(tke::utils::update::skill_dir) {
-            Some(d) => row("Skill落点", &d.display().to_string(), "", true),
-            None => row("Skill落点", "未安装", "", false),
+            Some(d) => row("Skill落点", &d.display().to_string(), "", Tone::Plain),
+            None => row("Skill落点", "未安装", "", Tone::Muted),
         }
         if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
             let logs = PathBuf::from(home).join(".tke").join("logs");
-            row("默认日志落点", &logs.display().to_string(), "", true);
+            row("默认日志落点", &logs.display().to_string(), "", Tone::Plain);
         }
     }
 
@@ -377,11 +382,6 @@ pub fn wda_app_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn strips_nested_color_codes() {
-        assert_eq!(strip("\x1b[38;5;245m灰\x1b[0m字"), "灰字");
-    }
 
     /// 标签列必须按显示宽度对齐——中文占两格，`{:<15}` 按字符数填会错位
     #[test]
