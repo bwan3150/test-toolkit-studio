@@ -113,6 +113,24 @@ impl WebDriver {
         Ok(conn)
     }
 
+    /// 起浏览器（**显式**）。`headed=Some(true)` 强制开窗口，`None` 用全局设置。
+    ///
+    /// 早先浏览器是**第一条 web 命令顺带起来的**——脚本里看不出它什么时候起的、
+    /// 以什么模式起的，AI 也无从判断"现在到底有没有环境"。显式 boot 把这件事
+    /// 摆到脚本第一行：读脚本的人一眼知道它需要什么。
+    pub fn boot(&self, headed: Option<bool>) -> Result<()> {
+        if let Some(h) = headed {
+            // 显式指定优先于全局 --headless
+            crate::utils::params::set_web_headless(if h {
+                crate::utils::params::HeadlessMode::Off
+            } else {
+                crate::utils::params::HeadlessMode::On
+            });
+        }
+        self.ensure_create()?;
+        Ok(())
+    }
+
     /// 销毁会话：关闭浏览器 + 结束 chromedriver + 删除会话文件
     /// 进程内连接同时清空，后续操作（如脚本中 关闭→启动）会自动重建新会话
     pub fn close_session(&self) -> Result<()> {

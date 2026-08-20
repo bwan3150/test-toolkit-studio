@@ -76,7 +76,10 @@ pub enum ControlCommands {
         /// Activity 名（web 时省略）
         activity: Option<String>,
     },
-    /// 关闭应用: control close <包名>
+    /// 关闭**环境里面的东西**: control close <包名>（杀 App）
+    ///
+    /// web 省略包名 = 销毁会话（历史行为，等同 `shutdown`）——
+    /// **新脚本用 `shutdown`**：一条指令只做一件事，读的人不用猜
     Close {
         /// 要关闭的应用包名 / BundleID。**web 可省略**——web 的"关闭"就是销毁浏览器会话
         /// （连同 chromedriver 进程与会话文件一起清掉），包名对它没有意义。
@@ -130,6 +133,23 @@ pub enum ControlCommands {
         text: Option<String>,
     },
 
+    /// 启动运行环境: 起浏览器 / 开 iOS 模拟器
+    ///
+    /// 跟 `launch` 是两件事：launch 是"在环境里打开某个 App/网址"，
+    /// boot 是"把环境本身弄起来"。写在脚本第一行，读的人一眼知道它需要什么
+    Boot {
+        /// 开窗口（默认：浏览器无头 / 模拟器显示窗口）
+        ///
+        /// ⚠️ **没有 `--headless`**：无头本来就是默认，而且**全局已经有一个
+        /// `--headless=<mode>`**——子命令再定义同名开关会直接 panic
+        /// （clap 的定义与访问类型对不上，`--cache` 撞过同一个坑）
+        #[arg(long)]
+        headed: bool,
+    },
+    /// 关掉运行环境: 关浏览器进程 / 模拟器关机
+    ///
+    /// 与 `close` 分开：close 关的是环境**里面**的东西（App / 标签页）
+    Shutdown,
     /// 切换: control switch <标签序号|URL> (web) / control switch <包名> (App)
     Switch {
         /// web=标签序号 或 http(s) URL（新标签打开）；移动端=要切到前台的 App 包名
@@ -194,6 +214,11 @@ fn to_action(cmd: ControlCommands, device: &str) -> Result<ControlAction> {
             }),
         },
         ControlCommands::Key { code } => ControlAction::Key { code },
+        // 不加 --headed 就用全局设置（浏览器默认无头；要强制无头用全局 --headless=on）
+        ControlCommands::Boot { headed } => {
+            ControlAction::Boot { headed: headed.then_some(true) }
+        }
+        ControlCommands::Shutdown => ControlAction::Shutdown,
         ControlCommands::BrowserReset => ControlAction::BrowserReset,
         ControlCommands::BrowserEval { script } => ControlAction::BrowserEval { script },
         ControlCommands::BrowserViewport { size } => {

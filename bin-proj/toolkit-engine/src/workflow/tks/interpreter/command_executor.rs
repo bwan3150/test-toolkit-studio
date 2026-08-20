@@ -293,6 +293,36 @@ impl<'a> CommandExecutor<'a> {
         execute_action(&*self.controller, ControlAction::HideKeyboard).await.map(|_| ())
     }
 
+    /// 启动环境：`启动环境` / `启动环境 [有头]` / `启动环境 [无头]`
+    ///
+    /// 放在脚本第一行,读的人一眼知道这个脚本需要什么环境——
+    /// 早先浏览器是被第一条 web 命令**顺带**起来的,脚本里看不出这件事
+    pub async fn execute_boot(&mut self, params: &[TksParam]) -> Result<()> {
+        // 参数可省。写了就必须认得,别把 `启动环境 [有头]` 里的错字静默当成默认
+        let headed = match params.first() {
+            None => None,
+            Some(p) => {
+                let v = ParamExtractor::extract_text(&p.clone())?;
+                match v.trim() {
+                    "有头" | "有窗口" | "headed" => Some(true),
+                    "无头" | "headless" => Some(false),
+                    other => {
+                        return Err(TkeError::InvalidArgument(format!(
+                            "启动环境的参数只能是 有头 / 无头（收到 {}）",
+                            other
+                        )))
+                    }
+                }
+            }
+        };
+        execute_action(&*self.controller, ControlAction::Boot { headed }).await.map(|_| ())
+    }
+
+    /// 关闭环境：关浏览器进程 / 模拟器关机
+    pub async fn execute_shutdown(&mut self) -> Result<()> {
+        execute_action(&*self.controller, ControlAction::Shutdown).await.map(|_| ())
+    }
+
     // 对话框三条都走 execute_action：那里是「动作 → 设备」的唯一映射，
     // 直接调 controller 的话 CLI / tks / agent 就各走各的了
 

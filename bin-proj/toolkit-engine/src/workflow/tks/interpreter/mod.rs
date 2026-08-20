@@ -134,6 +134,8 @@ impl ScriptInterpreter {
             TksCommand::Switch => executor.execute_switch(&step.params).await,
             TksCommand::ScrollFind => executor.execute_scroll_find(&step.params).await,
             TksCommand::Key => executor.execute_key(&step.params).await,
+            TksCommand::Boot => executor.execute_boot(&step.params).await,
+            TksCommand::Shutdown => executor.execute_shutdown().await,
             TksCommand::DialogAccept => executor.execute_dialog_accept().await,
             TksCommand::DialogDismiss => executor.execute_dialog_dismiss().await,
             TksCommand::DialogInput => executor.execute_dialog_input(&step.params).await,

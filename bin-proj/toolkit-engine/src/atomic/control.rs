@@ -50,6 +50,12 @@ pub enum ControlAction {
     BrowserViewport { width: u32, height: u32 },
     /// 设下载目录；`wait_secs` 非空则等到下载完成并返回文件路径
     BrowserDownload { dir: std::path::PathBuf, wait_secs: Option<u64> },
+    /// 启动**运行环境**：起浏览器（`headed` 指定要不要窗口）/ 开模拟器。
+    /// 与 Launch 的区别：Launch 是"在环境里打开什么"，这个是"把环境弄起来"
+    Boot { headed: Option<bool> },
+    /// 关掉**运行环境**：关浏览器进程 / 模拟器关机。
+    /// 与 Close 的区别：Close 关的是环境**里面**的东西（App / 标签页）
+    Shutdown,
     /// 原生对话框（alert/confirm/prompt）：确定 / 取消 / 填字并确定。
     /// 这三种框是浏览器画的、不在 DOM 里，点不到也采不到，只能走这条专门的路
     Dialog { action: DialogAction },
@@ -214,6 +220,14 @@ pub async fn execute_action(controller: &Controller, action: ControlAction) -> R
                 );
             }
             Ok(out)
+        }
+        ControlAction::Boot { headed } => {
+            controller.boot(headed)?;
+            Ok(serde_json::json!({ "action": "boot", "headed": headed }))
+        }
+        ControlAction::Shutdown => {
+            controller.shutdown()?;
+            Ok(serde_json::json!({ "action": "shutdown" }))
         }
         ControlAction::Dialog { action } => {
             let name = match &action {

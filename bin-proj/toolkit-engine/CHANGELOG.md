@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+### 2026-08-20 · `boot` / `shutdown`：环境的起停从「魔法」变成显式一步
+用户提出:浏览器现在是**第一条 web 命令顺带起来的**,脚本里看不出它什么时候起的、
+以什么模式起的,AI 也无从判断"现在有没有环境";而且 `close` 语义重载
+（空参=销毁会话、带参=杀 App）。拆开:
+- **feat** `control boot [--headed]` / `control shutdown`;tks 指令
+  `启动环境` / `启动环境 [有头]` / `关闭环境`
+- **boot 管环境本身,launch 管环境里面的东西**——一条指令只做一件事,读脚本的人不用猜
+- iOS 模拟器:`simctl boot` + 显示窗口 + **`bootstatus -b` 等到真的可用**
+  （boot 命令返回时系统还在起,紧接着 install 会失败）;幂等（已开着不算错）
+- shutdown 前**先清会话文件**:下次 boot 起来的是新系统,旧 session_id 必然失效,
+  留着只会让下一条命令先撞一次"会话已死"
+- **安卓模拟器明说不支持**,不假装:要 Android SDK 的 emulator 二进制 + AVD 名
+- `close` 的帮助里指路到 `shutdown`;**空参行为保留**（很多脚本在用）
+- **fix(P-44)** `--headless` 撞全局同名参数 → **运行时 panic**（不是编译错）。
+  同一个坑第二次（上次是 `browser reset --cache`）。正解是删掉它:无头本来就是默认
+- **fix** `set_web_headless` 是 `OnceLock`,main 设过之后再设**被静默丢弃**——
+  `--headed` 一点作用都没有。换成 Atomic
+
 ### 2026-08-20 · 砍掉 CLI 里的教学式文案
 用户:「这种解释性文案应该都移除,CLI 本来就是信息越精简越好」。
 - **删** `device list` 末尾的「第一列就是 -d 要填的值」——表头已经写着 ID

@@ -76,6 +76,16 @@ pub struct FakeDriver {
 }
 
 impl FakeDriver {
+    /// 假设备没有"环境"要起——但**要成功返回**，否则脚本里的 `启动环境` 在
+    /// 无设备测试层里会挂掉，而那正是这套测试层存在的意义
+    pub fn boot(&self, _headed: Option<bool>) -> Result<()> {
+        Ok(())
+    }
+
+    pub fn shutdown(&self) -> Result<()> {
+        Ok(())
+    }
+
     /// 「我是谁」——测试用的假设备
     pub fn describe(&self) -> String {
         "假设备（测试用）".to_string()

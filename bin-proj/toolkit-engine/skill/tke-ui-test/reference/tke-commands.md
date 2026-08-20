@@ -43,6 +43,17 @@ tke 已经归一化掉了，你不用关心。
 **原生对话框（alert/confirm/prompt）`fetch` 采不到**——它是浏览器画的、不在 DOM 里。
 弹出时看每步结果的 `dialog` 字段，用 `确认对话框` / `取消对话框` 处理（C-23）。
 
+## 环境：起 / 关
+
+```bash
+tke -d web control boot                  # 起浏览器（无头）
+tke -d web control boot --headed         # 开窗口
+tke -d sim:<UDID> control boot           # 开 iOS 模拟器（并等它就绪）
+tke -d <设备> control shutdown           # 关浏览器进程 / 模拟器关机
+```
+
+`boot`/`shutdown` 管**环境本身**；`launch`/`close` 管环境**里面**的 App 与标签页。
+
 ## 做：操作设备
 
 **优先用 `steps --log`**（会留证据），`control` 只在不需要留痕时用：

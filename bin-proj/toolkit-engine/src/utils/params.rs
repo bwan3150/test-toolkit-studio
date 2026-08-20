@@ -131,17 +131,30 @@ pub fn desktop_available() -> bool {
 }
 
 /// 进程级 web 无头设置：main 启动时设一次，web 驱动深处查询（同 OCR_URL 的理由——
-/// 不为一个开关穿透 Controller/Driver 多层构造器）
-static WEB_HEADLESS: OnceLock<HeadlessMode> = OnceLock::new();
+/// 不为一个开关穿透 Controller/Driver 多层构造器）。
+///
+/// ⚠️ **必须可覆盖**，所以是 Atomic 而不是 OnceLock：`control boot --headed`
+/// 要在 main 设过之后再改一次。早先用 OnceLock，第二次 `set` 被静默丢掉
+/// （`let _ = …set()`），于是 `--headed` 一点作用都没有。
+static WEB_HEADLESS: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
-/// 设置无头模式（仅 main 启动时调用一次）
+/// 设置无头模式。main 启动时设一次；`control boot --headed` 可以再覆盖
 pub fn set_web_headless(mode: HeadlessMode) {
-    let _ = WEB_HEADLESS.set(mode);
+    let v = match mode {
+        HeadlessMode::Auto => 0,
+        HeadlessMode::On => 1,
+        HeadlessMode::Off => 2,
+    };
+    WEB_HEADLESS.store(v, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// 查询无头模式（未设置则 Auto）
 pub fn web_headless() -> HeadlessMode {
-    WEB_HEADLESS.get().copied().unwrap_or(HeadlessMode::Auto)
+    match WEB_HEADLESS.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => HeadlessMode::On,
+        2 => HeadlessMode::Off,
+        _ => HeadlessMode::Auto,
+    }
 }
 
 /// 统一参数表（解析一次，后续查表取参）

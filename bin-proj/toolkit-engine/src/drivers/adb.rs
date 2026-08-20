@@ -26,6 +26,25 @@ impl AdbDriver {
     }
     
     // 获取连接的设备列表
+    /// 启动运行环境。**安卓模拟器目前不支持**——不假装能做。
+    ///
+    /// 要支持得有 Android SDK 的 `emulator` 二进制（不在 tke 的分发里，几百 MB）、
+    /// 还要知道 AVD 名字（`emulator -list-avds`）。真机则根本不需要 boot：插上就能用。
+    pub fn boot(&self, _headed: Option<bool>) -> Result<()> {
+        Err(TkeError::InvalidArgument(
+            "安卓：真机插上即用，不需要 boot；模拟器（AVD）暂不支持自动启动 —— \
+             先用 Android Studio 或 `emulator -avd <名字>` 起一台，再 `tke device` 看序列号"
+                .into(),
+        ))
+    }
+
+    /// 关掉运行环境。同 boot：安卓这边没有 tke 管得着的"环境"
+    pub fn shutdown(&self) -> Result<()> {
+        Err(TkeError::InvalidArgument(
+            "安卓：真机没法从这儿关机；模拟器（AVD）暂不支持 —— 用 `adb -s <序列号> emu kill`".into(),
+        ))
+    }
+
     /// 「我是谁」——`Pixel 7（安卓 14）`。给报告和设备列表用，
     /// 那串序列号对人没有意义
     pub fn describe(&self) -> String {

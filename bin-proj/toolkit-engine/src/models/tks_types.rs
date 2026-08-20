@@ -27,6 +27,10 @@ pub enum TksCommand {
     Hover,            // 悬停（web 独有：鼠标移到元素上触发 hover，展开悬停下拉/菜单，不点击）
     Select,           // 选择（web 独有：选中 <select> 的某一项。原生下拉展开后选项由浏览器绘制、
                       //       DOM 里不可见，点击路线走不通，只能走 DOM 设值 + 派发事件）
+    Boot,             // 启动环境（起浏览器 / 开 iOS 模拟器）——与「启动」的区别：
+                      //   「启动」是在环境里打开某个 App/网址，这条是把环境本身弄起来
+    Shutdown,         // 关闭环境（关浏览器进程 / 模拟器关机）——与「关闭」的区别：
+                      //   「关闭」关的是环境里面的东西（App / 标签页）
     DialogAccept,     // 确认对话框（web 独有：原生 alert/confirm 的「确定」。这三种是浏览器画的、
                       //             不在 DOM 里，fetch 采不到，只能走这条专门的路）
     DialogDismiss,    // 取消对话框（web 独有：原生 confirm 的「取消」）
@@ -53,6 +57,8 @@ impl TksCommand {
             "断言页面" => Some(Self::AssertPage),
             "切换" => Some(Self::Switch),
             "滚动查找" => Some(Self::ScrollFind),
+            "启动环境" => Some(Self::Boot),
+            "关闭环境" => Some(Self::Shutdown),
             "确认对话框" => Some(Self::DialogAccept),
             "取消对话框" => Some(Self::DialogDismiss),
             "对话框输入" => Some(Self::DialogInput),

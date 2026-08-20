@@ -514,6 +514,59 @@ impl WdaDriver {
 
     // ===== 信息 =====
 
+    /// 启动运行环境。**模拟器才有这回事**——真机开着就是开着，插上就能用。
+    ///
+    /// `headed` 对模拟器意味着"要不要把 Simulator 窗口显示出来"：
+    /// 不显示也能测（WDA 走 HTTP，不依赖窗口），但人看不到画面。默认显示。
+    pub fn boot(&self, headed: Option<bool>) -> Result<()> {
+        if !self.simulator {
+            return Err(TkeError::InvalidArgument(
+                "真机不需要 boot —— 插上、解锁就能用。要装/拉起 WebDriverAgent 见 tke doctor".into(),
+            ));
+        }
+        // 已经在跑就什么都不做（幂等）——boot 写在脚本第一行，每次跑都会执行
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "boot", &self.udid])
+            .output()
+            .map_err(|e| TkeError::DeviceError(format!("simctl boot 失败: {}", e)))?;
+        let err = String::from_utf8_lossy(&out.stderr);
+        // "Unable to boot device in current state: Booted" = 已经开着，不是错误
+        if !out.status.success() && !err.contains("current state: Booted") {
+            return Err(TkeError::DeviceError(format!("启动模拟器失败: {}", err.trim())));
+        }
+        if headed.unwrap_or(true) {
+            let _ = std::process::Command::new("open").args(["-a", "Simulator"]).output();
+        }
+        // 等到真的可用为止。**别只等 boot 命令返回**：它返回时系统还在起，
+        // 紧接着 simctl install 会失败
+        let _ = std::process::Command::new("xcrun")
+            .args(["simctl", "bootstatus", &self.udid, "-b"])
+            .output();
+        Ok(())
+    }
+
+    /// 关掉运行环境（模拟器关机）。真机没有这回事
+    pub fn shutdown(&self) -> Result<()> {
+        if !self.simulator {
+            return Err(TkeError::InvalidArgument(
+                "真机没法从这儿关机 —— 要结束 WDA 会话用 `关闭`（空参）".into(),
+            ));
+        }
+        // 关机前先把会话文件清掉：下次 boot 起来的是新系统，旧 session_id 必然失效，
+        // 留着只会让下一条命令先撞一次"会话已死"再重建
+        let _ = std::fs::remove_file(Self::state_file(&self.udid));
+        *self.conn.lock().unwrap() = None;
+        let out = std::process::Command::new("xcrun")
+            .args(["simctl", "shutdown", &self.udid])
+            .output()
+            .map_err(|e| TkeError::DeviceError(format!("simctl shutdown 失败: {}", e)))?;
+        let err = String::from_utf8_lossy(&out.stderr);
+        if !out.status.success() && !err.contains("current state: Shutdown") {
+            return Err(TkeError::DeviceError(format!("关闭模拟器失败: {}", err.trim())));
+        }
+        Ok(())
+    }
+
     /// 「我是谁」——给人看的一句话（`iPhone 17 Pro（模拟器）`）。
     ///
     /// 报告和设备列表里显示这个，而不是那串 UUID：**UUID 对人没有任何意义**，

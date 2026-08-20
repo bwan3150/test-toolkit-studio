@@ -363,6 +363,33 @@ impl Controller {
         }
     }
 
+    /// 启动**运行环境**：起浏览器 / 开模拟器。
+    ///
+    /// 跟 `launch_app` 是两件事：那个是"在环境里打开某个 App/网址"，
+    /// 这个是"把环境本身弄起来"。早先浏览器是第一条 web 命令**顺带**起来的——
+    /// 脚本里看不出它什么时候起的、以什么模式起的，AI 也无从判断"现在有没有环境"。
+    pub fn boot(&self, headed: Option<bool>) -> Result<()> {
+        match &self.driver {
+            Driver::Adb(d) => d.boot(headed),
+            Driver::Web(d) => d.boot(headed),
+            Driver::Wda(d) => d.boot(headed),
+            Driver::Fake(d) => d.boot(headed),
+        }
+    }
+
+    /// 关掉**运行环境**：关浏览器进程 / 模拟器关机。
+    ///
+    /// 与 `stop_app`（关环境**里面**的某个 App / 标签页）分开——
+    /// 这是这次拆分的全部意义：一条指令只做一件事，读脚本的人不用猜
+    pub fn shutdown(&self) -> Result<()> {
+        match &self.driver {
+            Driver::Adb(d) => d.shutdown(),
+            Driver::Web(d) => d.close_session(),
+            Driver::Wda(d) => d.shutdown(),
+            Driver::Fake(d) => d.shutdown(),
+        }
+    }
+
     /// 「我是谁」——给人看的一句话（`iPhone 17 Pro · iOS 26.0（模拟器）` /
     /// `Pixel 7（安卓 14）` / `Chrome（无头）`）。
     ///

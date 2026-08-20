@@ -764,3 +764,23 @@ std::fs::read_dir(dir)?.flatten().map(|e| e.path())
 
 **自查**：换一个没见过的扩展名，看产物还收不收得到（已用单测钉住，
 夹具里那个后缀就叫「以后某个新驱动的后缀」）。
+
+## P-44 (2026-08-20) 子命令的开关跟全局参数撞名 → 运行时 panic
+
+**现象**：给 `control boot` 加了个 `--headless`，然后**任何** control 命令都崩：
+
+```
+thread 'main' panicked at src/main.rs:77:
+Mismatch between definition and access of `headless`.
+Could not downcast to alloc::string::String, need to downcast to bool
+```
+
+**原因**：全局已经有一个 `--headless=<auto|on|off>`（String），子命令又定义了同名的
+`bool`。clap 按**名字**存取参数，两个定义撞在一起——而且**不是编译期报错，是运行时 panic**。
+
+同一个坑第二次：`browser reset --cache` 撞全局的 `--cache <目录>`（那次也是 panic）。
+
+**做法**：加子命令开关前**先扫一眼全局参数**。撞了就换名，或者干脆别加——
+`--headless` 那次的正解是**删掉它**：无头本来就是默认，全局那个已经够用了。
+
+**自查**：新加的开关名，在 `main.rs` 的全局 `Params` 里 grep 一遍。
