@@ -37,7 +37,7 @@
 | **确认/取消对话框、对话框输入** | ❌ | ❌ | ❌ | ✅ |
 
 **iOS 模拟器**用 `-d sim:<UDID>`（`tke device list` 列得到）。真机与模拟器**同一套
-WebDriverAgent**，只有"怎么连上"不同（真机走 USB 隧道，模拟器直连本机 8100）——
+WebDriverAgent**，只有"怎么连上"不同（真机走 USB 隧道，模拟器直连本机端口，一台一个）——
 指令写法、元素表、坐标口径、报告全都一样。
 
 模拟器缺 WebDriverAgent 的话 `tke doctor` 会说，装它就一条命令（tke 自己拉起，

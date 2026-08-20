@@ -22,9 +22,10 @@ use std::process::Command;
 use std::time::Duration;
 
 /// 持久化的转发/会话信息（字段对 infra 子模块可见）
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct WdaState {
-    /// go-ios forward 本地转发端口
+    /// 本机上跟 WDA 说话的端口。真机 = go-ios forward 的本地转发端口；
+    /// 模拟器 = WDA 自己监听的端口（**每台一个**，见 infra 的 `sim_port`，Q-13）
     port: u16,
     forward_pid: u32,
     /// go-ios runwda 进程（由 tke 拉起时记录；外部启动的 WDA 则为 None）

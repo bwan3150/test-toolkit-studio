@@ -101,7 +101,7 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 | | 真机（`-d <UDID>`） | 模拟器（`-d sim:<UDID>`） |
 |---|---|---|
 | 靠什么 | **WebDriverAgent**（HTTP + JSON） | **同一个 WebDriverAgent** |
-| 怎么连上 | go-ios 建隧道 + USB 端口转发 → 随机端口 | 与主机共享网络，直连 **8100** |
+| 怎么连上 | go-ios 建隧道 + USB 端口转发 → 随机端口 | 与主机共享网络，直连 **每台一个端口**（`8100 + hash(UDID) % 100`） |
 | 设备上的 runner 谁装 | 一次性 Xcode 安装，**必须签名**（Apple 硬要求） | tke 自己：`simctl install` 一个预编译 `.app`，**免签名** |
 | runner 谁拉起 | tke（go-ios `runwda`，免 Xcode） | tke（`simctl launch`，**连 xcodebuild 都不用**） |
 | 装起来 | go-ios 随 `tke doctor --fix` 下载；WDA 要 Xcode 装一次 | **`tke doctor --fix --profile ios` 全包**（下 21MB 的 .app 到 `~/.tke/wda/`） |
@@ -113,8 +113,9 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 
 **tke 不需要内置 WDA 源码**：它只说 WDA 的 HTTP 协议，分发的是**编译好的 runner**。
 
-**模拟器端口写死 8100**：模拟器与主机共享网络，**多台模拟器同时跑会撞端口**。
-单台够用；要并行得给每台传 `USE_PORT`。
+**模拟器端口一台一个**：模拟器与主机共享网络，WDA 默认全都监听 8100，并行跑两台会撞。
+现在按 UDID 定端口（稳定可复现）、`SIMCTL_CHILD_USE_PORT` 传给 runner，复用前还会核对
+端口的归属（`launchctl list` 的 PID vs `lsof` 的监听 PID）——否则命令可能发到另一台上。
 
 **`Platform` 仍然只有三个**（Android/iOS/Web）：模拟器跑的是同一套 iOS App，
 元素库的 ios 通道、定位策略、归一化目标格式全都复用。多出来的只是**驱动**

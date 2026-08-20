@@ -11,8 +11,12 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-/// WDA 在设备上的监听端口（WebDriverAgent 默认值）
+/// WDA 在设备上的监听端口（WebDriverAgent 默认值）。
+/// **真机专用**：USB 转发的对端固定是它。模拟器不走这个常量，见 `sim_port`（Q-13）
 const WDA_DEVICE_PORT: u16 = 8100;
+
+/// 模拟器里那个预编译 runner 的 bundle id
+const WDA_SIM_BUNDLE: &str = "com.facebook.WebDriverAgentRunner.xctrunner";
 
 impl WdaDriver {
     /// WDA /status 是否可达
@@ -31,19 +35,7 @@ impl WdaDriver {
         // 拉起 WDA 这一步**不归 tke 管**（go-ios 只能对真机做，模拟器没有 lockdown）——
         // 所以这里只连、连不上就如实说清楚该怎么把它跑起来。
         if self.is_simulator() {
-            let base = format!("http://127.0.0.1:{}", WDA_DEVICE_PORT);
-            if !Self::wda_ready(&base) {
-                // 没跑就把它拉起来——这是 tke 该干的活，不该让人自己去 simctl
-                self.launch_wda_on_simulator()?;
-            }
-            let state = Self::load_state(&self.udid).unwrap_or(WdaState {
-                port: WDA_DEVICE_PORT,
-                forward_pid: 0,   // 模拟器没有转发进程
-                runwda_pid: None, // 也没有 runwda
-                session_id: None,
-                scale: None,
-            });
-            return Ok((base, WdaState { port: WDA_DEVICE_PORT, ..state }));
+            return self.ensure_simulator_wda();
         }
 
         // 复用已有转发
@@ -139,15 +131,133 @@ impl WdaDriver {
     }
 
     /// 状态文件 / go-ios 日志所在目录（$TMPDIR/tke/ios）
-    /// 把 WebDriverAgent 拉进**模拟器**：装（幂等）→ 起 → 等就绪。
+    /// 模拟器的 WDA：**每台一个端口**（Q-13）。
+    ///
+    /// 模拟器与主机共享网络，WebDriverAgent 默认全都监听 8100——并行跑两台就会互相抢。
+    /// 抢输的那台起不来还算好的，更糟的是**端口通、命令却发到了另一台设备上**：
+    /// 每一步都报成功，动的是别人（P-35 那一族的老毛病）。
+    /// 所以每台按自己的 UDID 定端口、记进自己的状态文件，启动时用 `SIMCTL_CHILD_USE_PORT`
+    /// 告诉 runner 监听哪儿（`simctl` 把 `SIMCTL_CHILD_*` 转成被启动进程的环境变量）。
+    ///
+    /// 结果按 UDID 缓存在进程内：`ensure_forward` 一步里会被调好几次
+    /// （launch_app → ensure_create → ensure_existing → …），归属校验要跑两个子进程，
+    /// 每次都验就是白等
+    fn ensure_simulator_wda(&self) -> Result<(String, WdaState)> {
+        use std::sync::{Mutex, OnceLock};
+        static CACHE: OnceLock<Mutex<std::collections::HashMap<String, (String, WdaState)>>> =
+            OnceLock::new();
+        let cache = CACHE.get_or_init(Default::default);
+        if let Some(hit) = cache.lock().ok().and_then(|c| c.get(&self.udid).cloned()) {
+            return Ok(hit);
+        }
+
+        let prev = Self::load_state(&self.udid);
+        // 复用：状态文件记着端口、端口通、**并且那个端口确实是这台的**。
+        // 少了最后一条就会误连——两台模拟器都在跑时，8100 上应答的可能是任何一台
+        if let Some(state) = prev.as_ref().filter(|s| s.port != 0) {
+            let base = format!("http://127.0.0.1:{}", state.port);
+            if Self::wda_ready(&base) && self.owns_port(state.port) {
+                let hit = (base, state.clone());
+                if let Ok(mut c) = cache.lock() {
+                    c.insert(self.udid.clone(), hit.clone());
+                }
+                return Ok(hit);
+            }
+        }
+
+        // 端口：先用上次那个（同一台每次都是同一个端口，日志和抓包好对上），
+        // 被占了就按 UDID 算一个，再被占就让系统随便给一个
+        let port = [prev.as_ref().map(|s| s.port).unwrap_or(0), Self::sim_port(&self.udid)]
+            .into_iter()
+            .find(|p| *p != 0 && Self::port_free(*p))
+            .unwrap_or_else(Self::free_port);
+
+        self.launch_wda_on_simulator(port)?;
+
+        let state = WdaState {
+            port,
+            forward_pid: 0,   // 模拟器没有转发进程
+            runwda_pid: None, // 也没有 runwda
+            session_id: None,
+            scale: None,
+        };
+        Self::save_state(&self.udid, &state);
+        let hit = (format!("http://127.0.0.1:{}", port), state);
+        if let Ok(mut c) = cache.lock() {
+            c.insert(self.udid.clone(), hit.clone());
+        }
+        Ok(hit)
+    }
+
+    /// 这个端口上监听的，是不是**这台模拟器**里的 WDA。
+    ///
+    /// 靠得住的原因：模拟器里的进程就是 macOS 上的进程，`simctl spawn <udid> launchctl list`
+    /// 报的 PID 与 `lsof` 看到的监听 PID 是同一个数。
+    /// 两边有任何一边问不出来（没装 lsof、launchctl 输出变了）就**放行**——
+    /// 那时退回"端口通就算数"，跟改这一版之前一样，不会更差
+    fn owns_port(&self, port: u16) -> bool {
+        let (Some(mine), Some(listening)) = (self.sim_wda_pid(), Self::listener_pid(port)) else {
+            return true;
+        };
+        mine == listening
+    }
+
+    /// 这台模拟器里 WDA runner 的进程号（没跑 → None）
+    fn sim_wda_pid(&self) -> Option<u32> {
+        let out = Command::new("xcrun")
+            .args(["simctl", "spawn", &self.udid, "launchctl", "list", WDA_SIM_BUNDLE])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        // launchctl 的 plist 文本里有一行 `"PID" = 12345;`
+        String::from_utf8_lossy(&out.stdout).lines().find_map(|l| {
+            l.trim()
+                .strip_prefix("\"PID\" = ")?
+                .trim_end_matches(';')
+                .trim()
+                .parse()
+                .ok()
+        })
+    }
+
+    /// 谁在监听这个端口
+    fn listener_pid(port: u16) -> Option<u32> {
+        let out = Command::new("lsof")
+            .args(["-nP", &format!("-iTCP:{}", port), "-sTCP:LISTEN", "-t"])
+            .output()
+            .ok()?;
+        String::from_utf8_lossy(&out.stdout).split_whitespace().next()?.parse().ok()
+    }
+
+    fn port_free(port: u16) -> bool {
+        std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+    }
+
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|l| l.local_addr())
+            .map(|a| a.port())
+            .unwrap_or(WDA_DEVICE_PORT)
+    }
+
+    /// 由 UDID 定的端口：`8100 + hash % 100`。
+    /// **要的是稳定**——同一台模拟器每次都拿同一个端口，人对日志、抓包、`lsof` 时不用猜；
+    /// 换成每次随机分配也能跑，但排查起来就没有一个固定的锚点了
+    fn sim_port(udid: &str) -> u16 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        udid.hash(&mut h);
+        WDA_DEVICE_PORT + (h.finish() % 100) as u16
+    }
+
+    /// 把 WebDriverAgent 拉进**模拟器**：装（幂等）→ 起在指定端口 → 等就绪。
     ///
     /// 这条路比真机干净得多：**不用签名、不用 xcodebuild、连 .xctestrun 都不用**
     /// ——实测预编译的 `WebDriverAgentRunner-Runner.app` 用 `simctl launch` 直接就起得来
     /// （XCTest bundle 一般要 xcodebuild 带一堆环境变量，模拟器上不需要）。
-    ///
-    /// ⚠️ 端口写死 8100：模拟器与主机共享网络，**多台模拟器同时跑会撞端口**。
-    /// 单台够用；真要并行得给每台传 `USE_PORT`，那时再说。
-    fn launch_wda_on_simulator(&self) -> Result<()> {
+    fn launch_wda_on_simulator(&self, port: u16) -> Result<()> {
         // **一次运行只试一次**。ensure_forward 在一步里会被调好几次
         // （launch_app → ensure_create → ensure_existing → …），不拦的话那行提示
         // 打四遍，失败时还要一遍遍等满 15 秒超时（实测:一步里打了 4 次）
@@ -175,13 +285,17 @@ impl WdaDriver {
             .args(["simctl", "install", &self.udid])
             .arg(&app)
             .output();
+        // `--terminate-running-process`：已经在跑的那个用的是**旧端口**，不杀掉的话
+        // launch 只是把它带到前台，USE_PORT 根本不生效——端口就还是撞的
         let out = Command::new("xcrun")
             .args([
                 "simctl",
                 "launch",
+                "--terminate-running-process",
                 &self.udid,
-                "com.facebook.WebDriverAgentRunner.xctrunner",
+                WDA_SIM_BUNDLE,
             ])
+            .env("SIMCTL_CHILD_USE_PORT", port.to_string())
             .output()
             .map_err(|e| TkeError::DeviceError(format!("拉起模拟器上的 WDA 失败: {}", e)))?;
         if !out.status.success() {
@@ -192,7 +306,7 @@ impl WdaDriver {
         }
 
         // 等就绪。**别只等一两秒**：冷启动那次要跑一遍 XCTest 初始化
-        let base = format!("http://127.0.0.1:{}", WDA_DEVICE_PORT);
+        let base = format!("http://127.0.0.1:{}", port);
         for _ in 0..30 {
             std::thread::sleep(Duration::from_millis(500));
             if Self::wda_ready(&base) {
@@ -200,7 +314,7 @@ impl WdaDriver {
             }
         }
         Err(TkeError::DeviceError(format!(
-            "WDA 起来了但 {} 一直不通（15 秒）。模拟器锁屏了？或者上一个 WDA 还占着 8100",
+            "WDA 起来了但 {} 一直不通（15 秒）。模拟器锁屏了？或者上一个 WDA 还占着这个端口",
             base
         )))
     }
@@ -260,5 +374,36 @@ impl WdaDriver {
                  （下载: https://github.com/danielpaulus/go-ios/releases）".to_string(),
             )
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 同一台每次都拿同一个端口——这是能用 `lsof` 对上号的前提（Q-13）
+    #[test]
+    fn sim_port_is_stable_per_udid() {
+        let a = WdaDriver::sim_port("A1B2C3D4-0000-1111-2222-333344445555");
+        assert_eq!(a, WdaDriver::sim_port("A1B2C3D4-0000-1111-2222-333344445555"));
+    }
+
+    /// 不同模拟器要落在不同端口上——它们共享主机网络，撞了就是命令发错设备
+    #[test]
+    fn sim_port_differs_across_udids() {
+        let udids: Vec<String> = (0..20).map(|i| format!("UDID-{:04}-SIM", i)).collect();
+        let ports: std::collections::HashSet<u16> =
+            udids.iter().map(|u| WdaDriver::sim_port(u)).collect();
+        // 100 个槽里放 20 台，撞几个是数学上的必然（生日问题），但不能挤成一堆
+        assert!(ports.len() >= 15, "20 台只分到 {} 个端口，太挤了", ports.len());
+    }
+
+    /// 端口必须落在 8100..8200：再往上就撞进别人常用的段了
+    #[test]
+    fn sim_port_stays_in_range() {
+        for i in 0..200 {
+            let p = WdaDriver::sim_port(&format!("sim-{}", i));
+            assert!((8100..8200).contains(&p), "端口 {} 越界", p);
+        }
     }
 }

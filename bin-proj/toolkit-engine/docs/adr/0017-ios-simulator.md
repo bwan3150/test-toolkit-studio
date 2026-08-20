@@ -93,8 +93,14 @@
 `simctl install` + `simctl launch` 拉起来。idb 驱动与 AX 归一化**已删除**——
 不留两套，那意味着两份归一化、两条调试路径。
 
-端口写死 8100 是已知限制：模拟器与主机共享网络，多台同时跑会撞。
-单台够用；要并行得给每台传 `USE_PORT`。
+**端口一台一个**（2026-08-20 补，关闭 Q-13）：模拟器与主机共享网络，WDA 默认全都监听
+8100，并行跑两台就会互相抢。现在每台按 UDID 定端口（`8100 + hash % 100`，稳定可复现，
+排查时 `lsof` 对得上号）、记进自己的状态文件，启动时用 `SIMCTL_CHILD_USE_PORT` 传给 runner，
+并带 `--terminate-running-process`（不杀掉旧的，launch 只是把它带到前台，USE_PORT 不生效）。
+
+复用已有 WDA 时**要验端口的归属**：`simctl spawn <udid> launchctl list` 报的 PID
+与 `lsof` 看到的监听 PID 是同一个数（模拟器里的进程就是 macOS 进程）。少了这一步，
+两台都在跑时 8100 上应答的可能是任何一台——每步都报成功，动的却是另一台设备。
 
 ## 自查（`scripts/verify-ios-sim.sh` 一条命令跑完）
 

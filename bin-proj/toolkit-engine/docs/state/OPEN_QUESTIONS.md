@@ -138,11 +138,20 @@ tke 不该去碰用户的 Apple ID。所以真机能砍掉的是「clone + 编�
 要做的前提：用户机器上有证书**且**有覆盖目标设备的 profile。已知用户那台有 3 个 Apple Development
 证书，profile 目录待确认（Xcode 16+ 挪到了 `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`）。
 
-## Q-13 (2026-08-19) 模拟器端口写死 8100，多台并行会撞
+## Q-13 (2026-08-19) 模拟器端口写死 8100，多台并行会撞 —— ✅ 已关闭 (2026-08-20)
 
 模拟器与主机共享网络，所有实例的 WDA 都监听 8100。单台够用，**并行跑多台模拟器会互相抢**。
-解法是给每台传 `USE_PORT`（`simctl launch --env`），并把端口记进状态文件——
-现在的 `WdaState.port` 已经有这个字段，只是模拟器分支写死了常量。
+
+**✅ 已关闭 (2026-08-20)**：每台按 UDID 定端口（`8100 + hash % 100`，**稳定可复现**，
+排查时 `lsof` 对得上号），记进自己的状态文件，启动时 `SIMCTL_CHILD_USE_PORT` 传给 runner，
+并带 `--terminate-running-process`（不杀旧的，launch 只是把它带到前台，USE_PORT 不生效）。
+
+做的时候撞出一个比"抢端口"更值得防的分支：**复用已有 WDA 时必须核对端口的归属**。
+两台都在跑时 8100 上应答的可能是任何一台——`/status` 照样通，命令却发到了另一台设备上，
+每步都报成功而动的是别人。校验靠 `simctl spawn <udid> launchctl list` 的 PID 与 `lsof`
+的监听 PID 相等（模拟器里的进程就是 macOS 进程）；两边有一边问不出来就放行，退回旧行为。
+
+⚠️ **mac 上多台模拟器并行待真机验**（本机 Linux 只能验端口分配的单测）。
 
 ## Q-14 (2026-08-19) `tke harness` 在四端的实跑没验过
 
