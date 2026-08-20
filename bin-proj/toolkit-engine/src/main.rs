@@ -189,6 +189,12 @@ enum Commands {
         /// 不该让人多打一个词（`tke device` 直接列出来）
         #[command(subcommand)]
         action: Option<DeviceCommands>,
+
+        /// 连没启动的模拟器一起列（= `tke device list --all`）。
+        /// **顶层也收这个参数**：`device` 既然等于 `device list`，
+        /// 那 `tke device --all` 就该能用——不然"省一个词"反而变成了要多记一条规矩
+        #[arg(long)]
+        all: bool,
     },
     /// [工具] 元素库管理（按坐标取元素落库）
     Element {
@@ -323,8 +329,9 @@ async fn main() -> tke::Result<()> {
         Commands::App { action } => {
             tools::app::handle(action, params.clone()).await
         }
-        Commands::Device { action } => {
-            let action = action.unwrap_or(cli::tools::DeviceCommands::List { all: false });
+        Commands::Device { action, all } => {
+            // 顶层 `--all` 只对 list 有意义；给了子命令就以子命令自己的参数为准
+            let action = action.unwrap_or(cli::tools::DeviceCommands::List { all });
             tools::device::handle(action, params.clone())
         }
         Commands::Element { action } => {

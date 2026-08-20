@@ -42,20 +42,21 @@ pub fn section(title: &str) {
 /// 三段就会各自对齐到不同位置，整张表反而更乱
 const LABEL_W: usize = 15;
 
-/// 一行的语气。**颜色只用来分轻重**，不额外表意——四个色跟结论行那三个符号同一套：
-/// 绿=好、黄=该动手了、红=坏了、灰=这条用不了/无从判断
+/// 一行的语气。**上色是例外，不是常态**——用户的话：「不要绿色泛滥」。
+///
+/// 一张体检表大多数时候通篇都是好的，每行都染绿等于没染：眼睛扫过去，
+/// 真正要人动手的那一两行反而淹了。所以正常状态一律不上色，
+/// 只有**需要人做点什么**的行才有颜色。
 #[derive(Clone, Copy, PartialEq)]
 pub enum Tone {
-    /// 就绪、可用、已是最新
-    Ok,
-    /// 有更新、装了但用不了——**不拦路，但要显眼**
-    Warn,
-    /// 缺依赖，环境跑不起来
-    Bad,
-    /// 没有 / 查不了 / 不支持——整行置灰，一眼跳过
-    Muted,
-    /// 纯事实（平台、路径），不该抢眼
+    /// 正常（就绪、可用、已是最新）与纯事实（平台、路径）——**不上色**
     Plain,
+    /// 有可用更新——这行是要人动手的，给它颜色
+    Update,
+    /// 缺依赖 / 装了但用不了——红
+    Bad,
+    /// 没有 / 查不了 / 不支持——灰，一眼跳过
+    Muted,
 }
 
 /// 一行：`  标签      值 (补充)`。
@@ -64,8 +65,7 @@ pub enum Tone {
 /// 补充不跟着值一起上色是有意的：一行里两段亮色，扫下来就分不出哪个是状态了
 fn row(label: &str, value: &str, note: &str, tone: Tone) {
     let value = match tone {
-        Tone::Ok => format!("{}{}{}", c("38;5;42"), value, c("0")),
-        Tone::Warn => format!("{}{}{}", c("38;5;214"), value, c("0")),
+        Tone::Update => format!("{}{}{}", c("38;5;42"), value, c("0")),
         Tone::Bad => format!("{}{}{}", c("38;5;203"), value, c("0")),
         Tone::Muted => dim(value),
         Tone::Plain => value.to_string(),
@@ -133,7 +133,7 @@ impl Health {
         if deps.is_empty() {
             row("依赖", "无需补齐", "此机型不支持该平台", Tone::Muted);
         } else if missing.is_empty() {
-            row("依赖", &format!("{} 项已就绪", deps.len()), &scope, Tone::Ok);
+            row("依赖", &format!("{} 项已就绪", deps.len()), &scope, Tone::Plain);
         } else {
             row("依赖", &format!("缺 {} 项 / 共 {} 项", missing.len(), deps.len()), &scope, Tone::Bad);
             for m in &missing {
@@ -152,9 +152,9 @@ impl Health {
         match &self.st {
             None => row("Engine版本", local, "离线，未校验", Tone::Muted),
             Some(s) if s.tke_stale => {
-                row("Engine版本", "有可用更新", &format!("{} → {}", local, s.remote.tke), Tone::Warn)
+                row("Engine版本", "有可用更新", &format!("{} → {}", local, s.remote.tke), Tone::Update)
             }
-            Some(_) => row("Engine版本", "已是最新", local, Tone::Ok),
+            Some(_) => row("Engine版本", "已是最新", local, Tone::Plain),
         }
 
         // skill 新鲜度比的是 **build 戳**而不是版本号：SKILL.md 天天改，
@@ -164,9 +164,9 @@ impl Health {
             None => row("Skill版本", "未校验", "离线", Tone::Muted),
             Some(s) => match (&s.skill_dir, &s.local_skill_build) {
                 (Some(_), Some(local_b)) if s.skill_stale => {
-                    row("Skill版本", "有可用更新", &format!("{} → {}", local_b, s.remote.build), Tone::Warn)
+                    row("Skill版本", "有可用更新", &format!("{} → {}", local_b, s.remote.build), Tone::Update)
                 }
-                (Some(_), Some(local_b)) => row("Skill版本", "已是最新", local_b, Tone::Ok),
+                (Some(_), Some(local_b)) => row("Skill版本", "已是最新", local_b, Tone::Plain),
                 // 老安装器装的没写版本文件——不当成过期（无从判断），但要说清为什么看不出来
                 (Some(_), None) => row("Skill版本", "无版本信息", "由旧安装器安装", Tone::Muted),
                 (None, _) => row("Skill版本", "未安装", "", Tone::Muted),
@@ -196,13 +196,13 @@ impl Health {
             match (n_real, self.skip_why("android")) {
                 (0, Some(w)) => row("Android真机", "未检测", &w, Tone::Muted),
                 (0, None) => row("Android真机", "不可用", "尚未连接设备", Tone::Muted),
-                (n, _) => row("Android真机", "可用", &format!("{} 台", n), Tone::Ok),
+                (n, _) => row("Android真机", "可用", &format!("{} 台", n), Tone::Plain),
             }
             match n_emu {
                 // tke 不管 AVD 的起停（要 SDK 的 emulator + AVD 名），
                 // 但已经跑起来的模拟器 adb 连得上、tke 照常操作——这两件事要分清
                 0 => row("Android模拟器", "不可用", "尚未启动 AVD", Tone::Muted),
-                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Ok),
+                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Plain),
             }
         }
         if want("ios") {
@@ -214,7 +214,7 @@ impl Health {
                 match (n, self.skip_why("ios")) {
                     (0, Some(w)) => row("iOS真机", "未检测", &w, Tone::Muted),
                     (0, None) => row("iOS真机", "不可用", "尚未连接设备", Tone::Muted),
-                    (n, _) => row("iOS真机", "可用", &format!("{} 台", n), Tone::Ok),
+                    (n, _) => row("iOS真机", "可用", &format!("{} 台", n), Tone::Plain),
                 }
             }
             self.print_ios_sim();
@@ -224,12 +224,12 @@ impl Health {
             let driver = tke::utils::deps::present_in(&self.exe_dir, "chromedriver");
             // 缺哪几样就都说出来：只报第一个，人补完还得再跑一次才知道另一个也缺
             match (chrome, driver) {
-                (true, true) => row("Web浏览器", "可用", "Chrome for Testing", Tone::Ok),
+                (true, true) => row("Web浏览器", "可用", "Chrome for Testing", Tone::Plain),
                 _ => {
                     let mut lack = Vec::new();
                     if !chrome { lack.push("Chrome for Testing") }
                     if !driver { lack.push("chromedriver") }
-                    row("Web浏览器", "不可用", &format!("缺 {}", lack.join(" / ")), Tone::Muted)
+                    row("Web浏览器", "不可用", &format!("缺 {}", lack.join(" / ")), Tone::Bad)
                 }
             }
         }
@@ -252,11 +252,11 @@ impl Health {
         if sims.is_empty() {
             row("iOS模拟器", "不可用", "尚未创建模拟器", Tone::Muted);
         } else if !wda {
-            row("iOS模拟器", "操作不了", "缺 WebDriverAgent", Tone::Warn);
+            row("iOS模拟器", "操作不了", "缺 WebDriverAgent", Tone::Bad);
         } else if booted == 0 {
             row("iOS模拟器", "待启动", &format!("{} 台可选", sims.len()), Tone::Muted);
         } else {
-            row("iOS模拟器", "可用", &format!("{} 台已启动", booted), Tone::Ok);
+            row("iOS模拟器", "可用", &format!("{} 台已启动", booted), Tone::Plain);
         }
     }
 
