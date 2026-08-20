@@ -104,11 +104,18 @@ done
 # **失败要看得见**（INV-9）：早先这里 `>/dev/null 2>&1`，于是后面三步全红，
 # 而真正的原因（WDA 没起来）被吞在这一行里
 for U in "${UDID_A}" "${UDID_B}"; do
-    # `>file 2>&1` 而不是只收 stderr：**tke 的错误走的是 stdout**
-    #（`{"success":false,"error":…}`）。上一版只留 stderr，于是报错行后面空空如也
-    if ! "${TKE}" -d "sim:${U}" fetch >"${TMPDIR:-/tmp}/tke-boot.log" 2>&1; then
-        bad "把 WDA 拉进 ${U} 失败："
-        sed 's/^/      /' "${TMPDIR:-/tmp}/tke-boot.log" | head -6
+    # 这一步**只为把 WDA 拉起来**，fetch 本身成不成不重要：拉起 runner 必然把前台
+    # App 挤走，于是采集会报"现在前台是桌面"——那是意料之中的，不是故障。
+    # ③ 随后会把两台的前台各自拉成一个真 App。
+    # 但真起不来的情况要看得见，所以照样打出来（`>file 2>&1`：**tke 的错误走 stdout**）
+    BOOT_LOG="${TMPDIR:-/tmp}/tke-boot.log"
+    if ! "${TKE}" -d "sim:${U}" fetch >"${BOOT_LOG}" 2>&1; then
+        if grep -q "前台是桌面\|前台是 WebDriverAgent" "${BOOT_LOG}"; then
+            note "${U} 的 WDA 起来了（前台被挤成桌面，③ 会把 App 拉回来）"
+        else
+            bad "把 WDA 拉进 ${U} 可能失败了："
+            sed 's/^/      /' "${BOOT_LOG}" | head -6
+        fi
     fi
 done
 
@@ -166,8 +173,10 @@ done
 printf '\n%s③ 两台开不同 App，各端口报的前台各是各的%s\n' "${Y}" "${N}"
 APP_A=com.apple.Preferences      # 设置
 APP_B=com.apple.mobilesafari     # Safari
-xcrun simctl launch "${UDID_A}" "${APP_A}" >/dev/null 2>&1
-xcrun simctl launch "${UDID_B}" "${APP_B}" >/dev/null 2>&1
+LAUNCH_LOG="${TMPDIR:-/tmp}/tke-launch.log"
+: >"${LAUNCH_LOG}"
+xcrun simctl launch "${UDID_A}" "${APP_A}" >>"${LAUNCH_LOG}" 2>&1 || note "A 起 ${APP_A} 没成"
+xcrun simctl launch "${UDID_B}" "${APP_B}" >>"${LAUNCH_LOG}" 2>&1 || note "B 起 ${APP_B} 没成"
 sleep 2
 
 active_of(){
@@ -179,14 +188,20 @@ except Exception: print('')"
 FG_A=$(active_of "${PORT_A}"); FG_B=$(active_of "${PORT_B}")
 note "A 端口 ${PORT_A} 前台 → ${FG_A:-（问不到）}   期望 ${APP_A}"
 note "B 端口 ${PORT_B} 前台 → ${FG_B:-（问不到）}   期望 ${APP_B}"
+# 判据是**两个端口报的不是同一个 App**——串台的话它们必然报同一个。
+# 至于前台是不是我们刚 launch 的那个,不重要:某台上原本就开着别的 App、
+# launch 被系统挡下、或者 App 自己又切回去了,都会让它跟期望不符,
+# 但只要两边不同,"这两个端口连的是两台设备"就已经成立（用户实测撞上:
+# A 报的是它原本开着的 com.example.app,而不是刚 launch 的设置）
 if [ -z "${FG_A}" ] || [ -z "${FG_B}" ]; then
     fail "有一边问不到前台 —— WDA 没起来？先看 ②"
 elif [ "${FG_A}" = "${FG_B}" ]; then
     fail "两个端口报的是同一个 App（${FG_A}）—— **串台了**"
-elif [ "${FG_A}" = "${APP_A}" ] && [ "${FG_B}" = "${APP_B}" ]; then
-    ok "各端口连着自己那台（设置 / Safari）—— 没串台"
 else
-    bad "前台跟期望对不上，自己看上面两行判断（App 可能没起来）"
+    ok "两个端口报的前台不是同一个 —— 没串台"
+    if [ "${FG_A}" != "${APP_A}" ] || [ "${FG_B}" != "${APP_B}" ]; then
+        note "（前台跟刚 launch 的那个不一样,不影响结论;launch 的输出在 ${LAUNCH_LOG}）"
+    fi
 fi
 
 # 附带一条：分辨率。同尺寸机型上它判不了串台，但截图能不能要得到本身也是个信息

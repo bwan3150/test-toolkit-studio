@@ -138,33 +138,31 @@ tke 不该去碰用户的 Apple ID。所以真机能砍掉的是「clone + 编�
 要做的前提：用户机器上有证书**且**有覆盖目标设备的 profile。已知用户那台有 3 个 Apple Development
 证书，profile 目录待确认（Xcode 16+ 挪到了 `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`）。
 
-## Q-13 (2026-08-19) 模拟器端口写死 8100，多台并行会撞 —— ✅ 已关闭 (2026-08-20)
+## Q-13 (2026-08-19) 模拟器端口写死 8100，多台并行会撞 —— ✅ 已关闭 (2026-08-20，**用户实测通过**)
 
-模拟器与主机共享网络，所有实例的 WDA 都监听 8100。单台够用，**并行跑多台模拟器会互相抢**。
+模拟器与主机共享网络，所有实例的 WDA 都监听 8100。单台够用，**并行跑多台会互相抢**——
+抢输的那台起不来还算好的，更糟的是端口通、命令却发到了另一台上（每步都报成功，动的是别人）。
 
-**✅ 已关闭 (2026-08-20)**：每台按 UDID 定端口（`8100 + hash % 100`，**稳定可复现**，
-排查时 `lsof` 对得上号），记进自己的状态文件，启动时 `SIMCTL_CHILD_USE_PORT` 传给 runner，
-并带 `--terminate-running-process`（不杀旧的，launch 只是把它带到前台，USE_PORT 不生效）。
+**做法**：每台按 UDID 定端口（`8100 + 1 + hash % 99`，**有意跳过 8100**——那是 WDA 出厂默认，
+任何一台没带 `USE_PORT` 起来的都在那儿），启动时 `SIMCTL_CHILD_USE_PORT` 传给 runner，
+带 `--terminate-running-process`（不杀旧的，launch 只是把它带到前台，USE_PORT 不生效）。
+复用前**核对端口归属**：`simctl spawn <udid> launchctl list` 的 PID = `lsof` 的监听 PID。
 
-做的时候撞出一个比"抢端口"更值得防的分支：**复用已有 WDA 时必须核对端口的归属**。
-两台都在跑时 8100 上应答的可能是任何一台——`/status` 照样通，命令却发到了另一台设备上，
-每步都报成功而动的是别人。校验靠 `simctl spawn <udid> launchctl list` 的 PID 与 `lsof`
-的监听 PID 相等（模拟器里的进程就是 macOS 进程）；两边有一边问不出来就放行，退回旧行为。
+**用户实测（2026-08-20，iPhone 17 Pro + iPhone 16 Pro 并行）**：
+端口 8149 / 8197 分开、两边 PID 都对上、两个端口报的前台是不同的 App、两边证据各落各的目录。
+**那个预编译 WDA runner 认 `SIMCTL_CHILD_USE_PORT`**——这条之前只是推测。
 
-⚠️ **2026-08-20 用户实测跑出两个洞并已修**：①端口从状态文件继承 → 旧状态里两台都是 8100，
-于是又都挑了 8100（现在只认 UDID 算出来的，且一律不复用 8100）②归属校验用 bundle id
-精确查 launchctl → iOS 的 label 带 `UIKitApplication:` 前缀，永远查不到，校验形同虚设，
-第二台直接复用了第一台的 WDA（现在列全表按子串找）。**修完用户重验:①②通过**——端口 8149/8197 分开、
-两边 `launchctl` 与 `lsof` 的 PID 都对上,说明那个预编译 runner **认 `SIMCTL_CHILD_USE_PORT`**。
-③④ 当时红的是脚本自己的毛病（只收 stderr 而 tke 的错误走 stdout;③走 tke 会话被前台没 App 干扰），
-已改成直接 curl WDA 的 `/screenshot` 比分辨率。**③④ 待重跑**
+过程里逼出三个洞（都已修）：
+1. 端口从状态文件继承 → 旧状态里两台都是 8100，于是又都挑了 8100
+2. 归属校验用 bundle id 精确查 `launchctl` → iOS 的 label 是
+   `UIKitApplication:com.facebook.…[0x…][rb-legacy]`，**永远查不到**，校验一路放行，
+   第二台直接复用了第一台的 WDA（正是要防的那件事）
+3. `ensure_existing` 吞掉 attach 的真实错误（见 PITFALLS 新增条目）
 
-⚠️ **mac 上多台模拟器并行待真机验**（本机 Linux 只能验端口分配的单测）。
-验法：`bash scripts/verify-sim-parallel.sh <UDID-A> <UDID-B>`（不给参数会列出可选的）
-——两台要**型号不同**，
-查端口是否分开、每个端口的监听 PID 是否属于对应那台，再**并发 refresh** 比两张截图的
-分辨率（型号不同则分辨率不同，串台一眼看出来）。注意 `device info` 验不了这件事：
-模拟器的机型是问 simctl 拿的，不经过 WDA。
+验法：`bash scripts/verify-sim-parallel.sh <UDID-A> <UDID-B>`（不给参数会列出可选的）。
+判串台**不能比分辨率**（iPhone 17 Pro 与 16 Pro 都是 1206×2622），
+也**不能用 `device info`**（机型问的是 simctl，不经过 WDA）——要给两台开不同 App，
+再问每个端口「你前台是谁」。
 
 ## Q-14 (2026-08-19) `tke harness` 在四端的实跑没验过
 
