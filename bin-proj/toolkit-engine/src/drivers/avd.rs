@@ -19,17 +19,42 @@ use std::process::Command;
 
 use crate::{Result, TkeError};
 
-/// 找 Android SDK 里的 `emulator` 二进制。**不走 ToolManager**：
-/// 那个只在 tke 同目录找，而这东西是用户自己装的 SDK 的一部分，
-/// 报错文案也不该说"要和 tke 放在同一目录"（会把人引到错的方向）
-pub fn emulator_bin() -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "emulator.exe" } else { "emulator" };
+/// 一套安卓 SDK：emulator 二进制 + SDK 根 + AVD 目录。**三样必须配套**。
+///
+/// 为什么不能只找一个 `emulator` 就完事：机器上可能同时有两套——用户自己的
+/// `~/Library/Android/sdk` 和 tke 装的 `~/.tke/android-sdk`。拿我们的 emulator 去跑
+/// 他的 AVD 会直接失败：他那台 AVD 的 `config.ini` 里 `image.sysdir.1` 指的是
+/// **他那套 SDK 里的**系统镜像，而 emulator 按 `ANDROID_SDK_ROOT` 找镜像——
+/// 指错了就是 `Broken AVD system path`。
+///
+/// 所以按**这台 AVD 属于谁**来选整套工具链，而不是全局挑一个 emulator。
+#[derive(Debug, Clone)]
+pub struct Toolchain {
+    pub emulator: PathBuf,
+    pub sdk_root: PathBuf,
+    pub avd_home: PathBuf,
+}
+
+fn exe_name() -> &'static str {
+    if cfg!(windows) { "emulator.exe" } else { "emulator" }
+}
+
+/// tke 自己装的那套（`doctor --fix --profile android-emu` 的落点）
+fn tke_toolchain() -> Option<Toolchain> {
+    let sdk = tke_sdk_dir()?;
+    let emulator = sdk.join("emulator").join(exe_name());
+    emulator.is_file().then(|| Toolchain {
+        emulator,
+        avd_home: sdk.join("avd"),
+        sdk_root: sdk,
+    })
+}
+
+/// 用户自己装的那套（Android Studio / sdkmanager 装的）。
+/// **不走 ToolManager**：那个只在 tke 同目录找，而这是用户的 SDK 的一部分，
+/// 报错说"要和 tke 放在同一目录"会把人引到完全错的方向
+fn user_toolchain() -> Option<Toolchain> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    // **我们自己装的那套优先**（`tke doctor --fix --profile android-emu` 的落点）：
-    // 版本是我们挑的、AVD 是我们建的，比去猜用户 SDK 里有什么确定得多
-    if let Some(d) = tke_sdk_dir() {
-        roots.push(d);
-    }
     for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
         if let Some(v) = std::env::var_os(var) {
             roots.push(PathBuf::from(v));
@@ -43,13 +68,39 @@ pub fn emulator_bin() -> Option<PathBuf> {
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
         roots.push(PathBuf::from(local).join("Android/Sdk")); // Windows 默认
     }
-    for r in roots {
-        let p = r.join("emulator").join(exe);
-        if p.is_file() {
-            return Some(p);
-        }
+    let sdk = roots.into_iter().find(|r| r.join("emulator").join(exe_name()).is_file())?;
+    Some(Toolchain {
+        emulator: sdk.join("emulator").join(exe_name()),
+        sdk_root: sdk,
+        avd_home: user_avd_home(),
+    })
+}
+
+/// 用户的 AVD 放哪儿：`ANDROID_AVD_HOME` 优先，否则是标准的 `~/.android/avd`
+fn user_avd_home() -> PathBuf {
+    if let Some(v) = std::env::var_os("ANDROID_AVD_HOME") {
+        return PathBuf::from(v);
     }
-    which::which("emulator").ok()
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|h| PathBuf::from(h).join(".android").join("avd"))
+        .unwrap_or_default()
+}
+
+/// 这台 AVD 该用哪套工具链——**谁家的 AVD 用谁家的 SDK**
+fn toolchain_for(avd: &str) -> Option<Toolchain> {
+    [tke_toolchain(), user_toolchain()]
+        .into_iter()
+        .flatten()
+        .find(|tc| tc.avd_home.join(format!("{}.ini", avd)).is_file())
+}
+
+/// 装了 emulator 没有（任意一套都算）。给 doctor 判断"这条路通不通"用
+pub fn emulator_bin() -> Option<PathBuf> {
+    tke_toolchain()
+        .or_else(user_toolchain)
+        .map(|t| t.emulator)
+        .or_else(|| which::which("emulator").ok())
 }
 
 /// tke 自己装的那套 SDK 在哪（与 `cli/android_sdk.rs` 同一口径）
@@ -104,31 +155,47 @@ pub fn ensure_sdk_layout() -> Result<()> {
     Ok(())
 }
 
-/// 给 emulator 子进程配好环境。
+/// 给 emulator 子进程配好这套工具链的环境。
 ///
-/// **两个都要**：`ANDROID_SDK_ROOT` 让它找到系统镜像（config.ini 里写的是相对 SDK 根的
-/// 路径），`ANDROID_AVD_HOME` 让它找到我们建的 AVD——我们**有意不往 `~/.android/avd`
-/// 写**（那是用户的地盘，卸载时不好界定该删哪些）
-fn with_env(cmd: &mut Command) {
-    if let Some(sdk) = tke_sdk_dir() {
-        cmd.env("ANDROID_SDK_ROOT", &sdk);
-        cmd.env("ANDROID_HOME", &sdk);
-        cmd.env("ANDROID_AVD_HOME", sdk.join("avd"));
-    }
+/// **三样要一致**：`ANDROID_SDK_ROOT` 决定去哪找系统镜像（AVD 的 `config.ini` 里
+/// `image.sysdir.1` 是相对 SDK 根的路径），`ANDROID_AVD_HOME` 决定去哪找 AVD。
+/// 早先这里无条件指向 tke 自己那套——于是**一旦装了我们的 SDK，用户自己的 AVD
+/// 就跑不了了**（AVD 找不到，就算找到镜像路径也对不上）
+fn with_env(cmd: &mut Command, tc: &Toolchain) {
+    cmd.env("ANDROID_SDK_ROOT", &tc.sdk_root);
+    cmd.env("ANDROID_HOME", &tc.sdk_root);
+    cmd.env("ANDROID_AVD_HOME", &tc.avd_home);
 }
 
-/// 这台机器上建好的 AVD 名字。没装 SDK / 一个都没建 → 空
+/// 这台机器上建好的 AVD 名字——**两套 SDK 的都算**（tke 装的 + 用户自己的）。
+///
+/// 直接扫 `<avd_home>/*.ini` 而不是跑 `emulator -list-avds`：那条命令只看**一个**
+/// AVD 目录（取决于环境变量），而这里恰恰要把两边合起来；扫目录也不依赖二进制跑得起来
 pub fn list_avds() -> Vec<String> {
-    let Some(bin) = emulator_bin() else { return Vec::new() };
-    let mut cmd = Command::new(&bin);
-    with_env(&mut cmd);
-    let Ok(out) = cmd.arg("-list-avds").output() else { return Vec::new() };
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(|l| l.trim().to_string())
-        // 这条命令偶尔会往 stdout 混一行提示（比如 SDK 路径警告），只收像名字的
-        .filter(|l| !l.is_empty() && !l.contains(' ') && !l.starts_with('#'))
-        .collect()
+    let mut out: Vec<String> = Vec::new();
+    for tc in [tke_toolchain(), user_toolchain()].into_iter().flatten() {
+        for n in avd_names_in(&tc.avd_home) {
+            if !out.contains(&n) {
+                out.push(n);
+            }
+        }
+    }
+    out
+}
+
+/// 一个 AVD 目录里有哪些 AVD（`<名字>.ini` 与同名 `.avd` 目录都在才算数）
+fn avd_names_in(dir: &std::path::Path) -> Vec<String> {
+    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut names: Vec<String> = rd
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            let name = p.file_stem()?.to_str()?.to_string();
+            (p.extension()? == "ini" && dir.join(format!("{}.avd", name)).is_dir()).then_some(name)
+        })
+        .collect();
+    names.sort();
+    names
 }
 
 /// 没装时给人看的一行——**只说怎么装，不代劳**（1GB 级的东西不该由 tke 悄悄下）
@@ -145,15 +212,16 @@ pub fn install_hint() -> String {
 /// `headed=None` 时按有没有桌面自动定（同 web 的 `--headless=auto`）：
 /// 无头服务器上开窗口必然失败，而有桌面时看得见画面对人排查更有用。
 pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
-    let bin = emulator_bin().ok_or_else(|| TkeError::InvalidArgument(install_hint()))?;
-    let avds = list_avds();
-    if !avds.iter().any(|a| a == name) {
-        return Err(TkeError::InvalidArgument(format!(
-            "没有叫 `{}` 的 AVD。现有的：{}",
-            name,
-            if avds.is_empty() { "一个都没有".into() } else { avds.join(" / ") }
-        )));
-    }
+    // **谁家的 AVD 用谁家的 SDK**：拿我们的 emulator 去跑用户的 AVD，
+    // 镜像路径必然对不上（他的 config.ini 指的是他那套 SDK 里的 system-images）
+    let Some(tc) = toolchain_for(name) else {
+        let avds = list_avds();
+        return Err(TkeError::InvalidArgument(if avds.is_empty() {
+            install_hint()
+        } else {
+            format!("没有叫 `{}` 的 AVD。现有的：{}", name, avds.join(" / "))
+        }));
+    };
     // 已经起着就直接用（幂等）——boot 写在脚本第一行，每次跑都会执行
     if let Some(serial) = running_serial_of(name) {
         return Ok(serial);
@@ -164,8 +232,8 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
 
     let before = emulator_serials();
     let headed = headed.unwrap_or_else(crate::utils::params::desktop_available);
-    let mut cmd = Command::new(&bin);
-    with_env(&mut cmd);
+    let mut cmd = Command::new(&tc.emulator);
+    with_env(&mut cmd, &tc);
     cmd.args(["-avd", name, "-no-audio", "-no-boot-anim", "-no-snapshot-save"]);
     if !headed {
         cmd.arg("-no-window");
@@ -323,6 +391,22 @@ mod tests {
     fn missing_sdk_is_not_an_error() {
         // 这台机器上装没装都行：list_avds 都必须安静地返回一个列表
         let _ = list_avds();
+    }
+
+    /// AVD 目录里要 `<名字>.ini` **和**同名 `.avd` 目录都在才算数——
+    /// 只有一个 ini 的多半是删剩下的残骸，列出来会让人去启动一台根本起不来的
+    #[test]
+    fn avd_needs_both_ini_and_dir() {
+        let base = std::env::temp_dir().join(format!("tke-avdtest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("good.ini"), "x").unwrap();
+        std::fs::create_dir_all(base.join("good.avd")).unwrap();
+        std::fs::write(base.join("orphan.ini"), "x").unwrap(); // 只有 ini
+        std::fs::create_dir_all(base.join("nodir.avd")).unwrap(); // 只有目录
+
+        assert_eq!(avd_names_in(&base), vec!["good".to_string()]);
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     /// 关真机要说清楚，别让人以为命令没生效

@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-21 · 谁家的 AVD 用谁家的 SDK（用户已有的模拟器现在能跑了）
+用户 mac 上有自己的两台 AVD（Android Studio 建的）。`tke device` 列得出来,
+但**一旦他再装我们那套 SDK,这两台就跑不了了**——早先 `with_env` 无条件把
+`ANDROID_SDK_ROOT` / `ANDROID_AVD_HOME` 指向 `~/.tke/android-sdk`,
+于是 emulator 既找不到他的 AVD、也对不上镜像路径（他的 `config.ini` 里
+`image.sysdir.1` 指的是**他那套 SDK** 里的 system-images）。
+- **feat** `Toolchain`（emulator + SDK 根 + AVD 目录,**三样配套**），
+  `toolchain_for(avd)` 按**这台 AVD 属于谁**选整套,而不是全局挑一个 emulator
+- `list_avds` 改成**扫两边的 `<avd_home>/*.ini`**:`emulator -list-avds` 只看一个
+  AVD 目录（取决于环境变量），而这里恰恰要把两套合起来;扫目录也不依赖二进制跑得起来
+- `<名字>.ini` **与**同名 `.avd` 目录都在才算数——只剩 ini 的是删剩的残骸,
+  列出来会让人去启动一台根本起不来的（单测钉住）
+
 ### 2026-08-21 · `tke device` 只列**立刻能用的**,未启动的折叠成一句话
 用户在 mac 上看到的清单里,iOS 那边折叠了 22 台未启动的,而两台没启动的 AVD 却直挺挺
 列着——因为安卓和 iOS **各写各的折叠条件**("有在跑的才折叠"),同一份清单两套规矩。
