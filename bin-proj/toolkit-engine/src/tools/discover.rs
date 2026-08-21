@@ -43,13 +43,14 @@ pub struct Discovery {
     pub skipped: Vec<Skipped>,
 }
 
-/// 默认只列**在跑的**。装了 Xcode 的 mac 上模拟器动辄二三十台，
+/// 默认只列**立刻能用的**。装了 Xcode 的 mac 上模拟器动辄二三十台，
 /// 全摆出来那份清单就没法看了（实测用户机器：24 台，只有 1 台 Booted）。
 pub fn discover() -> Discovery {
     discover_with(false)
 }
 
-/// `all=true` 连没启动的模拟器一起列（要挑一台来启动时用）
+/// `all=true` 连没启动的模拟器一起列（要挑一台来启动时用）。
+/// 默认只列**立刻能用的**——没启动的折叠成末尾一句话（见 `fold_idle_simulators`）
 pub fn discover_with(all: bool) -> Discovery {
     let mut d = Discovery::default();
     // 浏览器：不需要连什么，装了 chromedriver 就能跑。
@@ -74,9 +75,12 @@ pub fn discover_with(all: bool) -> Discovery {
         });
     }
     android(&mut d);
-    android_avds(&mut d, all);
+    android_avds(&mut d);
     ios_devices(&mut d);
-    ios_simulators(&mut d, all);
+    ios_simulators(&mut d);
+    if !all {
+        fold_idle_simulators(&mut d);
+    }
     d
 }
 
@@ -85,7 +89,7 @@ pub fn discover_with(all: bool) -> Discovery {
 ///
 /// 已经跑着的模拟器由 `android()` 从 `adb devices` 里就列出来了（序列号 `emulator-5554`），
 /// 这里只补"能起但没起"的那些，id 给成 `avd:<名字>`——那正是 `boot` 要的参数
-fn android_avds(d: &mut Discovery, all: bool) {
+fn android_avds(d: &mut Discovery) {
     let avds = crate::drivers::avd::list_avds();
     if avds.is_empty() {
         return;
@@ -98,15 +102,10 @@ fn android_avds(d: &mut Discovery, all: bool) {
     if idle.is_empty() {
         return;
     }
-    let running = d.targets.iter().any(|t| t.id.starts_with("emulator-"));
-    // 有在跑的就只提一句还有几台闲着（同 iOS 模拟器的处理），别刷屏
-    if running && !all {
-        d.skipped.push(Skipped {
-            kind: "android-avd",
-            why: format!("{} 台 AVD 未启动 · --all", idle.len()),
-        });
-        return;
-    }
+    // **一律加进来**，要不要折叠由 `fold_idle_simulators` 统一决定——
+    // 早先安卓和 iOS 各写各的折叠条件（"有在跑的才折叠"），于是同一份清单里
+    // 一类折叠了、另一类没有，看着像 bug（用户实测撞上：iOS 折叠了 22 台，
+    // 而两台没启动的 AVD 却直挺挺列着）
     for name in idle {
         d.targets.push(Target {
             // **带 avd: 前缀**：序列号是起来之后才有的，起之前只能按名字说
@@ -207,7 +206,7 @@ fn ios_devices(d: &mut Discovery) {
 }
 
 /// 模拟器：走 `simctl`，**跟真机完全是两条路**——没有 USB、不需要 go-ios 隧道
-fn ios_simulators(d: &mut Discovery, all: bool) {
+fn ios_simulators(d: &mut Discovery) {
     if !cfg!(target_os = "macos") {
         return; // 上面 ios_devices 已经说过"只有 macOS"，这儿不重复刷屏
     }
@@ -258,7 +257,7 @@ fn ios_simulators(d: &mut Discovery, all: bool) {
                 state: if booted { "已启动".into() } else { "未启动".into() },
                 ready: booted,
             };
-            if all || t.ready {
+            if t.ready {
                 d.targets.push(t);
             } else {
                 idle.push(t);
@@ -266,17 +265,83 @@ fn ios_simulators(d: &mut Discovery, all: bool) {
         }
     }
 
-    // 一台在跑的都没有 → 把关着的也列出来（不然等于告诉人"没有模拟器"）；
-    // 有在跑的 → 只提一句还有多少台关着,别刷屏
-    if !idle.is_empty() {
-        let booted = d.targets.iter().any(|t| t.kind == "ios-sim");
-        if booted {
-            d.skipped.push(Skipped {
-                kind: "ios-sim",
-                why: format!("{} 台模拟器未启动 · --all", idle.len()),
-            });
-        } else {
-            d.targets.extend(idle);
+    // 一律加进来，折叠交给 `fold_idle_simulators` 统一处理
+    d.targets.extend(idle);
+}
+
+/// 默认这份清单**只回答"现在能测什么"**——没启动的模拟器一律折叠成末尾一句话。
+///
+/// 用户拍板（2026-08-21）：`tke device` 要的是"立刻能用的",不是"这台机器上存在的"。
+/// 装了 Xcode 的 mac 上动辄二三十台模拟器,全摆出来那份清单就没法看了。
+///
+/// ⚠️ **只折叠没启动的模拟器**，不是所有 `ready=false`：离线的安卓真机
+///（插着但 unauthorized/offline）必须继续显示——它是"连着却用不了",
+/// 跟"关着的模拟器"完全是两回事,折叠掉人就不知道该去点那个授权弹窗了
+fn fold_idle_simulators(d: &mut Discovery) {
+    let idle = |t: &Target| !t.ready && matches!(t.kind, "android-avd" | "ios-sim");
+    let n = d.targets.iter().filter(|t| idle(t)).count();
+    if n == 0 {
+        return;
+    }
+    d.targets.retain(|t| !idle(t));
+    d.skipped.push(Skipped {
+        kind: "idle-sim",
+        // **把命令写全**：`· --all` 那种缩写要人自己拼出完整命令，
+        // 而这一行常常是他第一次看到 `--all` 这个词
+        why: format!("tke device --all 查看其他 {} 台未启动的设备", n),
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn t(id: &str, kind: &'static str, ready: bool) -> Target {
+        Target {
+            id: id.into(),
+            kind,
+            os: "—".into(),
+            model: "x".into(),
+            state: if ready { "已连接".into() } else { "未启动".into() },
+            ready,
         }
+    }
+
+    /// 默认清单只回答"现在能测什么"：没启动的模拟器折叠成一句话
+    #[test]
+    fn idle_simulators_are_folded_by_default() {
+        let mut d = Discovery::default();
+        d.targets = vec![
+            t("web", "web", true),
+            t("avd:Pixel", "android-avd", false),
+            t("sim:AAA", "ios-sim", false),
+            t("sim:BBB", "ios-sim", true),
+        ];
+        fold_idle_simulators(&mut d);
+        assert_eq!(d.targets.len(), 2, "只该留下能用的：{:?}", d.targets);
+        assert_eq!(d.skipped.len(), 1);
+        assert!(d.skipped[0].why.contains("2 台"), "{}", d.skipped[0].why);
+        // 命令要写全——这一行常常是人第一次看到 `--all` 这个词
+        assert!(d.skipped[0].why.contains("tke device --all"), "{}", d.skipped[0].why);
+    }
+
+    /// **离线的真机不能折叠**：它是"连着却用不了"，跟"关着的模拟器"是两回事——
+    /// 折叠掉，人就不知道该去点那个授权弹窗了
+    #[test]
+    fn offline_real_device_stays_visible() {
+        let mut d = Discovery::default();
+        d.targets = vec![t("R5CT30", "android", false), t("avd:Pixel", "android-avd", false)];
+        fold_idle_simulators(&mut d);
+        assert_eq!(d.targets.len(), 1);
+        assert_eq!(d.targets[0].id, "R5CT30");
+    }
+
+    /// 没有闲置模拟器时不该凭空多一行
+    #[test]
+    fn nothing_to_fold_adds_no_note() {
+        let mut d = Discovery::default();
+        d.targets = vec![t("web", "web", true)];
+        fold_idle_simulators(&mut d);
+        assert!(d.skipped.is_empty());
     }
 }
