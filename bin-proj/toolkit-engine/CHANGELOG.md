@@ -7,6 +7,33 @@
 
 ## [Unreleased]
 
+### 2026-08-21 · `tke doctor --fix --profile android-emu`:从 Google 官方源装模拟器
+用户问能不能把模拟器镜像也放我们自己的分发源。**查了条款:不行**——Android SDK 许可
+3.4 明文禁止 redistribute「the SDK or any part of the SDK」,3.1 又是 non-sublicensable。
+(WebDriverAgent 能自己分发是因为它 BSD 开源,不是因为它小。)
+所以改成:**我们做编排,Google 做分发**——字节来自 dl.google.com,许可关系是用户 ↔ Google,
+我们只替他敲那几行命令(同 ADR-0014 的 `tke update` 就是去跑官方 install.sh)。
+- **feat** `cli/android_sdk.rs`:解析 Google 仓库 XML → 挑本机的 emulator + `aosp_atd`
+  系统镜像 → 下载解压 → 建 AVD。**不需要 JDK**(官方 `sdkmanager`/`avdmanager` 是 Java 写的,
+  而包的直链就在清单里,AVD 本质是两个 ini 自己写更直接)
+- 下载前把「这是 Google 的 SDK,下载即接受 Android SDK 许可」**说给人听**
+- **feat** 卸载:`tke uninstall --all` 一并删(约 2GB);细分 `--android`。
+  安卓 SDK **由 tke 自己删**不交给 uninstall.sh——它本来就是 tke 装的,而且不该等发版
+- **fix 解压写成稀疏文件**:`system.img` 是稀疏镜像,`io::copy` 展开后**实占 8.1GB**,
+  改成遇全零块就 seek 后降到 **1.1GB**(整套 9.0G → 2.1G)。体积统计也改成算实际占盘,
+  否则卸载预览会说"9603 MB"而人量出来只有 2GB
+- **fix 挑包按 revision 而不是出现顺序**:第一版"取最后一个",实测装到的是 37.1.11
+- **fix `avd:` 的 kind 混用**:AVD 原来也叫 `android`,于是 doctor 把没启动的 AVD
+  **算进了真机**("Android真机 可用 (1 台)"——而这台机器连 adb 都没装)。单独一个 `android-avd`
+
+### 2026-08-21 · `cargo test --lib` 漏掉 bin crate（P-46）
+`src/cli/` 属于 bin crate,而 AGENTS.md 的必过清单一直写 `--lib`——**它只测 lib**。
+`cli/fix.rs` 那几个测试在 `detect_missing` 改名后就编不过了,连着几次"全绿"提交都没发现;
+`json_output.rs` 的三个 doctest 也烂着(缺 `use`,而且示例里的函数会 `process::exit`)。
+- 清单改成 `cargo test --no-default-features`(全量),AGENTS.md 两处都改
+- 修 `cli/fix.rs` 的三处调用、`json_output.rs` 的三个 doctest(加 `use` + `no_run`)
+- **教训写进 P-46**:绿灯的范围要跟你以为的范围对得上。只覆盖一半代码的命令比没有更危险
+
 ### 2026-08-21 · 安卓模拟器（AVD）起停 —— **选装**,不进依赖检查（ADR-0018）
 先把账算清楚(官方仓库清单实测):`emulator` 包 351~490MB + `aosp_atd` 系统镜像
 450~860MB = **一台 0.8~1.3GB**;而且 **Google 至今不发布 linux-arm64 版**。

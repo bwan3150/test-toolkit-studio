@@ -29,8 +29,9 @@ const DEFAULT_BASE_URL: &str = "https://cloud.test-toolkit.app/sl/preview/tookit
 /// Doctor 命令参数（`tke fix` 是它的别名，见 main.rs）
 #[derive(clap::Args)]
 pub struct FixArgs {
-    /// 只看这一类：web（浏览器）/ android / ios / all（默认）
-    #[arg(long, default_value = "all", value_parser = ["web", "android", "ios", "all"])]
+    /// 只看这一类：web（浏览器）/ android / ios / all（默认）。
+    /// `android-emu` = 安卓模拟器，**选装**，只有显式点名才装（ADR-0018）
+    #[arg(long, default_value = "all", value_parser = ["web", "android", "ios", "android-emu", "all"])]
     pub profile: String,
 
     /// 补齐缺失的依赖（**会联网下载**）。不加就只体检，一个字节都不下
@@ -62,6 +63,27 @@ impl FixArgs {
 }
 
 
+/// `tke doctor --profile android-emu`（不加 --fix）：只说装没装、装了多大、怎么装
+fn report_android_emu() -> Result<()> {
+    use crate::cli::android_sdk as sdk;
+    if sdk::installed() {
+        let size = sdk::installed_size_mb().unwrap_or(0);
+        println!("  {} {}", dim("状态    "), format!("已装 · {} MB", size));
+        println!("  {} {}", dim("落点    "), sdk::sdk_dir().map(|d| d.display().to_string()).unwrap_or_default());
+        println!("  {} {}", dim("AVD     "), sdk::AVD_NAME);
+        println!();
+        println!("  {} {}", sym_ok(), "可用");
+        println!("    {}", dim(&format!("起它：tke -d avd:{} control boot", sdk::AVD_NAME)));
+    } else {
+        println!("  {} {}", dim("状态    "), dim("未安装（选装）"));
+        println!();
+        println!("  {}", dim("安卓真机插上即用，模拟器不是必经之路——要装再装："));
+        println!("    tke doctor --fix --profile android-emu");
+        println!("  {}", dim("约 1GB（emulator + 系统镜像），从 Google 官方源下载"));
+    }
+    Ok(())
+}
+
 pub async fn handle(args: FixArgs) -> Result<()> {
     handle_as(args, false).await
 }
@@ -74,6 +96,16 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
         .clone()
         .or_else(|| std::env::var("TKE_BASE_URL").ok())
         .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
+
+    // `android-emu` 走**另一条路**：它不是"跑起来所缺的依赖"，是一件选装的大件
+    // （ADR-0018）。混进体检表会让人以为不装就不完整——恰恰相反，多数人根本不需要它
+    if args.profile == "android-emu" {
+        section("ANDROID EMULATOR");
+        if !download {
+            return report_android_emu();
+        }
+        return crate::cli::android_sdk::install(args.yes).await;
+    }
 
     let exe_dir = tke_dir()?;
     let platform = platform_tag()?;
@@ -369,7 +401,7 @@ fn platform_tag() -> Result<String> {
 
 // ── 下载 / 安装 ──────────────────────────────────────────────────────────
 
-fn confirm(prompt: &str) -> Result<bool> {
+pub(crate) fn confirm(prompt: &str) -> Result<bool> {
     use std::io::Write;
     print!("{} [y/N] ", prompt);
     std::io::stdout().flush().ok();
@@ -382,7 +414,7 @@ fn confirm(prompt: &str) -> Result<bool> {
     Ok(matches!(line.trim(), "y" | "Y" | "yes"))
 }
 
-fn curl_text(url: &str) -> Option<String> {
+pub(crate) fn curl_text(url: &str) -> Option<String> {
     let out = Command::new("curl")
         .args(["-fsSL", "--max-time", "20", url])
         .output()
@@ -392,7 +424,7 @@ fn curl_text(url: &str) -> Option<String> {
 
 /// 下载到文件并**验文件头**——分发平台对不存在的路径回落 200 + HTML，
 /// 只看 curl 退出码会把网页当成二进制装进去（P-19）
-fn curl_file(url: &str, out: &Path, magic: &[u8]) -> Result<()> {
+pub(crate) fn curl_file(url: &str, out: &Path, magic: &[u8]) -> Result<()> {
     let st = Command::new("curl")
         .args(["-fsSL", "--retry", "2", "--max-time", "900", url, "-o"])
         .arg(out)
@@ -553,12 +585,12 @@ mod tests {
         let empty = std::env::temp_dir().join(format!("tke-fix-empty-{}", std::process::id()));
         std::fs::create_dir_all(&empty).unwrap();
 
-        let names: Vec<&str> = detect_missing(&empty, "android").iter().map(|m| m.name).collect();
+        let names: Vec<&str> = detect_deps(&empty, "android").iter().filter(|d| !d.present).map(|d| d.name).collect();
         assert!(names.contains(&"adb"), "android 应查 adb：{:?}", names);
         assert!(!names.contains(&"chromedriver"), "android 不该查 chromedriver：{:?}", names);
 
         // iOS 这条按宿主机能力分：做不了的机器上不该报缺——补上也用不了（门禁在 Controller 层）
-        let names: Vec<&str> = detect_missing(&empty, "ios").iter().map(|m| m.name).collect();
+        let names: Vec<&str> = detect_deps(&empty, "ios").iter().filter(|d| !d.present).map(|d| d.name).collect();
         if tke::utils::capability::ios_supported() {
             assert_eq!(names, vec!["go-ios"], "支持 iOS 的机器上该查 go-ios");
         } else {
@@ -575,7 +607,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("adb"), b"x").unwrap();
 
-        let names: Vec<&str> = detect_missing(&dir, "android").iter().map(|m| m.name).collect();
+        let names: Vec<&str> = detect_deps(&dir, "android").iter().filter(|d| !d.present).map(|d| d.name).collect();
         assert!(names.is_empty(), "adb 在场就不该报缺：{:?}", names);
         let _ = std::fs::remove_dir_all(&dir);
     }

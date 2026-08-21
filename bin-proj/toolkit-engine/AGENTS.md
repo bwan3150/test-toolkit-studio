@@ -16,7 +16,7 @@
 
 ## ⛔ 结束之前（缺一不可）
 
-- [ ] `cargo test --no-default-features --lib` 通过
+- [ ] `cargo test --no-default-features` 通过（**全量**，别只 `--lib`——它不覆盖 bin crate）
 - [ ] 追加 `CHANGELOG.md`（不重写已有条目；pre-push 会强制）
 - [ ] 覆写 `docs/state/STATE.md`（含 Last-Commit）与 `HANDOFF.md`
 - [ ] 踩了新坑 → 追加 `docs/PITFALLS.md`；做了架构决策 → 新增 `docs/adr/NNNN-*.md`
@@ -44,7 +44,7 @@
 | 目的 | 命令 |
 |---|---|
 | 编译检查 | `cargo check --no-default-features` |
-| 单测+无设备集成（push 前必过） | `cargo test --no-default-features --lib` |
+| 单测+无设备集成（push 前必过） | `cargo test --no-default-features`（**不要只跑 `--lib`**——那漏掉 `src/cli/` 所在的 bin crate，实测漏了整整一批编不过的测试） |
 | 黑盒 CLI 契约测试 | `cargo test --no-default-features --test cli`（秒级） |
 | 真机 e2e 冒烟（需设备,手动） | `./tests/e2e/smoke.sh <case.tks> [device]` |
 | 产二进制（真机验证用） | `./build-mac.sh` / `./build-linux.sh` / `build-win.bat`（**禁 cargo build 产二进制**，P-02） |

@@ -3,7 +3,7 @@
 #
 #   curl -fsSL <BASE_URL>/uninstall.sh | bash              # 卸载 tke、驱动、skill
 #   curl -fsSL <BASE_URL>/uninstall.sh | bash -s -- --logs # 连检查记录一起删
-#   curl -fsSL <BASE_URL>/uninstall.sh | bash -s -- --all  # 连 Chrome for Testing 也删
+#   curl -fsSL <BASE_URL>/uninstall.sh | bash -s -- --all  # 连 Chrome 与安卓模拟器也删
 #   ... -s -- --dry-run                                    # 只看会删什么，不动手
 #
 # 默认**不删**两样东西，因为删了很难回来：
@@ -25,15 +25,18 @@ section() { printf '\n%s%s▸ %s%s\n' "$C_B" "$C_TITLE" "$1" "$C_R"; }
 
 DEL_LOGS=0
 DEL_CHROME=0
+DEL_ANDROID=0
 DRY=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --logs)    DEL_LOGS=1; shift ;;
         --chrome)  DEL_CHROME=1; shift ;;
-        --all)     DEL_LOGS=1; DEL_CHROME=1; shift ;;
+        # 安卓模拟器是选装的大件(约 1GB),跟 Chrome 一样默认留着
+        --android) DEL_ANDROID=1; shift ;;
+        --all)     DEL_LOGS=1; DEL_CHROME=1; DEL_ANDROID=1; shift ;;
         --dry-run) DRY=1; shift ;;
         -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) echo "未知参数: $1（可用: --logs / --chrome / --all / --dry-run）" >&2; exit 2 ;;
+        *) echo "未知参数: $1（可用: --logs / --chrome / --android / --all / --dry-run）" >&2; exit 2 ;;
     esac
 done
 
@@ -103,6 +106,8 @@ done
 # iOS 模拟器用的 WebDriverAgent（21MB）。跟 tke 一起装的,就跟 tke 一起删——
 # 留着它既占地方又会让下次 doctor 误判成"已装"
 rm_path "$HOME/.tke/wda" "wda       "
+# 安卓模拟器(选装,约 1GB)。**只删我们自己装的那份**——用户已有的 ~/Android/Sdk 不碰
+[ "$DEL_ANDROID" = 1 ] && rm_path "$HOME/.tke/android-sdk" "android   "
 if [ "$DEL_CHROME" = 1 ]; then
     for d in "$CHROME_DIR"/chrome-*; do
         rm_path "$d" "chrome    "
@@ -116,6 +121,10 @@ KEPT=""; KEPT_FLAGS=""
 if [ "$DEL_CHROME" = 0 ] && ls "$CHROME_DIR"/chrome-* >/dev/null 2>&1; then
     [ -n "$KEPT" ] && { KEPT="$KEPT · Chrome"; KEPT_FLAGS="$KEPT_FLAGS / --chrome"; } \
                    || { KEPT="Chrome"; KEPT_FLAGS="--chrome"; }
+fi
+if [ "$DEL_ANDROID" = 0 ] && [ -d "$HOME/.tke/android-sdk" ]; then
+    [ -n "$KEPT" ] && { KEPT="$KEPT · 安卓模拟器"; KEPT_FLAGS="$KEPT_FLAGS / --android"; } \
+                   || { KEPT="安卓模拟器"; KEPT_FLAGS="--android"; }
 fi
 
 printf '\n'

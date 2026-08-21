@@ -201,7 +201,7 @@ impl Health {
             // **选装**（用户拍板 2026-08-21）：iOS 模拟器是 macOS 自带的，
             // 而这套要 1GB 上下（emulator 包 + 系统镜像），且安卓真机很好开——
             // 所以没装**不算环境不完整**，只如实说一句，不进「下一步」催人装
-            let n_avd = self.disc.targets.iter().filter(|t| t.id.starts_with("avd:")).count();
+            let n_avd = self.disc.targets.iter().filter(|t| t.kind == "android-avd").count();
             match (n_emu, n_avd) {
                 (0, 0) if tke::drivers::avd::emulator_bin().is_none() => {
                     row("Android模拟器", "未安装", "选装", Tone::Muted)

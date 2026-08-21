@@ -18,7 +18,8 @@ impl JsonOutput {
     /// - `data`: 任何可序列化的数据结构
     ///
     /// # 示例
-    /// ```
+    /// ```no_run
+    /// use tke::JsonOutput;
     /// JsonOutput::success(serde_json::json!({
     ///     "success": true,
     ///     "x": 100,
@@ -56,7 +57,8 @@ impl JsonOutput {
     /// - `message`: 错误消息
     ///
     /// # 示例
-    /// ```
+    /// ```no_run
+    /// use tke::JsonOutput;
     /// JsonOutput::error("未找到匹配点");
     /// ```
     pub fn error(message: impl AsRef<str>) -> ! {
@@ -110,7 +112,8 @@ impl JsonOutput {
     /// - `data`: 任何可序列化的数据结构
     ///
     /// # 示例
-    /// ```
+    /// ```no_run
+    /// use tke::JsonOutput;
     /// JsonOutput::success_with(serde_json::json!({
     ///     "x": 100,
     ///     "y": 200

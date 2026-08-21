@@ -25,6 +25,11 @@ use crate::{Result, TkeError};
 pub fn emulator_bin() -> Option<PathBuf> {
     let exe = if cfg!(windows) { "emulator.exe" } else { "emulator" };
     let mut roots: Vec<PathBuf> = Vec::new();
+    // **我们自己装的那套优先**（`tke doctor --fix --profile android-emu` 的落点）：
+    // 版本是我们挑的、AVD 是我们建的，比去猜用户 SDK 里有什么确定得多
+    if let Some(d) = tke_sdk_dir() {
+        roots.push(d);
+    }
     for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
         if let Some(v) = std::env::var_os(var) {
             roots.push(PathBuf::from(v));
@@ -47,10 +52,33 @@ pub fn emulator_bin() -> Option<PathBuf> {
     which::which("emulator").ok()
 }
 
+/// tke 自己装的那套 SDK 在哪（与 `cli/android_sdk.rs` 同一口径）
+pub fn tke_sdk_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|h| PathBuf::from(h).join(".tke").join("android-sdk"))
+        .filter(|d| d.is_dir())
+}
+
+/// 给 emulator 子进程配好环境。
+///
+/// **两个都要**：`ANDROID_SDK_ROOT` 让它找到系统镜像（config.ini 里写的是相对 SDK 根的
+/// 路径），`ANDROID_AVD_HOME` 让它找到我们建的 AVD——我们**有意不往 `~/.android/avd`
+/// 写**（那是用户的地盘，卸载时不好界定该删哪些）
+fn with_env(cmd: &mut Command) {
+    if let Some(sdk) = tke_sdk_dir() {
+        cmd.env("ANDROID_SDK_ROOT", &sdk);
+        cmd.env("ANDROID_HOME", &sdk);
+        cmd.env("ANDROID_AVD_HOME", sdk.join("avd"));
+    }
+}
+
 /// 这台机器上建好的 AVD 名字。没装 SDK / 一个都没建 → 空
 pub fn list_avds() -> Vec<String> {
     let Some(bin) = emulator_bin() else { return Vec::new() };
-    let Ok(out) = Command::new(&bin).arg("-list-avds").output() else { return Vec::new() };
+    let mut cmd = Command::new(&bin);
+    with_env(&mut cmd);
+    let Ok(out) = cmd.arg("-list-avds").output() else { return Vec::new() };
     String::from_utf8_lossy(&out.stdout)
         .lines()
         .map(|l| l.trim().to_string())
@@ -90,6 +118,7 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
     let before = emulator_serials();
     let headed = headed.unwrap_or_else(crate::utils::params::desktop_available);
     let mut cmd = Command::new(&bin);
+    with_env(&mut cmd);
     cmd.args(["-avd", name, "-no-audio", "-no-boot-anim", "-no-snapshot-save"]);
     if !headed {
         cmd.arg("-no-window");
@@ -117,6 +146,17 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
                 return Ok(s.clone());
             }
         }
+    }
+    // Linux 上起不来，头号嫌疑是 KVM：`/dev/kvm` 在、但当前用户不在 kvm 组。
+    // 不说的话人会去翻那份几百行的 emulator 日志
+    if cfg!(target_os = "linux")
+        && std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm").is_err()
+    {
+        return Err(TkeError::DeviceError(format!(
+            "模拟器起不来，多半是没有 KVM 加速：/dev/kvm 打不开（在不在 kvm 组？）。\n\
+             \u{3000}修：sudo usermod -aG kvm $USER，然后重新登录。日志：{}",
+            log.display()
+        )));
     }
     Err(TkeError::DeviceError(format!(
         "模拟器 {} 起了三分钟还没就绪{}。日志：{}",

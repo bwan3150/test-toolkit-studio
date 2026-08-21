@@ -157,7 +157,7 @@ fn paint(kind: &str, s: &str) -> String {
         return s.to_string();
     }
     let color = match kind {
-        "android" => "38;5;114",       // 安卓绿
+        "android" | "android-avd" => "38;5;114", // 安卓绿
         "ios" | "ios-sim" => "38;5;75", // 苹果蓝
         _ => "38;5;179",               // 网页黄
     };

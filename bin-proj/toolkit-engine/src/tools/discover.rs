@@ -14,7 +14,7 @@ use std::process::Command;
 pub struct Target {
     /// **`-d` 直接填这个**（浏览器有头那行连参数一起给，复制就能用）
     pub id: String,
-    /// android / ios / ios-sim / web —— **机器读的**（JSON 输出、脚本判断用）
+    /// android / android-avd / ios / ios-sim / web —— **机器读的**（JSON 输出、脚本判断用）
     pub kind: &'static str,
     /// 系统：`Android 15` / `iOS 26.2` / `—`
     pub os: String,
@@ -111,7 +111,9 @@ fn android_avds(d: &mut Discovery, all: bool) {
         d.targets.push(Target {
             // **带 avd: 前缀**：序列号是起来之后才有的，起之前只能按名字说
             id: format!("avd:{}", name),
-            kind: "android",
+            // **单独一个 kind**：混用 "android" 会让上层把没启动的 AVD 数进真机
+            //（doctor 实测报出"Android真机 可用 (1 台)"，而这台机器连 adb 都没装）
+            kind: "android-avd",
             os: "Android".into(),
             model: name,
             state: "未启动".into(),

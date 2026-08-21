@@ -829,3 +829,15 @@ log.json、报告、**截图顶部横幅**，全是要发给别人看的东西�
 **改法**：下层的错误原样透出去；只有在"连 /session 都没建起来"这一种情况下才补一句
 下一步该敲什么。**用 `if let Ok(..)` 处理 Result，就是在丢错误**——写的时候要问一句：
 我丢掉的那句，是不是比我换上的这句更有用（同 INV-9）。
+
+## P-47 `cargo test --lib` 不覆盖 bin crate，那批测试烂了很久没人知道
+
+`src/cli/` 属于 **bin crate**（`main.rs` 里 `mod cli`），而 AGENTS.md 的必过清单一直写的是
+`cargo test --no-default-features --lib`——**`--lib` 只测 lib crate**。于是 `cli/fix.rs`
+里那几个测试在 `detect_missing` 改名成 `detect_deps` 之后就编不过了，连着好几次
+"全绿"的提交都没发现，直到有人手敲 `--bin tke` 才炸出来。
+
+**改法**：清单改成 `cargo test --no-default-features`（不带 `--lib`，跑全部 target）。
+
+**更一般的教训**：绿灯的范围要跟你以为的范围对得上。一条只覆盖一半代码的命令，
+比没有命令更危险——它会给你"都验过了"的错觉。

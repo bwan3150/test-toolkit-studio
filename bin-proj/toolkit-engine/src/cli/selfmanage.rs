@@ -41,7 +41,8 @@ pub struct UpdateArgs {
 
 #[derive(clap::Args)]
 pub struct UninstallArgs {
-    /// 连日志与 Chrome 一起删（默认都保留：日志是你跑过的证据，Chrome 有几百 MB）
+    /// 连日志、Chrome、安卓模拟器一起删（默认都保留：日志是你跑过的证据，
+    /// Chrome 有几百 MB、安卓模拟器约 1GB——重装要重新下）
     #[arg(long)]
     pub all: bool,
 
@@ -49,11 +50,13 @@ pub struct UninstallArgs {
     #[arg(short = 'y', long)]
     pub yes: bool,
 
-    /// 只删日志 / 只删 Chrome（细分场景，一般用 --all 就够）
+    /// 只删日志 / 只删 Chrome / 只删安卓模拟器（细分场景，一般用 --all 就够）
     #[arg(long, hide = true)]
     pub logs: bool,
     #[arg(long, hide = true)]
     pub chrome: bool,
+    #[arg(long, hide = true)]
+    pub android: bool,
 
     #[arg(long, hide = true)]
     pub base_url: Option<String>,
@@ -77,6 +80,7 @@ pub async fn uninstall(args: UninstallArgs) -> Result<()> {
     let base = base_url(args.base_url);
     let del_logs = args.all || args.logs;
     let del_chrome = args.all || args.chrome;
+    let del_android = args.all || args.android;
 
     if !args.yes {
         // 把"会删什么、留什么"直接摆出来——这就是 --dry-run 想解决的问题，
@@ -101,10 +105,22 @@ pub async fn uninstall(args: UninstallArgs) -> Result<()> {
         if del_chrome {
             println!("  Chrome for Testing");
         }
-        let kept: Vec<&str> = [(!del_logs).then_some("日志"), (!del_chrome).then_some("Chrome")]
-            .into_iter()
-            .flatten()
-            .collect();
+        // 安卓模拟器只在**装了**的时候提，而且要报体积——1GB 级的东西，
+        // 删之前该让人知道删的是多少（重装得重新下）
+        if let Some(mb) = crate::cli::android_sdk::installed_size_mb() {
+            if del_android {
+                println!("  安卓模拟器  {} MB", mb);
+            }
+        }
+        let has_android = crate::cli::android_sdk::installed_size_mb().is_some();
+        let kept: Vec<&str> = [
+            (!del_logs).then_some("日志"),
+            (!del_chrome).then_some("Chrome"),
+            (!del_android && has_android).then_some("安卓模拟器"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         if !kept.is_empty() {
             println!("保留：{}（要一并删除：--all）", kept.join(" · "));
         }
@@ -120,6 +136,17 @@ pub async fn uninstall(args: UninstallArgs) -> Result<()> {
         {
             println!("已取消");
             return Ok(());
+        }
+    }
+
+    // 安卓模拟器**由 tke 自己删**，不交给 uninstall.sh。两个理由：
+    //   - 它本来就是 tke 装的（`doctor --fix --profile android-emu`），不是安装脚本装的
+    //   - 分发源上的脚本可能还是旧版（不认 `--android`），而这条不该等发版
+    // 脚本里也留了 `--android`，那是给 `curl | bash` 直接卸载的人用的
+    if del_android {
+        match crate::cli::android_sdk::remove() {
+            Ok(()) => println!("  已删除安卓模拟器"),
+            Err(e) => println!("  安卓模拟器没删掉：{}", e),
         }
     }
 
