@@ -19,9 +19,22 @@ use tke::{Result, TkeError};
 
 const REPO_BASE: &str = "https://dl.google.com/android/repository";
 
-/// 默认装哪个 API。34 是体积与兼容性的平衡点（`aosp_atd` x86_64 615MB / arm64 599MB）；
-/// 更高的 API 镜像明显更大（36 是 746MB），更低的又开始缺现代 App 要的能力
+/// 默认装哪个 API。34 是体积与兼容性的平衡点（x86_64 721MB / arm64 705MB）；
+/// 更高的 API 镜像明显更大，更低的又开始缺现代 App 要的能力
 const DEFAULT_API: u32 = 34;
+
+/// 装哪一类系统镜像。
+///
+/// ⚠️ **不能用 `aosp_atd`**，哪怕它小 100MB、哪怕它就是给自动化测试用的。
+/// ATD 镜像**默认关掉了硬件渲染**——实测 `adb shell screencap` 拿到的是一张纯黑图
+///（两个 GPU 后端都试过，同一张 15197 字节的纯色 PNG），Google 的说法是让你改用
+/// AndroidX Test Screenshot API，那是 instrumentation **进程内**的东西，
+/// 我们从外面 `screencap` 拿不到。
+///
+/// 而 tke 的立身之本就是**留下带标注的截图给人复核**（ADR-0010）。
+/// 省 100MB 换来"报告里全是黑图"，这个交换不成立。
+/// `default` = 标准 AOSP 镜像，无 Google 服务；要测依赖 GMS 的 App 得换 `google_apis`
+const IMAGE_TAG: &str = "default";
 
 /// 我们建的那台 AVD 叫什么。**固定名字**：这是"tke 装的那一台"，
 /// 人自己用 Android Studio 建的那些照常并存、互不干扰
@@ -94,7 +107,7 @@ pub async fn install(yes: bool) -> Result<()> {
     println!("    落点          {}", sdk.display());
     // 下载多少 ≠ 占盘多少。系统镜像是稀疏的，展开后逻辑 8GB 上下、
     // 实占约 2GB——两个数字都说，人才好判断这台机器塞不塞得下
-    println!("    {}", dim("装完约占 2GB（系统镜像是稀疏的，逻辑大小会显示 8GB 上下）"));
+    println!("    {}", dim("装完约占 2.5GB（系统镜像是稀疏的，逻辑大小会显示 8GB 上下）"));
     println!();
     println!("  {}", dim("这是 Google 的 Android SDK，下载即表示你接受 Android SDK 许可"));
     println!("  {}", dim("（https://developer.android.com/studio/terms）"));
@@ -120,14 +133,17 @@ pub async fn install(yes: bool) -> Result<()> {
     print!("  {} 系统镜像 … ", sym_dot());
     flush();
     let zip = tmp.join("sysimg.zip");
-    crate::cli::fix::curl_file(&format!("{}/sys-img/aosp_atd/{}", REPO_BASE, img.url), &zip, b"PK")?;
+    crate::cli::fix::curl_file(&format!("{}/sys-img/android/{}", REPO_BASE, img.url), &zip, b"PK")?;
     // 镜像 zip 的第一层是 abi 名（`x86_64/`），要落在
-    // `system-images/android-<API>/aosp_atd/` 下面——emulator 按这个路径找
-    let dest = sdk.join("system-images").join(format!("android-{}", DEFAULT_API)).join("aosp_atd");
+    // `system-images/android-<API>/<tag>/` 下面——emulator 按这个路径找
+    let dest = sdk.join("system-images").join(format!("android-{}", DEFAULT_API)).join(IMAGE_TAG);
     std::fs::create_dir_all(&dest).map_err(TkeError::IoError)?;
     unzip_into(&zip, &dest)?;
     println!("{}", sym_ok());
     let _ = std::fs::remove_dir_all(&tmp);
+
+    // emulator 靠 `platform-tools/` 认 SDK root，缺了直接 FATAL（实测踩过）
+    tke::drivers::avd::ensure_sdk_layout()?;
 
     print!("  {} 建 AVD `{}` … ", sym_dot(), AVD_NAME);
     flush();
@@ -144,6 +160,7 @@ pub async fn install(yes: bool) -> Result<()> {
         println!();
         println!("  {} 这台机器还不能用 KVM 加速，模拟器会慢到没法用", crate::cli::doctor::sym_warn());
         println!("    {}", dim("修：sudo usermod -aG kvm $USER  然后重新登录（或重启）"));
+        println!("    {}", dim("（`setfacl` 那条路没用——emulator 读的是 /etc/group）"));
     }
     Ok(())
 }
@@ -191,8 +208,17 @@ pub fn installed_size_mb() -> Option<u64> {
 }
 
 fn kvm_ok() -> bool {
-    // 存在还不够，**要能读写**：`/dev/kvm` 在但不在 kvm 组里是最常见的情形
-    std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm").is_ok()
+    // **按 emulator 的判据**：它读 `/etc/group` 看你在不在 kvm 组，
+    // 而不是去 open /dev/kvm。用 open 判会误报"能用"——`setfacl` 给的 ACL
+    // open 得到、emulator 却仍然拒绝（而且那个 ACL 会被 logind 重置掉）
+    let Ok(groups) = std::fs::read_to_string("/etc/group") else { return true };
+    let Some(user) = std::env::var("USER").ok().or_else(|| std::env::var("LOGNAME").ok()) else {
+        return true;
+    };
+    groups
+        .lines()
+        .find(|l| l.starts_with("kvm:"))
+        .is_some_and(|l| l.rsplit(':').next().is_some_and(|m| m.split(',').any(|g| g == user)))
 }
 
 fn flush() {
@@ -228,12 +254,13 @@ fn pick_emulator(host_os: &str, host_arch: &str) -> Result<Pkg> {
     })
 }
 
-/// 从 `sys-img/aosp_atd/sys-img2-3.xml` 里挑指定 API + abi 的系统镜像。
-/// 用 `aosp_atd` 是有意的：Google 给自动化测试用的精简镜像，比 `google_apis` 省约 40%，
-/// 代价是**没有 Google Play 服务**——要测依赖 GMS 的 App 得换 `google_atd`
+/// 从 `sys-img/android/sys-img2-3.xml` 里挑指定 API + abi 的系统镜像。
+/// **有意不用 `aosp_atd`**（虽然它小 100MB）：那个镜像关掉了硬件渲染，
+/// 截图全黑，见 `IMAGE_TAG` 上面那段
 fn pick_image(api: u32, abi: &str) -> Result<Pkg> {
-    let xml = fetch(&format!("{}/sys-img/aosp_atd/sys-img2-3.xml", REPO_BASE))?;
-    let want = format!("system-images;android-{};aosp_atd;{}", api, abi);
+    // 标准 AOSP 镜像的清单在 `sys-img/android/` 下（ATD 那套在 `sys-img/aosp_atd/`）
+    let xml = fetch(&format!("{}/sys-img/android/sys-img2-3.xml", REPO_BASE))?;
+    let want = format!("system-images;android-{};{};{}", api, IMAGE_TAG, abi);
     let mut best: Option<(Vec<u32>, Pkg)> = None;
     for a in archives(&xml) {
         if a.path == want {
@@ -425,9 +452,9 @@ fn create_avd(sdk: &Path, api: u32, abi: &str) -> Result<()> {
          avd.ini.displayname={name}\n\
          abi.type={abi}\n\
          hw.cpu.arch={cpu}\n\
-         image.sysdir.1=system-images/android-{api}/aosp_atd/{abi}/\n\
-         tag.id=aosp_atd\n\
-         tag.display=AOSP ATD\n\
+         image.sysdir.1=system-images/android-{api}/{tag}/{abi}/\n\
+         tag.id={tag}\n\
+         tag.display=AOSP\n\
          image.androidVersion.api={api}\n\
          hw.lcd.width=1080\n\
          hw.lcd.height=2340\n\
@@ -444,7 +471,8 @@ fn create_avd(sdk: &Path, api: u32, abi: &str) -> Result<()> {
         name = AVD_NAME,
         abi = abi,
         cpu = cpu_arch,
-        api = api
+        api = api,
+        tag = IMAGE_TAG
     );
     std::fs::write(avd.join("config.ini"), config).map_err(TkeError::IoError)?;
 
@@ -483,11 +511,11 @@ mod tests {
     /// 认得出 sys-img 那种带分号的包名
     #[test]
     fn parses_system_image_entries() {
-        let xml = r#"<r><remotePackage path="system-images;android-34;aosp_atd;x86_64">
+        let xml = r#"<r><remotePackage path="system-images;android-34;default;x86_64">
             <archives><archive><complete><size>615</size><url>x86_64-34_r02.zip</url></complete></archive></archives>
           </remotePackage></r>"#;
         let got = archives(xml);
-        assert_eq!(got[0].path, "system-images;android-34;aosp_atd;x86_64");
+        assert_eq!(got[0].path, "system-images;android-34;default;x86_64");
         assert_eq!(got[0].url, "x86_64-34_r02.zip");
     }
 

@@ -841,3 +841,35 @@ log.json、报告、**截图顶部横幅**，全是要发给别人看的东西�
 
 **更一般的教训**：绿灯的范围要跟你以为的范围对得上。一条只覆盖一半代码的命令，
 比没有命令更危险——它会给你"都验过了"的错觉。
+
+## P-48 安卓模拟器无头下 `swiftshader_indirect` 截图是纯色
+
+Linux amd64 实测：`-gpu swiftshader_indirect` 起得来、元素采得到、坐标也点得中，
+**唯独截图是一张纯色图**（63KB 的 PNG，而正常的同一屏是 1.7MB）。
+emulator 自己的 `adb emu screenrecord screenshot` 拿到的也一样——说明不是 `screencap`
+的问题，是合成器只出了背景层、App 的内容层根本没合上去。
+
+**改法**：`-gpu swiftshader`（**不带 `_indirect`**）。换完同一屏壁纸、图标、状态栏全在。
+
+**为什么值得单列一条**：这是"每一步都报成功"的又一个变种（同 P-35 那一族）——
+起成功、采到元素、点也点中、页面确实变了，只有**留给人看的那张证据**是空的。
+而 tke 的立身之本就是留证据（ADR-0010）。查的时候容易把注意力放在"是不是没渲染"，
+其实该问的是"哪一层没合上去"。
+
+顺带：`aosp_atd` 镜像**默认关掉硬件渲染**，截图恒为纯色，Google 让你改用
+AndroidX Test Screenshot API（instrumentation 进程内，外部拿不到）。它小 100MB，
+但对 tke 不可用——已在 `cli/android_sdk.rs` 里写死用 `default` 镜像。
+
+## P-49 `am start` 失败时退出码是 0，错误走的是设备那边的 stderr
+
+两层遮蔽叠在一起：
+
+1. `am start` 找不到 Activity 时**退出码仍是 0**（错误只写文本）
+2. 那段文本走的是**设备上的 stderr**，`adb shell` 不会把它并进 stdout，
+   而 tke 这层只收 stdout
+
+于是包根本没装、组件名拼错（`pkg/.Act/` 末尾多一个斜杠，`result code=-92`），
+`tke steps "启动 [...]"` 照样报成功——App 从没起来过，后面每一步都在对着桌面操作。
+
+**改法**：`adb shell "am start -n <组件> 2>&1"`，再查输出里有没有 `Error:` / `Error type`。
+**更一般的**：凡是靠退出码判断成败的外部命令，都要先确认"它失败时退出码真的会变"。

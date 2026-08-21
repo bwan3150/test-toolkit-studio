@@ -60,6 +60,50 @@ pub fn tke_sdk_dir() -> Option<PathBuf> {
         .filter(|d| d.is_dir())
 }
 
+/// 把 `-d avd:<名字>` 翻成能直接用的 adb 序列号。**这是唯一的解析口**。
+///
+/// 起来了 → `emulator-5554`；没起来 → 原样返回（只有 `boot` 用得了它）。
+/// 为什么要单独一个函数：第一版只在 `AdbDriver::new` 里解析，于是 `tke device info`
+/// 走 `DeviceManager` 那条路时 `avd:tke` 被原样塞进 `adb -s`，报出
+/// `adb: unknown host service`——同一个前缀，两条路各解析各的，必然漏
+pub fn resolve_device_id(device_id: Option<String>) -> Option<String> {
+    match device_id {
+        Some(d) if d.starts_with("avd:") => {
+            let name = d.trim_start_matches("avd:");
+            running_serial_of(name).or(Some(d))
+        }
+        other => other,
+    }
+}
+
+/// 把 SDK 目录补成 emulator 认得的样子。
+///
+/// **emulator 靠 `platform-tools/` 这个子目录判断"这是不是一个 SDK root"**——
+/// 没有它就一路往上猜，猜不到就 `FATAL | Broken AVD system path` 直接退出
+/// （实测：我们只放了 emulator/ 与 system-images/，日志里连着五行 "please install it"，
+/// 而报到人眼前的却是"起了三分钟还没就绪"，完全指不到这儿）。
+///
+/// adb 我们本来就分发，软链过去即可——**不重复下一份**。
+/// 幂等：每次 boot 前都调，老的安装也能自己补上
+pub fn ensure_sdk_layout() -> Result<()> {
+    let Some(sdk) = tke_sdk_dir() else { return Ok(()) };
+    let pt = sdk.join("platform-tools");
+    std::fs::create_dir_all(&pt).map_err(TkeError::IoError)?;
+    let name = if cfg!(windows) { "adb.exe" } else { "adb" };
+    let dst = pt.join(name);
+    if dst.exists() {
+        return Ok(());
+    }
+    if let Ok(adb) = crate::ToolManager::resolve("adb") {
+        #[cfg(unix)]
+        let _ = std::os::unix::fs::symlink(&adb, &dst);
+        // Windows 上建符号链接要管理员权限，复制更省事（adb.exe 几 MB）
+        #[cfg(not(unix))]
+        let _ = std::fs::copy(&adb, &dst);
+    }
+    Ok(())
+}
+
 /// 给 emulator 子进程配好环境。
 ///
 /// **两个都要**：`ANDROID_SDK_ROOT` 让它找到系统镜像（config.ini 里写的是相对 SDK 根的
@@ -115,6 +159,9 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
         return Ok(serial);
     }
 
+    // 每次都补一遍：便宜、幂等，而且能让"装的时候还没有 adb"那种安装自己长好
+    ensure_sdk_layout()?;
+
     let before = emulator_serials();
     let headed = headed.unwrap_or_else(crate::utils::params::desktop_available);
     let mut cmd = Command::new(&bin);
@@ -122,8 +169,19 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
     cmd.args(["-avd", name, "-no-audio", "-no-boot-anim", "-no-snapshot-save"]);
     if !headed {
         cmd.arg("-no-window");
-        // 无头下用软件渲染：CI / 无桌面机器上没有可用的 GL，默认的 auto 会起不来
-        cmd.args(["-gpu", "swiftshader_indirect"]);
+        // 无头下用软件渲染：CI / 无桌面机器上没有可用的 GL，`auto` 会起不来。
+        //
+        // ⚠️ **必须是 `swiftshader` 而不是 `swiftshader_indirect`**（实测，Linux amd64）：
+        // indirect 那个能起、能采元素、能点中，**唯独截图是一张纯色图**——
+        // emulator 自己的 `emu screenrecord screenshot` 拿到的也一样，
+        // 说明合成器只出了背景层、App 的内容层根本没合上去（63KB 的纯色 PNG）。
+        // 换成 `swiftshader` 之后同一屏是 1.7MB、壁纸图标状态栏全在。
+        //
+        // 这个坑特别值得防：**每一步都报成功**，元素采得到、点也点得中，
+        // 只有留给人看的那张证据是空的（P-35 那一族）。
+        // `TKE_AVD_GPU` 留个口子，换后端不必改代码
+        let gpu = std::env::var("TKE_AVD_GPU").unwrap_or_else(|_| "swiftshader".into());
+        cmd.args(["-gpu", &gpu]);
     }
     let log = log_path(name);
     let out_file = std::fs::File::create(&log).map_err(TkeError::IoError)?;
@@ -147,11 +205,12 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
             }
         }
     }
-    // Linux 上起不来，头号嫌疑是 KVM：`/dev/kvm` 在、但当前用户不在 kvm 组。
-    // 不说的话人会去翻那份几百行的 emulator 日志
-    if cfg!(target_os = "linux")
-        && std::fs::OpenOptions::new().read(true).write(true).open("/dev/kvm").is_err()
-    {
+    // Linux 上起不来，头号嫌疑是 KVM。
+    // ⚠️ **判据要跟 emulator 一致**：它不是去 open /dev/kvm，而是**读 `/etc/group` 看
+    // 你在不在 kvm 组**（日志原话："The KVM line in /etc/group is: [kvm:x:993:]"）。
+    // 所以 `setfacl -m u:$USER:rw /dev/kvm` 那条路它根本不认——而且实测那个 ACL
+    // 还会被 systemd-logind 的 uaccess 规则重置掉。要治就得 usermod 进组
+    if cfg!(target_os = "linux") && !in_kvm_group() {
         return Err(TkeError::DeviceError(format!(
             "模拟器起不来，多半是没有 KVM 加速：/dev/kvm 打不开（在不在 kvm 组？）。\n\
              \u{3000}修：sudo usermod -aG kvm $USER，然后重新登录。日志：{}",
@@ -221,6 +280,19 @@ fn emulator_serials() -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// 当前用户在不在 `kvm` 组——**按 emulator 的判据来**，不是看能不能 open /dev/kvm。
+/// 这两件事会分叉：`setfacl` 给了 ACL 时 open 得到、emulator 却仍然拒绝
+fn in_kvm_group() -> bool {
+    let Ok(groups) = std::fs::read_to_string("/etc/group") else { return true };
+    let Some(user) = std::env::var("USER").ok().or_else(|| std::env::var("LOGNAME").ok()) else {
+        return true; // 判断不了就别拦路，让 emulator 自己去报
+    };
+    groups
+        .lines()
+        .find(|l| l.starts_with("kvm:"))
+        .is_some_and(|l| l.rsplit(':').next().is_some_and(|m| m.split(',').any(|g| g == user)))
 }
 
 fn boot_completed(serial: &str) -> bool {

@@ -52,6 +52,19 @@ API 34 arm64-v8a 599 MB、API 36 x86_64 746 MB。**一台的总成本 0.8~1.3 GB
 - `device list` 把没启动的 AVD 也列出来（id = `avd:<名字>`），有在跑的就只提一句
   还有几台闲着（同 iOS 模拟器，别刷屏）
 
+## 实测（2026-08-21，Linux amd64）
+
+装 → 起 → 装 App → 启动 → 采集 → 按文字点击 → 页面跳转 → 证据落盘 → 关机，全通。
+冷启动 61 秒（KVM 加速），采集与点击的表现跟真机没有区别。
+
+**镜像从 `aosp_atd` 换成了 `default`**：ATD 小 100MB，但它**默认关掉硬件渲染**，
+截图恒为纯色。Google 的说法是改用 AndroidX Test Screenshot API——那是 instrumentation
+**进程内**的东西，我们从外面 `screencap` 拿不到。tke 的立身之本是留证据（ADR-0010），
+这个交换不成立。
+
+**渲染后端必须是 `-gpu swiftshader`，不能是 `swiftshader_indirect`**（P-47）：
+后者起得来、采得到、点得中，唯独截图是纯色——合成器只出了背景层。
+
 ## 代价 / 已知限制
 
 - **Linux arm64 没有官方 emulator**。要在那一档跑安卓模拟器只能用 redroid 之类的

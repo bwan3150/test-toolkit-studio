@@ -7,6 +7,28 @@
 
 ## [Unreleased]
 
+### 2026-08-21 · 安卓模拟器 Linux amd64 **端到端实测通过**,逼出四个真 bug
+装 → 起 → 装 App → 启动 → 采集 → **按文字点击** → 页面真的跳转 → 证据落盘 → 关机,
+整条链路在 Linux amd64 上跑通（截图里 "Network & internet" 被红框标出、蓝点是实际
+点击位置,点完页面确实换了）。过程逼出四个 bug:
+- **fix 截图是纯色（P-47）**:`-gpu swiftshader_indirect` 起得来、采得到、点得中,
+  **唯独截图是纯色**（63KB vs 正常 1.7MB）;emulator 自己的 `emu screenrecord screenshot`
+  也一样,说明合成器只出了背景层。改用 **`-gpu swiftshader`**（不带 `_indirect`）
+- **fix 镜像换成 `default`**:`aosp_atd` 虽然小 100MB,但它**默认关掉硬件渲染**,
+  截图恒为纯色（Google 让你用 AndroidX Test Screenshot API,那是进程内的,外部拿不到）。
+  tke 的立身之本就是留证据,省 100MB 换"报告里全是黑图"这交换不成立
+- **fix `启动 ["pkg/.Act"]` 拼出末尾多余斜杠**:tks 单参数写法把整串当包名、activity 是空的,
+  而 `format!("{}/{}")` 又补了一个 → `am start` 回 `result code=-92`（START_ABORTED）
+- **fix `am start` 的失败完全看不见（P-48）**:它**失败时退出码仍是 0**,错误文本走
+  设备那边的 stderr,`adb shell` 不并进 stdout,tke 这层又只收 stdout——两层一叠,
+  包根本没装也报成功。改成 `am start ... 2>&1` 再查 `Error:`
+- **fix `platform-tools/` 缺失**:emulator 靠这个子目录认 SDK root,缺了直接
+  `FATAL | Broken AVD system path`,而报到人眼前的是"起了三分钟还没就绪"
+- **fix `avd:` 前缀两条路各解析各的**:`device info` 走 `DeviceManager` 没解析,
+  把 `avd:tke` 原样塞进 `adb -s` → `adb: unknown host service`。统一到一个解析口
+- **fix KVM 判据**:emulator 读 `/etc/group` 看你在不在 kvm 组,**不是** open `/dev/kvm`
+  ——`setfacl` 那条路它不认（而且那个 ACL 会被 logind 重置）。tke 的提示改成 usermod
+
 ### 2026-08-21 · `tke doctor --fix --profile android-emu`:从 Google 官方源装模拟器
 用户问能不能把模拟器镜像也放我们自己的分发源。**查了条款:不行**——Android SDK 许可
 3.4 明文禁止 redistribute「the SDK or any part of the SDK」,3.1 又是 non-sublicensable。

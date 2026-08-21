@@ -22,14 +22,15 @@ impl AdbDriver {
         let adb_path = ToolManager::resolve("adb")?;
         // `avd:<名字>` = 安卓模拟器，**要 boot 起来才有设备 id**。
         // 这时 device_id 留空：起之前 `-s` 无从填起；起来之后走 resolved
-        let (device_id, avd) = match device_id {
-            Some(d) if d.starts_with("avd:") => {
-                let name = d.trim_start_matches("avd:").to_string();
-                // 已经跑着就直接认（脚本第二次跑不必再 boot）
-                (crate::drivers::avd::running_serial_of(&name), Some(name))
-            }
-            other => (other, None),
-        };
+        let avd = device_id
+            .as_deref()
+            .filter(|d| d.starts_with("avd:"))
+            .map(|d| d.trim_start_matches("avd:").to_string());
+        // 已经跑着就解析成序列号（脚本第二次跑不必再 boot）；
+        // 没起来的话 resolve 会把 `avd:x` 原样还回来——那时 `-s` 用不了它，
+        // 所以要滤掉，让 adb 自己选唯一设备，boot 之后再由 resolved 顶上
+        let device_id =
+            crate::drivers::avd::resolve_device_id(device_id).filter(|d| !d.starts_with("avd:"));
         Ok(Self {
             device_id,
             adb_path,
@@ -361,10 +362,65 @@ impl AdbDriver {
     }
 
     // 启动应用
+    /// 启动 App。三种输入都得认（实测踩过第二种）：
+    ///   - 包名 + Activity 分开给
+    ///   - **整串组件名塞进 package**（`启动 ["pkg/.MainActivity"]` 就是这样——
+    ///     tks 单参数写法把整串当包名，activity 是空的）
+    ///   - 只给包名，让系统自己找启动 Activity
+    ///
+    /// 原来一律 `format!("{}/{}")`，于是第二种拼出 `pkg/.MainActivity/`——多一个斜杠，
+    /// `am start` 回 `result code=-92`（START_ABORTED）。而当时**没人发现**：
+    /// 这条命令的输出根本没被检查，tke 照样报成功，App 却从没起来过（P-35 那一族）。
     pub fn launch_app(&self, package: &str, activity: &str) -> Result<()> {
-        let component = format!("{}/{}", package, activity);
-        self.run_adb_command(&["shell", "am", "start", "-n", &component])?;
+        let component = match Self::component_of(package, activity) {
+            Some(c) => c,
+            // 只有包名：问系统它的启动 Activity 是哪个（`am start -n` 要完整组件名）
+            None => {
+                let out = self.run_adb_command_output(&[
+                    "shell", "cmd", "package", "resolve-activity", "--brief", package,
+                ])?;
+                out.lines()
+                    .map(str::trim)
+                    .find(|l| l.contains('/') && !l.contains(' '))
+                    .map(|s| s.to_string())
+                    .ok_or_else(|| {
+                        TkeError::AdbError(format!(
+                            "找不到 {} 的启动 Activity（装了吗？`tke app list` 看看）",
+                            package
+                        ))
+                    })?
+            }
+        };
+        // `2>&1` 是必须的：**`am start` 失败时退出码照样是 0**，而错误文本走的是
+        // 设备那边的 stderr——`adb shell` 不会把它并进 stdout，我们这层又只收 stdout。
+        // 两层一叠，"Activity class does not exist" 就完全看不见了（实测：包根本没装，
+        // tke 照样报成功）
+        let out = self.run_adb_command_output(&[
+            "shell",
+            &format!("am start -n {} 2>&1", component),
+        ])?;
+        // 查输出才知道成没成
+        if out.contains("Error:") || out.contains("Error type") {
+            return Err(TkeError::AdbError(format!(
+                "启动 {} 失败：{}",
+                component,
+                out.lines().find(|l| l.contains("Error")).unwrap_or_else(|| out.trim())
+            )));
+        }
         Ok(())
+    }
+
+    /// 拼 `am start -n` 要的组件名。`None` = 只给了包名，得让系统自己找
+    fn component_of(package: &str, activity: &str) -> Option<String> {
+        let pkg = package.trim_end_matches('/');
+        if !activity.is_empty() {
+            Some(format!("{}/{}", pkg, activity.trim_start_matches('/')))
+        } else if pkg.contains('/') {
+            // 整串本来就是组件名，**别再补斜杠**
+            Some(pkg.to_string())
+        } else {
+            None
+        }
     }
 
     // 停止应用
@@ -505,3 +561,38 @@ const DEFAULT_ADB_TIMEOUT_SECS: u64 = 20;
 
 /// uiautomator dump 专用超时（秒）：它等 UI idle、是最常见的挂死点，收得更紧（超时后上层重试一次）
 const UI_DUMP_TIMEOUT_SECS: u64 = 12;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `启动 ["pkg/.Act"]` 走的是单参数那条路——整串在 package 里、activity 是空的。
+    /// 原来一律 `format!("{}/{}")`，拼出来末尾多个斜杠，`am start` 回 -92（实测）
+    #[test]
+    fn component_does_not_gain_a_trailing_slash() {
+        assert_eq!(
+            AdbDriver::component_of("org.fdroid.fdroid/.views.main.MainActivity", ""),
+            Some("org.fdroid.fdroid/.views.main.MainActivity".to_string())
+        );
+    }
+
+    /// 分开给的照常拼
+    #[test]
+    fn component_joins_package_and_activity() {
+        assert_eq!(
+            AdbDriver::component_of("com.example", ".Main"),
+            Some("com.example/.Main".to_string())
+        );
+        // 多余的斜杠两边都容忍
+        assert_eq!(
+            AdbDriver::component_of("com.example/", "/.Main"),
+            Some("com.example/.Main".to_string())
+        );
+    }
+
+    /// 只有包名 → None，交给 resolve-activity 去问系统
+    #[test]
+    fn package_only_needs_resolution() {
+        assert_eq!(AdbDriver::component_of("com.example", ""), None);
+    }
+}

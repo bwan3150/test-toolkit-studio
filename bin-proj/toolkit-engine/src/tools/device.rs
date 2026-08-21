@@ -12,6 +12,10 @@ impl DeviceManager {
     pub fn new(device_id: Option<String>) -> Result<Self> {
         // adb 由 ToolManager 统一在 tke 同目录定位
         let adb_path = ToolManager::resolve("adb")?;
+        // `avd:<名字>` 要翻成序列号再交给 adb——**跟 AdbDriver 走同一个解析口**。
+        // 少了这一步，`tke -d avd:tke device info` 会把 `avd:tke` 原样塞进 `adb -s`，
+        // 报 `adb: unknown host service`（实测踩过）
+        let device_id = crate::drivers::avd::resolve_device_id(device_id);
         Ok(Self {
             device_id,
             adb_path,
