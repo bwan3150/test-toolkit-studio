@@ -1,0 +1,230 @@
+// 【安卓模拟器（AVD）】起停 + 发现。**选装能力**（用户拍板 2026-08-21）。
+//
+// 为什么是选装而不是像 chromedriver 那样补齐：
+//   - iOS 模拟器是 macOS **自带**的（Xcode 装了就有），我们只补一个 21MB 的 WDA runner
+//   - 安卓**真机**开发者模式很好开，插上就能测——模拟器不是必经之路
+//   - 而这套东西很重：`emulator` 包 350~490MB + 一个系统镜像 450~860MB，
+//     加起来 1GB 上下。让每个人为一条备选路径先下 1GB，不划算（同 ADR-0012 的精神：
+//     不静默拖大包；这里更进一步——**根本不进依赖检查**，没装不算"环境不完整"）
+//
+// 所以这个文件只做两件事：**认出它装没装**，装了就**能起能停**。没装就如实说、
+// 给一行安装命令，绝不代下。
+//
+// 与 iOS 模拟器的对照（`wda/infra.rs`）：那边要自己管端口（多台会撞 8100，见 Q-13），
+// 安卓这边**天生不撞**——每台 AVD 占一个从 5554 起、步进 2 的控制台端口，
+// 序列号就是 `emulator-<端口>`，adb 直接分得清。
+
+use std::path::PathBuf;
+use std::process::Command;
+
+use crate::{Result, TkeError};
+
+/// 找 Android SDK 里的 `emulator` 二进制。**不走 ToolManager**：
+/// 那个只在 tke 同目录找，而这东西是用户自己装的 SDK 的一部分，
+/// 报错文案也不该说"要和 tke 放在同一目录"（会把人引到错的方向）
+pub fn emulator_bin() -> Option<PathBuf> {
+    let exe = if cfg!(windows) { "emulator.exe" } else { "emulator" };
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for var in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Some(v) = std::env::var_os(var) {
+            roots.push(PathBuf::from(v));
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let h = PathBuf::from(home);
+        roots.push(h.join("Library/Android/sdk")); // macOS 默认
+        roots.push(h.join("Android/Sdk")); // Linux 默认
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        roots.push(PathBuf::from(local).join("Android/Sdk")); // Windows 默认
+    }
+    for r in roots {
+        let p = r.join("emulator").join(exe);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    which::which("emulator").ok()
+}
+
+/// 这台机器上建好的 AVD 名字。没装 SDK / 一个都没建 → 空
+pub fn list_avds() -> Vec<String> {
+    let Some(bin) = emulator_bin() else { return Vec::new() };
+    let Ok(out) = Command::new(&bin).arg("-list-avds").output() else { return Vec::new() };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        // 这条命令偶尔会往 stdout 混一行提示（比如 SDK 路径警告），只收像名字的
+        .filter(|l| !l.is_empty() && !l.contains(' ') && !l.starts_with('#'))
+        .collect()
+}
+
+/// 没装时给人看的一行——**只说怎么装，不代劳**（1GB 级的东西不该由 tke 悄悄下）
+pub fn install_hint() -> String {
+    "没装安卓模拟器（选装）。装法：Android Studio 里建一台，或命令行 \
+     `sdkmanager --install \"emulator\" \"system-images;android-34;aosp_atd;x86_64\"` \
+     再 `avdmanager create avd -n tke -k \"system-images;android-34;aosp_atd;x86_64\"`\
+     （arm64 机器把 x86_64 换成 arm64-v8a；aosp_atd 是给自动化用的精简镜像，最小）"
+        .to_string()
+}
+
+/// 起一台 AVD，**等到它真的能用**，返回 adb 序列号（`emulator-5554`）。
+///
+/// `headed=None` 时按有没有桌面自动定（同 web 的 `--headless=auto`）：
+/// 无头服务器上开窗口必然失败，而有桌面时看得见画面对人排查更有用。
+pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
+    let bin = emulator_bin().ok_or_else(|| TkeError::InvalidArgument(install_hint()))?;
+    let avds = list_avds();
+    if !avds.iter().any(|a| a == name) {
+        return Err(TkeError::InvalidArgument(format!(
+            "没有叫 `{}` 的 AVD。现有的：{}",
+            name,
+            if avds.is_empty() { "一个都没有".into() } else { avds.join(" / ") }
+        )));
+    }
+    // 已经起着就直接用（幂等）——boot 写在脚本第一行，每次跑都会执行
+    if let Some(serial) = running_serial_of(name) {
+        return Ok(serial);
+    }
+
+    let before = emulator_serials();
+    let headed = headed.unwrap_or_else(crate::utils::params::desktop_available);
+    let mut cmd = Command::new(&bin);
+    cmd.args(["-avd", name, "-no-audio", "-no-boot-anim", "-no-snapshot-save"]);
+    if !headed {
+        cmd.arg("-no-window");
+        // 无头下用软件渲染：CI / 无桌面机器上没有可用的 GL，默认的 auto 会起不来
+        cmd.args(["-gpu", "swiftshader_indirect"]);
+    }
+    let log = log_path(name);
+    let out_file = std::fs::File::create(&log).map_err(TkeError::IoError)?;
+    let err_file = out_file.try_clone().map_err(TkeError::IoError)?;
+    cmd.stdin(std::process::Stdio::null()).stdout(out_file).stderr(err_file);
+    cmd.spawn()
+        .map_err(|e| TkeError::DeviceError(format!("启动模拟器失败: {}（日志 {}）", e, log.display())))?;
+
+    // 冷启动很慢（首次能到一两分钟），而**只等 adb 认出设备是不够的**：
+    // 那时系统还在起，装 App / 采集都会失败。要等 sys.boot_completed
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+    let mut serial = None;
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        if serial.is_none() {
+            serial = emulator_serials().into_iter().find(|s| !before.contains(s));
+        }
+        if let Some(s) = &serial {
+            if boot_completed(s) {
+                return Ok(s.clone());
+            }
+        }
+    }
+    Err(TkeError::DeviceError(format!(
+        "模拟器 {} 起了三分钟还没就绪{}。日志：{}",
+        name,
+        match &serial {
+            Some(s) => format!("（adb 已看到 {}，但 sys.boot_completed 一直不是 1）", s),
+            None => "（adb 始终没看到它）".to_string(),
+        },
+        log.display()
+    )))
+}
+
+/// 关掉一台正在跑的模拟器。`emu kill` 是模拟器自己的控制台命令，比杀进程干净
+pub fn shutdown(serial: &str) -> Result<()> {
+    if !serial.starts_with("emulator-") {
+        return Err(TkeError::InvalidArgument(format!(
+            "{} 不是模拟器（真机没法从这儿关机）",
+            serial
+        )));
+    }
+    let adb = crate::ToolManager::resolve("adb")?;
+    let out = Command::new(adb)
+        .args(["-s", serial, "emu", "kill"])
+        .output()
+        .map_err(|e| TkeError::AdbError(format!("关闭模拟器失败: {}", e)))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(TkeError::DeviceError(format!(
+            "关闭 {} 失败：{}",
+            serial,
+            String::from_utf8_lossy(&out.stderr).trim()
+        )))
+    }
+}
+
+/// 这个 AVD 现在是不是已经跑着了——**按名字找**，因为序列号每次可能不同。
+/// `adb -s emulator-NNNN emu avd name` 回的是它的 AVD 名
+pub fn running_serial_of(name: &str) -> Option<String> {
+    let adb = crate::ToolManager::resolve("adb").ok()?;
+    emulator_serials().into_iter().find(|s| {
+        Command::new(&adb)
+            .args(["-s", s, "emu", "avd", "name"])
+            .output()
+            .ok()
+            .is_some_and(|o| String::from_utf8_lossy(&o.stdout).lines().any(|l| l.trim() == name))
+    })
+}
+
+/// 现在 adb 看得到的模拟器序列号
+fn emulator_serials() -> Vec<String> {
+    let Ok(adb) = crate::ToolManager::resolve("adb") else { return Vec::new() };
+    let Ok(out) = Command::new(adb).arg("devices").output() else { return Vec::new() };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .skip(1)
+        .filter_map(|l| {
+            let mut it = l.split_whitespace();
+            match (it.next(), it.next()) {
+                (Some(id), Some("device")) if id.starts_with("emulator-") => Some(id.to_string()),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn boot_completed(serial: &str) -> bool {
+    let Ok(adb) = crate::ToolManager::resolve("adb") else { return false };
+    Command::new(adb)
+        .args(["-s", serial, "shell", "getprop", "sys.boot_completed"])
+        .output()
+        .ok()
+        .is_some_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "1")
+}
+
+fn log_path(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join("tke").join("avd");
+    let _ = std::fs::create_dir_all(&dir);
+    let safe: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    dir.join(format!("{}.log", safe))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 没装 SDK 时**不能报错、更不能 panic**——它是选装的，"没有"是正常状态
+    #[test]
+    fn missing_sdk_is_not_an_error() {
+        // 这台机器上装没装都行：list_avds 都必须安静地返回一个列表
+        let _ = list_avds();
+    }
+
+    /// 关真机要说清楚，别让人以为命令没生效
+    #[test]
+    fn shutdown_rejects_real_device() {
+        let e = shutdown("R5CT30XXXXX").unwrap_err();
+        assert!(e.to_string().contains("不是模拟器"), "{}", e);
+    }
+
+    /// 安装提示里必须有那条能直接粘的命令，否则等于只说了"你没装"
+    #[test]
+    fn install_hint_carries_a_command() {
+        let h = install_hint();
+        assert!(h.contains("sdkmanager"), "{}", h);
+        assert!(h.contains("aosp_atd"), "{}", h);
+    }
+}

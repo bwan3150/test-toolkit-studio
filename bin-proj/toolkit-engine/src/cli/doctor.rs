@@ -198,11 +198,20 @@ impl Health {
                 (0, None) => row("Android真机", "不可用", "尚未连接设备", Tone::Muted),
                 (n, _) => row("Android真机", "可用", &format!("{} 台", n), Tone::Plain),
             }
-            match n_emu {
-                // tke 不管 AVD 的起停（要 SDK 的 emulator + AVD 名），
-                // 但已经跑起来的模拟器 adb 连得上、tke 照常操作——这两件事要分清
-                0 => row("Android模拟器", "不可用", "尚未启动 AVD", Tone::Muted),
-                n => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Plain),
+            // **选装**（用户拍板 2026-08-21）：iOS 模拟器是 macOS 自带的，
+            // 而这套要 1GB 上下（emulator 包 + 系统镜像），且安卓真机很好开——
+            // 所以没装**不算环境不完整**，只如实说一句，不进「下一步」催人装
+            let n_avd = self.disc.targets.iter().filter(|t| t.id.starts_with("avd:")).count();
+            match (n_emu, n_avd) {
+                (0, 0) if tke::drivers::avd::emulator_bin().is_none() => {
+                    row("Android模拟器", "未安装", "选装", Tone::Muted)
+                }
+                (0, 0) => row("Android模拟器", "不可用", "装了 SDK 但一个 AVD 都没建", Tone::Muted),
+                (0, m) => row("Android模拟器", "待启动", &format!("{} 台可选", m), Tone::Muted),
+                (n, 0) => row("Android模拟器", "可用", &format!("{} 台已启动", n), Tone::Plain),
+                (n, m) => {
+                    row("Android模拟器", "可用", &format!("{} 台已启动 · 另有 {} 台可选", n, m), Tone::Plain)
+                }
             }
         }
         if want("ios") {

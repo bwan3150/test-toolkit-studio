@@ -74,9 +74,50 @@ pub fn discover_with(all: bool) -> Discovery {
         });
     }
     android(&mut d);
+    android_avds(&mut d, all);
     ios_devices(&mut d);
     ios_simulators(&mut d, all);
     d
+}
+
+/// 还没启动的 AVD（安卓模拟器）。**选装**：没装 SDK 就一个字都不说——
+/// 那不是"缺依赖"，是这条路本来就不必走（真机插上即用）。
+///
+/// 已经跑着的模拟器由 `android()` 从 `adb devices` 里就列出来了（序列号 `emulator-5554`），
+/// 这里只补"能起但没起"的那些，id 给成 `avd:<名字>`——那正是 `boot` 要的参数
+fn android_avds(d: &mut Discovery, all: bool) {
+    let avds = crate::drivers::avd::list_avds();
+    if avds.is_empty() {
+        return;
+    }
+    // 名字对得上的说明已经在跑（上面 android() 列过了），不重复
+    let idle: Vec<String> = avds
+        .into_iter()
+        .filter(|n| crate::drivers::avd::running_serial_of(n).is_none())
+        .collect();
+    if idle.is_empty() {
+        return;
+    }
+    let running = d.targets.iter().any(|t| t.id.starts_with("emulator-"));
+    // 有在跑的就只提一句还有几台闲着（同 iOS 模拟器的处理），别刷屏
+    if running && !all {
+        d.skipped.push(Skipped {
+            kind: "android-avd",
+            why: format!("{} 台 AVD 未启动 · --all", idle.len()),
+        });
+        return;
+    }
+    for name in idle {
+        d.targets.push(Target {
+            // **带 avd: 前缀**：序列号是起来之后才有的，起之前只能按名字说
+            id: format!("avd:{}", name),
+            kind: "android",
+            os: "Android".into(),
+            model: name,
+            state: "未启动".into(),
+            ready: false,
+        });
+    }
 }
 
 fn android(d: &mut Discovery) {

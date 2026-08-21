@@ -8,16 +8,43 @@ use std::process::Command;
 pub struct AdbDriver {
     device_id: Option<String>,
     adb_path: PathBuf,
+    /// `-d avd:<名字>` 里的 AVD 名。它**不是设备 id**——设备 id 要等模拟器起来
+    /// 才有（`emulator-5554`），所以 boot 之后把实到的序列号记进 `resolved`
+    avd: Option<String>,
+    /// boot 之后实到的序列号。之所以要 Mutex：`boot(&self)` 改不了自己，
+    /// 而后续每条 adb 命令都得知道 `-s` 该填谁
+    resolved: std::sync::Mutex<Option<String>>,
 }
 
 impl AdbDriver {
     pub fn new(device_id: Option<String>) -> Result<Self> {
         // adb 与其它直通工具一样，由 ToolManager 统一在 tke 同目录定位
         let adb_path = ToolManager::resolve("adb")?;
+        // `avd:<名字>` = 安卓模拟器，**要 boot 起来才有设备 id**。
+        // 这时 device_id 留空：起之前 `-s` 无从填起；起来之后走 resolved
+        let (device_id, avd) = match device_id {
+            Some(d) if d.starts_with("avd:") => {
+                let name = d.trim_start_matches("avd:").to_string();
+                // 已经跑着就直接认（脚本第二次跑不必再 boot）
+                (crate::drivers::avd::running_serial_of(&name), Some(name))
+            }
+            other => (other, None),
+        };
         Ok(Self {
             device_id,
             adb_path,
+            avd,
+            resolved: std::sync::Mutex::new(None),
         })
+    }
+
+    /// `-s` 到底该填谁：boot 实到的序列号优先，其次是命令行给的
+    fn effective_device(&self) -> Option<String> {
+        self.resolved
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .or_else(|| self.device_id.clone())
     }
     
     // 设置目标设备
@@ -26,23 +53,37 @@ impl AdbDriver {
     }
     
     // 获取连接的设备列表
-    /// 启动运行环境。**安卓模拟器目前不支持**——不假装能做。
+    /// 启动运行环境 = 起一台 AVD（安卓模拟器）。**真机不需要**：插上就能用。
     ///
-    /// 要支持得有 Android SDK 的 `emulator` 二进制（不在 tke 的分发里，几百 MB）、
-    /// 还要知道 AVD 名字（`emulator -list-avds`）。真机则根本不需要 boot：插上就能用。
-    pub fn boot(&self, _headed: Option<bool>) -> Result<()> {
-        Err(TkeError::InvalidArgument(
-            "安卓：真机插上即用，不需要 boot；模拟器（AVD）暂不支持自动启动 —— \
-             先用 Android Studio 或 `emulator -avd <名字>` 起一台，再 `tke device` 看序列号"
-                .into(),
-        ))
+    /// 只认 `-d avd:<名字>`——序列号（`emulator-5554`）是模拟器**起来之后**才有的东西，
+    /// 拿它当启动参数是循环论证。起来之后把实到的序列号记下来，后面每条 adb 命令都用它。
+    pub fn boot(&self, headed: Option<bool>) -> Result<()> {
+        let Some(name) = self.avd.clone() else {
+            return Err(TkeError::InvalidArgument(
+                "安卓：真机插上即用，不需要 boot。要起模拟器请指定是哪一台：\
+                 `-d avd:<AVD名>`（有哪些：tke device list）"
+                    .into(),
+            ));
+        };
+        let serial = crate::drivers::avd::boot(&name, headed)?;
+        if let Ok(mut g) = self.resolved.lock() {
+            *g = Some(serial);
+        }
+        Ok(())
     }
 
-    /// 关掉运行环境。同 boot：安卓这边没有 tke 管得着的"环境"
+    /// 关掉运行环境 = 关掉这台模拟器。真机没有这回事
     pub fn shutdown(&self) -> Result<()> {
-        Err(TkeError::InvalidArgument(
-            "安卓：真机没法从这儿关机；模拟器（AVD）暂不支持 —— 用 `adb -s <序列号> emu kill`".into(),
-        ))
+        match self.effective_device() {
+            Some(s) if s.starts_with("emulator-") => crate::drivers::avd::shutdown(&s),
+            Some(s) => Err(TkeError::InvalidArgument(format!(
+                "{} 是真机，没法从这儿关机（模拟器才可以）",
+                s
+            ))),
+            None => Err(TkeError::InvalidArgument(
+                "没指定关哪台。模拟器用 `-d avd:<名字>` 或 `-d emulator-<端口>`".into(),
+            )),
+        }
     }
 
     /// 「我是谁」——`Pixel 7（安卓 14）`。给报告和设备列表用，
@@ -413,7 +454,7 @@ impl AdbDriver {
     fn run_adb_command_with_timeout(&self, args: &[&str], timeout_secs: u64) -> Result<String> {
         use std::process::Stdio;
         let mut cmd = Command::new(&self.adb_path);
-        if let Some(ref device_id) = self.device_id {
+        if let Some(device_id) = self.effective_device() {
             cmd.arg("-s").arg(device_id);
         }
         cmd.args(args);

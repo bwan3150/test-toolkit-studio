@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+### 2026-08-21 · 安卓模拟器（AVD）起停 —— **选装**,不进依赖检查（ADR-0018）
+先把账算清楚(官方仓库清单实测):`emulator` 包 351~490MB + `aosp_atd` 系统镜像
+450~860MB = **一台 0.8~1.3GB**;而且 **Google 至今不发布 linux-arm64 版**。
+用户拍板:iOS 模拟器是 macOS **自带**的(我们只补 21MB 的 WDA runner)、
+安卓真机开发者模式很好开——**模拟器不是必经之路,做成选装**。
+- **feat** `drivers/avd.rs`:定位 `emulator`(从 `ANDROID_HOME`/SDK 默认路径找,
+  **不走 ToolManager**——那个只在 tke 同目录找,报错会把人引到错方向)、列 AVD、起、等就绪、关
+- **feat** `-d avd:<名字>` + `启动环境` / `关闭环境`。**序列号是起来之后才有的**
+  (`emulator-5554`),拿它当启动参数是循环论证,所以按 AVD 名指定;boot 后把实到的
+  序列号记进 `AdbDriver::resolved`,后续每条 adb 命令都用它
+- 等就绪等的是 **`sys.boot_completed`**,不是"adb 认出设备"——那时系统还在起,
+  装 App / 采集都会失败(同 iOS 等 `bootstatus` 的理由)
+- 无头按有没有桌面自动定(同 web 的 `--headless=auto`),无头下加
+  `-gpu swiftshader_indirect`(CI 机器上没有可用的 GL)
+- `device list` 把没启动的 AVD 也列出来(id = `avd:<名字>`);`doctor` 那行写
+  「未安装（选装）」,**不进「下一步」催人装、退出码也不因此非 0**
+- 端口这边**天然不撞**:每台 AVD 占一个从 5554 起步进 2 的控制台端口,Q-13 那类坑不存在
+- **未在装了 SDK 的机器上跑过**(本机没有)——待真机验
+
 ### 2026-08-20 · Q-13 用户实测通过;③ 的判据放宽到"两边不是同一个 App"
 用户 mac 上 iPhone 17 Pro + 16 Pro 并行:**端口 8149/8197 分开、两边 PID 对上、
 两个端口报的前台是不同的 App、两边证据各落各的目录**。

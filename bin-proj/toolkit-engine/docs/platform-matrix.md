@@ -117,6 +117,13 @@ web 内部按 `devicePixelRatio` 换算成 CSS 坐标，调用方不用管——
 现在按 UDID 定端口（稳定可复现）、`SIMCTL_CHILD_USE_PORT` 传给 runner，复用前还会核对
 端口的归属（`launchctl list` 的 PID vs `lsof` 的监听 PID）——否则命令可能发到另一台上。
 
+**安卓模拟器是选装的**（用户拍板 2026-08-21）：iOS 模拟器 macOS 自带、我们只补一个 21MB 的
+WDA runner，而安卓这套要 1GB 上下（`emulator` 包 350~490MB + 系统镜像 450~860MB），
+且安卓真机开发者模式很好开。所以 **tke 不分发、不进依赖检查**——没装不算"环境不完整"，
+只在 `tke doctor` 里写一句「未安装（选装）」。装了就能用：`-d avd:<名字>` + `启动环境`。
+官方 emulator **没有 linux-arm64 版**（Google 至今不发布），那一档只能用 redroid 之类的容器方案。
+轻量化选 `aosp_atd` 系统镜像——Google 给自动化用的精简版，比 `google_apis` 省约 40%。
+
 **`Platform` 仍然只有三个**（Android/iOS/Web）：模拟器跑的是同一套 iOS App，
 元素库的 ios 通道、定位策略、归一化目标格式全都复用。多出来的只是**驱动**
 （`Driver::IosSim`），跟 `Driver::Fake` 一样——有驱动，没平台。

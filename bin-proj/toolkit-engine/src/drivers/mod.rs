@@ -2,10 +2,13 @@
 // 每个子模块只负责对接一种设备的协议，互不依赖；Controller 按设备 ID 选择驱动，
 // 向上层（原子方法/解释器）暴露完全一致的 API：
 //   -d <android序列号>      → adb::AdbDriver  (Android, adb)
+//   -d avd:<AVD名>          → adb::AdbDriver  (安卓模拟器；boot 起它,起来后就是普通 adb 设备)
 //   -d web[:会话名]         → web::WebDriver  (网页, chromedriver + Chrome for Testing)
 //   -d <iOS UDID>/wda:xxx  → wda::WdaDriver  (iOS, WebDriverAgent)
 
 mod adb;
+/// 安卓模拟器（AVD）的起停与发现——**选装能力**，没装不算环境不完整
+pub mod avd;
 pub mod fake;
 mod wda;
 mod web;

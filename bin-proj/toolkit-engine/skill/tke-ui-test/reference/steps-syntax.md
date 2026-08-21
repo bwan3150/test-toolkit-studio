@@ -40,6 +40,17 @@
 WebDriverAgent**，只有"怎么连上"不同（真机走 USB 隧道，模拟器直连本机端口，一台一个）——
 指令写法、元素表、坐标口径、报告全都一样。
 
+**安卓模拟器**是**选装**的（跟 iOS 模拟器不同——那个 macOS 自带）。装了的话
+`tke device list` 会把没启动的 AVD 也列出来，id 就是 `avd:<名字>`：
+
+```bash
+tke -d avd:Pixel_7 steps "启动环境" "启动 [\"com.example.app/.MainActivity\"]" …
+```
+
+`启动环境` 会把它起起来并等到真的能用（`sys.boot_completed`），起来之后就是一台普通的
+adb 设备。**没装就别管它**——安卓真机插上即用，模拟器不是必经之路，`tke doctor` 里
+那行写着「未安装（选装）」不是要你去装。
+
 模拟器缺 WebDriverAgent 的话 `tke doctor` 会说，装它就一条命令（tke 自己拉起，
 不用你碰 Xcode）：
 
@@ -62,7 +73,7 @@ tke doctor --fix --profile ios
 ### 环境：起 / 关
 
 ```
-启动环境                         # 起浏览器（无头）/ 开 iOS 模拟器
+启动环境                         # 起浏览器（无头）/ 开 iOS 模拟器 / 起安卓 AVD（要 -d avd:<名字>）
 启动环境 [有头]                  # 开窗口（要看着它跑，或人要手动登录）
 关闭环境                         # 关浏览器进程 / 模拟器关机
 ```
