@@ -873,3 +873,32 @@ AndroidX Test Screenshot API（instrumentation 进程内，外部拿不到）。
 
 **改法**：`adb shell "am start -n <组件> 2>&1"`，再查输出里有没有 `Error:` / `Error type`。
 **更一般的**：凡是靠退出码判断成败的外部命令，都要先确认"它失败时退出码真的会变"。
+
+## P-50 写死的错误文案会把查的人带偏（我自己被带偏了三轮）
+
+`boot` 的就绪判据有三项（系统起完 / 屏幕亮着 / 有焦点窗口），而超时时的错误一律写着
+**「adb 已看到 emulator-5554，但 sys.boot_completed 一直不是 1」**。
+
+真正卡住的是第二项：`screen_on` 只认 `Display Power: state=ON`，而 Android 15 的
+`dumpsys power` 里那一行是 `Display Power: com.android.server.power.…$1@6fe9d67`
+——一个对象引用，永远匹配不上。
+
+于是查的人（当时是我）盯着 `getprop sys.boot_completed` 反复确认「明明是 1 啊」，
+一路怀疑到 adb 路径、userdata 损坏、强杀残留，绕了三轮才想起去看另外两项。
+
+**改法**：报错时**逐项验一遍，只说真正没过的那些**。
+**更一般的**：一条覆盖多个判据的失败路径，错误文案不能挑其中一个写死——
+那等于在替读者做一个你并没有验证过的判断。
+
+## P-51 模拟器的三代 API 判据
+
+同一件事在不同 Android 版本上字段名完全不同，写判据时要认全（实测踩过前两条）：
+
+| 要判断 | 现在（API 30+） | 旧格式 |
+|---|---|---|
+| 屏幕亮着 | `dumpsys power` 里 `mWakefulness=Awake` | `Display Power: state=ON` / `mScreenOn=true` |
+| App 的 launchd label（iOS） | `UIKitApplication:<bundle>[0x…][rb-legacy]` | 拿 bundle id 精确查是查不到的 |
+| `am start` 失败 | 退出码仍是 0，错误走**设备那边的 stderr** | — |
+
+**共同点**：判据不匹配时**看起来都像"东西没就绪"**，而不是"我判错了"。
+写这类判据时，先在目标版本上把原始输出打出来看一眼，别照着记忆写。

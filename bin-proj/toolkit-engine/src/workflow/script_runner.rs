@@ -32,6 +32,19 @@ impl ScriptRunner {
         Self { params, healer: None, healer_factory: None }
     }
 
+    /// 前台是不是盖着 ANR 对话框——**只在步骤超时时问一次**，正常路径上不花这个钱。
+    ///
+    /// 只对安卓有意义（iOS/web 没有这种系统弹窗）；拿不到设备或不是安卓一律 None，
+    /// 那时按原来的措辞报超时
+    fn anr_hint(&self) -> Option<String> {
+        let id = self.params.device()?;
+        if crate::Platform::from_device(Some(&id)) != crate::Platform::Android {
+            return None;
+        }
+        let serial = crate::drivers::avd::resolve_device_id(Some(id))?;
+        crate::drivers::avd::anr_dialog(&serial)
+    }
+
     /// 注入定位自愈钩子（builder 式）
     pub fn with_healer(mut self, healer: Arc<dyn super::tks::ElementHealer>) -> Self {
         self.healer = Some(healer);
@@ -249,10 +262,20 @@ impl ScriptRunner {
             .await
             {
                 Ok(r) => r,
-                Err(_) => Err(TkeError::DeviceError(format!(
-                    "执行超时（>{}s）：元素反复重试或页面无响应",
-                    step_timeout_secs
-                ))),
+                // 超时时**先看看是不是系统弹了个框盖住了**。"元素反复重试或页面无响应"
+                // 听起来像被测页面的毛病，而真相可能是 "System UI isn't responding"
+                // 那个 ANR 对话框——两者的下一步完全不同（一个查 App，一个等/换机器）。
+                // 用户实测撞上过，光看这行错误完全指不到那儿去
+                Err(_) => Err(TkeError::DeviceError(match self.anr_hint() {
+                    Some(who) => format!(
+                        "执行超时（>{}s）：屏幕上盖着「{} 无响应」的系统对话框，点不到下面的元素",
+                        step_timeout_secs, who
+                    ),
+                    None => format!(
+                        "执行超时（>{}s）：元素反复重试或页面无响应",
+                        step_timeout_secs
+                    ),
+                })),
             };
             let duration_ms = step_start.elapsed().as_millis() as u64;
 

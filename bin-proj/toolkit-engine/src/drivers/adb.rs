@@ -167,10 +167,32 @@ impl AdbDriver {
 
         // 在设备上dump UI：uiautomator 等 UI idle，动画页面会挂——收紧超时、失败重试一次
         // （第二次动画往往正好停在间隙）；两次都不行就报错，交上层"未能采集"可见降级。
-        if let Err(first) = self.run_adb_command_with_timeout(&["shell", "uiautomator", "dump", temp_path], UI_DUMP_TIMEOUT_SECS) {
+        // ⚠️ **退出码 0 不代表 dump 出来了**：`uiautomator dump` 等不到 idle 时会打印
+        // "ERROR: could not get idle state." 然后**正常退出**，文件根本没生成。
+        // 不查的话，错误要到下一步 `adb pull` 才炸出来，报的是
+        // 「failed to stat remote object '/sdcard/ui_dump.xml'」——指向文件不存在，
+        // 而真正的原因（页面一直在动/设备正在关机）完全看不出来（用户实测撞上）。
+        // 成功时那行是 "UI hierchary dumped to: <路径>"（upstream 的拼写就是这样）
+        let dumped = |out: &str| out.contains("dumped to");
+        let dump_once = || {
+            self.run_adb_command_with_timeout(
+                &["shell", "uiautomator", "dump", temp_path],
+                UI_DUMP_TIMEOUT_SECS,
+            )
+            .and_then(|out| {
+                if dumped(&out) {
+                    Ok(out)
+                } else {
+                    Err(TkeError::AdbError(format!(
+                        "采集页面失败：uiautomator 没能导出界面（{}）",
+                        out.lines().find(|l| l.contains("ERROR")).unwrap_or("没有输出").trim()
+                    )))
+                }
+            })
+        };
+        if let Err(first) = dump_once() {
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-            self.run_adb_command_with_timeout(&["shell", "uiautomator", "dump", temp_path], UI_DUMP_TIMEOUT_SECS)
-                .map_err(|_| first)?;
+            dump_once().map_err(|_| first)?;
         }
         
         // 拉取XML到本地

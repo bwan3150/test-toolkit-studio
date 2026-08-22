@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+### 2026-08-22 · boot 之后把屏幕唤醒;ANR 与就绪判据都说人话
+用户 mac 上跑起来了但**报告里两张截图都是纯黑**,第二步 `uiautomator dump` 连文件都
+产不出来。根因是 `sys.boot_completed=1` **只说系统起来了**——屏幕可能还关着或停在锁屏,
+那时候截什么都是黑的、也采不到东西。
+- **fix boot 后唤醒屏幕 + 推开锁屏**（`KEYCODE_WAKEUP` + `wm dismiss-keyguard`）。
+  这属于"把环境准备好",不是替人操作被测对象——锁屏不是被测对象,
+  而黑着的屏幕上什么都做不了
+- **fix `screen_on` 判据认三代字段**（P-50）:第一版只认 `Display Power: state=ON`,
+  而 Android 15 那一行是个**对象引用**,永远匹配不上 → boot 一路等到三分钟超时
+- **fix 就绪超时的错误逐项验、只说真正没过的**（P-49）:上一版一律写
+  "sys.boot_completed 一直不是 1",而实际卡住的是屏幕那项——**这句写死的文案
+  把我自己带偏了三轮**（去查 adb 路径、userdata 损坏、强杀残留）
+- **fix boot/shutdown 的竞态**:`adb emu kill` 只是把命令发过去就返回,那台还要
+  好几秒才退干净。用户 shutdown 完立刻跑脚本,`启动环境` 4 秒就"成功"——
+  它把**正在关闭的那台**当成了已经在跑。现在 shutdown 等它真的消失,
+  boot 的幂等检查也要问 `boot_completed`
+- **feat 步骤超时时点名 ANR**:"元素反复重试或页面无响应"听起来像被测页面的毛病,
+  而真相可能是 `System UI isn't responding` 那个对话框盖住了。
+  现在直接报「屏幕上盖着「com.android.systemui 无响应」的系统对话框,点不到下面的元素」
+- **fix `uiautomator dump` 退出码 0 不代表产出了文件**:等不到 idle 时它打印
+  "ERROR: could not get idle state." 然后**正常退出**,错误要到下一步 `adb pull` 才炸,
+  报的却是「failed to stat remote object】——指向文件不存在,真正的原因完全看不出来
+- AVD 模板给足资源:3072MB / 4 核（软件渲染下 2 核 2GB 会让 SystemUI 一直 ANR）
+
 ### 2026-08-21 · 谁家的 AVD 用谁家的 SDK（用户已有的模拟器现在能跑了）
 用户 mac 上有自己的两台 AVD（Android Studio 建的）。`tke device` 列得出来,
 但**一旦他再装我们那套 SDK,这两台就跑不了了**——早先 `with_env` 无条件把

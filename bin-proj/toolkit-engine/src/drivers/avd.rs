@@ -222,9 +222,30 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
             format!("没有叫 `{}` 的 AVD。现有的：{}", name, avds.join(" / "))
         }));
     };
-    // 已经起着就直接用（幂等）——boot 写在脚本第一行，每次跑都会执行
+    // 已经起着就直接用（幂等）——boot 写在脚本第一行，每次跑都会执行。
+    //
+    // ⚠️ **"adb 列得出来"不等于"能用"**：`adb emu kill` 之后那台要好几秒才真正消失，
+    // 这期间它还在 `adb devices` 里。用户实测撞上：shutdown 完立刻跑脚本，
+    // `启动环境` 4 秒就"成功"了——它把**正在关闭的那台**当成了已经在跑，
+    // 于是后面每一步都在对着一台正在退出的模拟器操作（屏幕全黑、
+    // `uiautomator dump` 连文件都产不出来）。所以要**问它 boot_completed**
     if let Some(serial) = running_serial_of(name) {
-        return Ok(serial);
+        if boot_completed(&serial) && ui_ready(&serial) {
+            warn_if_anr(&serial, name);
+            return Ok(serial);
+        }
+        // 列得出来却没就绪：要么正在启动、要么正在关闭。等一小会儿看它往哪边走
+        for _ in 0..15 {
+            std::thread::sleep(std::time::Duration::from_millis(1000));
+            match running_serial_of(name) {
+                Some(s) if boot_completed(&s) && ui_ready(&s) => {
+                    warn_if_anr(&s, name);
+                    return Ok(s); // 是在启动，等到了
+                }
+                Some(_) => continue,
+                None => break, // 是在关闭，已经退干净了——往下走，重新起一台
+            }
+        }
     }
 
     // 每次都补一遍：便宜、幂等，而且能让"装的时候还没有 adb"那种安装自己长好
@@ -268,7 +289,8 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
             serial = emulator_serials().into_iter().find(|s| !before.contains(s));
         }
         if let Some(s) = &serial {
-            if boot_completed(s) {
+            if boot_completed(s) && ui_ready(s) {
+                warn_if_anr(s, name);
                 return Ok(s.clone());
             }
         }
@@ -285,13 +307,32 @@ pub fn boot(name: &str, headed: Option<bool>) -> Result<String> {
             log.display()
         )));
     }
+    // **说清是哪一项没过**：上一版一律写"sys.boot_completed 一直不是 1"，
+    // 而实际卡住的是屏幕状态那一项——一句写死的措辞能把查的人（包括我自己）带偏三轮
+    let why = match &serial {
+        None => "adb 始终没看到它".to_string(),
+        Some(s) => {
+            let mut missing = Vec::new();
+            if !boot_completed(s) {
+                missing.push("系统没起完（sys.boot_completed≠1）");
+            }
+            if !screen_on(s) {
+                missing.push("屏幕没亮");
+            }
+            if focused_window(s).is_none() {
+                missing.push("窗口管理器没有焦点窗口");
+            }
+            format!(
+                "adb 已看到 {}，但{}",
+                s,
+                if missing.is_empty() { "就绪判据反复横跳".into() } else { missing.join("、") }
+            )
+        }
+    };
     Err(TkeError::DeviceError(format!(
-        "模拟器 {} 起了三分钟还没就绪{}。日志：{}",
+        "模拟器 {} 起了三分钟还没就绪（{}）。日志：{}",
         name,
-        match &serial {
-            Some(s) => format!("（adb 已看到 {}，但 sys.boot_completed 一直不是 1）", s),
-            None => "（adb 始终没看到它）".to_string(),
-        },
+        why,
         log.display()
     )))
 }
@@ -305,11 +346,20 @@ pub fn shutdown(serial: &str) -> Result<()> {
         )));
     }
     let adb = crate::ToolManager::resolve("adb")?;
-    let out = Command::new(adb)
+    let out = Command::new(&adb)
         .args(["-s", serial, "emu", "kill"])
         .output()
         .map_err(|e| TkeError::AdbError(format!("关闭模拟器失败: {}", e)))?;
     if out.status.success() {
+        // **等它真的从 adb 里消失**。`emu kill` 只是把关机命令发过去就返回了，
+        // 那台还要好几秒才退干净——不等的话紧接着的 boot 会把它当成"已经在跑"
+        // （用户实测：shutdown 完立刻跑脚本，全程对着一台正在退出的模拟器操作）
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if !emulator_serials().iter().any(|s| s == serial) {
+                break;
+            }
+        }
         Ok(())
     } else {
         Err(TkeError::DeviceError(format!(
@@ -361,6 +411,114 @@ fn in_kvm_group() -> bool {
         .lines()
         .find(|l| l.starts_with("kvm:"))
         .is_some_and(|l| l.rsplit(':').next().is_some_and(|m| m.split(',').any(|g| g == user)))
+}
+
+/// 界面这一层就绪了没有。
+///
+/// **`sys.boot_completed=1` 还不够**：那只说明系统起来了，SystemUI 可能还在忙——
+/// 用户实测撞上：boot 一返回就跑脚本，第一次点击撞上 "System UI isn't responding"
+/// 的 ANR 弹窗，点击超时。判据用 `dumpsys window` 能不能报出当前焦点窗口：
+/// 有焦点 = 窗口管理器和 SystemUI 都活着，这时候点下去才有意义
+fn ui_ready(serial: &str) -> bool {
+    // 屏幕先得亮着。**这是用户实测撞出来的第一现场**：boot 报成功、脚本照跑，
+    // 而报告里两张截图都是纯黑 720×1280——冷启动后屏幕是关着的（或停在锁屏），
+    // 那时候截什么都是黑的、`uiautomator dump` 也采不到东西
+    if !screen_on(serial) {
+        wake_and_unlock(serial);
+        if !screen_on(serial) {
+            return false;
+        }
+    }
+    // ⚠️ **ANR 弹窗也是一个有焦点的窗口**，但**不能因此判 boot 失败**：
+    // 它多半会自己过去，而模拟器确实已经起来了。等它一会儿，还在就放行——
+    // 后面哪一步被它挡住，报错里会点名（见 `anr_dialog`）
+    focused_window(serial).is_some()
+}
+
+/// 屏幕亮着没有。
+///
+/// ⚠️ **判据要认三代字段**。第一版只认 `Display Power: state=ON`，
+/// 而 Android 15 的 `dumpsys power` 里那一行是
+/// `Display Power: com.android.server.power.PowerManagerService$1@6fe9d67`——
+/// 一个对象引用，永远匹配不上，于是 boot 一路等到三分钟超时。
+/// 现在这代的判据是 `mWakefulness=Awake`
+fn screen_on(serial: &str) -> bool {
+    let Ok(adb) = crate::ToolManager::resolve("adb") else { return true };
+    Command::new(adb)
+        .args(["-s", serial, "shell", "dumpsys", "power"])
+        .output()
+        .ok()
+        .is_some_and(|o| {
+            let out = String::from_utf8_lossy(&o.stdout);
+            out.contains("mWakefulness=Awake")           // Android 10+
+                || out.contains("Display Power: state=ON") // 旧格式
+                || out.contains("mScreenOn=true")          // 更旧
+        })
+}
+
+/// 唤醒屏幕 + 把锁屏推开。
+///
+/// **这属于"把环境准备好"，不是替人操作被测对象**——锁屏不是被测对象，
+/// 而黑着的屏幕上什么都采不到、点不着（同 `boot` 本身的定位：管环境，不管环境里的东西）。
+/// 两条命令都是幂等的：屏幕已经亮着时 WAKEUP 什么也不做
+fn wake_and_unlock(serial: &str) {
+    let Ok(adb) = crate::ToolManager::resolve("adb") else { return };
+    let run = |args: &[&str]| {
+        let mut a = vec!["-s", serial];
+        a.extend_from_slice(args);
+        let _ = Command::new(&adb).args(&a).output();
+    };
+    run(&["shell", "input", "keyevent", "KEYCODE_WAKEUP"]);
+    // Android 6+ 的 `wm dismiss-keyguard`；无密码锁屏一推就开
+    run(&["shell", "wm", "dismiss-keyguard"]);
+}
+
+/// 当前有焦点的窗口（`dumpsys window` 的 mCurrentFocus 那一行）
+pub fn focused_window(serial: &str) -> Option<String> {
+    let adb = crate::ToolManager::resolve("adb").ok()?;
+    let out = Command::new(adb).args(["-s", serial, "shell", "dumpsys", "window"]).output().ok()?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find(|l| l.contains("mCurrentFocus=") && !l.contains("mCurrentFocus=null"))
+        .map(|l| l.trim().to_string())
+}
+
+/// 起来了但前台盖着 ANR 弹窗——**等它一会儿，还在就说一声**。
+///
+/// 不判失败：模拟器确实起来了，而这个框多半会自己过去。但也不能默不作声——
+/// 它盖着的时候后面每一步都会点不中，人得知道是这个原因
+fn warn_if_anr(serial: &str, avd: &str) {
+    for _ in 0..30 {
+        if anr_dialog(serial).is_none() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
+    if let Some(who) = anr_dialog(serial) {
+        // 走 stderr：NDJSON 事件流在 stdout，别把它搅浑
+        eprintln!(
+            "! 模拟器 {} 起来了，但 {} 一直没响应，屏幕上盖着 ANR 对话框——\n\
+             \u{3000}后面的点击多半会点不中。这台机器跑不动软件渲染的模拟器？\
+             给 AVD 多分点 CPU/内存，或换一台有 GPU 的机器",
+            avd, who
+        );
+    }
+}
+
+/// 前台是不是一个 ANR（"应用无响应"）对话框，是的话它是谁的。
+///
+/// **这个要单独报出来**：被它盖住时，点击会一路重试到超时，报的是
+/// "元素反复重试或页面无响应"——听起来像被测页面的毛病，而真相是**系统弹了个框**。
+/// 两者的下一步完全不同（一个是查 App，一个是等/换台机器）
+pub fn anr_dialog(serial: &str) -> Option<String> {
+    let w = focused_window(serial)?;
+    if !w.contains("Application Not Responding") {
+        return None;
+    }
+    // 形如 `mCurrentFocus=Window{... Application Not Responding: com.android.systemui}`
+    w.rsplit("Application Not Responding:")
+        .next()
+        .map(|s| s.trim().trim_end_matches('}').trim().to_string())
 }
 
 fn boot_completed(serial: &str) -> bool {

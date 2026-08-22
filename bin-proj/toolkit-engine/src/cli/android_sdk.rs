@@ -459,8 +459,9 @@ fn create_avd(sdk: &Path, api: u32, abi: &str) -> Result<()> {
          hw.lcd.width=1080\n\
          hw.lcd.height=2340\n\
          hw.lcd.density=440\n\
-         hw.ramSize=2048\n\
-         vm.heapSize=256\n\
+         hw.ramSize=3072\n\
+         hw.cpu.ncore=4\n\
+         vm.heapSize=512\n\
          disk.dataPartition.size=6G\n\
          hw.keyboard=yes\n\
          hw.gpu.enabled=yes\n\
