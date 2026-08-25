@@ -153,3 +153,57 @@ P1+P2 就交付了「轻量/架构不匹配的电脑也能测」这个核心价�
    分层计时（网络 / 进程启动 / 设备操作）从 P1 就埋进 `elapsed_ms`。
 5. **并发压设备**：`web:N` 多槽位已支持，安卓/iOS 一机一租约；节点的槽位上限要上报，别让平台超卖。
 6. **安全轨授权**：目标归属校验在平台侧；tke 侧只保证 `red-team` 拒绝 + 强度落报告（INV-15）。
+
+## 10. 技术选型：axum（2026-08-26 用户拍板）
+
+### 决定性事实：hyper/tower 栈**早就在依赖图里**
+
+```
+genai（非可选） → reqwest 0.13 → hyper-rustls → hyper 1.7
+Cargo.lock 已有：hyper 1.7.0 · hyper-util 0.1.17 · tower 0.5.2 · tower-http 0.6.11 · h2 0.4.12
+（`--no-default-features` 下同样在）
+```
+
+所以「axum 会拉进 hyper/tower 一大坨」这个顾虑不成立——那一大坨是 AI 客户端带进来的，躲不掉。
+axum 的真实增量只有 axum + axum-core + matchit 等四到六个小 crate。
+
+### 选 axum 的四条理由（按权重）
+
+1. **增量依赖 ≈ 0**（上面那条）。
+2. **SSE 与 WebSocket 都内置**——正好是 L2 的两个需求（事件流 + 桥接 `JsonFrontend` 双向 NDJSON）。
+   别的方案在这里都要再引一个 WS 库。
+3. **tower-http 给白名单之外的第二层护栏**：请求体大小限制 / 超时 / 并发限制。
+   INV-16 管「能执行什么」，这层管「能压多狠」，两层都要有。
+4. `ServeDir` 直接覆盖 L3 产物下载。
+
+### 落选的与理由
+
+| 方案 | 为什么不选 |
+|---|---|
+| hyper 1.x 裸用 | 路由/提取/SSE/WS 全手写，且**自制请求解析是新的攻击面**——白名单之外不该再多一层自己写的解析 |
+| tiny_http / rouille | WS 基本没有、SSE 勉强；每连接一线程撑不住长连接；tokio 已在图里也省不掉 |
+| poem + poem-openapi | 自动出 OpenAPI 很香，但生态窄、宏重编译慢。**OpenAPI 改为手写**——契约本来就要人审 |
+| actix-web 4 | 自带 actix-rt = 第二套运行时；依赖树与图里的 hyper 栈不共享，体积与编译时间双涨 |
+| warp | filter 组合的类型错误难读，社区重心已转 axum |
+
+### 配套决定 A：client-only 瘦身的瓶颈不是 axum
+
+release 二进制现在 **30MB**。大头是 `genai`（拖 reqwest/rustls 全套）、`image`/`imageproc`、
+`rusqlite`（bundled，自带整个 SQLite C 源码）、可选的 tesseract；axum 的份额估计 <1MB。
+
+建议 feature 布局：
+
+```toml
+serve  = ["axum", "tower-http"]   # 节点侧
+agent  = ["genai"]                # AI 编排（harness / security）
+client = []                       # 远程客户端：无 serve、无 agent、无 image/rusqlite
+```
+
+⚠️ **「谁占那 30MB」没量过**。按 Q-17 的规矩：P2 开工前用 `cargo-bloat` 量一次再动手，
+别照上面这段估计改——本项目已经有两次「说慢/说大，根因都不在猜的那个地方」的教训。
+
+### 配套决定 B：TLS 不在 tke 里做
+
+`hyper-rustls` 虽然已在图里，节点仍只监听 HTTP；TLS 交给前面的 nginx / Caddy，
+或走平台内网 + 由反代处理 mTLS。理由与 D1 同源：证书轮换 / SNI / ACME 是运维的事，
+塞进 tke 就又多一块要为多租户重新论证的东西。

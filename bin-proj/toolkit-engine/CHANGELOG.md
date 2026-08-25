@@ -22,6 +22,19 @@
 - ROADMAP 加「新主线：服务化」；README 导航加 remote-api.md
 - **代码零改动**，全量测试与构建状态不变
 
+### 2026-08-26 · HTTP 框架定为 axum（`remote-api.md` §10）
+上一条里「别顺手 cargo add axum」的顾虑，查完 `Cargo.lock` 后被自己推翻了。
+- **决定性事实**：hyper 1.7 / hyper-util / tower / tower-http / h2 **早就在依赖图里**——
+  `genai`（非可选）→ reqwest 0.13 → hyper-rustls → hyper，`--no-default-features` 下同样在。
+  axum 的真实增量只有四到六个小 crate
+- **选它的理由**：增量≈0 / **SSE 与 WS 都内置**（正好是 L2 的两个需求）/ tower-http 给白名单之外的
+  第二层护栏（body 限制·超时·并发限制）/ `ServeDir` 覆盖 L3 产物下载
+- **落选**：裸 hyper（自制请求解析＝新攻击面）、tiny_http（无 WS、每连接一线程）、
+  poem-openapi（生态窄宏重，OpenAPI 改手写）、actix-web（第二套运行时）、warp（社区重心已转移）
+- **配套 A**：client-only 瘦身的瓶颈**不是 axum**（<1MB），是 genai/image/rusqlite(bundled)。
+  feature 布局 serve/agent/client；但「谁占那 30MB」**没量过**——P2 前先 `cargo-bloat`（Q-17 规矩）
+- **配套 B**：TLS 不进 tke，交给前面的 nginx/Caddy 或平台内网 mTLS（理由与 ADR-0022 D1 同源）
+
 ### 2026-08-25 · 一次装全 skill（默认装分发源上所有 skill，manifest 驱动）
 用户：skill 都是 md 不占地方，装一次就该全到位、别分开装。
 - **feat manifest**：publish.sh + CI 写 `skills`（一行一个 skill 名）；install 读它决定装哪些

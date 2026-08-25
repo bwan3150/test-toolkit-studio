@@ -50,7 +50,10 @@ artifacts 下载 + workspace 上传。
 ## 埋的坑 / 要注意
 
 - **STATE 的 Last-Commit 是 `f741efaf`（上一场的），本场文档未提交**——下个会话先看 `git status`。
-- 依赖选型没定：HTTP 框架（axum 会拉进 hyper/tower 一大坨，`ureq` 是同步的用不了）——
-  P1 开工第一件事是权衡「二进制体积 / 编译时长 / client-only 构建」，别顺手就 `cargo add axum`。
+- **HTTP 框架已定 = axum**（2026-08-26 拍板，理由与落选项见 `remote-api.md` §10）。
+  关键事实：hyper 1.7 / tower / tower-http / h2 **早就在依赖图里**（genai → reqwest → hyper-rustls），
+  躲不掉，所以 axum 增量≈0。**client-only 瘦身的瓶颈不是 axum 是 genai/image/rusqlite**，
+  而且「谁占那 30MB」没量过——P2 开工前先 `cargo-bloat` 量（Q-17 的规矩）。
+  TLS 不进 tke（交给前面的反代）。
 - `Cargo.toml` 里 web 驱动用的是**同步** `ureq`（注释写明是为了避免 tokio 运行时冲突）——
   serve 是 async 的，子进程模型正好绕开这个矛盾，**别想着把它们合到一个运行时里**。
