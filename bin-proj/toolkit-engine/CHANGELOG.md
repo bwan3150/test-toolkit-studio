@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · orchestrator 多行消息改用 Assistant 事件（修 TUI 阶梯缩进）
+真机 TUI 里 agent 的长回复（带 Markdown 项目符号）渲染成逐行右移的阶梯——因为我用了 `Notice`
+事件发对话消息，而 `Notice` 的渲染走带缩进的包裹逻辑，多行就累加缩进。
+- **fix agent 对用户说的话（Text 回复 + 调工具的前导说明）改用 `UiEvent::Assistant`**——
+  harness 本就为「主 AI 说话」设计，`text.lines()` 逐行从第 0 列渲染，多行正确。
+  短状态行（→ http / findings / 报告路径）仍用 `Notice`。token 用量取 `session.last_usage()`
+
 ### 2026-08-25 · tke security 无参进 TUI + 主 agent 开场面试（选项选择）
 用户要的入口：直接 `tke security`（连 url 都不给）就进交互 TUI，**主 agent 来面试**——问测什么、
 什么强度（选项选）、什么 scope。

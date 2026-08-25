@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
+use crate::workflow::agent::ui::Tokens;
 use crate::{AiConfig, Frontend, Level, LlmReply, LlmSession, LlmTool, Result, UiCommand, UiEvent};
 use super::analyst;
 use super::evidence::{EvidenceDir, EvidenceRef};
@@ -159,11 +160,12 @@ pub async fn run(
             Ok(r) => r,
             Err(e) => { frontend.emit(UiEvent::Notice { level: Level::Err, text: format!("AI 出错：{e}") }); break; }
         };
+        let (pt, ct) = session.last_usage();
 
         let calls = match reply {
             LlmReply::Text(t) => {
-                // 编排官对用户说话 → 停下等用户下一句（REPL 回合）
-                frontend.emit(UiEvent::Notice { level: Level::Info, text: t });
+                // 编排官对用户说话 → 用 Assistant 事件（多行完整渲染，不走 Notice 的缩进包裹）→ 停下等用户
+                frontend.emit(UiEvent::Assistant { text: t, tokens: Tokens::new(pt, ct) });
                 match frontend.await_answer(round, String::new()).await {
                     Some(a) => { session.user(a); continue; }
                     None => { aborted = true; break; }
@@ -172,7 +174,8 @@ pub async fn run(
             LlmReply::ToolCalls { text, calls } => {
                 if let Some(t) = text.as_deref() {
                     if !t.trim().is_empty() {
-                        frontend.emit(UiEvent::Notice { level: Level::Info, text: t.trim().to_string() });
+                        // 调工具时的思考/说明也是对用户说的话 → Assistant，多行正确渲染
+                        frontend.emit(UiEvent::Assistant { text: t.trim().to_string(), tokens: Tokens::new(pt, ct) });
                     }
                 }
                 calls
