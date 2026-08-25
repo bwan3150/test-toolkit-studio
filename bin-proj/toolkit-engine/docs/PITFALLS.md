@@ -902,3 +902,11 @@ AndroidX Test Screenshot API（instrumentation 进程内，外部拿不到）。
 
 **共同点**：判据不匹配时**看起来都像"东西没就绪"**，而不是"我判错了"。
 写这类判据时，先在目标版本上把原始输出打出来看一眼，别照着记忆写。
+
+## P-52 TUI 里 AI 对用户说的多行话要用 Assistant 事件，不是 Notice
+
+security orchestrator 真机 TUI 里，agent 的长回复（带 Markdown 项目符号）渲染成**逐行右移的阶梯**。
+根因：用了 `UiEvent::Notice` 发对话消息，而 Notice 的 TUI 渲染走**带缩进的包裹逻辑**，多行时每行累加缩进。
+harness 本就为「主 AI 说话」设计了 `UiEvent::Assistant`——它按 `text.lines()` **逐行从第 0 列**渲染，多行正确。
+**规矩**：agent 对用户说的话（Text 回复 + 调工具的前导说明）一律 `Assistant`；短状态行（→ http/findings）才用 `Notice`。
+（token 用量取 `session.last_usage()` 填 `Tokens::new(pt,ct)`。）commit 3c453a17。

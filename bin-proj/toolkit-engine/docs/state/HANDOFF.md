@@ -1,87 +1,48 @@
 # 交接单
 
-**会话时间**: 2026-08-18 ~ 08-19（第六场：web 盲区 + 删直通 + **iOS 模拟器从零打通**）
-**产出 commit**: `bae905a7` 之后到 `HEAD`（见 CHANGELOG 的 Unreleased 段）
+**会话时间**: 2026-08-25（第七场：**tke security 从零到上线** —— 第二个 agent 领域）
+**产出 commit**: `94270671` 之后到 `HEAD`（见 CHANGELOG 的 Unreleased 段；本场约 40 个提交）
 
 ## 一句话
 
-这场从「用户一份说『登录表单是死的』的报告」开始，一路挖出 **9 个会让 AI 得出假结论的坑**
-（P-35 ~ P-43），删掉了 CLI 直通，最后把 **iOS 模拟器**从完全不支持做到了**端到端跑通并可分发**。
+这一整场从零做出了 **tke 的第二个 agent 领域：安全测试**——设计锁 → 侦察 primitive → 对话式 AI agent →
+共享任务生命周期 → skill → 深挖 playbook → **CI 发版上线**。全程真机验证、142 测试绿。
 
-## 主线一：那一族 bug —— 「点得中 + 报成功 + 什么也没发生」
+## 做出来的东西（自底向上）
 
-用户的报告写着「点 Sign in 均无任何反馈，是个死表单」。真相是**每次都点在 `<h1>Sign In` 标题上**。
-顺着查下去，同族的一共九个：
+1. **primitive**（`src/workflow/security/`）：`tke http`（原始探测，4xx/5xx 照收/不跟重定向/体限2MiB）+
+   `tke recon <verb>` 八个（headers/fingerprint/**detect**/cors/graphql/bundle/endpoints/tls）。
+   `HttpEngine` trait（UreqEngine+FakeEngine 可脱网单测）+ `evidence.rs`（`--log` 落 `evidence/step_NNN`，**续写不覆盖**）。
+2. **AI 角色**：`prober`（自主顺藤，去重+无进展强制收尾）、`analyst`（对抗复核，oneshot 强制结构化，毙假阳分软硬）、
+   `reporter`（**确定性**出 HTML+findings.json，无 LLM）。提示词 `security/prompt/`（builtin+外部覆盖）。
+3. **对话外壳** `orchestrator`：`tke security` 默认进 **TUI**（复用 harness `Frontend`），**主 agent 开场面试**
+   （目标/强度/scope，选项选择），`--json`/非终端→无头一次性。
+4. **共享生命周期**（ADR-0021）：`tke task new --kind <ui|security>` 写 `task.json` 标记；
+   **`tke report <dir>` 按 kind 自动分派** UI 报告 vs 安全报告——两轨一条命令。
+5. **skill** `tke-security-test`（ADR-0010 借调用方 AI）+ **service-playbook.md**（往后端深挖：Sanity/Supabase/
+   Firebase/S3/Algolia/Hasura 的指纹+已知误配+**精确零凭据探测式**+防误报）。
+6. **分发**：多-skill 管线泛化（manifest 驱动），**默认一行装全部 skill**；`--skill` 只装一个。CI 已发版上线。
 
-| # | 坑 | 假结论长什么样 |
-|---|---|---|
-| P-35 | 文字定位取 DOM 序第一个，不看能不能点 | 「表单是死的」 |
-| P-36 | iframe 内容一个都不采 | 「支付组件没渲染出来」 |
-| P-37 | 原生对话框被 WebDriver 自动点成「取消」 | 「删除功能失效」 |
-| P-38 | console 报错 AI 完全看不见 | 「点了没反应」说不出为什么 |
-| P-39 | viewport 设的是窗口不是视口（390×844 量到 757） | 响应式测的不是那个断点 |
-| P-40 | `key_event` 的 `_ => Ok(())`（**iOS 和 web 两边都是**） | 「TAB 按下去了」其实没有 |
-| P-41 | 更新了 skill 却没重读 | 更新"成功"，行为没变 |
-| P-42 | 构建成功了但敲的 `tke` 是另一个文件 | 新子命令报 unrecognized |
-| P-43 | 产物收集认扩展名白名单 | `raw_pages/` 静静地空着 |
+## 关键决策（都进了 ADR）
 
-**共性**：每一步都报成功，合起来什么也没生效。人和 AI 都会转去怀疑被测对象。
+- **ADR-0019** security 领域 + 三层能力分层 + 强度阶梯 + INV-13/14/15。
+- **ADR-0020**（已被 0021 取代）：曾想 `tke ui report`/`tke security report` 拆分。
+- **ADR-0021**：领域即数据——task/report 领域无关，靠 `task.json` 分派。取代 0020。
 
-## 主线二：删掉 CLI 直通（ADR-0016，用户拍板）
+## 真机验过的 / 待验的
 
-`tke adb shell input tap` 点得中，但没截图、没 log、报告一片空白——而 skill 从第一句起就在讲
-「用 steps 因为它留证据」。留着这条路等于把那句话作废。删了；`ToolManager::resolve`（内部定位）留着。
-删之前盘出唯一缺口是 logcat，补了 `tke app log`。
+- ✅ **真机过**：P1 七 verb + 无头 `security --json` 在 konechome 出报告；我（当调用方 AI）手动走完两轨
+  （security 顺藤到 Framer bundle·无泄露·评级B；UI 无头浏览器截图）；`recon detect` 对已修的 konechome 正确返回 none。
+- 🟡 **待用户真机验**：**对话式 TUI 交互手感**（选项选择/追问节奏/插话）——只有真 TTY 能暴露。
+  上一场 prober 死循环就是真机跑才逼出来的（已修），交互这块同理，值得他实跑一遍 `tke security`。
 
-## 主线三：iOS 模拟器（ADR-0017，**本场最大的一块**）
+## 下一步候选
 
-从「完全不支持」到「端到端跑通 + 已分发」。路线拐过一次弯，值得记：
+- playbook 再覆盖几类服务（Contentful/Strapi/Elasticsearch/MongoDB/Directus）——加一条 playbook + 一个 detect 正则即可，不改架构。
+- 注入子系统（opt-in，检测非利用）、源码灰盒、endpoints 吃 OpenAPI、tls 深度证书（需 TLS 库）。
+- `--json` 与 Electron app 联调。
 
-1. 先做 `sim:` 前缀直连 8100，但要用户自己编译 WDA 工程 → 门槛太高
-2. 看到用户另一个会话用 **idb** 驱动模拟器，改走 idb（brew 一条命令、免签名）→ AX 归一化都写完了
-3. 用户提出「**锁版本、自己掌控依赖**」→ 账反过来了：同样是自己分发，
-   **WDA 全面胜出**（协议 HTTP+JSON 客户端现成、归一化现成、产物 21MB vs 77MB）
-4. 实测确认关键的三条：`.xctestrun` 里没有本机绝对路径、**`simctl launch` 直接起得来**、
-   `/status` 回 WDA 16.3.0 → **删掉 idb，改走预编译 WDA**
+## 坑（这场踩的，已进 PITFALLS）
 
-**现在的样子**：`curl 装 tke` → `tke doctor --fix --profile ios` → `tke -d sim:<UDID> steps ...`。
-不碰 Xcode、不装 brew、不编译任何东西。用户已完整验过一遍（含从分发源自动下载）。
-
-## 08-20 补做的（同一场的延续）
-
-- **`boot` / `shutdown`**（用户提）：环境的起停从"魔法"变成显式一步。
-  `boot`/`shutdown` 管环境本身，`launch`/`close` 管环境里的东西——一条指令只做一件事
-- **`tke device` 重做**：四列（ID/系统/型号/状态）按**显示宽度**对齐、平台配色、
-  未就绪置灰、浏览器列有头无头两行；`device`≡`device list`；模拟器默认只列在跑的
-  （mac 上动辄二三十台）
-- **P-45（安全）**：iOS 的密码框**从来没被识别过**，真密码明文进了用户传到云端的报告。
-  安卓原生有、web 对齐了，唯独 XCUI 归一化没输出 `password` 属性——**而注释写着
-  "三平台同一条路"**。这类"做了两端、注释按三端写"的漏法最危险
-- **报告**：手机竖屏图限高 56vh + 点击就地展开（纯 CSS）；原图/元素表/**原始页面**
-  三个链接移到图下方；顶部设备栏也用友好名
-- **skill 读图优先级**：改成 **元素表 → OCR → 读图**。早先「必须读图」那段是为治
-  C-11（从不读图）写的，**过纠正**到覆盖所有排查场景了
-- **跨端只用一个 `--log`**：用户那次双端检查交付了两个报告链接，而结论是合并写的
-
-### 收尾时补的几条（都源自用户看实跑输出后的反馈）
-
-- **CLI 文案砍到最短**：删掉「第一列就是 -d 要填的值」这类教学句，skipped 压成
-  「安卓未检测 · 缺 adb · tke doctor --fix」——**事实 + 下一步，不解释为什么**
-- **读图优先级**：元素表 → OCR → 读图，上一级答得了就别用下一级。
-  早先「必须读图」那段是为治「从不读图」写的，**过纠正**到覆盖所有排查场景了
-- **跨端只用一个 `--log`**：用户那次双端检查交付了两个报告链接，而结论是合并写的
-- **`--summary -`**：长结论 heredoc 一步注入。AI 之前先写 /tmp/summary.md 再指过来，
-  **那个绕路是文档教的**（`--summary-file` 的帮助里写着"先写成文件省事"）
-
-## 还有什么没做
-
-见 `OPEN_QUESTIONS.md` 的 Q-12 ~ Q-14：**iOS 真机的 WDA 自动注入**（卡在 provisioning
-profile 必须联 Apple）、**多模拟器端口冲突**（8100 写死）、**harness 在四端的实跑**。
-
-## 下一场开始之前
-
-1. 照 `AGENTS.md` 的「开始之前」走
-2. 这场的每个坑都在 `docs/PITFALLS.md`（P-35 ~ P-43），**下结论前先扫一眼**
-3. `docs/platform-matrix.md` 是四端能力的单一来源，改驱动要回去改它
-4. **本机（Linux）验不了的**：iOS 全部、安卓全部、Windows。这场靠用户在 mac 上跑
-   `scripts/verify-ios-sim.sh` 完成验证——**别把"编译过了"当成"能用"**（P-42 的教训）
+- **P-52**：TUI 里 AI 对用户说的多行话要用 `UiEvent::Assistant` 不是 `Notice`——Notice 走带缩进的包裹，多行成阶梯。
+- 深度不在"更聪明的模型"，在**喂给它的攻击知识（playbook）+ 把线索递到手上的工具（detect）**——AI 会推理但没领域知识就是空推。

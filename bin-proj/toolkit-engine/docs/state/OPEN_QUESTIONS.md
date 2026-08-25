@@ -170,3 +170,16 @@ tke 不该去碰用户的 Apple ID。所以真机能砍掉的是「clone + 编�
 但 **harness 的 AI 探索闭环**只在 web 上跑过。它用的是同一套驱动，理论上换 `-d` 就行，
 但「AI 看着 iOS 元素表能不能做对决策」是另一回事（XCUI 的 `resource_id` 往往就是可见文字，
 跟安卓/web 的语义不同）。需要有 AI key 的环境实跑。
+
+## Q-15 (2026-08-25) tke security 对话式 TUI 交互手感真机未验
+
+`tke security` 无参进 TUI → 主 agent 开场面试（目标/强度/scope，选项选择）→ 探测 → 出报告，
+逻辑链路真机跑过一部分（面试 + 探测 + 阶梯缩进已修），但**完整交互手感未系统验**：
+选项列表方向键选、追问节奏、用户中途插话/改方向、`report` 时机。只有真 TTY 能暴露——
+上一场 prober 死循环就是真机才逼出来的。**待用户在 mac 上实跑一遍 `tke security` 对真实产品做一次深挖。**
+
+## Q-16 (2026-08-25) service-playbook 覆盖面
+
+现覆盖 Sanity/Firebase/Supabase/S3/Algolia/Hasura。真实世界还有 Contentful/Strapi/Directus/
+Elasticsearch/MongoDB/Redis/公开 Swagger 等。**扩法已固定**：playbook 加一条 + `recon detect` 加一个正则，
+不改架构。按遇到的真实站点按需加，不必一次堆全。
