@@ -90,6 +90,7 @@ fn default_tool(role: &str, name: &str) -> &'static str {
         ("orchestrator", "recon") => include_str!("builtin/tools/prober/recon.md"),
         ("orchestrator", "record_finding") => include_str!("builtin/tools/prober/record_finding.md"),
         ("orchestrator", "ask_user") => include_str!("builtin/tools/orchestrator/ask_user.md"),
+        ("orchestrator", "set_scope") => include_str!("builtin/tools/orchestrator/set_scope.md"),
         ("orchestrator", "report") => include_str!("builtin/tools/orchestrator/report.md"),
         ("orchestrator", "finish") => include_str!("builtin/tools/orchestrator/finish.md"),
         _ => "（工具说明缺失）",

@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security 无参进 TUI + 主 agent 开场面试（选项选择）
+用户要的入口：直接 `tke security`（连 url 都不给）就进交互 TUI，**主 agent 来面试**——问测什么、
+什么强度（选项选）、什么 scope。
+- **feat 开场面试**：`--mode` 去掉默认值（改 `Option`），裸进时 mode/focus/target 皆未定 →
+  orchestrator 开场把「已知/未知」交给 agent，提示词引导它用 `ask_user` 逐项补齐
+- **feat `ask_user` 带 options**：有选项就走 `await_choice_or_text`（TUI 渲染成列表+内联输入，
+  用户可选可打字，正是「tke 那种选项选择」）
+- **feat `set_scope` 工具**：面试结果（target/mode/focus）写回运行态，真正参数化本次测试（报告 mode
+  标签、探测默认目标都用它）
+- 无头（`--json`）不变：没法交互，mode/focus 用默认兜底
+- 全量 137 绿。**交互真机待验**
+
 ### 2026-08-25 · tke security 收成单一入口 + 对话式 orchestrator（改对 CLI 形状）
 用户纠正：`tke security` 该像 harness 一样**一个入口**（默认交互、`--json` 对接），我之前错做成
 `security probe` / `security run` 两个子命令（且 `run` 与 .tks 回放语义撞车）。改回 ADR-0019 原样。

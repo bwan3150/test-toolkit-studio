@@ -60,12 +60,12 @@ pub enum ReconCommands {
 /// prober/analyst/reporter 是内部阶段，不是子命令。
 #[derive(clap::Args)]
 pub struct SecurityArgs {
-    /// 目标 URL（可选：不给则进对话后再问）
+    /// 目标 URL（可选：不给则由主 agent 在 TUI 里问你）
     pub url: Option<String>,
-    /// 强度档：passive / safe（默认）/ aggressive / red-team
-    #[arg(long, default_value = "safe")]
-    pub mode: String,
-    /// 只测某一面：auth/injection/data-exposure/transport/config（默认全量）
+    /// 强度档：passive / safe / aggressive / red-team（不给则交互时由 agent 用选项问你）
+    #[arg(long)]
+    pub mode: Option<String>,
+    /// 只测某一面：auth/injection/data-exposure/transport/config（不给则问你或默认全量）
     #[arg(long)]
     pub focus: Option<String>,
     /// 自定义提示词目录（布局同 builtin：agents/<role>.md、tools/<role>/<name>.md）
@@ -171,40 +171,42 @@ async fn run_prober(
 ///   `--json` / 非终端 → 无头一次性（探测→复核→出报告，一次性 JSON 输出，给 Electron/CI）。
 pub async fn security(args: SecurityArgs, params: Arc<Params>) -> Result<()> {
     use std::io::IsTerminal;
-    let focus = args.focus.clone().unwrap_or_else(|| "全量".to_string());
     let task_dir = task_dir_of(&params);
     let prompts = SecurityPrompts::load(args.prompts_dir.clone());
 
     let interactive = !params.json && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
 
     if interactive {
-        // 对话式：复用 harness 的前端（TUI，spawn 失败回落 Plain）
+        // 对话式：复用 harness 的前端（TUI，spawn 失败回落 Plain）。
+        // url/mode/focus 都可能为 None——由主 agent 在 TUI 里用选项/追问补齐（用户要的开场面试）。
         let frontend: Box<dyn tke::Frontend> = match tke::TuiFrontend::spawn() {
             Ok(f) => Box::new(f),
             Err(_) => Box::new(tke::PlainFrontend::new()),
         };
         tke::workflow::security::orchestrator::run(
-            &params.ai, &prompts, frontend, task_dir, args.url, args.mode, focus, args.max_steps,
+            &params.ai, &prompts, frontend, task_dir, args.url, args.mode, args.focus, args.max_steps,
         ).await
     } else {
-        headless(&params, &prompts, &task_dir, args, focus).await
+        headless(&params, &prompts, &task_dir, args).await
     }
 }
 
 /// 无头一次性：探测→复核→出报告，一次性 JSON。给 `--json`/CI/Electron。
+/// 无头没法交互问，所以 mode/focus 用默认（safe/全量）兜底。
 async fn headless(
     params: &Arc<Params>,
     prompts: &SecurityPrompts,
     task_dir: &std::path::Path,
     args: SecurityArgs,
-    focus: String,
 ) -> Result<()> {
     let url = match &args.url {
         Some(u) => u.clone(),
         None => return Err(tke::TkeError::InvalidArgument(
             "无头模式（--json/非终端）需要显式给目标 URL：tke security <url> --json".into())),
     };
-    let probe = run_prober(params, &url, &args.mode, &focus, prompts, task_dir, args.max_steps).await?;
+    let mode = args.mode.clone().unwrap_or_else(|| "safe".to_string());
+    let focus = args.focus.clone().unwrap_or_else(|| "全量".to_string());
+    let probe = run_prober(params, &url, &mode, &focus, prompts, task_dir, args.max_steps).await?;
     let analyzed = tke::workflow::security::analyst::analyze(&params.ai, prompts, task_dir, probe).await?;
     let paths = tke::workflow::security::report::write_reports(task_dir, &analyzed)?;
 

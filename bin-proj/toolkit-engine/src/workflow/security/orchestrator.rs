@@ -19,7 +19,7 @@ use super::analyst;
 use super::evidence::{EvidenceDir, EvidenceRef};
 use super::finding::{Category, Finding, ProbeReport, Severity};
 use super::http::{HttpEngine, HttpRequest, UreqEngine};
-use super::prompt::{render, SecurityPrompts};
+use super::prompt::SecurityPrompts;
 use super::recon;
 use super::report as reporter;
 
@@ -56,7 +56,21 @@ fn tools(prompts: &SecurityPrompts) -> Vec<LlmTool> {
             }, "required": ["id","severity","category","title","detail","confirmed"]
         })),
         LlmTool::new("ask_user", d("ask_user"), json!({
-            "type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "options": {"type": "array", "items": {"type": "string"},
+                    "description": "可选：给用户几个可选项（TUI 渲染成列表，用户可选或直接打字）"}
+            },
+            "required": ["question"]
+        })),
+        LlmTool::new("set_scope", d("set_scope"), json!({
+            "type": "object",
+            "properties": {
+                "target": {"type": "string"},
+                "mode": {"type": "string", "enum": ["passive","safe","aggressive","red-team"]},
+                "focus": {"type": "string"}
+            }
         })),
         LlmTool::new("report", d("report"), json!({
             "type": "object", "properties": {}
@@ -80,6 +94,7 @@ fn headers_from(v: &Value) -> Vec<(String, String)> {
 }
 
 /// 运行对话式编排。阻塞直到 finish / 用户 Abort。
+/// url/mode/focus 都可能为 None——由主 agent 在 TUI 里**开场面试**补齐（选项/追问）。
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     ai: &AiConfig,
@@ -87,8 +102,8 @@ pub async fn run(
     frontend: Box<dyn Frontend>,
     task_dir: PathBuf,
     opening_url: Option<String>,
-    mode: String,
-    focus: String,
+    mode_opt: Option<String>,
+    focus_opt: Option<String>,
     _max_steps: usize,
 ) -> Result<()> {
     let engine = UreqEngine::default();
@@ -97,31 +112,35 @@ pub async fn run(
     let mut evidence_by_seq: Vec<EvidenceRef> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
 
+    // 运行态：由 CLI 参数初始化，可被主 agent 的 set_scope 覆盖（面试的结果真正生效）
+    let mut target: Option<String> = opening_url.clone();
+    let mut mode: String = mode_opt.clone().unwrap_or_else(|| "safe".into());
+    let mut focus: String = focus_opt.clone().unwrap_or_else(|| "全量".into());
+
     frontend.emit(UiEvent::SessionInfo {
-        device: format!("目标 {}", opening_url.clone().unwrap_or_else(|| "（待定，稍后问你）".into())),
+        device: format!("目标 {}", target.clone().unwrap_or_else(|| "（待 agent 问你）".into())),
         platform: format!("强度 {mode} · 聚焦 {focus}"),
         model: ai.model.clone().unwrap_or_else(|| "默认".into()),
         provider: ai.provider.clone().unwrap_or_else(|| "anthropic（默认）".into()),
         reasoning: ai.reasoning_effort.clone().unwrap_or_else(|| "medium".into()),
     });
 
-    let system = render(&prompts.system("orchestrator"),
-        &[("mode", &mode), ("focus", &focus)]);
+    let system = prompts.system("orchestrator");
     let mut session = match LlmSession::new_for_role(ai, "orchestrator", system, tools(prompts)) {
         Ok(s) => s,
         Err(e) => { frontend.emit(UiEvent::Notice { level: Level::Err, text: format!("AI 会话建立失败：{e}") }); frontend.shutdown().await; return Err(e); }
     };
 
-    // 开场：给了 url 直接进入；否则先问
-    match &opening_url {
-        Some(u) => session.user(render(
-            "目标：{url}（强度 {mode}，聚焦 {focus}）。先跟我确认范围/方向，再按我说的来。",
-            &[("url", u), ("mode", &mode), ("focus", &focus)])),
-        None => match frontend.await_answer(0, "要测哪个目标？给我 URL，也可以说测试重点。".into()).await {
-            Some(a) => session.user(a),
-            None => { frontend.shutdown().await; return Ok(()); }
-        },
-    }
+    // 开场：把「已知/未知」交给 agent，让它做开场面试（缺什么问什么，强度/scope 用选项问）
+    let known = format!(
+        "会话开始。已知：目标={}，强度档={}，聚焦={}。\
+         缺的信息（目标/强度/scope）请**用 ask_user 问我**补齐——强度和 scope 尽量给选项让我选；\
+         问清后调 set_scope 记下，再开始测。",
+        target.clone().unwrap_or_else(|| "未给".into()),
+        mode_opt.clone().unwrap_or_else(|| "未给".into()),
+        focus_opt.clone().unwrap_or_else(|| "未给".into()),
+    );
+    session.user(known);
 
     let mut round = 0usize;
     let mut aborted = false;
@@ -230,14 +249,36 @@ pub async fn run(
                 }
                 "ask_user" => {
                     let q = call.arguments.get("question").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                    match frontend.await_answer(round, q).await {
+                    let options: Vec<String> = call.arguments.get("options").and_then(|v| v.as_array())
+                        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                        .unwrap_or_default();
+                    let ans = if options.is_empty() {
+                        frontend.await_answer(round, q).await
+                    } else {
+                        use crate::workflow::agent::ui::ChoiceReply;
+                        match frontend.await_choice_or_text(q, options.clone()).await {
+                            Some(ChoiceReply::Pick(i)) => options.get(i).cloned(),
+                            Some(ChoiceReply::Text(t)) => Some(t),
+                            None => None,
+                        }
+                    };
+                    match ans {
                         Some(a) => session.tool_result(&call.call_id, a),
                         None => { aborted = true; break; }
                     }
                 }
+                "set_scope" => {
+                    let a = &call.arguments;
+                    if let Some(t) = a.get("target").and_then(|v| v.as_str()) { if !t.trim().is_empty() { target = Some(t.to_string()); } }
+                    if let Some(m) = a.get("mode").and_then(|v| v.as_str()) { if !m.trim().is_empty() { mode = m.to_string(); } }
+                    if let Some(f) = a.get("focus").and_then(|v| v.as_str()) { if !f.trim().is_empty() { focus = f.to_string(); } }
+                    frontend.emit(UiEvent::Notice { level: Level::Dim,
+                        text: format!("范围已定：目标 {} · 强度 {mode} · 聚焦 {focus}", target.clone().unwrap_or_else(|| "未定".into())) });
+                    session.tool_result(&call.call_id, format!("scope set: target={} mode={mode} focus={focus}", target.clone().unwrap_or_default()));
+                }
                 "report" => {
                     frontend.emit(UiEvent::Notice { level: Level::Info, text: format!("出报告：复核 {} 条候选……", findings.len()) });
-                    let probe = ProbeReport { target: opening_url.clone().unwrap_or_default(), mode: mode.clone(),
+                    let probe = ProbeReport { target: target.clone().unwrap_or_default(), mode: mode.clone(),
                         findings: findings.clone(), summary: String::new(), steps: round };
                     let analyzed = analyst::analyze(ai, prompts, &task_dir, probe).await?;
                     let paths = reporter::write_reports(&task_dir, &analyzed)?;
