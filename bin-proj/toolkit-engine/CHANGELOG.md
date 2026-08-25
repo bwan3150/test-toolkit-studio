@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke-security-test skill（借调用方 AI 做黑盒安全测试，承 ADR-0010/0020/0021）
+安全轨的 skill 本体：教 Claude Code/Codex 等编程 agent 用**自己的**能力 + tke 的 primitive 做安全测试。
+命令全部基于本会话真机跑通的流程（konechome 两轨实测）。
+- **doc `skill/tke-security-test/SKILL.md`**：红线（只测授权目标/强度档/脱敏/不产资产）+ 主流程
+  （task new → recon 扫 → 顺藤摸瓜 → 自己判定 → 写 findings.json → tke report）+ 强度档纪律 + 空结果如实报
+- **doc `reference/recon-and-findings.md`**：七 verb 判据 + findings.json 完整字段 + 顺藤套路
+- 与 tke-ui-test 同哲学（ADR-0010）：tke 给手/眼/证据/报告，判断交给调用方；一次性检查不产 .tks
+- **待做**：分发管线泛化（`skill/install.sh` 现写死 tke-ui-test，要支持多 skill 才能一行装 tke-security-test）
+
 ### 2026-08-25 · 共享任务生命周期：统一 tke report + tke task（ADR-0021 取代 0020）
 用户提出更干净的模型：task/steps/report 是**领域无关**的生命周期层，一个任务是 UI 还是安全测试
 是它的**属性**（记在任务目录的 task.json 里），不该拆成 `tke ui report`/`tke security report`。
