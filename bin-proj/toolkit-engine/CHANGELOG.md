@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · prober 收敛性修复：去重拦截 + 无进展强制收尾（真机撞出的死循环）
+用户 mac 首跑 prober（konechome）暴露死循环：模型顺藤对了（认出 Framer→追到 framerusercontent
+CDN），但**反复抓同一批 URL 几十次**（robots/sitemap/searchIndex），24 步没 finish 也没 record，
+撞上限收场。根因：① 无「已取过」记忆；② `tool_result_bulky` 把旧大响应换占位→模型忘了→回头再抓。
+- **fix 循环层去重**：记住 (方法+url / recon verb+url)→步号；重复请求直接回指旧步号，
+  不再打网络、不再落证据（真机会把预算耗光）
+- **fix 无进展强制收尾**：整轮都在重复 → 计数，连着两轮就强制 finish，不再空转到 max_steps；
+  预算快用完时主动要求收尾。撞上限时的 summary 也据 findings 有无说人话
+- **prompt 收敛纪律**：绝不重复抓、空 findings 是合格结论、死胡同就放下、Framer 数据在 JS chunk 非
+  searchIndex、有预算感优先追最可疑线索
+- 两个新单测钉住去重（重复不落新证据）与强制收尾（steps<10 而非撞 50）。全量 133 绿。**真机待复跑**
+
 ### 2026-08-25 · tke security P2 起步：prober 顺藤摸瓜（AI 编排 + 独立提示词体系）
 #1 侦察底座真机通过后开 #2。搭出**探测官 prober**——多轮、接地、带工具的 LLM 循环
 （形态学同 harness 的 orchestrator/explorer，但工具/角色/提示词另起一套，只借 provider）。
