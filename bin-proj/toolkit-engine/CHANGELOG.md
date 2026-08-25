@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security：证据续写（不再覆盖）+ macOS 一键冒烟脚本
+写冒烟脚本时逼出一个地基 bug：一次评估是多个进程调用（http + 各 recon verb）共用一个
+`--log` 目录，但 `EvidenceDir` 每次都从 `step_001` 重编号 → **后面的探测覆盖前面的**，
+证据只剩最后一条命令的。违背「一个任务一份、反复调用续写、连续编号」原则。
+- **fix `EvidenceDir::new` 续写**：扫目录已有 `step_NNN` 取最大值 +1 接着排；单测钉住重开续写
+- **test `tests/security-smoke.sh`**：macOS/Linux 一键冒烟——build（可 `--no-build`）→ 跑 `http`
+  + 七个 recon verb（`--log` 共用一个任务目录）→ JSON 美化 → 证据一览。跑**刚构建的**
+  `bin/<platform>/tke`（非 PATH 里那个）；默认目标 example.com，提示只对授权目标跑
+- 全量 129 绿；本机端到端验过脚本（证据连续 step_001..016 不覆盖）
+
 ### 2026-08-25 · tke security P1 续：recon 六个 verb 补齐（地基先打牢）
 在 headers 之上把侦察 primitive 补全，`recon.rs` 拆成 `recon/` 目录（一 verb 一文件）。
 统一结果结构 `ReconResult`{findings, probes}——单请求=1 probe，多路径=N probe，全落证据。

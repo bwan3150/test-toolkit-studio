@@ -27,10 +27,15 @@ pub struct EvidenceDir {
 
 impl EvidenceDir {
     /// 在 `task_dir/evidence/` 下开一个证据目录。
+    ///
+    /// **续写而非覆盖**：编号从目录里已有的最大 `step_NNN` 之后接着排——
+    /// 一次评估往往是多个进程调用（http + 各 recon verb）共用同一个 `--log`，
+    /// 每次都从 001 重来会互相覆盖（承「一个任务一份、反复调用续写、连续编号」原则）。
     pub fn new(task_dir: &Path) -> Result<Self> {
         let dir = task_dir.join("evidence");
         std::fs::create_dir_all(&dir).map_err(TkeError::IoError)?;
-        Ok(Self { dir, next: 1 })
+        let next = highest_seq(&dir) + 1;
+        Ok(Self { dir, next })
     }
 
     pub fn dir(&self) -> &Path {
@@ -54,6 +59,25 @@ impl EvidenceDir {
             response: PathBuf::from("evidence").join(&resp_name),
         })
     }
+}
+
+/// 扫目录里已有的 `step_NNN_*.txt`，返回最大的 NNN（没有则 0）。
+fn highest_seq(dir: &Path) -> usize {
+    let mut max = 0;
+    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+    for entry in rd.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        // 形如 step_007_req.txt / step_007_resp.txt
+        if let Some(rest) = name.strip_prefix("step_") {
+            if let Some(num) = rest.split('_').next() {
+                if let Ok(n) = num.parse::<usize>() {
+                    max = max.max(n);
+                }
+            }
+        }
+    }
+    max
 }
 
 /// 请求原文：`METHOD URL` + 头 + 空行 + 体。
@@ -111,6 +135,24 @@ mod tests {
         assert!(resp_txt.starts_with("HTTP 200"));
         assert!(resp_txt.contains("Server: nginx"));
         assert!(resp_txt.contains("hello"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resumes_numbering_across_reopen() {
+        // 模拟「多个进程调用共用同一 --log」：第二次开 EvidenceDir 应从 step_002 续，而非覆盖 step_001
+        let tmp = std::env::temp_dir().join(format!("tke-sec-evi-resume-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let req = HttpRequest::new("GET", "https://t.example/");
+        let resp = HttpResponse { status: 200, headers: vec![], body: b"x".to_vec(), truncated: false, elapsed_ms: 1 };
+
+        let r1 = EvidenceDir::new(&tmp).unwrap().record(&req, &resp).unwrap();
+        assert_eq!(r1.seq, 1);
+        let r2 = EvidenceDir::new(&tmp).unwrap().record(&req, &resp).unwrap();
+        assert_eq!(r2.seq, 2, "重开应续写而非从 1 覆盖");
+        assert!(tmp.join("evidence/step_001_req.txt").exists());
+        assert!(tmp.join("evidence/step_002_req.txt").exists());
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
