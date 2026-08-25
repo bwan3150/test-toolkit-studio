@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-25
-Last-Commit: a714ff5f
+Last-Commit: faf7bf4e
 ---
 
 # 当前状态
@@ -45,7 +45,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | 分发源六平台齐备 | ✅ 依赖全 / ⏳ 二进制待 CI | 依赖六平台已手工补齐(linux-arm64 只有 go-ios、win32 没有 go-ios——上游就没有),**一次性活不再动**;tke 二进制只有 mac-arm64+linux-amd64,darwin-amd64/windows 等 CI 跑 |
 | 依赖补齐 `tke fix` | ✅ 本机端到端实测 | ADR-0012:唯一会联网下载的命令;普通命令缺依赖只报错指路。空目录只放 tke → fix → 跑通网页检查 |
 | 两件套自包含（拷走即跑） | ✅ 本机实测通过 | Q-6 关闭:缺 `-d` 时从 tklib 的 meta.json 读平台兜底(web 零参数回放/android 走默认设备/ios 仍需显式) |
-| **tke security（安全测试新领域）** | 🟢 P1 侦察底座 用户 mac 实测通过;🟡 **P2 三段全落(prober+analyst+reporter+`security run`),真机待复跑** | **ADR-0019** + INV-13/14/15 + `security-report-spec.md` + 可视化基线 `security-report-template.sample.html`(用户确认风格)。第二个 agent 领域,骨架复用 harness。能力三层:`tke http`/`tke recon` primitive ⇄ AI 工具 ⇄ `tke security` 编排。强度阶梯 passive/safe/aggressive/red-team(默认 safe)+正交 `--focus`。**已落**(`src/workflow/security/`):`tke http`(原始探测,4xx/5xx 照收/不跟重定向/体限2MiB)、`HttpEngine` trait(UreqEngine+FakeEngine 可脱网单测)、`evidence.rs`(`--log` 落 `evidence/step_NNN_{req,resp}`,INV-14)、**recon 七个 verb**(headers/fingerprint/cors/graphql/bundle/endpoints/tls,一 verb 一文件在 `recon/`,统一 `ReconResult{findings,probes}`,bundle 密钥脱敏,endpoints 防 SPA 兜底假阳,tls 轻量待接证书库)。证据**续写不覆盖**(多次调用共用 `--log` 时按已有 step_NNN 续排,写脚本逼出来的)。冒烟脚本 `tests/security-smoke.sh`(build→http+七 verb→证据一览,跑刚构建的 bin/ 产物)。security 单测 22、全量 129 绿。**用户 mac 实测(2026-08-25)**:example.com + konechome.com.au 全 verb 跑通,证据连续不覆盖,**防假阳闸门有效**(konechome 是 Framer SPA,endpoints 没误报 .env/.git,只留真实 robots)。**注意**:参考报告那个 Sanity 零凭据泄露现在还测不出——bundle 默认扫首页 HTML 而非真正 JS bundle,且"从 bundle 找 projectId→探 Sanity data API"是多步推进,属 #2 prober 的活。**P2 已落 prober**:`tke security probe <url> [--mode --focus --prompts-dir --max-steps]`,多轮接地 LLM 循环(工具 http/recon/record_finding/finish),只借 provider,提示词自成一套(`security/prompt/`,builtin+外部覆盖,占位 target/mode/focus),统一 `Finding`(软硬分)。fake LLM 脚本化单测过;**真机待用户用 mac 的 [ai] 配置跑**。**待做**:analyst 对抗复核、reporter 出 HTML+findings.json、完整 `tke security run` 三段编排、`--json`/Tui、注入子系统(opt-in)、源码灰盒、endpoints 吃 OpenAPI、tls 深度证书 |
+| **tke security（安全测试新领域）** | 🟢 P1 侦察底座 mac 实测过;🟢 P2 无头管线 mac 实测过(konechome 出报告);🟡 **对话式 orchestrator 已落,交互真机待验** | **ADR-0019** + INV-13/14/15 + `security-report-spec.md` + 基线 `security-report-template.sample.html`。第二个 agent 领域,骨架复用 harness。**唯一入口 `tke security [url]`**(改对了:曾错做成 `security probe`/`security run` 子命令,用户纠正——`run` 是 .tks 语义):**默认对话式编排**(复用 harness `Frontend`/TUI),**`--json`/非终端→无头一次性**(探测→复核→出报告)。三层:`tke http`/`tke recon` primitive(可脚本,7 verb) ⇄ AI 工具 ⇄ orchestrator。强度阶梯 passive/safe/aggressive/red-team(默认 safe)+`--focus`。**已落**(`src/workflow/security/`):http 原语 + `HttpEngine`(Ureq+Fake 可脱网测) + `evidence.rs`(续写不覆盖,INV-14) + recon 七 verb(bundle 密钥脱敏/endpoints 防 SPA 假阳/tls 轻量) + **prober**(自主顺藤,去重+无进展强制收尾,真机死循环已修) + **analyst**(对抗复核,oneshot 强制结构化,毙假阳分软硬,INV-13) + **reporter**(确定性出 `security-report.html`+`findings.json`+每确认漏洞 `vuln-*.html`,转义防注入) + **orchestrator**(对话 REPL:recon/http/record_finding/ask_user/report/finish,说话即交回话筒)。提示词 `security/prompt/`(builtin+外部覆盖)。冒烟脚本 `tests/security-smoke.sh`;样例 `examples/security_report_sample.rs`。全量 137 绿。**真机实测**:P1 七 verb + 无头 `security --json` 都在 konechome 跑通出报告。**待验**:对话式 TUI 交互真机手感。**待做**:`--json` 与 Electron 联调、注入子系统(opt-in)、源码灰盒、endpoints 吃 OpenAPI、tls 深度证书、report 里方法/边界/风险矩阵等区块补全 |
 
 ## 本次会话不要碰
 
