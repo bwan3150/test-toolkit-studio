@@ -8,7 +8,8 @@
 //   allowlist  命令白名单 + 参数过滤（INV-16，安全承重墙）
 //   lease      租约：设备独占 + 目录隔离 + TTL/心跳 + 复位计划（INV-17）
 //   exec       子进程执行 + 参数注入 + 分层计时（D2、Q-17）
-//   routes     端点：hello/health/devices/sessions/exec/artifacts/workspace
+//   task       L2 任务层：服务端跑 harness/security + 事件流 + 五态出口 + webhook（D3/D6）
+//   routes     端点：hello/health/devices/sessions/exec/artifacts/workspace/tasks
 //
 // 三层测试（ADR-0008）：① 各文件内 `#[cfg(test)]` 单测（无网无设备）
 // ② `tests/serve.rs` 黑盒接口测试（起真二进制、发真 HTTP、跑真子进程，仍不需要设备）
@@ -18,6 +19,7 @@ pub mod allowlist;
 pub mod exec;
 pub mod lease;
 pub mod routes;
+pub mod task;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,6 +28,8 @@ use std::time::Duration;
 use lease::{LeaseTable, PoolDevice};
 
 pub struct ServeState {
+    /// L2 任务层（ADR-0022 D3）：服务端跑 AI 编排，token 计用户账
+    pub tasks: task::TaskTable,
     /// Bearer token；None = 只允许回环地址（见 `run`）
     pub token: Option<String>,
     /// 要 fork 的 tke 自身
@@ -99,6 +103,7 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
 
     let pool = build_pool(opts.web_slots, &opts.fake_devices);
     let state = Arc::new(ServeState {
+        tasks: task::TaskTable::new(),
         token: opts.token.clone(),
         bin,
         leases: LeaseTable::new(opts.root.clone(), pool, opts.session_ttl),

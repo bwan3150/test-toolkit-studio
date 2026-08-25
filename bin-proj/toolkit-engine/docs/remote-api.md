@@ -137,7 +137,7 @@ PUT /v1/sessions/{sid}/workspace/**     # 上传 APK / IPA / foo.tks + foo.tklib
 | **P0** ✅ | ADR-0022 + 本契约 + INV-16/17 | 用户拍板（2026-08-26 已拍） |
 | **P1** ✅ | `tke serve` 单节点：hello / health / devices / sessions 租约 / exec / artifacts / workspace | **已落地**：单测 30 + 黑盒接口测试 10 + 真设备 e2e（web 9/9、安卓真机 8/8）。见 §11 |
 | **P2** ✅ | `TKE_REMOTE` 客户端模式 + build 戳握手 + `tke remote` 会话管理；两条 remote skill（**生成式**：delta + 正文原样内联） | **已落地**：客户端单测 + 黑盒 11 + 本机真机演练（web / 安卓真机 / 安全轨）。见 §12 |
-| **P3** | 任务层：`POST /tasks` + SSE + webhook + WS 交互式 + `needs_decision` 回传 | 下发一个 harness 任务，关掉终端，收到报告链接 |
+| **P3** ✅ 骨架 / 🟡 AI 端到端待真机验 | 任务层：`POST /tasks` + SSE + WS 交互式 + webhook + `needs_decision` 回传 | 单测 6 + 黑盒 7（不需要 key）；**真跑一次探索要 `[ai]`，归真机验证**。见 §13 |
 | **P4** | 节点注册/心跳/能力上报；平台侧池化调度与计费对接 | 平台上租一台安卓，页面里对话式探索 |
 | **P5** | 部署形态：Docker（Linux + web + AVD/redroid）、mac mini 节点（iOS）、systemd/launchd、GitHub Action | Action 里一个 step 跑通 |
 | **P6** | 可选：MCP 网关；`tke steps` 统一吃 http/recon（ADR-0021 暂缓的那条——远程「每步一 RTT」后可能真的需要合批） | — |
@@ -331,3 +331,47 @@ Q-18 的审计结论：真正需要分叉的只有 4 个话题（装/连、`doct
   也没法在两边表示同一个位置。
 - **没有后台心跳**：单次命令的进程活不到下一条命令。改为**每条命令前续租一次**，够用。
 - **跨机没验**：全部实测都在本机回环上。网络那段的耗时仍未量（Q-17 的后半截）。
+
+## 13. P3 已落地（2026-08-26）
+
+### 端点
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/v1/tasks` | 起任务（**202**，异步）。body：`kind`(ui/security) / `target` / `testcase` / `mode` / `interactive` / `max_rounds` / `timeout_s` / `callback_url` |
+| GET | `/v1/tasks` · `/v1/tasks/{id}` | 列表 / 单个（含 `outcome` + `exit_code` + `detail`） |
+| GET | `/v1/tasks/{id}/events` | **SSE**：先重放已发生的，再接实时的 |
+| GET | `/v1/tasks/{id}/session` | **WebSocket**：事件推给你，你的回答写进任务进程 stdin |
+| GET | `/v1/tasks/{id}/report` | ui → `report.html`，security → `security-report.html`（自己找，调用方不用记） |
+| POST | `<callback_url>` | 终态 webhook：outcome + 报告地址 |
+
+### 五态出口（复活 ADR-0009 的条款）
+
+`passed`(0) / `failed`(1) / `needs_decision`(2) / `blocked`(3) / `error`(4)。
+
+**决策点不得自行决定**（D6 / INV-3）：headless 任务一看到 `awaiting_input` 就**立刻终止**并把
+问题原文回传（继续跑下去就等于让它自己拿主意了）；`interactive: true` 的任务才把问题转给
+WebSocket 那头的人。
+
+**没有 `done` 事件 = 没跑完**，即使退出码是 0 也判 `error`——编排本该以 done 收束。
+
+### 三处实测逼出来的修正
+
+1. **参数校验必须在租设备之前**。一个拼错的 `kind` 先撞上"没有 android 设备可租"（409），
+   把"你写错了"报成了"这儿没有"，调用方会往错误的方向查。
+2. **失败任务要交出 stderr 尾巴**（最后 50 行）。任务挂了的时候它是唯一线索——
+   这次实测挂的原因是节点没配 API key，不给尾巴调用方只知道"失败了"（P-46 同款）。
+   stderr 不进事件流（它是节点日志不是协议），但进 `detail.stderr_tail`。
+3. **终局事件要进重放缓冲**。原本 `task_end` 只广播不落缓冲，于是"任务早跑完了才来订阅"
+   的人只看到一片空白——而这恰恰是"下发完关掉终端、回头再看"的主场景。
+
+### 强度与预算
+
+`red-team` **服务端硬拒**（D5，`check_mode`）；`timeout_s` 收在 30~7200 秒之间硬执行，
+超时杀进程并判 `error`。任务结束（含失败、含超时）一律释放会话并复位设备（INV-17）。
+
+### 还没验的
+
+**真跑一次 AI 编排**（拿到 `done`、出报告、WS 交互式回答问题）要节点配 `[ai]`——
+本机没有 key，全部归真机验证。已测的是任务层骨架：参数校验、进程起停、事件流与重放、
+五态判定、设备归还、webhook 回调。

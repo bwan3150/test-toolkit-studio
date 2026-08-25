@@ -22,6 +22,28 @@
 - ROADMAP 加「新主线：服务化」；README 导航加 remote-api.md
 - **代码零改动**，全量测试与构建状态不变
 
+### 2026-08-26 · P3 落地：任务层（服务端跑 AI + SSE/WS + webhook + 五态出口）
+ADR-0022 的 P3，也就是"下发完就脱手、回头收报告"那条路。
+- **`src/serve/task.rs`**：`POST /v1/tasks` 起后台任务（202）→ 子进程跑 `tke harness --json` /
+  `tke security` → 逐行泵事件 → 终态释放会话+复位设备+webhook 回调
+- **端点**：`/v1/tasks`(POST/GET) · `/{id}` · `/{id}/events`(**SSE**，先重放再接实时) ·
+  `/{id}/session`(**WebSocket**，桥 `JsonFrontend` 的双向 NDJSON——那协议本就是长连接设计的) ·
+  `/{id}/report`（ui/security 两种报告名自己找）
+- **五态出口复活**（ADR-0009 的条款，D6/INV-3）：passed(0)/failed(1)/needs_decision(2)/
+  blocked(3)/error(4)。**headless 一看到 `awaiting_input` 就立刻终止并回传问题原文**——
+  继续跑下去就等于让它自己拿主意；`interactive:true` 的任务才把问题转给 WS 那头的人。
+  **没有 done 事件 = 没跑完**，退出码 0 也判 error
+- **`red-team` 服务端硬拒**（D5）；`timeout_s` 收在 30~7200 硬执行，超时杀进程
+- **三处实测逼出来的修正**：①参数校验必须在租设备之前（拼错的 kind 先撞上"没有 android 设备可租"，
+  把"你写错了"报成"这儿没有"）②失败任务要交出 **stderr 尾巴**（最后 50 行）——这次挂的原因是
+  节点没配 API key，不给尾巴调用方只知道"失败了"（P-46 同款）③**终局事件要进重放缓冲**，
+  否则"任务早跑完了才来订阅"只看到一片空白，而那正是主场景
+- 依赖：axum 开 `ws` + tokio-stream + futures-util
+- **测试**：单测 6 + 黑盒 7（`tests/task.rs`，**不需要 API key**：测参数校验、进程起停、
+  事件流与重放、五态判定、设备归还、webhook 真的发出去——测试里起了个一次性 HTTP 收听端）。全量 **264 绿**
+- **待真机验**：真跑一次 AI 编排（拿到 done、出报告、WS 交互式回答问题）要节点配 `[ai]`，
+  本机没有 key
+
 ### 2026-08-26 · P2 落地：`TKE_REMOTE` 客户端 + 两条 remote skill（生成式）
 ADR-0022 的 P2。**一个环境变量决定走哪条路**，命令行一个字都不用改。
 - **`src/remote/`**：`argv`（客户端翻译：`-d` → 租哪台、`--log` → 转发+拉回同一个相对路径）/

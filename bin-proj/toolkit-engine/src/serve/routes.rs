@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::body::Bytes;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
@@ -19,6 +20,7 @@ use axum::{Json, Router};
 use serde_json::json;
 
 use super::exec::ExecRequest;
+use super::task::SpawnTask;
 use super::lease::{AcquireError, Lease};
 use super::{allowlist, exec, ServeState};
 
@@ -59,6 +61,12 @@ pub fn router(state: Arc<ServeState>) -> Router {
             "/v1/sessions/{sid}/workspace/{*path}",
             put(workspace_put).layer(DefaultBodyLimit::max(upload_limit)),
         )
+        // ===== L2 任务层（ADR-0022 D3）=====
+        .route("/v1/tasks", post(task_create).get(task_list))
+        .route("/v1/tasks/{id}", get(task_get))
+        .route("/v1/tasks/{id}/events", get(task_events))
+        .route("/v1/tasks/{id}/session", get(task_ws))
+        .route("/v1/tasks/{id}/report", get(task_report))
         .layer(middleware::from_fn_with_state(state.clone(), auth))
         .with_state(state)
 }
@@ -375,4 +383,146 @@ mod tests {
         assert_eq!(got, vec!["logs/log.json", "logs/screenshots/a.png"]);
         let _ = std::fs::remove_dir_all(&tmp);
     }
+}
+
+// ===================== L2 任务层 =====================
+
+#[derive(serde::Deserialize)]
+struct CreateTask {
+    kind: String,
+    target: Option<String>,
+    testcase: Option<String>,
+    mode: Option<String>,
+    /// true = 有人（或平台 UI）会通过 WebSocket 回答问题；
+    /// false（默认）= headless，遇到决策点立刻 `needs_decision` 回传（D6）
+    #[serde(default)]
+    interactive: bool,
+    max_rounds: Option<u32>,
+    timeout_s: Option<u64>,
+    callback_url: Option<String>,
+}
+
+async fn task_create(
+    State(st): St,
+    Json(body): Json<CreateTask>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let req = SpawnTask {
+        kind: body.kind,
+        target: body.target,
+        testcase: body.testcase,
+        mode: body.mode,
+        interactive: body.interactive,
+        max_rounds: body.max_rounds,
+        // 分钟级、几万 token 的东西必须有个头：预算和超时是一等公民，服务端硬执行
+        timeout: Duration::from_secs(body.timeout_s.unwrap_or(1800).clamp(30, 7200)),
+        callback_url: body.callback_url,
+    };
+    match super::task::spawn(st.clone(), &st.leases, req).await {
+        Ok(v) => Ok((StatusCode::ACCEPTED, Json(v))),
+        Err((code, why)) => Err(ApiError(StatusCode::from_u16(code).unwrap_or(StatusCode::BAD_REQUEST), why)),
+    }
+}
+
+async fn task_list(State(st): St) -> Json<serde_json::Value> {
+    Json(json!({"tasks": st.tasks.list()}))
+}
+
+async fn task_get(State(st): St, Path(id): Path<String>) -> Result<Json<serde_json::Value>, ApiError> {
+    st.tasks.get(&id, |t| Json(t.view())).ok_or_else(|| not_found(format!("任务 {id} 不存在。")))
+}
+
+/// 事件流（SSE）。**先重放已经发生的，再接实时的**——
+/// 下发完关掉终端、回头再连上的人，不该看不到前半截
+async fn task_events(State(st): St, Path(id): Path<String>) -> Result<Response, ApiError> {
+    use axum::response::sse::{Event, Sse};
+    use futures_util::stream::{self, StreamExt};
+
+    let past: Vec<String> = st
+        .tasks
+        .get(&id, |t| t.events.iter().map(|e| e.to_string()).collect())
+        .ok_or_else(|| not_found(format!("任务 {id} 不存在。")))?;
+    let rx = st.tasks.subscribe(&id);
+
+    let replay = stream::iter(past.into_iter().map(|s| Ok::<_, std::convert::Infallible>(Event::default().data(s))));
+    let live = match rx {
+        Some(rx) => tokio_stream::wrappers::BroadcastStream::new(rx)
+            .filter_map(|r| async move { r.ok().map(|s| Ok(Event::default().data(s))) })
+            .boxed(),
+        None => stream::empty().boxed(),
+    };
+    Ok(Sse::new(replay.chain(live)).into_response())
+}
+
+/// 交互式会话（WebSocket）：事件推给你，你的回答写进任务进程的 stdin。
+/// 桥的是 `JsonFrontend` 那套双向 NDJSON——**那协议本来就是给长连接设计的**（app 在用），
+/// 这里只是把管子从 stdio 换成 WebSocket
+async fn task_ws(State(st): St, Path(id): Path<String>, ws: WebSocketUpgrade) -> Result<Response, ApiError> {
+    let interactive = st
+        .tasks
+        .get(&id, |t| t.interactive)
+        .ok_or_else(|| not_found(format!("任务 {id} 不存在。")))?;
+    if !interactive {
+        // 说清楚而不是接上一个哑口的连接：headless 任务的问题是**回传**的，不是等人回答的
+        return Err(bad(format!(
+            "任务 {id} 是 headless 的，不接受交互。它遇到决策点会以 needs_decision 回传问题——             建任务时给 `interactive: true` 才有这条通道。"
+        )));
+    }
+    Ok(ws.on_upgrade(move |socket| ws_pump(socket, st, id)))
+}
+
+async fn ws_pump(socket: WebSocket, st: Arc<ServeState>, id: String) {
+    use futures_util::{SinkExt, StreamExt};
+    let (mut sink, mut stream) = socket.split();
+
+    // 先补齐历史，再转实时——与 SSE 同一个道理
+    let past: Vec<String> = st.tasks.get(&id, |t| t.events.iter().map(|e| e.to_string()).collect()).unwrap_or_default();
+    for e in past {
+        if sink.send(Message::Text(e.into())).await.is_err() {
+            return;
+        }
+    }
+    let mut rx = match st.tasks.subscribe(&id) {
+        Some(rx) => rx,
+        None => return,
+    };
+
+    let id2 = id.clone();
+    let st2 = st.clone();
+    // 收：客户端发来的每一行就是一条 UiCommand（{"type":"answer","text":"…"}），原样喂给子进程
+    let recv = tokio::spawn(async move {
+        while let Some(Ok(msg)) = stream.next().await {
+            if let Message::Text(t) = msg {
+                if let Err(e) = st2.tasks.answer(&id2, t.to_string()) {
+                    tracing::warn!(target: "tke::task", "回答没送达: {e}");
+                    break;
+                }
+            }
+        }
+    });
+
+    while let Ok(line) = rx.recv().await {
+        if sink.send(Message::Text(line.into())).await.is_err() {
+            break;
+        }
+    }
+    recv.abort();
+}
+
+/// 报告：ui 任务出 `report.html`，security 出 `security-report.html`——
+/// 调用方不用记是哪一种，这里自己找
+async fn task_report(State(st): St, Path(id): Path<String>) -> Result<Response, ApiError> {
+    let dirs = st
+        .tasks
+        .get(&id, |t| t.lease.dirs.clone())
+        .ok_or_else(|| not_found(format!("任务 {id} 不存在。")))?;
+    for name in ["security-report.html", "report.html"] {
+        let p = dirs.logs.join(name);
+        if p.exists() {
+            let bytes = std::fs::read(&p).map_err(|e| not_found(e.to_string()))?;
+            return Ok(([(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")], bytes).into_response());
+        }
+    }
+    Err(not_found(format!(
+        "任务 {id} 还没有报告——可能还在跑，也可能没跑到出报告那一步（看 /v1/tasks/{id} 的 outcome）。"
+    )))
 }
