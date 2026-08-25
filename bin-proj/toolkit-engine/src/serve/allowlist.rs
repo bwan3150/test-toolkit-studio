@@ -60,12 +60,17 @@ const ALLOWED: &[CmdSpec] = &[
               banned: &["--fix", "-y", "--yes", "--base-url", "--check"] },
 ];
 
+/// **所有命令通用**的宿主路径参数。`--log` 不禁用而是沙箱化，是有意的：
+/// 本地写 `--log logs/scan` 再 `tke report logs/scan`，远程必须是**同一个相对路径**才能对上
+/// ——把它吃掉的话证据落进会话默认目录，后面那条 report 就找不着了（实跑安全轨时撞出来的）。
+const GLOBAL_PATH_FLAGS: &[&str] = &["--log"];
+
 /// 全局禁用旗标：改落点 / 改配置 / 开 AI / 改设备的，一律由服务端注入，不接受调用方指定。
 /// `--headless` 也在内——服务器上开有头窗口必然失败，而且会毁掉正在复用的会话。
 const BANNED_FLAGS: &[&str] = &[
     "--config", "-c",
     "--prompts-dir",
-    "--log", "--cache", "--current-dir", "--scripts",
+    "--cache", "--current-dir", "--scripts",
     "--json",
     "--device", "-d",
     "--copilot",
@@ -170,7 +175,7 @@ pub fn validate(argv: &[String]) -> Result<Validated, Rejected> {
             if spec.banned.contains(&name) {
                 return Err(Rejected(format!("`{cmd} {name}` 不对远程开放。")));
             }
-            let is_path_flag = spec.path_flags.contains(&name);
+            let is_path_flag = spec.path_flags.contains(&name) || GLOBAL_PATH_FLAGS.contains(&&*name);
             match tok.split_once('=') {
                 // `--lib=foo` 拆成两个 token，下游只处理一种形态
                 Some((k, v)) => {
@@ -248,13 +253,23 @@ mod tests {
 
     #[test]
     fn 落点与设备参数不接受远程指定() {
-        for bad in ["--log", "--cache", "--current-dir", "--config", "--json", "--copilot", "--headless"] {
+        for bad in ["--cache", "--current-dir", "--config", "--json", "--copilot", "--headless"] {
             let e = v(&["fetch", bad, "x"]).unwrap_err();
             assert!(e.0.contains("服务端"), "{bad}: {}", e.0);
         }
         // 短横线形式与 `=` 形式都要拦住（曾经最容易漏的两种写法）
         assert!(v(&["fetch", "-d", "web:1"]).is_err());
         assert!(v(&["fetch", "--headless=off"]).is_err());
+    }
+
+    #[test]
+    fn log是所有命令通用的沙箱路径参数() {
+        // 本地 `--log logs/scan` → `tke report logs/scan`；远程必须是同一个相对路径才对得上
+        let r = v(&["recon", "headers", "https://x", "--log", "logs/scan"]).unwrap();
+        assert_eq!(r.host_path_idx, vec![4], "--log 的值要被沙箱进会话工作区");
+        assert!(r.argv.contains(&"--log".to_string()), "不能吃掉它——下游要靠它对上目录");
+        let r = v(&["steps", "等待 [1s]", "--log=out"]).unwrap();
+        assert_eq!(r.argv.last().unwrap(), "out");
     }
 
     #[test]

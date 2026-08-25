@@ -22,6 +22,28 @@
 - ROADMAP 加「新主线：服务化」；README 导航加 remote-api.md
 - **代码零改动**，全量测试与构建状态不变
 
+### 2026-08-26 · P2 落地：`TKE_REMOTE` 客户端 + 两条 remote skill（生成式）
+ADR-0022 的 P2。**一个环境变量决定走哪条路**，命令行一个字都不用改。
+- **`src/remote/`**：`argv`（客户端翻译：`-d` → 租哪台、`--log` → 转发+拉回同一个相对路径）/
+  `state`（会话落盘，与 web 驱动的 session_file 同套路）/ `client`（ureq，不引新的异步客户端）/
+  `mod`（拦截、隐式会话、版本漂移提醒）。拦截在 **clap 之前**——先过本地 clap 等于要求两端版本严格一致
+- **`tke remote status|open|close|pull|devices|push`**：显式管会话（平时不用敲，第一条命令自动租）
+- **stdout 与退出码原样透传**：这是"文档不分叉"的下半截
+- **`--log` 语义改了**（P1 里它是禁用旗标）：改成**全局沙箱路径参数**，两边同一个相对路径。
+  **原因是实跑安全轨撞出来的**：本地 `--log logs/scan` 再 `tke report logs/scan` 靠这个路径对上，
+  远程把它吃掉的话第二条命令就找不着东西了
+- **无设备会话**（`platform: "none"`）：`http`/`recon`/`report`/`task` 不碰设备，没给 `-d` 就
+  开一个只有工作区的会话——不占池、不互斥、**不计设备时长**。这是 ADR-0022 D3 的直接推论：
+  安全轨强制租一台手机 = 让用户为没用到的设备付租金。**写 security remote skill 时才发现**
+- **两条 remote skill 是生成的**：`skill/remote-delta/*.md`（只维护差异：连接方式 + 覆盖表）+
+  `build-remote.sh` 把本地版正文**逐字节内联**。结构上不可能漂；publish.sh 打包前自己跑，
+  四个包已进 manifest（默认全装）。Q-18 审计结论：真正要分叉的只有 4 个话题
+- **测试**：客户端单测 + 黑盒 11（`tests/remote.rs`：起真节点、跑真客户端，不需要设备）+
+  `tests/common/` 共享起服务器的那段。全量 **251 绿**
+- **本机实测**：web（8 个产物含 report.html 拉回本地）/ 安卓真机 CPH2305（5 个产物）/
+  安全轨照 remote skill 原样敲（**没租任何设备**，证据拉回 `logs/scan/evidence/`）
+- **跨机没验**：都在本机回环上；网络那段耗时仍未量（Q-17 后半截）
+
 ### 2026-08-26 · P1 落地：`tke serve` 单节点（租约 + exec 白名单 + 产物）
 ADR-0022 的 P1。**代码 + 三层测试 + 守卫**一起进来。
 - **`src/serve/`**：`allowlist`（命令白名单 + 禁用旗标 + 宿主路径表，INV-16 的执行点）/

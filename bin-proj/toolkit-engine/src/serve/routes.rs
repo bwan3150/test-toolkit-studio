@@ -52,6 +52,8 @@ pub fn router(state: Arc<ServeState>) -> Router {
         .route("/v1/sessions/{sid}", delete(session_delete))
         .route("/v1/sessions/{sid}/heartbeat", post(session_heartbeat))
         .route("/v1/sessions/{sid}/exec", post(session_exec))
+        // 不带路径 = 整个工作区（拉产物时最常用的那一次，别让人非得先知道有哪些目录）
+        .route("/v1/sessions/{sid}/artifacts", get(artifact_root))
         .route("/v1/sessions/{sid}/artifacts/{*path}", get(artifact_get))
         .route(
             "/v1/sessions/{sid}/workspace/{*path}",
@@ -259,7 +261,8 @@ async fn session_exec(
     let req = ExecRequest {
         validated,
         dirs: lease.dirs.clone(),
-        device: Some(lease.device.id.clone()),
+        // 无设备会话不注入 `-d`：注入一个空的设备 id 会让下游按默认安卓设备去连
+        device: (!lease.device.id.is_empty()).then(|| lease.device.id.clone()),
         timeout,
     };
     let out = exec::run(&st.bin, &req).await.map_err(bad)?;
@@ -275,6 +278,18 @@ async fn session_exec(
 struct ListQuery {
     #[serde(default)]
     list: bool,
+}
+
+/// 列整个工作区（`/artifacts` 不带路径）
+async fn artifact_root(
+    State(st): St,
+    Path(sid): Path<String>,
+) -> Result<Response, ApiError> {
+    let lease = need_lease(&st, &sid)?;
+    let mut names = Vec::new();
+    collect(&lease.dirs.workspace, &lease.dirs.workspace, &mut names);
+    names.sort();
+    Ok(Json(json!({"files": names})).into_response())
 }
 
 /// 下载产物。路径一律过工作区沙箱——`artifacts/../../../etc/passwd` 就是在这儿挡住的

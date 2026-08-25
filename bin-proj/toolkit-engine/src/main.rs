@@ -166,6 +166,12 @@ enum Commands {
         args: cli::serve::ServeArgs,
     },
 
+    /// [服务] 远程会话管理（配了 TKE_REMOTE 后，普通命令会自动发给节点）
+    Remote {
+        #[command(subcommand)]
+        action: cli::remote::RemoteCommands,
+    },
+
     // ==================== ④ 自有工具 ====================
     /// [工具] OCR 图片文字识别
     Ocr {
@@ -239,6 +245,15 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> tke::Result<()> {
+    // 远程模式拦截（ADR-0022 D4）：**必须在 clap 之前**——远程要原样转发命令，
+    // 先过一遍本地 clap 等于要求两端版本严格一致，那正是我们想避免的耦合。
+    // 不在白名单里的命令拿不到 Some，照旧走本地
+    if let Some(cfg) = tke::remote::RemoteConfig::from_env() {
+        if let Some(code) = tke::remote::maybe_dispatch(&cfg) {
+            std::process::exit(code);
+        }
+    }
+
     let matches = Cli::command()
         .override_help(cli::help::build_help())
         .get_matches();
@@ -353,6 +368,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Serve { args } => {
             cli::serve::handle(args).await
+        }
+        Commands::Remote { action } => {
+            cli::remote::handle(action).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {

@@ -33,6 +33,9 @@ pub mod tools;
 // ⑤ 服务化：把本机能力开成 HTTP 接口（ADR-0022）
 pub mod serve;
 
+// ⑤' 远程客户端：TKE_REMOTE 一设，同一条命令发给远端节点（ADR-0022 D4）
+pub mod remote;
+
 // ===== 统一导出（保持 crate 根路径简洁） =====
 
 // 基础设施

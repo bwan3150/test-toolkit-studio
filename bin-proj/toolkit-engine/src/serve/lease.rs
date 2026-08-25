@@ -41,6 +41,9 @@ impl PoolDevice {
             "android" | "android-avd" => "android",
             "ios" | "ios-sim" => "ios",
             "web" => "web",
+            // 无设备会话：安全轨的 http/recon 只打 URL，不碰设备。
+            // 让它也去租一台手机 = 让用户为没用到的设备付租金（计费模型见 ADR-0022 D3）
+            "none" => "none",
             _ => "fake",
         }
     }
@@ -175,6 +178,13 @@ impl LeaseTable {
         ttl: Option<Duration>,
     ) -> Result<Lease, AcquireError> {
         let want = platform.unwrap_or("any");
+        // 无设备会话：不占池、不互斥、不复位——它只要一个隔离的工作区
+        if want == "none" && device_id.is_none() {
+            return Ok(self.insert_lease(
+                PoolDevice { id: String::new(), kind: "none".into(), label: "无设备（只用工作区）".into() },
+                ttl,
+            ));
+        }
         let pool = self.pool.lock().expect("pool 锁中毒").clone();
         let candidates: Vec<PoolDevice> = pool
             .into_iter()
@@ -187,8 +197,7 @@ impl LeaseTable {
             return Err(AcquireError::NoSuchDevice(device_id.unwrap_or(want).to_string()));
         }
 
-        let mut leases = self.leases.lock().expect("leases 锁中毒");
-        let now = now_secs();
+        let leases = self.leases.lock().expect("leases 锁中毒");
         // **过期租约照样占着设备**，直到 sweep 把它复位掉——这是 INV-17 的要求：
         // 在这里顺手 retain 掉它们，设备就绕过复位直接给了下一个租户
         // （单测「sweep交出过期的那批」当初就是这么逼出来的）。
@@ -201,12 +210,18 @@ impl LeaseTable {
             None => return Err(AcquireError::AllBusy(device_id.unwrap_or(want).to_string())),
         };
 
+        drop(leases);
+        Ok(self.insert_lease(device, ttl))
+    }
+
+    fn insert_lease(&self, device: PoolDevice, ttl: Option<Duration>) -> Lease {
         let sid = self.next_id();
         let dirs = SessionDirs::under(&self.root, &sid);
         // 建目录失败当成"没有设备可租"处理不合适——直接 panic 也不合适，
         // 交给上层：这里只在内存里建租约，目录建不出来 routes 会回 500
         let _ = dirs.create();
         let ttl = ttl.unwrap_or(self.default_ttl);
+        let now = now_secs();
         let lease = Lease {
             id: sid.clone(),
             device,
@@ -215,8 +230,8 @@ impl LeaseTable {
             expires_at: now + ttl.as_secs(),
             launched_apps: Vec::new(),
         };
-        leases.insert(sid, lease.clone());
-        Ok(lease)
+        self.leases.lock().expect("leases 锁中毒").insert(sid, lease.clone());
+        lease
     }
 
     pub fn get(&self, sid: &str) -> Option<Lease> {
@@ -367,6 +382,20 @@ mod tests {
         assert!(l.dirs.logs.starts_with(&l.dirs.workspace), "logs 必须在 cwd 树内，否则只能用绝对路径引用它");
         assert!(l.dirs.workspace.exists() && l.dirs.cache.exists());
         assert!(l.dirs.root.starts_with(tmp.path()));
+    }
+
+    #[test]
+    fn 无设备会话不占池不互斥() {
+        let (t, _tmp) = table(vec![dev("web:1", "web")]);
+        // 安全轨的 http/recon 只打 URL。让它去租一台手机 = 让用户为没用到的设备付租金
+        let a = t.acquire(Some("none"), None, None).unwrap();
+        let b = t.acquire(Some("none"), None, None).unwrap();
+        assert_ne!(a.id, b.id, "无设备会话之间不互斥");
+        assert!(a.device.id.is_empty() && a.device.platform() == "none");
+        assert!(a.reset_plan().actions.is_empty(), "没设备就没什么好复位的");
+        // 真设备一台没少
+        assert!(t.acquire(Some("web"), None, None).is_ok());
+        assert!(a.dirs.workspace.exists(), "工作区照样要有——证据得有地方落");
     }
 
     #[test]

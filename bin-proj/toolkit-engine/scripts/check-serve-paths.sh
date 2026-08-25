@@ -16,7 +16,8 @@ ALLOWLIST="src/serve/allowlist.rs"
 
 # 不在远程白名单里的命令，它们的路径参数与 serve 无关
 # （harness/security = AI 编排走任务层；doctor --fix/update/serve 本身 = 节点运维）
-EXEMPT='src/cli/serve.rs|src/cli/fix.rs|src/cli/doctor.rs|src/cli/android_sdk.rs|src/cli/selfmanage.rs|src/cli/workflow/harness.rs|src/cli/security/'
+# cli/remote.rs 是**客户端**命令（tke remote pull --into 之类），跑在调用方本地，与节点白名单无关
+EXEMPT='src/cli/remote.rs|src/cli/serve.rs|src/cli/fix.rs|src/cli/doctor.rs|src/cli/android_sdk.rs|src/cli/selfmanage.rs|src/cli/workflow/harness.rs|src/cli/security/'
 
 # 只看**带 `#[arg(` 且 long 的结构体字段**：函数参数里的 PathBuf 不是 CLI 参数
 # （位置参数没有旗标名，由 allowlist 的 path_first_arg 覆盖，这里本来就扫不到）

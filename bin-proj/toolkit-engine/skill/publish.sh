@@ -78,6 +78,10 @@ echo "build: $(date -u +%Y%m%d-%H%M%S)" >> "$OUT/VERSION"
 # SKILL.md 却天天改 —— 用户抱着两天前的旧文档，体检照样说"一致"（Q-11 就是这么发生的）。
 # 多 skill：凡是 skill/<名>/SKILL.md 存在的目录都打一个包（tke-ui-test / tke-security-test / 未来的）
 # 同时写一个 manifest（skills，一行一个名）——install.sh 读它决定装哪些（默认全装）。
+# 远程版是**生成**的（delta + 本地版正文原样内联，见 build-remote.sh）——
+# 打包前先生成，它们随后会被下面的循环当成普通 skill 收进去
+"$SCRIPT_DIR/build-remote.sh" || { echo "❌ 生成 remote skill 失败" >&2; exit 1; }
+
 : > "$OUT/skills"
 for skill_dir in "$SCRIPT_DIR"/*/; do
     name="$(basename "$skill_dir")"

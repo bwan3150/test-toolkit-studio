@@ -15,6 +15,7 @@ pub mod fix;
 pub mod report;
 pub mod task;
 pub mod serve;
+pub mod remote;
 
 // ① 直通（统一处理所有外部二进制，含 adb -d 注入特例）
 

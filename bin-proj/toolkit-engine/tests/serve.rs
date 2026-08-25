@@ -10,81 +10,8 @@
 //
 // 跑法:cargo test --no-default-features --test serve
 
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
-
-const TOKEN: &str = "test-token-1234";
-
-/// 起一个 serve,读它打印的监听行拿到真实端口(`--port 0`)
-struct Server {
-    child: Child,
-    base: String,
-    root: PathBuf,
-}
-
-impl Server {
-    fn start() -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "tke-serve-test-{}-{:?}",
-            std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_tke"))
-            .args(["serve", "--port", "0", "--token", TOKEN])
-            .args(["--root".as_ref(), root.as_os_str()])
-            .args(["--fake-device", "fake:api", "--web-slots", "2", "--exec-timeout", "60"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("起 tke serve 失败");
-
-        // 监听行是契约:`{"success":true,"listening":"127.0.0.1:PORT",...}`
-        let out = child.stdout.take().unwrap();
-        let mut lines = BufReader::new(out).lines();
-        let line = lines.next().expect("serve 没打印监听行").expect("读监听行失败");
-        let v: serde_json::Value = serde_json::from_str(&line).unwrap_or_else(|e| panic!("监听行不是 JSON: {line} ({e})"));
-        let addr = v["listening"].as_str().expect("监听行缺 listening").to_string();
-        Self { child, base: format!("http://{addr}"), root }
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!("{}{}", self.base, path)
-    }
-}
-
-impl Drop for Server {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        let _ = std::fs::remove_dir_all(&self.root);
-    }
-}
-
-// ureq 已经是依赖(web 驱动在用),测试直接借它发请求,不引新东西
-fn get(s: &Server, path: &str) -> (u16, serde_json::Value) {
-    resp(ureq::get(&s.url(path)).set("Authorization", &format!("Bearer {TOKEN}")).call())
-}
-
-fn post(s: &Server, path: &str, body: serde_json::Value) -> (u16, serde_json::Value) {
-    resp(ureq::post(&s.url(path)).set("Authorization", &format!("Bearer {TOKEN}")).send_json(body))
-}
-
-fn del(s: &Server, path: &str) -> (u16, serde_json::Value) {
-    resp(ureq::delete(&s.url(path)).set("Authorization", &format!("Bearer {TOKEN}")).call())
-}
-
-fn resp(r: Result<ureq::Response, ureq::Error>) -> (u16, serde_json::Value) {
-    match r {
-        Ok(r) => {
-            let code = r.status();
-            (code, r.into_json().unwrap_or(serde_json::Value::Null))
-        }
-        Err(ureq::Error::Status(code, r)) => (code, r.into_json().unwrap_or(serde_json::Value::Null)),
-        Err(e) => panic!("请求失败: {e}"),
-    }
-}
+mod common;
+use common::{del, get, post, resp, Server, TOKEN};
 
 fn new_session(s: &Server) -> String {
     let (code, v) = post(s, "/v1/sessions", serde_json::json!({"capabilities": {"platform": "fake"}}));
@@ -184,7 +111,10 @@ fn 白名单在http层就把人挡住() {
         (vec!["harness", "随便"], "任务层"),
         (vec!["update"], "运维"),
         (vec!["doctor", "--fix"], "开放"),
-        (vec!["fetch", "--log", "/etc"], "服务端"),
+        // `--log` 不禁用而是**沙箱化**（两边要能用同一个相对路径），所以拒绝理由是"越界"
+        (vec!["fetch", "--log", "/etc"], "越界"),
+        (vec!["fetch", "--log", "../../etc"], "越界"),
+        (vec!["fetch", "--cache", "/etc"], "服务端"),
         (vec!["fetch", "-d", "web:1"], "服务端"),
         (vec!["ocr", "--image", "/etc/passwd"], "越界"),
         (vec!["ocr", "--image", "../../etc/passwd"], "越界"),

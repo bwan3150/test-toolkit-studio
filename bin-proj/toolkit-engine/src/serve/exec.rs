@@ -61,17 +61,22 @@ pub struct ExecRequest {
 /// 放后面会撞 P-44（子命令开关与全局参数撞名）与 `--headless` 吃掉子命令那类坑，
 /// 前置是唯一稳的写法。
 pub fn build_argv(req: &ExecRequest, resolved_paths: &[(usize, PathBuf)]) -> Vec<String> {
-    let mut out: Vec<String> = vec![
-        "--json".into(),
-        "--log".into(),
-        req.dirs.logs.to_string_lossy().into_owned(),
+    // `--log` 只在调用方没给的时候才注入：给了就用他的（已沙箱进会话工作区），
+    // 否则本地/远程的目录对不上，`tke report <同一个相对路径>` 就找不到东西
+    let caller_gave_log = req.validated.argv.iter().any(|a| a == "--log");
+    let mut out: Vec<String> = vec!["--json".into()];
+    if !caller_gave_log {
+        out.push("--log".into());
+        out.push(req.dirs.logs.to_string_lossy().into_owned());
+    }
+    out.extend(vec![
         "--cache".into(),
         req.dirs.cache.to_string_lossy().into_owned(),
         "--current-dir".into(),
         req.dirs.workspace.to_string_lossy().into_owned(),
         // 等号形态：`--copilot false` 会不会吃掉后面的 token 取决于 clap 的心情，别赌
         "--copilot=false".into(),
-    ];
+    ]);
     if let Some(d) = &req.device {
         out.push("-d".into());
         out.push(d.clone());
@@ -212,6 +217,15 @@ mod tests {
             assert!(at < cmd_at, "{injected} 必须在子命令前（P-44：放后面会被当成子命令的参数）");
         }
         assert_eq!(argv[argv.len() - 2..], ["fetch", "--interactive"]);
+    }
+
+    #[test]
+    fn 调用方给了log就不再注入() {
+        let r = req(&["steps", "等待 [1s]", "--log", "logs/scan"], std::path::Path::new("/w"));
+        let resolved = resolve_paths(&r).unwrap();
+        let argv = build_argv(&r, &resolved);
+        assert_eq!(argv.iter().filter(|a| *a == "--log").count(), 1, "两个 --log 会让 clap 取到错的那个: {argv:?}");
+        assert!(argv.contains(&"/w/logs/scan".to_string()), "{argv:?}");
     }
 
     #[test]

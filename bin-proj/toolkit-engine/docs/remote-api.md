@@ -136,7 +136,7 @@ PUT /v1/sessions/{sid}/workspace/**     # 上传 APK / IPA / foo.tks + foo.tklib
 |---|---|---|
 | **P0** ✅ | ADR-0022 + 本契约 + INV-16/17 | 用户拍板（2026-08-26 已拍） |
 | **P1** ✅ | `tke serve` 单节点：hello / health / devices / sessions 租约 / exec / artifacts / workspace | **已落地**：单测 30 + 黑盒接口测试 10 + 真设备 e2e（web 9/9、安卓真机 8/8）。见 §11 |
-| **P2** | `TKE_REMOTE` 客户端模式 + build 戳握手；`tke-ui-test-remote` / `tke-security-test-remote`（复用主文档，只加「怎么连远端」） | 另一台零环境机器上 Claude Code 跑通一次 UI 检查并拿到报告 |
+| **P2** ✅ | `TKE_REMOTE` 客户端模式 + build 戳握手 + `tke remote` 会话管理；两条 remote skill（**生成式**：delta + 正文原样内联） | **已落地**：客户端单测 + 黑盒 11 + 本机真机演练（web / 安卓真机 / 安全轨）。见 §12 |
 | **P3** | 任务层：`POST /tasks` + SSE + webhook + WS 交互式 + `needs_decision` 回传 | 下发一个 harness 任务，关掉终端，收到报告链接 |
 | **P4** | 节点注册/心跳/能力上报；平台侧池化调度与计费对接 | 平台上租一台安卓，页面里对话式探索 |
 | **P5** | 部署形态：Docker（Linux + web + AVD/redroid）、mac mini 节点（iOS）、systemd/launchd、GitHub Action | Action 里一个 step 跑通 |
@@ -265,3 +265,69 @@ ADR-0022 D2「子进程执行」的重新审视触发条件（"进程启动开�
 - **fake 设备的跨进程状态**：`drivers::fake` 的页面脚本是进程级注册表，子进程里是空的，
   所以接口测试用的是 `task new` / `device` 这类不碰设备的命令。想让 CI 也覆盖"设备命令"
   这条路，得先让 fake 驱动的状态可落盘——**留到需要时再做**，e2e 已经覆盖了真设备那条。
+
+## 12. P2 已落地（2026-08-26）
+
+### 客户端：一个环境变量决定走哪条路
+
+```bash
+export TKE_REMOTE=https://<节点>   # 不带协议就补 http://
+export TKE_TOKEN=<凭据>
+tke -d web steps '启动 ["https://example.com"]' --log logs/check   # 跟本地一模一样
+```
+
+拦截发生在 **clap 之前**（远程要原样转发命令；先过本地 clap 等于要求两端版本严格一致）。
+不在白名单里的命令拿不到拦截，照旧走本地。
+
+**只有两个参数在远程有了新含义，其余原样转发：**
+
+| 参数 | 远程含义 | 为什么这么设计 |
+|---|---|---|
+| `-d web` / `-d android` / `-d <设备id>` | 租哪一类 / 哪一台（服务端注入回子进程） | 平台关键字与设备 id 分开认——远程点名一台是常事，猜错会把人租到别的机器上 |
+| `--log <相对目录>` | **照样发给节点**（沙箱进会话工作区），跑完把这棵子树拉回本地**同一个相对路径** | 本地写 `--log logs/scan` 再 `tke report logs/scan`，两条命令靠这个路径对上。把它吃掉，第二条就找不着了——实跑安全轨时撞出来的 |
+
+其余由服务端接管的（`--cache`/`--current-dir`/`--json`/`--copilot`/`--headless`）就地吃掉**并说一声**
+（静默 = 让人以为它生效了，INV-9）；`--config`/`--prompts-dir` 当场拒绝（那是节点的事）。
+
+**会话是隐式的**：第一条命令自动租一台、落盘记住（`~/.tke/remote/<节点>.json`，与 web 驱动的
+`session_file` 同一个套路）、后续命令复用并续租。显式管理用 `tke remote <status|open|close|pull|devices|push>`。
+
+**stdout 与退出码原样透传** —— 这是"文档不分叉"的下半截：调用方看到的东西跟本地一样。
+
+### 无设备会话（计费模型的一部分）
+
+`http` / `recon` / `report` / `task` / `doctor` 不碰设备。没给 `-d` 时客户端开一个
+**只有工作区的无设备会话**（`platform: "none"`）：不占池、不互斥、不复位、**不计设备时长**。
+
+这不是优化，是 ADR-0022 D3 的直接推论：安全轨远程调用如果强制租一台手机，
+用户就要为没用到的设备付租金。**写 security remote skill 时才发现这个洞**。
+
+### 两条 remote skill：生成式，单一源头
+
+```
+skill/remote-delta/tke-ui-test-remote.md        ← 只维护差异（连接方式 + 覆盖表）
+skill/build-remote.sh                            ← delta + 本地版正文**逐字节内联**
+→ skill/tke-ui-test-remote/                      ← 生成物，不进 git；publish.sh 打包前自己跑
+```
+
+`tke-ui-test-remote` = 84 行 delta + 585 行原版正文 = 669 行；`tke-security-test-remote` 232 行。
+**结构上不可能漂**——正文只有一处源头。四个包已经在 manifest 里，`install.sh` 默认全装。
+
+Q-18 的审计结论：真正需要分叉的只有 4 个话题（装/连、`doctor --fix` 补依赖、有头登录、日志落点），
+做成 delta 里的**覆盖表**（"正文说 X → 远程实际是 Y"）。赌注成立。
+
+### 实测（本机 Linux amd64）
+
+| 场景 | 结果 |
+|---|---|
+| `tke -d web ... --log logs/x` | 起无头 Chrome → 打开页面 → 8 个产物（含 report.html）拉回本地 |
+| `tke -d android ...` | 租到 CPH2305 · Android 15，5 个产物拉回本地 |
+| 安全轨（照 remote skill 原样敲） | **没租任何设备**，`task new` → `recon headers` → 证据落 `logs/scan/evidence/` 并拉回 |
+| `tke remote status / close` | 版本对得上；释放带复位回执，设备回池 |
+
+### P2 有意没做的
+
+- **`--log` 只接受相对路径**（绝对路径当场拒并说清楚）：绝对路径既过不了沙箱，
+  也没法在两边表示同一个位置。
+- **没有后台心跳**：单次命令的进程活不到下一条命令。改为**每条命令前续租一次**，够用。
+- **跨机没验**：全部实测都在本机回环上。网络那段的耗时仍未量（Q-17 的后半截）。
