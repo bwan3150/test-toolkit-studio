@@ -32,6 +32,7 @@ fn main() {
     f3.confirmed = false; // 疑似 → 只进全局清单，不出单独报告
 
     let report = AnalyzedReport {
+        usage: Default::default(),
         target: "https://shop.acme-demo.example/".into(),
         mode: "safe".into(),
         findings: vec![f1, f2, f3],

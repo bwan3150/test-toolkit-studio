@@ -413,8 +413,14 @@ async fn pump_events(
                 t.usage = Some(u);
             }
         }
-        // 一次性命令的结果对象:每来一个就覆盖,最后那个才算终局
+        // 一次性命令的结果对象:每来一个就覆盖,最后那个才算终局。
+        // 用量也可能长在这儿(安全轨不走 summary 事件),一并收下
         if let Some(o) = oneshot_outcome(&ev) {
+            if let Some(u) = ev.get("usage").filter(|u| !u.is_null()) {
+                if let Some(t) = st.tasks.tasks.lock().expect("tasks 锁中毒").get_mut(id) {
+                    t.usage = Some(u.clone());
+                }
+            }
             oneshot = Some(o);
         }
         if let Some(t) = st.tasks.tasks.lock().expect("tasks 锁中毒").get_mut(id) {
@@ -621,6 +627,19 @@ mod tests {
         // UiEvent 流里的东西不走这条路(它们有 type)
         assert!(oneshot_outcome(&serde_json::json!({"type":"done","success":true})).is_none());
         assert!(oneshot_outcome(&serde_json::json!({"foo":1})).is_none());
+    }
+
+    #[test]
+    fn 安全轨的用量长在结果对象上() {
+        // 安全轨不走 `summary` 事件（无头跑完只打一个结果对象），用量在那个对象的 usage 字段里。
+        // 这条钉住"两条路都能收到用量"——只认 summary 的话安全任务永远计不了费
+        let ev = serde_json::json!({
+            "success": true, "target": "https://x",
+            "usage": {"prompt_tokens": 800, "completion_tokens": 120, "total_tokens": 920, "model": "m"}
+        });
+        assert!(usage_from_event(&ev).is_none(), "它不是 summary 事件");
+        assert_eq!(oneshot_outcome(&ev).unwrap().0, Outcome::Passed);
+        assert_eq!(ev["usage"]["total_tokens"], 920, "收用量的那段读的就是这个字段");
     }
 
     #[test]

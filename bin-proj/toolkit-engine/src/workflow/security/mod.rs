@@ -22,3 +22,4 @@ pub mod orchestrator;
 pub mod prober;
 pub mod recon;
 pub mod report;
+pub mod usage;

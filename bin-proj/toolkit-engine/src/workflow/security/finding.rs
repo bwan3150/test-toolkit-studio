@@ -85,4 +85,6 @@ pub struct ProbeReport {
     pub summary: String,
     /// 实际用掉的推理轮数（工具调用步数）。
     pub steps: usize,
+    /// 这一段烧了多少 token（平台按它计费，ADR-0023 D3）
+    pub usage: super::usage::Usage,
 }

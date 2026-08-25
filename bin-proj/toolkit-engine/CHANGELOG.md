@@ -22,6 +22,25 @@
 - ROADMAP 加「新主线：服务化」；README 导航加 remote-api.md
 - **代码零改动**，全量测试与构建状态不变
 
+### 2026-08-26 · 安全轨补齐 token 用量（计费的最后一块）
+ADR-0023 D3 剩下的口子：harness 有 `Summary` 事件带全程总量，安全轨没有，
+于是平台对安全任务只能计设备时长。
+- **`workflow/security/usage.rs`**：领域内的用量累计件。`add(role, model, p, c)` / `merge()` /
+  `is_measured()` / `to_json()`。**分角色留账**（prober / analyst / orchestrator）——
+  钱花在自主探测还是对抗复核上是能指导调优的信息，合并成一个总数就再也分不开了；
+  `analyst.calls` 也留着（它是每条 finding 一次，次数本身有意义）
+- **三处会话都记账**：prober 跑完记 `session.total_usage()`；analyst 的 `one_shot` 改成
+  连用量一起返回（**重试失败那一轮也记**——同样烧了 token，不记就是漏账）；
+  交互式 orchestrator 出报告时把自己那段会话也算进去（否则对话式跑出来的账只有一半）
+- **两条交付路**：无头终局 JSON 的 `usage` 字段 + `findings.json` 里的同名字段，谁先到用谁
+- **没量到给 null 不给 0**（INV-9）：`is_measured()` 要求"记过账且总量>0"——
+  供应商没回 usage 时全 0，那也算没量到，宁可报不知道
+- **任务层两条路都收**：`usage_from_event`（harness 的 summary）+ 结果对象上的 `usage`（安全轨）
+- 测试：`usage.rs` 3 条 + analyst 端到端记账（**FakeTurn 带 token 且会累计，所以这条无 key 可测**）
+  + `findings.json` 落盘断言。全量 **271 绿**
+- **仍待真机**：安全任务的**成功**路径端到端（要 key）——fake provider 需要进程内预排会话，
+  子进程里跑不了
+
 ### 2026-08-26 · ADR-0023 平台对接 + 任务用量口子（顺带修了安全轨被判"没跑完"的真 bug）
 摸了 `TOOLKIT/bug`（Go+Vue 的测试管理平台）之后定的对接方案。接缝比预想整齐：
 它的 `scripts` 表注释就写着「后续 TestRun 触发自动化跑、回填结果都从这里出」，

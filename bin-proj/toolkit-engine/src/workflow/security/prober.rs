@@ -111,6 +111,7 @@ pub async fn run(
     max_steps: usize,
 ) -> Result<ProbeReport> {
     let mut report = ProbeReport {
+        usage: Default::default(),
         target: ctx.target.clone(),
         mode: ctx.mode.clone(),
         findings: Vec::new(),
@@ -305,6 +306,10 @@ pub async fn run(
             dup_turns = 0;
         }
     }
+
+    // 记账：自主探测这一段烧了多少（ADR-0023 D3，平台按它计费）
+    let (p, c) = session.total_usage();
+    report.usage.add("prober", session.model(), p, c);
 
     if report.summary.is_empty() {
         report.summary = if report.findings.is_empty() {

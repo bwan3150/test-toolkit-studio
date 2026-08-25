@@ -23,6 +23,8 @@ pub struct AnalyzedReport {
     pub summary: String,
     /// 被复核毙掉的候选数（假阳/无法复现）。
     pub dropped: usize,
+    /// 全程用量（prober 的 + 复核的），平台按它计费（ADR-0023 D3）
+    pub usage: super::usage::Usage,
 }
 
 fn parse_severity(s: &str) -> Severity {
@@ -79,6 +81,8 @@ pub async fn analyze(
 
     let mut kept: Vec<Finding> = Vec::new();
     let mut dropped = 0usize;
+    // 从 prober 那段接着记：一次安全测试的账要是完整的，不能只算复核这一半
+    let mut usage = report.usage.clone();
 
     for f in &report.findings {
         let ask = render(
@@ -88,7 +92,8 @@ pub async fn analyze(
                 ("evidence", &evidence_text(task_dir, f)),
             ],
         );
-        let verdict = one_shot(ai, prompts, system.clone(), schema.clone(), ask).await?;
+        let (verdict, u) = one_shot(ai, prompts, system.clone(), schema.clone(), ask).await?;
+        usage.merge(&u);
         match verdict {
             Some(v) => {
                 let keep = v.get("keep").and_then(|x| x.as_bool()).unwrap_or(false);
@@ -128,7 +133,7 @@ pub async fn analyze(
         format!("复核完成：{confirmed} 条已确认、{} 条疑似待查、{dropped} 条被毙。", kept.len() - confirmed)
     };
 
-    Ok(AnalyzedReport { target: report.target, mode: report.mode, findings: kept, summary, dropped })
+    Ok(AnalyzedReport { target: report.target, mode: report.mode, findings: kept, summary, dropped, usage })
 }
 
 /// 精简版强制工具单次调用（INV-2 同款；与 runner::oneshot 解耦，只借 provider）。
@@ -138,7 +143,7 @@ async fn one_shot(
     system: String,
     schema: serde_json::Value,
     ask: String,
-) -> Result<Option<serde_json::Value>> {
+) -> Result<(Option<serde_json::Value>, super::usage::Usage)> {
     const TOOL: &str = "report";
     let tool = LlmTool::new(TOOL, prompts.tool("analyst", "report"), schema);
     let mut sess = match LlmSession::new_for_role(ai, "analyst", system, vec![tool]) {
@@ -146,10 +151,12 @@ async fn one_shot(
         Err(e) => return Err(e),
     };
     sess.user(ask);
+    let mut out = None;
     for attempt in 0..2 {
         match sess.next().await {
             Ok(LlmReply::ToolCalls { calls, .. }) if !calls.is_empty() => {
-                return Ok(Some(calls[0].arguments.clone()));
+                out = Some(calls[0].arguments.clone());
+                break;
             }
             Ok(_) if attempt == 0 => {
                 sess.user(format!("请调用工具 {TOOL} 提交结果，不要用文字回复。"));
@@ -157,7 +164,11 @@ async fn one_shot(
             _ => break,
         }
     }
-    Ok(None)
+    // **失败那次也要记账**：重试一轮同样烧了 token，不记就是漏账
+    let mut u = super::usage::Usage::default();
+    let (p, c) = sess.total_usage();
+    u.add("analyst", sess.model(), p, c);
+    Ok((out, u))
 }
 
 #[cfg(test)]
@@ -181,6 +192,7 @@ mod tests {
         ]);
         let prompts = SecurityPrompts::load(None);
         let report = ProbeReport {
+            usage: Default::default(),
             target: "https://t.example/".into(), mode: "safe".into(),
             findings: vec![finding("real"), finding("fp")],
             summary: "".into(), steps: 3,
@@ -193,11 +205,44 @@ mod tests {
         assert_eq!(out.dropped, 1);
     }
 
+    /// 一次安全测试的账要**完整**：prober 那一段 + 每条 finding 的复核，一条都不能漏。
+    /// 平台按这个数计费（ADR-0023 D3），漏账就是少收钱、错账就是收错钱
+    #[tokio::test]
+    async fn 用量把探测与复核两段都算上() {
+        let ai = AiConfig { provider: Some("fake".into()), model: Some("m".into()), ..Default::default() };
+        for _ in 0..2 {
+            enqueue_fake_role_session("m", "analyst", vec![FakeTurn {
+                reply: FakeTurn::tool("report", json!({"keep": true, "confirmed": true, "rationale": "ok"})).reply,
+                prompt_tokens: 60,
+                completion_tokens: 10,
+            }]);
+        }
+        let prompts = SecurityPrompts::load(None);
+        // prober 那一段先记了 500+80
+        let mut usage = super::super::usage::Usage::default();
+        usage.add("prober", "m", 500, 80);
+        let report = ProbeReport {
+            usage,
+            target: "https://t.example/".into(), mode: "safe".into(),
+            findings: vec![finding("a"), finding("b")],
+            summary: "".into(), steps: 3,
+        };
+        let out = analyze(&ai, &prompts, &std::env::temp_dir(), report).await.unwrap();
+
+        assert_eq!(out.usage.by_role["prober"].prompt_tokens, 500, "prober 那段不能丢");
+        assert_eq!(out.usage.by_role["analyst"].calls, 2, "每条 finding 复核一次");
+        assert_eq!(out.usage.by_role["analyst"].prompt_tokens, 120);
+        assert_eq!(out.usage.total_tokens, 500 + 80 + 120 + 20);
+        assert!(out.usage.is_measured());
+        assert_eq!(out.usage.to_json()["total_tokens"], 720);
+    }
+
     #[tokio::test]
     async fn analyst_noop_on_zero_findings() {
         let ai = AiConfig { provider: Some("fake".into()), model: Some("m".into()), ..Default::default() };
         let prompts = SecurityPrompts::load(None);
         let report = ProbeReport {
+            usage: Default::default(),
             target: "https://t.example/".into(), mode: "safe".into(),
             findings: vec![], summary: "空".into(), steps: 5,
         };

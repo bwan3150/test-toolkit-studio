@@ -46,7 +46,7 @@ impl ReportInput {
         } else {
             self.summary
         };
-        AnalyzedReport { target: self.target, mode: self.mode, findings: self.findings, summary, dropped: 0 }
+        AnalyzedReport { target: self.target, mode: self.mode, findings: self.findings, summary, dropped: 0, usage: Default::default() }
     }
 }
 
@@ -71,6 +71,9 @@ pub fn write_reports(dir: &Path, r: &AnalyzedReport) -> Result<ReportPaths> {
         "score": grade(r).0,
         "summary": r.summary,
         "counts": counts_json(r),
+        // 用量也落进机器可读的那份：平台读 findings.json 就能记账，
+        // 不必非得接住任务终态（两条路都给，谁先到用谁）。没量到就是 null
+        "usage": r.usage.to_json(),
         "findings": r.findings,
     });
     std::fs::write(&json_path, serde_json::to_string_pretty(&json).unwrap_or_default())
@@ -350,7 +353,7 @@ mod tests {
     use super::super::evidence::EvidenceRef;
 
     fn analyzed(findings: Vec<Finding>) -> AnalyzedReport {
-        AnalyzedReport { target: "https://t.example/".into(), mode: "safe".into(),
+        AnalyzedReport { usage: Default::default(), target: "https://t.example/".into(), mode: "safe".into(),
             findings, summary: "测试".into(), dropped: 0 }
     }
 
@@ -365,6 +368,29 @@ mod tests {
         assert!(paths.vulns.is_empty(), "无确认发现不该产 vuln 文件");
         let json = std::fs::read_to_string(&paths.json).unwrap();
         assert!(json.contains("\"outcome\": \"clean\""));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 用量要落进 `findings.json` —— 平台读那个文件就能记账，
+    /// 不必非得接住任务终态（ADR-0023 D3：两条路都给，谁先到用谁）
+    #[test]
+    fn 用量落进findings_json() {
+        let tmp = std::env::temp_dir().join(format!("tke-rep-usage-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        // 没量到 → null，不是一堆 0（0 会被读成"这次没花钱"）
+        let paths = write_reports(&tmp, &analyzed(vec![])).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&paths.json).unwrap()).unwrap();
+        assert!(v.get("usage").is_some() && v["usage"].is_null(), "{v}");
+
+        // 量到了 → 带合计与分角色
+        let mut r = analyzed(vec![]);
+        r.usage.add("prober", "m", 500, 80);
+        r.usage.add("analyst", "m", 60, 10);
+        let paths = write_reports(&tmp, &r).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&paths.json).unwrap()).unwrap();
+        assert_eq!(v["usage"]["total_tokens"], 650);
+        assert_eq!(v["usage"]["by_role"]["prober"]["prompt_tokens"], 500);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

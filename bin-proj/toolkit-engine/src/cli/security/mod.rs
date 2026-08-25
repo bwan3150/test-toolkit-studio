@@ -228,6 +228,9 @@ async fn headless(
         "finding_count": analyzed.findings.len(),
         "confirmed": analyzed.findings.iter().filter(|f| f.confirmed).count(),
         "dropped": analyzed.dropped,
+        // 平台按它计费（ADR-0023 D3）。**没量到是 null 不是 0**——
+        // 0 会被读成"这次没花钱"，真相是"没量到"
+        "usage": analyzed.usage.to_json(),
         "report_html": paths.html.to_string_lossy(),
         "findings_json": paths.json.to_string_lossy(),
         "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),

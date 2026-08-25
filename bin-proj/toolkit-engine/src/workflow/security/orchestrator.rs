@@ -281,7 +281,12 @@ pub async fn run(
                 }
                 "report" => {
                     frontend.emit(UiEvent::Notice { level: Level::Info, text: format!("出报告：复核 {} 条候选……", findings.len()) });
-                    let probe = ProbeReport { target: target.clone().unwrap_or_default(), mode: mode.clone(),
+                    // 对话式这条路上，编排官自己那段会话也在烧 token——
+                    // 不带上它，交互式跑出来的账就只有复核那一半
+                    let mut spent = super::usage::Usage::default();
+                    let (p, c) = session.total_usage();
+                    spent.add("orchestrator", session.model(), p, c);
+                    let probe = ProbeReport { usage: spent, target: target.clone().unwrap_or_default(), mode: mode.clone(),
                         findings: findings.clone(), summary: String::new(), steps: round };
                     let analyzed = analyst::analyze(ai, prompts, &task_dir, probe).await?;
                     let paths = reporter::write_reports(&task_dir, &analyzed)?;
@@ -292,6 +297,11 @@ pub async fn run(
                         "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
                         "summary": analyzed.summary,
                     }).to_string());
+                    if analyzed.usage.is_measured() {
+                        frontend.emit(UiEvent::Notice { level: Level::Dim,
+                            text: format!("本次用量：{} tokens（{} 提示 / {} 生成）",
+                                analyzed.usage.total_tokens, analyzed.usage.prompt_tokens, analyzed.usage.completion_tokens) });
+                    }
                 }
                 "finish" => {
                     let s = call.arguments.get("summary").and_then(|v| v.as_str()).unwrap_or("");
