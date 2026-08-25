@@ -20,6 +20,17 @@
 - **App 侧接入**:handlers 消费新 NDJSON（healed/对齐输出）——等用户解冻
 - 文档债:docs/tke-cli-manual.md 整体过时重写;codebase-map.md 废弃或重生成
 
+## 新主线：服务化 / 远程能力（ADR-0022,2026-08-26 用户拍板）
+把 tke 变成「可被远程调用的单节点测试 agent」——测试服务器上部署 tke + 模拟器/真机/无头浏览器,
+云平台租设备下发任务,或让用户自己的 coding agent 通过远程 skill 调用（本地零安装）。
+- **P1 `tke serve` 单节点**（租约 + exec 白名单 + 产物）
+- **P2 `TKE_REMOTE` 二进制客户端 + 两条 remote skill**（文档复用不分叉）
+- **P3 任务层**（服务端 AI 跑 harness/security + SSE/WS + webhook + needs_decision 回传）
+- P4 平台对接 / P5 部署形态(Docker/mac 节点/GitHub Action) / P6 MCP 网关(可选)
+完整契约与验收见 `remote-api.md`。**P1+P2 就交付核心价值,别先做 P3。**
+
 ## 明确不做 / 缓做
 - 自动登录/改账号状态类"代办"（INV-12）
 - 知识库/mem0 真实接入（留了口子,未配置则跳过）
+- 多节点调度/计费/多租户——**归云平台,不进 tke**（ADR-0022 D1）
+- 远程 `red-team` 强度档（ADR-0022 D5;本地仍可用）

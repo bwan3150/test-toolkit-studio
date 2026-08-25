@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### 2026-08-26 · 服务化定调：ADR-0022 + 远程 API 契约（**只有文档，未落代码**）
+用户提出把 tke 变成可远程调用的服务：测试服务器上部署 tke + 模拟器/真机/无头浏览器，
+云平台租设备下发任务/交互式探索/脱手收报告；再出 `tke-ui-test-remote` / `tke-security-test-remote`
+两条远程 skill 给别家 coding agent 用（本地零安装，未来进 GitHub Action CI）。
+- **ADR-0022**（用户当场拍板四条分歧点）：①tke 只做单节点 agent，调度/计费/多租户归云平台
+  ②执行模型=**子进程**不做 handler in-process 化（`JsonOutput` 会 `process::exit` + 三处进程级全局态；
+  而「每命令一进程」正是 skill 今天的样子，行为等价）③API 三层，**分层依据是计费模型**
+  ④远程客户端=二进制 `TKE_REMOTE` 模式（选它是为了**skill 文档不分叉**）⑤远程不开 `red-team`
+- **新增 INV-16**（远程只走枚举白名单、无 argv 直通；**L1 必须零 LLM 面**——否则用户白嫖平台 key）
+  **INV-17**（租约即隔离、释放即复位——本地从不需要，租赁模式下不复位＝下个租户接手一台登录着的浏览器）
+- **docs/remote-api.md**：三层 API（exec/tasks/artifacts）+ 租约 + 白名单与参数过滤 + 计费口径 +
+  P1~P6 分阶段与验收 + 六个已知要踩的坑。复活 ADR-0009 的 `needs_decision` 五态出口（INV-3 延伸）
+- ROADMAP 加「新主线：服务化」；README 导航加 remote-api.md
+- **代码零改动**，全量测试与构建状态不变
+
 ### 2026-08-25 · 一次装全 skill（默认装分发源上所有 skill，manifest 驱动）
 用户：skill 都是 md 不占地方，装一次就该全到位、别分开装。
 - **feat manifest**：publish.sh + CI 写 `skills`（一行一个 skill 名）；install 读它决定装哪些

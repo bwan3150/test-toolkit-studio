@@ -1,6 +1,6 @@
 ---
-Last-Updated: 2026-08-25
-Last-Commit: f13f4c0e
+Last-Updated: 2026-08-26
+Last-Commit: f741efaf  # 本场（服务化定调）的文档改动尚未提交
 ---
 
 # 当前状态
@@ -10,6 +10,10 @@ Last-Commit: f13f4c0e
 北极星 = 测试领域专精的 Claude Code（ADR-0002）：tke 是能操作 Android/iOS/Web 的设备 AI agent,
 探索产 .tks+.tklib 两件套,可无 AI 回放,回放坏了由编排官编排修复。
 Electron App（studio）只是 tke 的外围封装——**当前主线只做 toolkit-engine**（用户拍板 2026-07-13）。
+
+**新主线（2026-08-26 拍板）：服务化**。tke 要能被远程调用——测试服务器上部署 tke + 模拟器/真机/
+无头浏览器，云平台租设备下发任务或交互式探索、脱手收报告；再出两条 remote skill 给别家 coding agent
+（本地零安装，未来进 CI）。**方向已锁（ADR-0022 + INV-16/17 + `docs/remote-api.md`），代码一行没写**。
 
 ## 各能力线状态
 
@@ -46,6 +50,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | 依赖补齐 `tke fix` | ✅ 本机端到端实测 | ADR-0012:唯一会联网下载的命令;普通命令缺依赖只报错指路。空目录只放 tke → fix → 跑通网页检查 |
 | 两件套自包含（拷走即跑） | ✅ 本机实测通过 | Q-6 关闭:缺 `-d` 时从 tklib 的 meta.json 读平台兜底(web 零参数回放/android 走默认设备/ios 仍需显式) |
 | **tke security（安全测试新领域）** | 🟢 **从零到上线全做完·CI 已发版**（primitive+prober/analyst/reporter+对话 TUI+task/report 生命周期+skill+深挖 playbook+一行装全 skill）;🟡 对话式 TUI 交互手感真机待验(Q-15) | **ADR-0019** + INV-13/14/15 + `security-report-spec.md` + 基线 `security-report-template.sample.html`。第二个 agent 领域,骨架复用 harness。**唯一入口 `tke security [url]`**(改对了:曾错做成 `security probe`/`security run` 子命令,用户纠正——`run` 是 .tks 语义):**默认对话式编排**(复用 harness `Frontend`/TUI),**`--json`/非终端→无头一次性**(探测→复核→出报告)。三层:`tke http`/`tke recon` primitive(可脚本,7 verb) ⇄ AI 工具 ⇄ orchestrator。强度阶梯 passive/safe/aggressive/red-team(默认 safe)+`--focus`。**已落**(`src/workflow/security/`):http 原语 + `HttpEngine`(Ureq+Fake 可脱网测) + `evidence.rs`(续写不覆盖,INV-14) + recon 七 verb(bundle 密钥脱敏/endpoints 防 SPA 假阳/tls 轻量) + **prober**(自主顺藤,去重+无进展强制收尾,真机死循环已修) + **analyst**(对抗复核,oneshot 强制结构化,毙假阳分软硬,INV-13) + **reporter**(确定性出 `security-report.html`+`findings.json`+每确认漏洞 `vuln-*.html`,转义防注入) + **orchestrator**(对话 REPL:recon/http/record_finding/ask_user/report/finish,说话即交回话筒)。提示词 `security/prompt/`(builtin+外部覆盖)。冒烟脚本 `tests/security-smoke.sh`;样例 `examples/security_report_sample.rs`。全量 137 绿。**真机实测**:P1 七 verb + 无头 `security --json` 都在 konechome 跑通出报告。**待验**:对话式 TUI 交互真机手感。**待做**:`--json` 与 Electron 联调、注入子系统(opt-in)、源码灰盒、endpoints 吃 OpenAPI、tls 深度证书、report 里方法/边界/风险矩阵等区块补全 |
+| **服务化 / 远程 API** | 📐 **只有设计,零代码**（2026-08-26 定调） | **ADR-0022**（用户当场拍板四条）+ **INV-16/17** + `docs/remote-api.md` 契约。要点：①tke 只做**单节点 agent**，调度/计费/多租户归云平台 ②执行模型=**子进程**（`JsonOutput` 会 `process::exit` + 三处进程级全局态，同进程并发不可能；而「每命令一进程」正是 skill 今天的样子，行为等价）③API 三层且**分层依据是计费**：L1 命令层零 LLM 面（只计设备时长，用户自己的 agent 出 AI）/ L2 任务层用平台 key（token+时长一起记账）/ L3 产物 ④客户端=**二进制 `TKE_REMOTE` 模式**（为了 skill 文档不分叉，MCP 排后面）⑤远程**不开 `red-team`**。复用面很大：`task.json`+`tke report`（ADR-0021）、`--json` 双向 NDJSON（交互式 WS）、`doctor --json`（健康）、`device list`（清单）、`web:N` 多槽位、`fake:` 无设备回归。**下一步 = P1 `tke serve`**（租约+exec 白名单+产物），验收是 `fake:` 在 CI 跑通全链路 + 本机 web 真跑一次 |
 
 ## 本次会话不要碰
 
