@@ -202,6 +202,18 @@ enum Commands {
         action: ElementCommands,
     },
 
+    // ==================== ⑤ 安全测试（ADR-0019，P1 侦察底座） ====================
+    /// [安全] 原始 HTTP 探测（落证据）: tke http GET <url> [-H 'K: V'] [-d body]
+    Http {
+        #[command(flatten)]
+        args: cli::security::HttpArgs,
+    },
+    /// [安全] 侦察检查: tke recon headers <url>（安全响应头等被动判据）
+    Recon {
+        #[command(subcommand)]
+        action: cli::security::ReconCommands,
+    },
+
     // ==================== ① 直通（不在静态列表，见 --help 末尾动态清单） ====================
     /// [直通] 透传任意同目录二进制: tke <工具名> <原生指令>
     #[command(external_subcommand)]
@@ -336,6 +348,13 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Element { action } => {
             tools::element::handle(action, params.clone()).await
+        }
+        // ⑤ 安全测试（ADR-0019）
+        Commands::Http { args } => {
+            cli::security::http(args, params.clone()).await
+        }
+        Commands::Recon { action } => {
+            cli::security::recon(action, params.clone()).await
         }
         // 便捷路由：tke <path.tks|path.toml> 等价于 tke run <path>。
         // 认不出的就是**未知命令**——CLI 直通已删（ADR-0015），

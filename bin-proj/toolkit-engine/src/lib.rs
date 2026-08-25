@@ -147,6 +147,9 @@ pub enum TkeError {
 
     #[error("AI模型错误: {0}")]
     LlmError(String),
+
+    #[error("网络错误: {0}")]
+    NetworkError(String),
 }
 
 pub type Result<T> = std::result::Result<T, TkeError>;

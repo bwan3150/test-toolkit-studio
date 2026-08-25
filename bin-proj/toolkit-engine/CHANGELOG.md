@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security P1 侦察底座：HTTP 原语 + 证据 + recon headers（可 fake 单测）
+P0 定契约后开写。新增 `src/workflow/security/`（第二个 agent 领域的业务逻辑层），
+两个 primitive 命令，均端到端真实网络冒烟通过（example.com）：
+- **feat `tke http <METHOD> <URL> [-H 'K: V'] [--data body]`**：原始 HTTP 探测。
+  4xx/5xx 照收当正常响应（探测就是要看状态码），默认不跟随重定向，响应体限 2 MiB。
+  `--data` 只有长名——短名 `-d` 被全局 `--device` 占用（clap 冲突，已避开）
+- **feat `tke recon headers <URL>`**：安全响应头检查（HSTS/CSP/点击劫持/nosniff/Server 版本）——
+  首个 curated 被动判据，safe 档可跑
+- **feat HttpEngine trait**：真实 `UreqEngine`（全链路 timeout，守 Q-4）+ `FakeEngine`
+  （按方法+URL 子串脚本化响应）——探测逻辑脱离网络单测，沿用 FakeDriver/FakeLlm 文化
+- **feat `evidence.rs`**：`--log <目录>` 给了就把 请求/响应 落进 `evidence/step_NNN_{req,resp}.txt`
+  （INV-14，无无证据的第二条路）；相对路径进 findings.json
+- 加 `TkeError::NetworkError`；14 个新单测（http/evidence/recon），全量 `cargo test` 114+ 绿
+- **未做**（P1 续/P2）：recon 其余 verb（cors/graphql/bundle/tls/fingerprint）、prober/analyst/reporter
+  角色、`tke security` 编排、报告生成。**真机由用户复验**
+
 ### 2026-08-25 · tke security P0 设计锁（ADR-0019 + 报告 spec + INV-13/14/15）
 新方向：`tke security`——探索式黑盒安全测试，作为 tke 的**第二个 agent 领域**（骨架复用 harness，
 工具/角色/提示词另起一套）。产全局安全水平报告 + 每个确认漏洞一份独立报告。本条只落 **P0 设计文档**，

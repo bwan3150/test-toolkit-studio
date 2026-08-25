@@ -15,6 +15,7 @@ pub mod tks;
 
 // AI 探索测试（tke harness）：内置 AI 闭环，逐轮决策生成 .tks
 pub mod agent;
+pub mod security;
 
 pub use events::RunEvent;
 pub use tks::{TksRunner, ScriptParser, ScriptInterpreter, ActionTrace, script_to_source, step_to_source};
