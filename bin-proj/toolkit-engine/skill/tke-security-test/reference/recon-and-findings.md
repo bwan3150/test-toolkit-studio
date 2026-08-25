@@ -17,6 +17,7 @@ tke --log <dir> http <METHOD> <URL> [-H 'K: V']... [--data <body>]
 | verb | 探什么 | 命中判据 |
 |---|---|---|
 | `fingerprint` | 技术栈 | 从 Server / X-Powered-By / Set-Cookie / 页面特征（`__NEXT_DATA__`、`wp-content`、generator…）认框架。info 级 |
+| `detect` | **后端服务标识** | 从 bundle 扒 Sanity `projectId`+`dataset` / Supabase `<ref>.supabase.co` / Firebase `firebaseio.com` / Algolia / GraphQL / S3，**并在 detail 里给出零凭据探测式**。往后端深挖的桥，见 `service-playbook.md` |
 | `headers` | 安全响应头 | 缺 HSTS / CSP / X-Frame-Options（或 frame-ancestors）/ nosniff；Server 带版本号 |
 | `cors` | 跨域 | 带 `Origin: https://evil.example` 探——反射任意 Origin **且** `Allow-Credentials:true`=**高危**；`*`=info |
 | `graphql` | introspection | POST 最小 introspection 查询，返回 `__schema` 且非报错=开着（低危，降低后续门槛） |

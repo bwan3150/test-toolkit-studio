@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use super::http::{HttpRequest, HttpResponse};
 
+pub mod detect;
 pub mod headers;
 pub mod fingerprint;
 pub mod cors;
@@ -18,6 +19,7 @@ pub mod bundle;
 pub mod endpoints;
 pub mod tls;
 
+pub use detect::detect_check;
 pub use headers::headers_check;
 pub use fingerprint::fingerprint_check;
 pub use cors::cors_check;

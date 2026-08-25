@@ -42,7 +42,7 @@ fn tools(prompts: &SecurityPrompts) -> Vec<LlmTool> {
         LlmTool::new("recon", d("recon"), json!({
             "type": "object",
             "properties": {
-                "verb": {"type": "string", "enum": ["headers","fingerprint","cors","graphql","bundle","endpoints","tls"]},
+                "verb": {"type": "string", "enum": ["headers","fingerprint","detect","cors","graphql","bundle","endpoints","tls"]},
                 "url": {"type": "string"}
             }, "required": ["verb","url"]
         })),
@@ -217,7 +217,7 @@ pub async fn run(
                     if let Some(&p) = seen.get(&key) { session.tool_result(&call.call_id, format!("已在 step {p} 附近跑过，别重复。")); continue; }
                     frontend.emit(UiEvent::Notice { level: Level::Dim, text: format!("→ recon {verb} {url}") });
                     let res = match verb.as_str() {
-                        "headers" => recon::headers_check(&engine, &url), "fingerprint" => recon::fingerprint_check(&engine, &url),
+                        "headers" => recon::headers_check(&engine, &url), "fingerprint" => recon::fingerprint_check(&engine, &url), "detect" => recon::detect_check(&engine, &url),
                         "cors" => recon::cors_check(&engine, &url), "graphql" => recon::graphql_check(&engine, &url),
                         "bundle" => recon::bundle_check(&engine, &url), "endpoints" => recon::endpoints_check(&engine, &url),
                         "tls" => recon::tls_check(&engine, &url), o => { session.tool_result(&call.call_id, format!("未知 verb：{o}")); continue; }

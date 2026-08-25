@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · 往后端深挖：服务暴露 playbook + `recon detect`（治"只查表面"）
+用户指出 tke security 只暴露表面（缺头/路径），挖不到 konechome 那种 Sanity 后端泄露——因为缺**服务专属知识**。
+去互联网搜了真实案例，提炼成「认出服务→已知误配→精确零凭据探测」的方法论，接进代码与提示词。
+- **feat `recon detect`**（`recon/detect.rs`）：从首页/JS bundle 扒后端标识——Sanity `projectId`+`dataset`、
+  Supabase `<ref>.supabase.co`、Firebase `firebaseio.com`、Algolia、GraphQL 端点、S3 桶——**并在 detail 给出
+  零凭据探测式**。命中=info 级线索（不是漏洞本身，AI 打一发确认才算，INV-13）。3 单测
+- **doc service-playbook.md**（skill reference）：每个服务的指纹+已知误配+精确探测+**防误报**（Stripe pk_/
+  Firebase apiKey/Supabase anon/Google Maps 是设计上可公开的，别报成漏洞；sk_/AKIA/service_role 才是真泄露）
+- **prompt 内置深挖方向**：prober.md/orchestrator.md 加「往后端深挖」——测绘后跑 detect，认出服务用零凭据探测坐实。
+  让 `tke security` 自己的 AI 也挖深，不只 skill
+- 真机验：`recon detect` 对已修好的 konechome 正确返回 none（无假阳）；单测证明有 Sanity 时必抓到。全量 142 绿
+
 ### 2026-08-25 · 分发管线泛化到多 skill（tke-ui-test + tke-security-test 一行装）
 skill 分发原本写死 tke-ui-test；泛化成「凡 skill/<名>/SKILL.md 存在就打一个包」，install 用 `--skill` 选装。
 - **publish.sh + CI（tke-publish.yml）**：循环打所有 skill 包（各含 VERSION），自查也循环校验

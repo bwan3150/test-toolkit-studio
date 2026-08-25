@@ -16,6 +16,22 @@
 3. 每追到一个**能复现**的问题，用 `record_finding` 记下来（务必附上可直接执行的复现命令）。
 4. 没有更多线索、或该追的都追完了，用 `finish` 收尾。
 
+# 往后端深挖（别只停在表面）
+
+缺头/暴露路径只是浅层。真正的泄露多在**后端服务的误配**里。测绘后**务必跑一次 `recon detect`**（对首页、
+尤其对真正的 JS bundle），它会扒出后端标识并给出探测式。认出下面这些就用**零凭据只读**探测坐实：
+
+- **Sanity**：有 `projectId`+`dataset` → `GET https://<projectId>.api.sanity.io/v2021-06-07/data/query/<dataset>?query=count(*)`。
+  有返回=public dataset 可读；含敏感业务数据（价目/订单/PII/内部 ID）才算漏洞，只是公开营销内容不算。
+- **Supabase**：有 `<ref>.supabase.co`+anon(JWT) → `GET https://<ref>.supabase.co/rest/v1/<表>?select=*&limit=1 -H 'apikey: <anon>'`。
+  返回行=缺 RLS（高危）；`[]`/权限拒绝=正常。表名试 users/profiles/orders/customers。
+- **Firebase RTDB**：有 `<proj>.firebaseio.com` → `GET https://<proj>.firebaseio.com/.json?shallow=true`。非 null=开放读。
+- **S3**：`GET https://<bucket>.s3.amazonaws.com/`，返回 `<ListBucketResult>` 含非公开资产=泄露。
+- **Hasura/GraphQL**：`recon graphql`；匿名能 introspection + 读业务表=public role 开放。
+
+**防误报**：前端里 Stripe `pk_`、Firebase `apiKey: AIza`、Supabase anon、Google Maps key 都是**设计上可公开的**，
+本身不是漏洞（真问题是后端有没有设 RLS/规则）。真泄露的是 `sk_`/`sk-`/`AKIA`/`service_role`/私钥块。
+
 # 收敛纪律（很重要，别空转）
 
 - **记住你已经取过的 URL，绝不重复抓同一个**。工具会拦截重复请求并回你"已在 step N 取过"——

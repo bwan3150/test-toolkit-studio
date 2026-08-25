@@ -105,6 +105,11 @@ tke --log ./sec-run http GET https://target.example/.env
 
 追一条线索走到死胡同（404 / 401 / 只是公开营销内容）就**放下**，别反复抓同一个。
 
+> **别只停在表面。** 缺头/暴露路径只是浅层。真正的泄露多在**后端服务的误配**里——
+> 认出站点用了 Sanity / Firebase / Supabase / S3 / Hasura 这类后端，就有一套**已知的零凭据探测**能直接命中
+> （如 Sanity public dataset 全量可读、Supabase 缺 RLS 读全表）。**这些精确探测式见
+> `reference/service-playbook.md`——每做一个真实站点都该对照它往后端挖一层。**
+
 ### 4. 判定（你是 analyst）
 
 对每条你追出来的可疑点，**据证据**判断：
@@ -163,4 +168,7 @@ tke report ./sec-run
 
 ## 需要更多时
 
+- **`reference/service-playbook.md`：往后端深挖的测试方向**——每个常见后端服务（Sanity/Firebase/
+  Supabase/S3/Algolia/Hasura）的指纹 + 已知误配 + **精确的零凭据探测式** + 防误报（哪些前端 key 是安全的）。
+  做真实站点时对照它，别只停在表面。
 - `reference/recon-and-findings.md`：七个 verb 的判据细节 + findings.json 完整字段 + 常见顺藤套路。

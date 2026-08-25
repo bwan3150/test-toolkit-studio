@@ -53,7 +53,7 @@ pub fn tools(prompts: &SecurityPrompts) -> Vec<LlmTool> {
         LlmTool::new("recon", d("recon"), json!({
             "type": "object",
             "properties": {
-                "verb": {"type": "string", "enum": ["headers","fingerprint","cors","graphql","bundle","endpoints","tls"]},
+                "verb": {"type": "string", "enum": ["headers","fingerprint","detect","cors","graphql","bundle","endpoints","tls"]},
                 "url": {"type": "string"}
             },
             "required": ["verb", "url"]
@@ -222,6 +222,7 @@ pub async fn run(
                     let result = match verb.as_str() {
                         "headers" => recon::headers_check(engine, &url),
                         "fingerprint" => recon::fingerprint_check(engine, &url),
+                        "detect" => recon::detect_check(engine, &url),
                         "cors" => recon::cors_check(engine, &url),
                         "graphql" => recon::graphql_check(engine, &url),
                         "bundle" => recon::bundle_check(engine, &url),

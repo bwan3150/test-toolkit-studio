@@ -42,6 +42,8 @@ pub enum ReconCommands {
     Headers { url: String, #[arg(long, default_value = "15")] timeout: u64 },
     /// 技术指纹：从头/Cookie/页面特征认出框架与服务器
     Fingerprint { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// 后端识别：从 bundle 扒出 Sanity/Supabase/Firebase/Algolia/GraphQL/S3 标识 + 探测式（往后端深挖）
+    Detect { url: String, #[arg(long, default_value = "15")] timeout: u64 },
     /// CORS 配置：反射任意 Origin / 通配 / 带凭据放行
     Cors { url: String, #[arg(long, default_value = "15")] timeout: u64 },
     /// GraphQL introspection 是否对外开放
@@ -240,6 +242,7 @@ pub async fn recon(cmd: ReconCommands, params: Arc<Params>) -> Result<()> {
     let (check_name, url, timeout): (&str, String, u64) = match &cmd {
         ReconCommands::Headers { url, timeout } => ("headers", url.clone(), *timeout),
         ReconCommands::Fingerprint { url, timeout } => ("fingerprint", url.clone(), *timeout),
+        ReconCommands::Detect { url, timeout } => ("detect", url.clone(), *timeout),
         ReconCommands::Cors { url, timeout } => ("cors", url.clone(), *timeout),
         ReconCommands::Graphql { url, timeout } => ("graphql", url.clone(), *timeout),
         ReconCommands::Bundle { url, timeout } => ("bundle", url.clone(), *timeout),
@@ -251,6 +254,7 @@ pub async fn recon(cmd: ReconCommands, params: Arc<Params>) -> Result<()> {
     let result = match &cmd {
         ReconCommands::Headers { .. } => recon::headers_check(&engine, &url)?,
         ReconCommands::Fingerprint { .. } => recon::fingerprint_check(&engine, &url)?,
+        ReconCommands::Detect { .. } => recon::detect_check(&engine, &url)?,
         ReconCommands::Cors { .. } => recon::cors_check(&engine, &url)?,
         ReconCommands::Graphql { .. } => recon::graphql_check(&engine, &url)?,
         ReconCommands::Bundle { .. } => recon::bundle_check(&engine, &url)?,
