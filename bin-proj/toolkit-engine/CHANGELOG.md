@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security P1 续：recon 六个 verb 补齐（地基先打牢）
+在 headers 之上把侦察 primitive 补全，`recon.rs` 拆成 `recon/` 目录（一 verb 一文件）。
+统一结果结构 `ReconResult`{findings, probes}——单请求=1 probe，多路径=N probe，全落证据。
+六个新 verb 都可 fake 单测，`fingerprint`/`tls` 已真实网络冒烟（example.com）：
+- **feat `recon fingerprint`**：从头/Set-Cookie/页面特征认技术栈（Next/Nuxt/WP/Express/Django…），info 级
+- **feat `recon cors`**：带假 Origin 探 CORS——反射任意 Origin+凭据=High，通配=info
+- **feat `recon graphql`**：POST 最小 introspection，看 schema 是否对外开放
+- **feat `recon bundle`**：正则扫 JS 里的 AWS/Google/Slack/JWT/私钥/通用密钥，命中 High
+  且**脱敏**（只留前 6 字符，承 P-45）
+- **feat `recon endpoints`**：探 .env/.git/actuator/server-status/robots 等常见路径；
+  **防 SPA 兜底假阳**——命中要 200 + 非 HTML + 内容签名对得上
+- **feat `recon tls`**（轻量）：明文 HTTP 是否强制跳 HTTPS + HSTS；深度证书检查待接 TLS 库
+- 全量 `cargo test` 128 绿（security 21 个）。**真机由用户复验**
+
 ### 2026-08-25 · tke security P1 侦察底座：HTTP 原语 + 证据 + recon headers（可 fake 单测）
 P0 定契约后开写。新增 `src/workflow/security/`（第二个 agent 领域的业务逻辑层），
 两个 primitive 命令，均端到端真实网络冒烟通过（example.com）：

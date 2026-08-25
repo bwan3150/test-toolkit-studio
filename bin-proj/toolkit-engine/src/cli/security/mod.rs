@@ -33,17 +33,23 @@ pub struct HttpArgs {
     pub timeout: u64,
 }
 
-/// `tke recon <子命令>`。
+/// `tke recon <子命令>`。每个都是确定性、可脚本、落证据的被动/低强度检查。
 #[derive(clap::Subcommand)]
 pub enum ReconCommands {
-    /// 安全响应头检查：HSTS / CSP / 点击劫持防护 / nosniff / Server 版本暴露
-    Headers {
-        /// 目标 URL
-        url: String,
-        /// 超时秒数
-        #[arg(long, default_value = "15")]
-        timeout: u64,
-    },
+    /// 安全响应头：HSTS / CSP / 点击劫持防护 / nosniff / Server 版本暴露
+    Headers { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// 技术指纹：从头/Cookie/页面特征认出框架与服务器
+    Fingerprint { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// CORS 配置：反射任意 Origin / 通配 / 带凭据放行
+    Cors { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// GraphQL introspection 是否对外开放
+    Graphql { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// Bundle 密钥扫描：JS/文本里疑似硬编码的密钥（脱敏呈现）
+    Bundle { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// 常见敏感路径：.env / .git / actuator / server-status / robots …
+    Endpoints { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+    /// 传输层（轻量）：明文 HTTP 是否强制跳 HTTPS + HSTS
+    Tls { url: String, #[arg(long, default_value = "15")] timeout: u64 },
 }
 
 /// 把 `-H 'K: V'` 列表解析成键值对（容忍无空格的 `K:V`）。
@@ -105,32 +111,50 @@ pub async fn http(args: HttpArgs, params: Arc<Params>) -> Result<()> {
     Ok(())
 }
 
-/// `tke recon` 处理。
+/// `tke recon` 处理：按 verb 选检查函数，其余（引擎、证据落盘、输出）统一。
 pub async fn recon(cmd: ReconCommands, params: Arc<Params>) -> Result<()> {
-    match cmd {
-        ReconCommands::Headers { url, timeout } => {
-            let engine = UreqEngine::new(Duration::from_secs(timeout));
-            let result = recon::headers_check(&engine, &url)?;
+    // 拆出 (verb 名, url, timeout, 检查函数)
+    let (check_name, url, timeout): (&str, String, u64) = match &cmd {
+        ReconCommands::Headers { url, timeout } => ("headers", url.clone(), *timeout),
+        ReconCommands::Fingerprint { url, timeout } => ("fingerprint", url.clone(), *timeout),
+        ReconCommands::Cors { url, timeout } => ("cors", url.clone(), *timeout),
+        ReconCommands::Graphql { url, timeout } => ("graphql", url.clone(), *timeout),
+        ReconCommands::Bundle { url, timeout } => ("bundle", url.clone(), *timeout),
+        ReconCommands::Endpoints { url, timeout } => ("endpoints", url.clone(), *timeout),
+        ReconCommands::Tls { url, timeout } => ("tls", url.clone(), *timeout),
+    };
 
-            let mut evidence_paths = serde_json::Value::Null;
-            if let Some(mut evi) = evidence_for(&params)? {
-                let r = evi.record(&HttpRequest::new("GET", &url), &result.response)?;
-                evidence_paths = serde_json::json!({
-                    "request": r.request.to_string_lossy(),
-                    "response": r.response.to_string_lossy(),
-                });
-            }
+    let engine = UreqEngine::new(Duration::from_secs(timeout));
+    let result = match &cmd {
+        ReconCommands::Headers { .. } => recon::headers_check(&engine, &url)?,
+        ReconCommands::Fingerprint { .. } => recon::fingerprint_check(&engine, &url)?,
+        ReconCommands::Cors { .. } => recon::cors_check(&engine, &url)?,
+        ReconCommands::Graphql { .. } => recon::graphql_check(&engine, &url)?,
+        ReconCommands::Bundle { .. } => recon::bundle_check(&engine, &url)?,
+        ReconCommands::Endpoints { .. } => recon::endpoints_check(&engine, &url)?,
+        ReconCommands::Tls { .. } => recon::tls_check(&engine, &url)?,
+    };
 
-            JsonOutput::print(serde_json::json!({
-                "success": true,
-                "check": "headers",
-                "url": url,
-                "status": result.response.status,
-                "finding_count": result.findings.len(),
-                "findings": result.findings,
-                "evidence": evidence_paths,
+    // 该检查发出的每个探测都落证据（INV-14）
+    let mut evidence_refs = Vec::new();
+    if let Some(mut evi) = evidence_for(&params)? {
+        for p in &result.probes {
+            let r = evi.record(&p.request, &p.response)?;
+            evidence_refs.push(serde_json::json!({
+                "request": r.request.to_string_lossy(),
+                "response": r.response.to_string_lossy(),
             }));
-            Ok(())
         }
     }
+
+    JsonOutput::print(serde_json::json!({
+        "success": true,
+        "check": check_name,
+        "url": url,
+        "probe_count": result.probes.len(),
+        "finding_count": result.findings.len(),
+        "findings": result.findings,
+        "evidence": evidence_refs,
+    }));
+    Ok(())
 }
