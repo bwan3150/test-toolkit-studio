@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · 一次装全 skill（默认装分发源上所有 skill，manifest 驱动）
+用户：skill 都是 md 不占地方，装一次就该全到位、别分开装。
+- **feat manifest**：publish.sh + CI 写 `skills`（一行一个 skill 名）；install 读它决定装哪些
+- **install.sh / install.ps1 默认装全部**：不带 `--skill` → 读 manifest 循环装所有 skill；
+  `--skill <名>` 保留为只装一个。默认 profile=all（ui-test 要驱动），仅 `--skill tke-security-test` 时=none
+- 加新 skill 自动纳入分发，不用再改 install
+- 本机验：起本地分发源 → `install.sh`（无参）→ tke-ui-test + tke-security-test **都装上**
+
 ### 2026-08-25 · 往后端深挖：服务暴露 playbook + `recon detect`（治"只查表面"）
 用户指出 tke security 只暴露表面（缺头/路径），挖不到 konechome 那种 Sanity 后端泄露——因为缺**服务专属知识**。
 去互联网搜了真实案例，提炼成「认出服务→已知误配→精确零凭据探测」的方法论，接进代码与提示词。

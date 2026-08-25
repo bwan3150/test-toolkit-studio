@@ -259,6 +259,8 @@ jobs:
           # skill 是哪一批。否则只能比 tke 二进制的版本号——而版本号只在 bump 时才变、
           # SKILL.md 却天天改，用户抱着两天前的旧文档，体检照样报"一致"（Q-11 就是这么发生的）。
           # 多 skill：凡是 skill/<名>/SKILL.md 存在的目录都打一个包（tke-ui-test / tke-security-test / …）
+          # 并写 manifest（skills，一行一个名）——install.sh 读它决定装哪些（默认全装）
+          : > dist/skills
           for skill_dir in "${ENGINE_DIR}/skill"/*/; do
             name="$(basename "$skill_dir")"
             [ -f "$skill_dir/SKILL.md" ] || continue
@@ -266,6 +268,7 @@ jobs:
             tar --exclude=".DS_Store" -czf "dist/skill/$name.tar.gz" \
                 -C "${ENGINE_DIR}/skill" "$name"
             rm -f "$skill_dir/VERSION"   # 不留在工作树里
+            echo "$name" >> dist/skills
           done
           # 四个脚本：装/卸 × bash/PowerShell（Windows 跑不了 bash 那些）
           for f in install.sh install.ps1 uninstall.sh uninstall.ps1; do

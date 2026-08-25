@@ -23,8 +23,8 @@
 #>
 [CmdletBinding()]
 param(
-    # 装哪个 skill：tke-ui-test / tke-security-test
-    [string]$Skill = 'tke-ui-test',
+    # 装哪个 skill：留空 = 装分发源上所有 skill（都是 md，装全不占地方）；指定则只装某个
+    [string]$Skill = '',
 
     # 只装这一类：web / android / ios / all / none（none = 只装 tke，安全测试用）
     [ValidateSet('web', 'android', 'ios', 'all', 'none', '')]
@@ -151,22 +151,37 @@ try {
     New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
     Section 'SKILL'
 
-    $skillTgz = Join-Path $tmp 'skill.tar.gz'
-    if (Get-File -Url "$BaseUrl/skill/$Skill.tar.gz$q" -Out $skillTgz -Kind 'gz') {
-        Remove-Item (Join-Path $skillRoot $Skill) -Recurse -Force -ErrorAction SilentlyContinue
-        # Windows 10 1803+ 自带 bsdtar，能直接解 .tar.gz
-        tar -xzf $skillTgz -C $skillRoot
-        if ($LASTEXITCODE -ne 0) { throw "skill 包解压失败（需要 Windows 10 1803+ 自带的 tar）" }
-        Write-Host "  $SOK $Dm$skillRoot\$Skill$Rs"
-        # 旧名残留：两个 skill 同时在册、description 几乎一样，AI 会乱挑
-        $old = Join-Path $skillRoot 'ui-check'
-        if (Test-Path $old) {
-            Remove-Item $old -Recurse -Force
-            Write-Host "  $SDOT 已清除旧版 ui-check（本 skill 已更名）"
-        }
+    # 装哪些：-Skill 指定则只装它；否则读分发源 manifest 装全部（都是 md，装全不占地方）
+    if ($Skill) {
+        $skillList = @($Skill)
     } else {
-        Write-Error "取不到 skill 包：$BaseUrl/skill/$Skill.tar.gz`n（若返回的是网页而非文件，多半是这个路径还没上传）"
-        exit 1
+        $manifest = ''
+        try {
+            $raw = (Invoke-WebRequest -Uri "$BaseUrl/skills$q" -UseBasicParsing -TimeoutSec 30).Content
+            $manifest = if ($raw -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($raw) } else { [string]$raw }
+        } catch { }
+        $skillList = @($manifest -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[a-z0-9][a-z0-9-]*$' })
+        if ($skillList.Count -eq 0) { $skillList = @('tke-ui-test') }   # manifest 取不到时兜底
+    }
+    $installed = @()
+    foreach ($name in $skillList) {
+        $skillTgz = Join-Path $tmp "$name.tar.gz"
+        if (Get-File -Url "$BaseUrl/skill/$name.tar.gz$q" -Out $skillTgz -Kind 'gz') {
+            Remove-Item (Join-Path $skillRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+            tar -xzf $skillTgz -C $skillRoot   # Windows 10 1803+ 自带 bsdtar
+            if ($LASTEXITCODE -ne 0) { throw "$name 解压失败（需要 Windows 10 1803+ 自带的 tar）" }
+            Write-Host "  $SOK $Dm$skillRoot\$name$Rs"
+            $installed += $name
+        } else {
+            Write-Error "取不到 skill 包：$BaseUrl/skill/$name.tar.gz`n（若返回的是网页而非文件，多半是这个路径还没上传）"
+            exit 1
+        }
+    }
+    # 旧名 ui-check 残留：和 tke-ui-test 同时在册、description 几乎一样，AI 会乱挑
+    $old = Join-Path $skillRoot 'ui-check'
+    if (Test-Path $old) {
+        Remove-Item $old -Recurse -Force
+        Write-Host "  $SDOT 已清除旧版 ui-check（本 skill 已更名）"
     }
 
     # ── 2. tke 及同目录驱动 ──
@@ -270,7 +285,7 @@ try {
     Write-Host ""
     # 结论上面的体检已经说过了，这里只补一句它不会讲的：怎么用
     if ($health -eq 0) {
-        Write-Host "  在 Claude Code 中输入 $Bd/$Skill$Rs 以调用"
+        foreach ($name in $installed) { Write-Host "  在 Claude Code 中输入 $Bd/$name$Rs 以调用" }
     }
     Write-Host "  $Dim升级 tke update  ·  卸载 tke uninstall$Rs"
     if ($health -ne 0) { exit 1 }
