@@ -7,13 +7,15 @@
 //! 两者都：走同一 HTTP 引擎、`--log <目录>` 给了就把 请求/响应 落进 `evidence/`（INV-14）。
 //! AI 编排层 `tke security` 是 P2。
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use tke::workflow::security::evidence::EvidenceDir;
 use tke::workflow::security::http::{HttpEngine, HttpRequest, UreqEngine};
-use tke::workflow::security::recon;
-use tke::{JsonOutput, Params, Result};
+use tke::workflow::security::prompt::SecurityPrompts;
+use tke::workflow::security::{prober, recon};
+use tke::{JsonOutput, LlmSession, Params, Result};
 
 /// `tke http` 参数。
 #[derive(clap::Args)]
@@ -50,6 +52,29 @@ pub enum ReconCommands {
     Endpoints { url: String, #[arg(long, default_value = "15")] timeout: u64 },
     /// 传输层（轻量）：明文 HTTP 是否强制跳 HTTPS + HSTS
     Tls { url: String, #[arg(long, default_value = "15")] timeout: u64 },
+}
+
+/// `tke security <子命令>`：AI 编排层。P2 先落 `probe`（直接跑 prober 顺藤摸瓜）；
+/// 后续 analyst/reporter 与完整 `tke security run` 陆续接上。
+#[derive(clap::Subcommand)]
+pub enum SecurityCommands {
+    /// 让 prober 对目标做多轮探测（需 [ai] 配置）
+    Probe {
+        /// 目标 URL
+        url: String,
+        /// 强度档：passive / safe（默认）/ aggressive / red-team
+        #[arg(long, default_value = "safe")]
+        mode: String,
+        /// 只测某一面：auth/injection/data-exposure/transport/config（默认全量）
+        #[arg(long)]
+        focus: Option<String>,
+        /// 自定义提示词目录（布局同 builtin：agents/<role>.md、tools/<role>/<name>.md）
+        #[arg(long)]
+        prompts_dir: Option<PathBuf>,
+        /// 最大推理步数（兜底防跑飞）
+        #[arg(long, default_value = "24")]
+        max_steps: usize,
+    },
 }
 
 /// 把 `-H 'K: V'` 列表解析成键值对（容忍无空格的 `K:V`）。
@@ -109,6 +134,51 @@ pub async fn http(args: HttpArgs, params: Arc<Params>) -> Result<()> {
         "evidence": evidence_paths,
     }));
     Ok(())
+}
+
+/// `tke security` 处理。
+pub async fn security(cmd: SecurityCommands, params: Arc<Params>) -> Result<()> {
+    match cmd {
+        SecurityCommands::Probe { url, mode, focus, prompts_dir, max_steps } => {
+            let focus = focus.unwrap_or_else(|| "全量".to_string());
+
+            // 证据目录：--log 给了就用它，否则临时目录（并告知路径，别把证据弄丢）
+            let task_dir = match &params.log {
+                Some(d) => d.clone(),
+                None => {
+                    let d = std::env::temp_dir().join(format!("tke-security-{}", std::process::id()));
+                    eprintln!("未指定 --log，本次证据落在临时目录：{}", d.display());
+                    d
+                }
+            };
+            let mut evidence = EvidenceDir::new(&task_dir)?;
+
+            let prompts = SecurityPrompts::load(prompts_dir);
+            let ctx = prober::ProbeCtx { target: url.clone(), mode: mode.clone(), focus: focus.clone() };
+            let system = prober::system_prompt(&prompts, &ctx);
+            let tools = prober::tools(&prompts);
+
+            // 真实 LLM 会话（需 [ai] 配置；未配好这里会报错指路）
+            let session = LlmSession::new_for_role(&params.ai, "prober", system, tools)?;
+
+            eprintln!("▶ prober 开跑：{url}（{mode} 档，聚焦 {focus}）");
+            let report = prober::run(session, &UreqEngine::default(), &mut evidence, &ctx, max_steps).await?;
+
+            JsonOutput::print(serde_json::json!({
+                "success": true,
+                "phase": "probe",
+                "target": report.target,
+                "mode": report.mode,
+                "focus": focus,
+                "steps": report.steps,
+                "summary": report.summary,
+                "finding_count": report.findings.len(),
+                "findings": report.findings,
+                "task_dir": task_dir.to_string_lossy(),
+            }));
+            Ok(())
+        }
+    }
 }
 
 /// `tke recon` 处理：按 verb 选检查函数，其余（引擎、证据落盘、输出）统一。

@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security P2 起步：prober 顺藤摸瓜（AI 编排 + 独立提示词体系）
+#1 侦察底座真机通过后开 #2。搭出**探测官 prober**——多轮、接地、带工具的 LLM 循环
+（形态学同 harness 的 orchestrator/explorer，但工具/角色/提示词另起一套，只借 provider）。
+- **feat prober 循环**（`prober.rs`）：工具 http / recon / record_finding / finish；
+  每轮基于刚看到的真实响应决定下一步（接地 INV-1），每个探测过 evidence（INV-14），
+  findings 由 prober 显式 record 才进候选（recon 结果只是线索）。max_steps 兜底防跑飞
+- **feat 独立提示词体系**（`prompt/`，同构 harness）：builtin `include_str!` 内嵌
+  （`agents/prober.md` + `tools/prober/*.md`）+ 外部目录覆盖（布局同 builtin）+ 空串守卫；
+  占位 `{target}/{mode}/{focus}`。**默认可用、可自定义**
+- **feat 统一 Finding 模型**（`finding.rs`）：severity/category/confirmed(软硬分,INV-13)/repro/evidence，
+  Serialize 进 findings.json；ProbeReport 汇总
+- **feat `tke security probe <url> [--mode --focus --prompts-dir --max-steps]`**：直接跑 prober
+- **fix 证据 EvidenceRef 加 Serialize**（进 findings.json 用）
+- 无 AI 配置时清晰报错不 panic；prober 循环用 FakeLlm 脚本化单测（recon→http→record→finish 全链）。
+  全量 132 绿。**真机由用户复验**（用他 mac 的 [ai] 配置对真实目标跑）
+
 ### 2026-08-25 · tke security：证据续写（不再覆盖）+ macOS 一键冒烟脚本
 写冒烟脚本时逼出一个地基 bug：一次评估是多个进程调用（http + 各 recon verb）共用一个
 `--log` 目录，但 `EvidenceDir` 每次都从 `step_001` 重编号 → **后面的探测覆盖前面的**，
