@@ -213,10 +213,10 @@ enum Commands {
         #[command(subcommand)]
         action: cli::security::ReconCommands,
     },
-    /// [安全] AI 探测编排: tke security probe <url>（prober 顺藤摸瓜，需 [ai]）
+    /// [安全] 安全测试唯一入口: tke security [url]（默认对话式；--json 无头对接，需 [ai]）
     Security {
-        #[command(subcommand)]
-        action: cli::security::SecurityCommands,
+        #[command(flatten)]
+        args: cli::security::SecurityArgs,
     },
 
     // ==================== ① 直通（不在静态列表，见 --help 末尾动态清单） ====================
@@ -361,8 +361,8 @@ async fn main() -> tke::Result<()> {
         Commands::Recon { action } => {
             cli::security::recon(action, params.clone()).await
         }
-        Commands::Security { action } => {
-            cli::security::security(action, params.clone()).await
+        Commands::Security { args } => {
+            cli::security::security(args, params.clone()).await
         }
         // 便捷路由：tke <path.tks|path.toml> 等价于 tke run <path>。
         // 认不出的就是**未知命令**——CLI 直通已删（ADR-0015），

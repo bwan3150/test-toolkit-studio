@@ -54,40 +54,26 @@ pub enum ReconCommands {
     Tls { url: String, #[arg(long, default_value = "15")] timeout: u64 },
 }
 
-/// `tke security <子命令>`：AI 编排层。P2 先落 `probe`（直接跑 prober 顺藤摸瓜）；
-/// 后续 analyst/reporter 与完整 `tke security run` 陆续接上。
-#[derive(clap::Subcommand)]
-pub enum SecurityCommands {
-    /// 让 prober 对目标做多轮探测（只探测，不复核不出报告；需 [ai] 配置）
-    Probe {
-        /// 目标 URL
-        url: String,
-        /// 强度档：passive / safe（默认）/ aggressive / red-team
-        #[arg(long, default_value = "safe")]
-        mode: String,
-        /// 只测某一面：auth/injection/data-exposure/transport/config（默认全量）
-        #[arg(long)]
-        focus: Option<String>,
-        /// 自定义提示词目录（布局同 builtin：agents/<role>.md、tools/<role>/<name>.md）
-        #[arg(long)]
-        prompts_dir: Option<PathBuf>,
-        /// 最大推理步数（兜底防跑飞）
-        #[arg(long, default_value = "24")]
-        max_steps: usize,
-    },
-    /// 完整流程：探测 → 复核 → 出 HTML 报告 + findings.json（需 [ai] 配置）
-    Run {
-        /// 目标 URL
-        url: String,
-        #[arg(long, default_value = "safe")]
-        mode: String,
-        #[arg(long)]
-        focus: Option<String>,
-        #[arg(long)]
-        prompts_dir: Option<PathBuf>,
-        #[arg(long, default_value = "24")]
-        max_steps: usize,
-    },
+/// `tke security` —— 安全测试**唯一入口**（ADR-0019）。
+/// 默认进**对话式编排**（像 tke harness：你下指令、它探测、有风险先问你）；
+/// `--json` / 非终端 → **无头一次性**（内部 探测→复核→出报告，输出给 Electron/CI）。
+/// prober/analyst/reporter 是内部阶段，不是子命令。
+#[derive(clap::Args)]
+pub struct SecurityArgs {
+    /// 目标 URL（可选：不给则进对话后再问）
+    pub url: Option<String>,
+    /// 强度档：passive / safe（默认）/ aggressive / red-team
+    #[arg(long, default_value = "safe")]
+    pub mode: String,
+    /// 只测某一面：auth/injection/data-exposure/transport/config（默认全量）
+    #[arg(long)]
+    pub focus: Option<String>,
+    /// 自定义提示词目录（布局同 builtin：agents/<role>.md、tools/<role>/<name>.md）
+    #[arg(long)]
+    pub prompts_dir: Option<PathBuf>,
+    /// 单个内部 agent 的最大推理步数（兜底防跑飞）
+    #[arg(long, default_value = "24")]
+    pub max_steps: usize,
 }
 
 /// 把 `-H 'K: V'` 列表解析成键值对（容忍无空格的 `K:V`）。
@@ -180,62 +166,63 @@ async fn run_prober(
     prober::run(session, &UreqEngine::default(), &mut evidence, &ctx, max_steps).await
 }
 
-/// `tke security` 处理。
-pub async fn security(cmd: SecurityCommands, params: Arc<Params>) -> Result<()> {
-    match cmd {
-        SecurityCommands::Probe { url, mode, focus, prompts_dir, max_steps } => {
-            let focus = focus.unwrap_or_else(|| "全量".to_string());
-            let task_dir = task_dir_of(&params);
-            let prompts = SecurityPrompts::load(prompts_dir);
-            let report = run_prober(&params, &url, &mode, &focus, &prompts, &task_dir, max_steps).await?;
+/// `tke security` 处理：单一入口，按前端能力自动分流。
+///   交互终端 → 对话式编排（orchestrator，复用 harness 的 Frontend/TUI）。
+///   `--json` / 非终端 → 无头一次性（探测→复核→出报告，一次性 JSON 输出，给 Electron/CI）。
+pub async fn security(args: SecurityArgs, params: Arc<Params>) -> Result<()> {
+    use std::io::IsTerminal;
+    let focus = args.focus.clone().unwrap_or_else(|| "全量".to_string());
+    let task_dir = task_dir_of(&params);
+    let prompts = SecurityPrompts::load(args.prompts_dir.clone());
 
-            JsonOutput::print(serde_json::json!({
-                "success": true,
-                "phase": "probe",
-                "target": report.target,
-                "mode": report.mode,
-                "focus": focus,
-                "steps": report.steps,
-                "summary": report.summary,
-                "finding_count": report.findings.len(),
-                "findings": report.findings,
-                "task_dir": task_dir.to_string_lossy(),
-            }));
-            Ok(())
-        }
-        SecurityCommands::Run { url, mode, focus, prompts_dir, max_steps } => {
-            let focus = focus.unwrap_or_else(|| "全量".to_string());
-            let task_dir = task_dir_of(&params);
-            let prompts = SecurityPrompts::load(prompts_dir);
+    let interactive = !params.json && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
 
-            // ① 探测
-            let probe = run_prober(&params, &url, &mode, &focus, &prompts, &task_dir, max_steps).await?;
-            // ② 复核
-            eprintln!("▶ analyst 复核 {} 条候选……", probe.findings.len());
-            let analyzed = tke::workflow::security::analyst::analyze(&params.ai, &prompts, &task_dir, probe).await?;
-            eprintln!("  {}", analyzed.summary);
-            // ③ 出报告
-            let paths = tke::workflow::security::report::write_reports(&task_dir, &analyzed)?;
-            eprintln!("▶ 报告已生成");
-
-            JsonOutput::print(serde_json::json!({
-                "success": true,
-                "phase": "run",
-                "target": analyzed.target,
-                "mode": analyzed.mode,
-                "focus": focus,
-                "summary": analyzed.summary,
-                "finding_count": analyzed.findings.len(),
-                "confirmed": analyzed.findings.iter().filter(|f| f.confirmed).count(),
-                "dropped": analyzed.dropped,
-                "report_html": paths.html.to_string_lossy(),
-                "findings_json": paths.json.to_string_lossy(),
-                "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
-                "task_dir": task_dir.to_string_lossy(),
-            }));
-            Ok(())
-        }
+    if interactive {
+        // 对话式：复用 harness 的前端（TUI，spawn 失败回落 Plain）
+        let frontend: Box<dyn tke::Frontend> = match tke::TuiFrontend::spawn() {
+            Ok(f) => Box::new(f),
+            Err(_) => Box::new(tke::PlainFrontend::new()),
+        };
+        tke::workflow::security::orchestrator::run(
+            &params.ai, &prompts, frontend, task_dir, args.url, args.mode, focus, args.max_steps,
+        ).await
+    } else {
+        headless(&params, &prompts, &task_dir, args, focus).await
     }
+}
+
+/// 无头一次性：探测→复核→出报告，一次性 JSON。给 `--json`/CI/Electron。
+async fn headless(
+    params: &Arc<Params>,
+    prompts: &SecurityPrompts,
+    task_dir: &std::path::Path,
+    args: SecurityArgs,
+    focus: String,
+) -> Result<()> {
+    let url = match &args.url {
+        Some(u) => u.clone(),
+        None => return Err(tke::TkeError::InvalidArgument(
+            "无头模式（--json/非终端）需要显式给目标 URL：tke security <url> --json".into())),
+    };
+    let probe = run_prober(params, &url, &args.mode, &focus, prompts, task_dir, args.max_steps).await?;
+    let analyzed = tke::workflow::security::analyst::analyze(&params.ai, prompts, task_dir, probe).await?;
+    let paths = tke::workflow::security::report::write_reports(task_dir, &analyzed)?;
+
+    JsonOutput::print(serde_json::json!({
+        "success": true,
+        "target": analyzed.target,
+        "mode": analyzed.mode,
+        "focus": focus,
+        "summary": analyzed.summary,
+        "finding_count": analyzed.findings.len(),
+        "confirmed": analyzed.findings.iter().filter(|f| f.confirmed).count(),
+        "dropped": analyzed.dropped,
+        "report_html": paths.html.to_string_lossy(),
+        "findings_json": paths.json.to_string_lossy(),
+        "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
+        "task_dir": task_dir.to_string_lossy(),
+    }));
+    Ok(())
 }
 
 /// `tke recon` 处理：按 verb 选检查函数，其余（引擎、证据落盘、输出）统一。

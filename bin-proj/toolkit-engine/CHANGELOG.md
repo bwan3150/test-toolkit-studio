@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security 收成单一入口 + 对话式 orchestrator（改对 CLI 形状）
+用户纠正：`tke security` 该像 harness 一样**一个入口**（默认交互、`--json` 对接），我之前错做成
+`security probe` / `security run` 两个子命令（且 `run` 与 .tks 回放语义撞车）。改回 ADR-0019 原样。
+- **fix CLI 收成单一 `tke security [url]`**：删 probe/run 子命令。交互终端→对话式 orchestrator；
+  `--json`/非终端→无头一次性（探测→复核→出报告，一次性 JSON）。`tke http`/`tke recon` primitive 不动
+- **feat orchestrator**（`orchestrator.rs`）：安全测试的对话外壳（ADR-0002 同形），**复用 harness
+  的 `Frontend` 三前端**（Plain/Json/**TUI**）——「共享 TUI」即直接用 `TuiFrontend`。工具
+  recon/http/record_finding/ask_user/report/finish；**它对用户说话（只回文字不调工具）时就把话筒交回**，
+  等用户下一句（REPL 回合）；有风险/升档先 `ask_user`。提示词 `agents/orchestrator.md`+tools（可覆盖）
+- 全量 137 绿。**对话式交互真机待验**（无头管线已在 konechome 跑通）
+
 ### 2026-08-25 · tke security #2 完成：analyst 对抗复核 + reporter 出报告 + `tke security run` 全流程
 prober 之后补齐 #2 剩两段，`tke security run <url>` 现在能一条龙：探测→复核→出 HTML 报告。
 - **feat analyst**（`analyst.rs`）：对抗式复核官，单次结构化输出（INV-2，强制 report 工具）。

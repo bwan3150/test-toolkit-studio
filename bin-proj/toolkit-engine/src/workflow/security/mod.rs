@@ -18,6 +18,7 @@ pub mod evidence;
 pub mod finding;
 pub mod http;
 pub mod prompt;
+pub mod orchestrator;
 pub mod prober;
 pub mod recon;
 pub mod report;

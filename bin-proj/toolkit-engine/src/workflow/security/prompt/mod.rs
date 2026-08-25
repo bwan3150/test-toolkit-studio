@@ -72,6 +72,7 @@ fn default_agent(role: &str) -> &'static str {
     match role {
         "prober" => include_str!("builtin/agents/prober.md"),
         "analyst" => include_str!("builtin/agents/analyst.md"),
+        "orchestrator" => include_str!("builtin/agents/orchestrator.md"),
         _ => include_str!("builtin/agents/prober.md"), // 未知角色兜底（不应出现）
     }
 }
@@ -84,6 +85,13 @@ fn default_tool(role: &str, name: &str) -> &'static str {
         ("prober", "finish") => include_str!("builtin/tools/prober/finish.md"),
         ("analyst", "report") => include_str!("builtin/tools/analyst/report.md"),
         ("analyst", "ask") => include_str!("builtin/tools/analyst/ask.md"),
+        // orchestrator：http/recon/record_finding 复用 prober 的描述，另加三个
+        ("orchestrator", "http") => include_str!("builtin/tools/prober/http.md"),
+        ("orchestrator", "recon") => include_str!("builtin/tools/prober/recon.md"),
+        ("orchestrator", "record_finding") => include_str!("builtin/tools/prober/record_finding.md"),
+        ("orchestrator", "ask_user") => include_str!("builtin/tools/orchestrator/ask_user.md"),
+        ("orchestrator", "report") => include_str!("builtin/tools/orchestrator/report.md"),
+        ("orchestrator", "finish") => include_str!("builtin/tools/orchestrator/finish.md"),
         _ => "（工具说明缺失）",
     }
 }
