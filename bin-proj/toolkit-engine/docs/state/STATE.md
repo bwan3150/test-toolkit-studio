@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-25
-Last-Commit: 1af559b3
+Last-Commit: 0789c495
 ---
 
 # 当前状态
@@ -45,7 +45,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | 分发源六平台齐备 | ✅ 依赖全 / ⏳ 二进制待 CI | 依赖六平台已手工补齐(linux-arm64 只有 go-ios、win32 没有 go-ios——上游就没有),**一次性活不再动**;tke 二进制只有 mac-arm64+linux-amd64,darwin-amd64/windows 等 CI 跑 |
 | 依赖补齐 `tke fix` | ✅ 本机端到端实测 | ADR-0012:唯一会联网下载的命令;普通命令缺依赖只报错指路。空目录只放 tke → fix → 跑通网页检查 |
 | 两件套自包含（拷走即跑） | ✅ 本机实测通过 | Q-6 关闭:缺 `-d` 时从 tklib 的 meta.json 读平台兜底(web 零参数回放/android 走默认设备/ios 仍需显式) |
-| **tke security（安全测试新领域）** | 🟡 **P1 侦察底座首块已落(本机冒烟通过),待真机复验** | **ADR-0019** + INV-13/14/15 + `security-report-spec.md` + 可视化基线 `security-report-template.sample.html`(用户确认风格)。第二个 agent 领域,骨架复用 harness。能力三层:`tke http`/`tke recon` primitive ⇄ AI 工具 ⇄ `tke security` 编排。强度阶梯 passive/safe/aggressive/red-team(默认 safe)+正交 `--focus`。**已落**(`src/workflow/security/`):`tke http`(原始探测,4xx/5xx 照收/不跟重定向/体限2MiB)、`HttpEngine` trait(UreqEngine+FakeEngine 可脱网单测)、`evidence.rs`(`--log` 落 `evidence/step_NNN_{req,resp}`,INV-14)、**recon 七个 verb**(headers/fingerprint/cors/graphql/bundle/endpoints/tls,一 verb 一文件在 `recon/`,统一 `ReconResult{findings,probes}`,bundle 密钥脱敏,endpoints 防 SPA 兜底假阳,tls 轻量待接证书库)。security 单测 21、全量 128 绿;fingerprint/tls 真实冒烟准确。**待做**:prober/analyst/reporter 角色、`tke security` AI 编排、报告生成、`--json`/Tui、注入子系统(opt-in)、源码灰盒、endpoints 吃 OpenAPI/Swagger、tls 深度证书检查 |
+| **tke security（安全测试新领域）** | 🟡 **P1 侦察底座首块已落(本机冒烟通过),待真机复验** | **ADR-0019** + INV-13/14/15 + `security-report-spec.md` + 可视化基线 `security-report-template.sample.html`(用户确认风格)。第二个 agent 领域,骨架复用 harness。能力三层:`tke http`/`tke recon` primitive ⇄ AI 工具 ⇄ `tke security` 编排。强度阶梯 passive/safe/aggressive/red-team(默认 safe)+正交 `--focus`。**已落**(`src/workflow/security/`):`tke http`(原始探测,4xx/5xx 照收/不跟重定向/体限2MiB)、`HttpEngine` trait(UreqEngine+FakeEngine 可脱网单测)、`evidence.rs`(`--log` 落 `evidence/step_NNN_{req,resp}`,INV-14)、**recon 七个 verb**(headers/fingerprint/cors/graphql/bundle/endpoints/tls,一 verb 一文件在 `recon/`,统一 `ReconResult{findings,probes}`,bundle 密钥脱敏,endpoints 防 SPA 兜底假阳,tls 轻量待接证书库)。证据**续写不覆盖**(多次调用共用 `--log` 时按已有 step_NNN 续排,写脚本逼出来的)。冒烟脚本 `tests/security-smoke.sh`(build→http+七 verb→证据一览,跑刚构建的 bin/ 产物)。security 单测 22、全量 129 绿;fingerprint/tls 真实冒烟准确。**待做**:prober/analyst/reporter 角色、`tke security` AI 编排、报告生成、`--json`/Tui、注入子系统(opt-in)、源码灰盒、endpoints 吃 OpenAPI/Swagger、tls 深度证书检查 |
 
 ## 本次会话不要碰
 
