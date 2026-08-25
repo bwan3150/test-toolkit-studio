@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security P0 设计锁（ADR-0019 + 报告 spec + INV-13/14/15）
+新方向：`tke security`——探索式黑盒安全测试，作为 tke 的**第二个 agent 领域**（骨架复用 harness，
+工具/角色/提示词另起一套）。产全局安全水平报告 + 每个确认漏洞一份独立报告。本条只落 **P0 设计文档**，
+无 src 改动；P1 起写码。
+- **doc ADR-0019** 定死：能力三层分层（`tke http`/`tke recon` primitive ⇄ AI 工具 ⇄ `tke security` 编排，
+  照 device 那套）；角色 recon→prober→analyst→reporter，analyst 对抗闸门防假阳；三信息层级只改种子来源；
+  **强度阶梯 `--mode`**（passive/safe/aggressive/red-team，默认 safe）+ 正交 `--focus`；五态出口
+- **doc INV-13/14/15**（写入 INVARIANTS.md）：判定必须黑盒复现 / 每探测落证据无第二条无证据路 /
+  强度默认最安全·升档显式·破坏不可逆需逐次确认·模式必落报告
+- **doc security-report-spec.md**：全局报告 6 段 + 单漏洞报告 9 段 + **报告材料库**（概览/图表/文字卡/
+  可复制执行/证据五类区块，agent 组合用）+ 机器可读 `findings.json`
+- **doc security-report-template.sample.html**：可视化基线——对齐参考仪表盘风格（暖色渐变环形图 + KPI 条 +
+  风险矩阵 + 攻击路径 + 带复制按钮的命令/脚本块），Toolkit 品牌，窄屏横滚，亮/暗手动切换定型
+
 ### 2026-08-22 · boot 之后把屏幕唤醒;ANR 与就绪判据都说人话
 用户 mac 上跑起来了但**报告里两张截图都是纯黑**,第二步 `uiautomator dump` 连文件都
 产不出来。根因是 `sys.boot_completed=1` **只说系统起来了**——屏幕可能还关着或停在锁屏,
