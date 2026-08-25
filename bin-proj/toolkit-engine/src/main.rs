@@ -124,17 +124,16 @@ enum Commands {
         args: HarnessArgs,
     },
 
-    /// [UI 测试] 设备/UI 测试轨命令: tke ui report <检查目录>（与安全轨 tke security report 对称）
-    Ui {
-        #[command(subcommand)]
-        action: cli::report::UiCommands,
-    },
-
-    /// [兼容别名] 旧的 `tke report`——等价 `tke ui report`（已改名，隐藏但仍可用）
-    #[command(hide = true)]
+    /// [编排] 出报告：按任务类型(ui/security)自动分派: tke report <检查目录>
     Report {
         #[command(flatten)]
         args: ReportArgs,
+    },
+
+    /// [编排] 起测试会话：建目录 + 写 task.json 标记（ui/security 共享）: tke task new --kind security --target <url>
+    Task {
+        #[command(subcommand)]
+        action: cli::task::TaskCommands,
     },
 
     /// [环境] 升级到最新版（跑官方安装脚本；tke 与 skill 一起更新）
@@ -326,13 +325,11 @@ async fn main() -> tke::Result<()> {
         Commands::Harness { args } => {
             workflow::harness::handle(args, params.clone()).await
         }
-        Commands::Ui { action } => {
-            let cli::report::UiCommands::Report { args } = action;
+        Commands::Report { args } => {
             report::handle(args).await
         }
-        Commands::Report { args } => {
-            // 隐藏别名：等价 tke ui report
-            report::handle(args).await
+        Commands::Task { action } => {
+            cli::task::handle(action, params.clone()).await
         }
         Commands::Update { args } => {
             cli::selfmanage::update(args).await

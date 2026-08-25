@@ -13,6 +13,7 @@ pub mod fix;
 
 /// tke report：把散落的多批检查汇总成一份全流程报告
 pub mod report;
+pub mod task;
 
 // ① 直通（统一处理所有外部二进制，含 adb -d 注入特例）
 

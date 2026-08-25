@@ -12,17 +12,6 @@ use std::path::{Path, PathBuf};
 
 use tke::{JsonOutput, Result, Verdict};
 
-/// `tke ui <子命令>`：设备/UI 测试轨的收尾命令。与安全轨 `tke security report` 对称
-/// （`tke <track> report`）。目前只有 report；`tke report` 保留为隐藏别名（向后兼容）。
-#[derive(clap::Subcommand)]
-pub enum UiCommands {
-    /// 汇总一次 UI/设备测试的证据目录成报告 + 写结论（= 老的 `tke report`）
-    Report {
-        #[command(flatten)]
-        args: ReportArgs,
-    },
-}
-
 /// Report 命令参数
 #[derive(clap::Args)]
 pub struct ReportArgs {
@@ -76,6 +65,26 @@ pub struct ReportArgs {
 pub async fn handle(args: ReportArgs) -> Result<()> {
     if !args.dir.is_dir() {
         JsonOutput::error(format!("目录不存在: {}", args.dir.display()));
+    }
+
+    // 领域即数据（ADR-0021）：目录里 task.json 标记 / findings.json → 安全任务，走安全报告；
+    // 否则走下面的设备/UI 报告。同一条 `tke report <dir>` 两轨通用。
+    if tke::workflow::task::is_security_task(&args.dir) {
+        let fj = args.dir.join("findings.json");
+        let json = std::fs::read_to_string(&fj).map_err(|e| {
+            tke::TkeError::InvalidArgument(format!(
+                "安全任务但读不到 {}：{e}（调用方应先把 findings.json 写进任务目录）", fj.display()))
+        })?;
+        let paths = tke::workflow::security::report::write_reports_from_json(&args.dir, &json)?;
+        JsonOutput::print(serde_json::json!({
+            "success": true,
+            "kind": "security",
+            "report_html": paths.html.to_string_lossy(),
+            "findings_json": paths.json.to_string_lossy(),
+            "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
+            "out_dir": args.dir.to_string_lossy(),
+        }));
+        return Ok(());
     }
 
     // 任务布局：目录里直接躺着 log.json

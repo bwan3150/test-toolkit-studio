@@ -496,7 +496,7 @@ tke -d <序列号> steps '启动 ["com.x", ".Main"]' --log ~/.tke/logs/scene-syn
 **最后一定要跑这一条**——写上结论并把报告打开给用户看：
 
 ```bash
-tke ui report ~/.tke/logs/<任务简称>/ \
+tke report ~/.tke/logs/<任务简称>/ \
   --task "用户让我验的那件事（写他的原话）" \
   --verdict pass \
   --open \
@@ -530,7 +530,7 @@ EOF
 > @'
 > ## 结论
 > | 端 | 结果 |
-> '@ | tke ui report <目录> --verdict pass --summary -
+> '@ | tke report <目录> --verdict pass --summary -
 > ```
 >
 > ⚠️ `--task` 也支持 `-`，但**两个不能同时用**（标准输入只能读一次，tke 会拦下来）。

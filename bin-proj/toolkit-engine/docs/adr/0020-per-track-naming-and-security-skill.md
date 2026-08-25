@@ -1,6 +1,6 @@
 # ADR-0020: 多测试轨的命名约定（`tke <track> report`）+ 安全 skill 轨
 
-- **状态**: 生效（用户 2026-08-25 拍板）
+- **状态**: **已被 ADR-0021 取代**（同日；命名从 `tke <track> report` 拆分改为统一 `tke report` + task.json 分派）
 - **日期**: 2026-08-25
 - **关联**: ADR-0010（skill 借调用方 AI）/ ADR-0019（security 领域）
 

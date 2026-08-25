@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · 共享任务生命周期：统一 tke report + tke task（ADR-0021 取代 0020）
+用户提出更干净的模型：task/steps/report 是**领域无关**的生命周期层，一个任务是 UI 还是安全测试
+是它的**属性**（记在任务目录的 task.json 里），不该拆成 `tke ui report`/`tke security report`。
+- **feat `task.json` 标记 + `is_security_task`**（`workflow/task.rs`）：任务目录记 `{kind,target,mode}`；
+  没标记则看有没有 findings.json 兜底
+- **feat `tke task new --kind <ui|security> [--target --mode --dir]`**：建目录 + 写标记，skill/脚本的干净起点
+- **feat `tke report <dir>` 统一分派**：读 task.json → security 读 findings.json 出安全报告 / 否则原设备报告。
+  一条命令两轨通用
+- **revert ADR-0020 的拆分**：删 `tke ui report`（回 `tke report`）、删 `tke security report` 子命令；
+  skill 文档改回 `tke report`。`tke security` 起始自动写 kind=security 标记
+- **steps 暂不统一**（有意，见 ADR-0021）：设备 vs URL 目标模型不同、收益低，等 skill 证明需要再议
+- **doc ADR-0021**（取代 0020）+ 全量 139 绿。端到端验过：task new → 写 findings.json → report 自动出安全报告
+
 ### 2026-08-25 · tke security report primitive + 多轨命名约定 tke <track> report（ADR-0020）
 为安全 skill 轨（tke-security-test，下一步）铺路：把 reporter 暴露成确定性命令，并统一多轨报告命名。
 - **feat `tke security report <findings.json> [--out]`**：无 AI 纯渲染——调用方（skill/脚本/CI）自己

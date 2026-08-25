@@ -58,8 +58,9 @@ pub enum ReconCommands {
 /// 默认进**对话式编排**（像 tke harness：你下指令、它探测、有风险先问你）；
 /// `--json` / 非终端 → **无头一次性**（内部 探测→复核→出报告，输出给 Electron/CI）。
 /// prober/analyst/reporter 是内部阶段，不是子命令。
+/// `tke security` —— 安全测试**唯一入口**：默认对话式 TUI（agent 开场面试）；
+/// `--json`/非终端 → 无头一次性。出报告统一走 `tke report <dir>`（按 task.json 分派，ADR-0021）。
 #[derive(clap::Args)]
-#[command(args_conflicts_with_subcommands = true)]
 pub struct SecurityArgs {
     /// 目标 URL（可选：不给则由主 agent 在 TUI 里问你）
     pub url: Option<String>,
@@ -75,23 +76,6 @@ pub struct SecurityArgs {
     /// 单个内部 agent 的最大推理步数（兜底防跑飞）
     #[arg(long, default_value = "24")]
     pub max_steps: usize,
-    /// 子命令（目前只有 report）；不给 = 进对话式编排
-    #[command(subcommand)]
-    pub action: Option<SecuritySub>,
-}
-
-/// `tke security` 的子命令。与设备轨的 `tke ui report` 对称：`tke <track> report`。
-#[derive(clap::Subcommand)]
-pub enum SecuritySub {
-    /// 从 findings JSON 确定性出报告（无 AI）——给 skill / 脚本 / CI 用，
-    /// 调用方自己收集 findings、喂进来就得到品牌 HTML 报告 + 每个确认漏洞一份。
-    Report {
-        /// findings JSON 文件路径（含 target/mode/findings；结构见 findings.json）
-        findings: PathBuf,
-        /// 报告输出目录（证据也应在此；不给则用 --log，再不给用临时目录）
-        #[arg(long)]
-        out: Option<PathBuf>,
-    },
 }
 
 /// 把 `-H 'K: V'` 列表解析成键值对（容忍无空格的 `K:V`）。
@@ -190,24 +174,11 @@ async fn run_prober(
 pub async fn security(args: SecurityArgs, params: Arc<Params>) -> Result<()> {
     use std::io::IsTerminal;
 
-    // 子命令：report（确定性出报告，无 AI）——与交互/无头分流之前先处理
-    if let Some(SecuritySub::Report { findings, out }) = &args.action {
-        let dir = out.clone().or_else(|| params.log.clone())
-            .unwrap_or_else(|| std::env::temp_dir().join(format!("tke-security-report-{}", std::process::id())));
-        let json = std::fs::read_to_string(findings)
-            .map_err(|e| tke::TkeError::InvalidArgument(format!("读不到 findings 文件 {}：{e}", findings.display())))?;
-        let paths = tke::workflow::security::report::write_reports_from_json(&dir, &json)?;
-        JsonOutput::print(serde_json::json!({
-            "success": true,
-            "report_html": paths.html.to_string_lossy(),
-            "findings_json": paths.json.to_string_lossy(),
-            "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
-            "out_dir": dir.to_string_lossy(),
-        }));
-        return Ok(());
-    }
-
     let task_dir = task_dir_of(&params);
+    // 起始就落 task.json 标记（kind=security）——之后 `tke report <task_dir>` 据此分派
+    let _ = tke::workflow::task::write_marker(&task_dir, &tke::workflow::task::TaskMeta {
+        kind: "security".into(), target: args.url.clone(), mode: args.mode.clone(),
+    });
     let prompts = SecurityPrompts::load(args.prompts_dir.clone());
 
     let interactive = !params.json && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();

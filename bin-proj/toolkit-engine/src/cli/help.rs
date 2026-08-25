@@ -27,9 +27,10 @@ pub fn build_help() -> String {
 {c}工作流{r}
   {g}run{r}          执行 .tks 单脚本 或 .toml flow {d}(多脚本顺序执行){r}
   {g}steps{r}        不落文件执行一串指令  {d}例: tke steps \"点击 [{{登录按钮}}]\" \"等待 [2s]\"{r}
-  {g}ui report{r}    重建一次 UI 检查的报告 {d}例: tke ui report ~/.tke/logs/登录检查/（steps 每批跑完会自动重建；--full-image 出原图版）{r}
+  {g}report{r}       出报告(按任务类型自动分派) {d}例: tke report ~/.tke/logs/登录检查/（UI 汇总证据 / 安全读 findings.json）{r}
+  {g}task{r}         起测试会话(建目录+标记)  {d}例: tke task new --kind security --target <url>（ui/security 共享）{r}
   {g}harness{r}      AI 探索测试并生成脚本  {d}例: tke harness 用例.md --scripts 目录/（文件名 AI 起·简写 harn）{r}
-  {g}security{r}     安全测试（对话式）    {d}例: tke security（进 TUI，agent 问你测什么）· tke security report <findings.json> 出报告{r}
+  {g}security{r}     安全测试（对话式）    {d}例: tke security（进 TUI，agent 问你测什么）；出报告走 tke report{r}
 
 {c}环境{r}
   {g}doctor{r}       环境体检 {d}(依赖齐不齐·设备连没连·版本与 skill 跟不跟得上；不下载任何东西){r}
