@@ -58,7 +58,7 @@ pub enum ReconCommands {
 /// 后续 analyst/reporter 与完整 `tke security run` 陆续接上。
 #[derive(clap::Subcommand)]
 pub enum SecurityCommands {
-    /// 让 prober 对目标做多轮探测（需 [ai] 配置）
+    /// 让 prober 对目标做多轮探测（只探测，不复核不出报告；需 [ai] 配置）
     Probe {
         /// 目标 URL
         url: String,
@@ -72,6 +72,19 @@ pub enum SecurityCommands {
         #[arg(long)]
         prompts_dir: Option<PathBuf>,
         /// 最大推理步数（兜底防跑飞）
+        #[arg(long, default_value = "24")]
+        max_steps: usize,
+    },
+    /// 完整流程：探测 → 复核 → 出 HTML 报告 + findings.json（需 [ai] 配置）
+    Run {
+        /// 目标 URL
+        url: String,
+        #[arg(long, default_value = "safe")]
+        mode: String,
+        #[arg(long)]
+        focus: Option<String>,
+        #[arg(long)]
+        prompts_dir: Option<PathBuf>,
         #[arg(long, default_value = "24")]
         max_steps: usize,
     },
@@ -136,33 +149,45 @@ pub async fn http(args: HttpArgs, params: Arc<Params>) -> Result<()> {
     Ok(())
 }
 
+/// 任务目录：--log 给了就用它，否则临时目录（告知路径，别把证据/报告弄丢）。
+fn task_dir_of(params: &Params) -> PathBuf {
+    match &params.log {
+        Some(d) => d.clone(),
+        None => {
+            let d = std::env::temp_dir().join(format!("tke-security-{}", std::process::id()));
+            eprintln!("未指定 --log，本次证据/报告落在临时目录：{}", d.display());
+            d
+        }
+    }
+}
+
+/// 跑 prober，返回 ProbeReport（run/probe 共用）。
+async fn run_prober(
+    params: &Arc<Params>,
+    url: &str,
+    mode: &str,
+    focus: &str,
+    prompts: &SecurityPrompts,
+    task_dir: &std::path::Path,
+    max_steps: usize,
+) -> Result<tke::workflow::security::finding::ProbeReport> {
+    let mut evidence = EvidenceDir::new(task_dir)?;
+    let ctx = prober::ProbeCtx { target: url.to_string(), mode: mode.to_string(), focus: focus.to_string() };
+    let system = prober::system_prompt(prompts, &ctx);
+    let tools = prober::tools(prompts);
+    let session = LlmSession::new_for_role(&params.ai, "prober", system, tools)?;
+    eprintln!("▶ prober 开跑：{url}（{mode} 档，聚焦 {focus}）");
+    prober::run(session, &UreqEngine::default(), &mut evidence, &ctx, max_steps).await
+}
+
 /// `tke security` 处理。
 pub async fn security(cmd: SecurityCommands, params: Arc<Params>) -> Result<()> {
     match cmd {
         SecurityCommands::Probe { url, mode, focus, prompts_dir, max_steps } => {
             let focus = focus.unwrap_or_else(|| "全量".to_string());
-
-            // 证据目录：--log 给了就用它，否则临时目录（并告知路径，别把证据弄丢）
-            let task_dir = match &params.log {
-                Some(d) => d.clone(),
-                None => {
-                    let d = std::env::temp_dir().join(format!("tke-security-{}", std::process::id()));
-                    eprintln!("未指定 --log，本次证据落在临时目录：{}", d.display());
-                    d
-                }
-            };
-            let mut evidence = EvidenceDir::new(&task_dir)?;
-
+            let task_dir = task_dir_of(&params);
             let prompts = SecurityPrompts::load(prompts_dir);
-            let ctx = prober::ProbeCtx { target: url.clone(), mode: mode.clone(), focus: focus.clone() };
-            let system = prober::system_prompt(&prompts, &ctx);
-            let tools = prober::tools(&prompts);
-
-            // 真实 LLM 会话（需 [ai] 配置；未配好这里会报错指路）
-            let session = LlmSession::new_for_role(&params.ai, "prober", system, tools)?;
-
-            eprintln!("▶ prober 开跑：{url}（{mode} 档，聚焦 {focus}）");
-            let report = prober::run(session, &UreqEngine::default(), &mut evidence, &ctx, max_steps).await?;
+            let report = run_prober(&params, &url, &mode, &focus, &prompts, &task_dir, max_steps).await?;
 
             JsonOutput::print(serde_json::json!({
                 "success": true,
@@ -174,6 +199,38 @@ pub async fn security(cmd: SecurityCommands, params: Arc<Params>) -> Result<()> 
                 "summary": report.summary,
                 "finding_count": report.findings.len(),
                 "findings": report.findings,
+                "task_dir": task_dir.to_string_lossy(),
+            }));
+            Ok(())
+        }
+        SecurityCommands::Run { url, mode, focus, prompts_dir, max_steps } => {
+            let focus = focus.unwrap_or_else(|| "全量".to_string());
+            let task_dir = task_dir_of(&params);
+            let prompts = SecurityPrompts::load(prompts_dir);
+
+            // ① 探测
+            let probe = run_prober(&params, &url, &mode, &focus, &prompts, &task_dir, max_steps).await?;
+            // ② 复核
+            eprintln!("▶ analyst 复核 {} 条候选……", probe.findings.len());
+            let analyzed = tke::workflow::security::analyst::analyze(&params.ai, &prompts, &task_dir, probe).await?;
+            eprintln!("  {}", analyzed.summary);
+            // ③ 出报告
+            let paths = tke::workflow::security::report::write_reports(&task_dir, &analyzed)?;
+            eprintln!("▶ 报告已生成");
+
+            JsonOutput::print(serde_json::json!({
+                "success": true,
+                "phase": "run",
+                "target": analyzed.target,
+                "mode": analyzed.mode,
+                "focus": focus,
+                "summary": analyzed.summary,
+                "finding_count": analyzed.findings.len(),
+                "confirmed": analyzed.findings.iter().filter(|f| f.confirmed).count(),
+                "dropped": analyzed.dropped,
+                "report_html": paths.html.to_string_lossy(),
+                "findings_json": paths.json.to_string_lossy(),
+                "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
                 "task_dir": task_dir.to_string_lossy(),
             }));
             Ok(())

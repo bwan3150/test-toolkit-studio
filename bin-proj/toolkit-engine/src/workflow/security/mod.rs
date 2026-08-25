@@ -13,9 +13,11 @@
 //!
 //! P1 只落**侦察底座**：HTTP 引擎（trait + 真实 ureq + fake 可测）+ 证据落盘 + 首批 recon 检查。
 
+pub mod analyst;
 pub mod evidence;
 pub mod finding;
 pub mod http;
 pub mod prompt;
 pub mod prober;
 pub mod recon;
+pub mod report;

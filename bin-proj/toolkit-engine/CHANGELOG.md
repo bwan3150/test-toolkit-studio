@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security #2 完成：analyst 对抗复核 + reporter 出报告 + `tke security run` 全流程
+prober 之后补齐 #2 剩两段，`tke security run <url>` 现在能一条龙：探测→复核→出 HTML 报告。
+- **feat analyst**（`analyst.rs`）：对抗式复核官，单次结构化输出（INV-2，强制 report 工具）。
+  逐条 finding 把**关联证据原文**喂给它据实判断（INV-13）：`keep=false` 毙假阳、
+  `confirmed` 分软硬、可修正 severity/category/title/detail。0 findings 时零 LLM 调用
+- **feat reporter**（`report.rs`）：**确定性**生成（不走 LLM，可单测可回归）——
+  `security-report.html`（暖色计分板+严重度环形+Toolkit 品牌，亮暗自适应，风格对齐用户确认的基线）
+  + `findings.json`（机器可读，含 outcome/score/counts）+ 每个**已确认**发现一份 `vuln-<id>.html`
+  （疑似只进全局清单不单独出，INV-13）。全程 HTML 转义防注入
+- **feat `tke security run`**：probe→analyst→report 三段编排；`probe` 保留为只探测入口
+- **feat 提示词**：analyst 的 agent/tools 提示词进 builtin（可外部覆盖，同 prober）
+- **feat examples/security_report_sample.rs**：无 LLM 造样例报告，验版式
+- 6 个新单测（analyst 毙假阳/空跳过、reporter 评级/转义/vuln 文件）。全量 137 绿。**真机待复跑**
+
 ### 2026-08-25 · prober 收敛性修复：去重拦截 + 无进展强制收尾（真机撞出的死循环）
 用户 mac 首跑 prober（konechome）暴露死循环：模型顺藤对了（认出 Framer→追到 framerusercontent
 CDN），但**反复抓同一批 URL 几十次**（robots/sitemap/searchIndex），24 步没 finish 也没 record，

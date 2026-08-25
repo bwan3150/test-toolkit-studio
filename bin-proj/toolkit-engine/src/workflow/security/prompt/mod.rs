@@ -71,6 +71,7 @@ fn guard_nonempty(s: String, what: &str) -> String {
 fn default_agent(role: &str) -> &'static str {
     match role {
         "prober" => include_str!("builtin/agents/prober.md"),
+        "analyst" => include_str!("builtin/agents/analyst.md"),
         _ => include_str!("builtin/agents/prober.md"), // 未知角色兜底（不应出现）
     }
 }
@@ -81,6 +82,8 @@ fn default_tool(role: &str, name: &str) -> &'static str {
         ("prober", "recon") => include_str!("builtin/tools/prober/recon.md"),
         ("prober", "record_finding") => include_str!("builtin/tools/prober/record_finding.md"),
         ("prober", "finish") => include_str!("builtin/tools/prober/finish.md"),
+        ("analyst", "report") => include_str!("builtin/tools/analyst/report.md"),
+        ("analyst", "ask") => include_str!("builtin/tools/analyst/ask.md"),
         _ => "（工具说明缺失）",
     }
 }
