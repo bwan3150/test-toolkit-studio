@@ -135,7 +135,7 @@ PUT /v1/sessions/{sid}/workspace/**     # 上传 APK / IPA / foo.tks + foo.tklib
 | 阶段 | 内容 | 验收 |
 |---|---|---|
 | **P0** ✅ | ADR-0022 + 本契约 + INV-16/17 | 用户拍板（2026-08-26 已拍） |
-| **P1** | `tke serve` 单节点：hello / health(`doctor --json`) / devices(`device list`) / sessions 租约 / exec / artifacts | `fake:` 驱动在 CI 无设备跑通全链路；本机 web 真跑一次网页检查 |
+| **P1** ✅ | `tke serve` 单节点：hello / health / devices / sessions 租约 / exec / artifacts / workspace | **已落地**：单测 30 + 黑盒接口测试 10 + 真设备 e2e（web 9/9、安卓真机 8/8）。见 §11 |
 | **P2** | `TKE_REMOTE` 客户端模式 + build 戳握手；`tke-ui-test-remote` / `tke-security-test-remote`（复用主文档，只加「怎么连远端」） | 另一台零环境机器上 Claude Code 跑通一次 UI 检查并拿到报告 |
 | **P3** | 任务层：`POST /tasks` + SSE + webhook + WS 交互式 + `needs_decision` 回传 | 下发一个 harness 任务，关掉终端，收到报告链接 |
 | **P4** | 节点注册/心跳/能力上报；平台侧池化调度与计费对接 | 平台上租一台安卓，页面里对话式探索 |
@@ -207,3 +207,61 @@ client = []                       # 远程客户端：无 serve、无 agent、�
 `hyper-rustls` 虽然已在图里，节点仍只监听 HTTP；TLS 交给前面的 nginx / Caddy，
 或走平台内网 + 由反代处理 mTLS。理由与 D1 同源：证书轮换 / SNI / ACME 是运维的事，
 塞进 tke 就又多一块要为多租户重新论证的东西。
+
+## 11. P1 已落地（2026-08-26）
+
+### 端点（`tke serve --port 8787 --token <t>`）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/hello` | 版本 + host_os + arch + **白名单命令清单**（省得调用方靠猜） |
+| GET | `/v1/health` | 复用 `tke doctor --json`，不新造判据 |
+| GET | `/v1/devices` | 池 + `leased_by` / `available`（平台调度靠它判断还能不能派） |
+| POST/GET | `/v1/sessions` | 建租约（201）/ 列活跃租约 |
+| GET/DELETE | `/v1/sessions/{sid}` | 查 / 释放（释放带**复位回执**） |
+| POST | `/v1/sessions/{sid}/heartbeat` | 续租 |
+| POST | `/v1/sessions/{sid}/exec` | L1 命令层 |
+| GET | `/v1/sessions/{sid}/artifacts/{*path}` | 下载产物（`?list=true` 列目录） |
+| PUT | `/v1/sessions/{sid}/workspace/{*path}` | 上传（APK/IPA、两件套） |
+
+**没有 token 就只准绑回环**——一个不设防的端口能操作真机，绑 `0.0.0.0` 等于把机器送人。
+
+### 实测数字（Q-17：先量再优化）
+
+Linux amd64，本机无头 Chrome + 一台安卓真机（CPH2305 · Android 15），经 HTTP 调用：
+
+| 动作 | 耗时 | 其中 spawn |
+|---|---|---|
+| 一条会失败的命令（走完全链路即返回） | 3 ms | **0～1 ms** |
+| `control boot`（起无头 Chrome） | 690 ms | ~1 ms |
+| `steps 启动 [URL]`（真打开页面 + 落证据） | 5.0 s | ~1 ms |
+| `fetch --interactive`（web） | 49 ms | ~1 ms |
+| `steps 按键 [KEYCODE_HOME]`（安卓真机） | 10.4 s | ~1 ms |
+
+**结论：进程启动不是瓶颈**（个位数毫秒，占比 <0.1%），耗时几乎全在设备本身。
+ADR-0022 D2「子进程执行」的重新审视触发条件（"进程启动开销成为主要成本"）**没有出现**，
+在有更强的证据之前不要为此重构。
+
+### 三层测试
+
+| 层 | 在哪 | 覆盖 | 跑法 |
+|---|---|---|---|
+| 单测 | `src/serve/**` 内 `#[cfg(test)]` | 白名单三道关 / 租约独占·TTL·复位计划 / 参数注入顺序 / 超时杀进程 | `cargo test --no-default-features --lib serve::` |
+| 接口 | `tests/serve.rs` | 起真二进制、发真 HTTP、跑真子进程：鉴权、租约 HTTP 语义（409 vs 404）、白名单在 HTTP 层的拒绝、上传下载沙箱、会话间隔离。**不需要设备** | `cargo test --no-default-features --test serve` |
+| e2e | `tests/e2e/serve-smoke.sh` | 唯一测不到的那环：**接口调用真的把设备操作了**——租真设备→操作→取证据→释放并确认复位 | `./tests/e2e/serve-smoke.sh web` |
+
+### 守卫
+
+`scripts/check-serve-paths.sh`（已挂进 pre-commit）：扫 `src/cli/**` 里带 `#[arg(long)]` 的
+`PathBuf` 参数，凡是既没进路径参数表、也没进禁用清单的就报红——因为**给命令加参数的人
+根本不会想到 serve**。写这条守卫的当天它就抓到两个真洞：`refresh --out` 与
+`control browser-download --dir`，两个都能读写会话工作区外。
+
+### P1 有意没做的
+
+- **`tke file` 不进白名单**：它的 `push`/`pull` 把宿主路径和设备路径混在同一批参数里，
+  语义要单独设计，先不开（`app` 没有 `install` 子命令，所以不存在宿主路径）。
+- **TLS**：节点只监听 HTTP，交给前面的反代（§10 配套决定 B）。
+- **fake 设备的跨进程状态**：`drivers::fake` 的页面脚本是进程级注册表，子进程里是空的，
+  所以接口测试用的是 `task new` / `device` 这类不碰设备的命令。想让 CI 也覆盖"设备命令"
+  这条路，得先让 fake 驱动的状态可落盘——**留到需要时再做**，e2e 已经覆盖了真设备那条。

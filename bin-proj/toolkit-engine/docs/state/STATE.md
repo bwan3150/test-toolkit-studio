@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-26
-Last-Commit: e5ad700e
+Last-Commit: ea8f4ab3
 ---
 
 # 当前状态
@@ -50,7 +50,7 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | 依赖补齐 `tke fix` | ✅ 本机端到端实测 | ADR-0012:唯一会联网下载的命令;普通命令缺依赖只报错指路。空目录只放 tke → fix → 跑通网页检查 |
 | 两件套自包含（拷走即跑） | ✅ 本机实测通过 | Q-6 关闭:缺 `-d` 时从 tklib 的 meta.json 读平台兜底(web 零参数回放/android 走默认设备/ios 仍需显式) |
 | **tke security（安全测试新领域）** | 🟢 **从零到上线全做完·CI 已发版**（primitive+prober/analyst/reporter+对话 TUI+task/report 生命周期+skill+深挖 playbook+一行装全 skill）;🟡 对话式 TUI 交互手感真机待验(Q-15) | **ADR-0019** + INV-13/14/15 + `security-report-spec.md` + 基线 `security-report-template.sample.html`。第二个 agent 领域,骨架复用 harness。**唯一入口 `tke security [url]`**(改对了:曾错做成 `security probe`/`security run` 子命令,用户纠正——`run` 是 .tks 语义):**默认对话式编排**(复用 harness `Frontend`/TUI),**`--json`/非终端→无头一次性**(探测→复核→出报告)。三层:`tke http`/`tke recon` primitive(可脚本,7 verb) ⇄ AI 工具 ⇄ orchestrator。强度阶梯 passive/safe/aggressive/red-team(默认 safe)+`--focus`。**已落**(`src/workflow/security/`):http 原语 + `HttpEngine`(Ureq+Fake 可脱网测) + `evidence.rs`(续写不覆盖,INV-14) + recon 七 verb(bundle 密钥脱敏/endpoints 防 SPA 假阳/tls 轻量) + **prober**(自主顺藤,去重+无进展强制收尾,真机死循环已修) + **analyst**(对抗复核,oneshot 强制结构化,毙假阳分软硬,INV-13) + **reporter**(确定性出 `security-report.html`+`findings.json`+每确认漏洞 `vuln-*.html`,转义防注入) + **orchestrator**(对话 REPL:recon/http/record_finding/ask_user/report/finish,说话即交回话筒)。提示词 `security/prompt/`(builtin+外部覆盖)。冒烟脚本 `tests/security-smoke.sh`;样例 `examples/security_report_sample.rs`。全量 137 绿。**真机实测**:P1 七 verb + 无头 `security --json` 都在 konechome 跑通出报告。**待验**:对话式 TUI 交互真机手感。**待做**:`--json` 与 Electron 联调、注入子系统(opt-in)、源码灰盒、endpoints 吃 OpenAPI、tls 深度证书、report 里方法/边界/风险矩阵等区块补全 |
-| **服务化 / 远程 API** | 📐 **只有设计,零代码**（2026-08-26 定调） | **ADR-0022**（用户当场拍板四条）+ **INV-16/17** + `docs/remote-api.md` 契约。要点：①tke 只做**单节点 agent**，调度/计费/多租户归云平台 ②执行模型=**子进程**（`JsonOutput` 会 `process::exit` + 三处进程级全局态，同进程并发不可能；而「每命令一进程」正是 skill 今天的样子，行为等价）③API 三层且**分层依据是计费**：L1 命令层零 LLM 面（只计设备时长，用户自己的 agent 出 AI）/ L2 任务层用平台 key（token+时长一起记账）/ L3 产物 ④客户端=**二进制 `TKE_REMOTE` 模式**（为了 skill 文档不分叉，MCP 排后面）⑤远程**不开 `red-team`**。复用面很大：`task.json`+`tke report`（ADR-0021）、`--json` 双向 NDJSON（交互式 WS）、`doctor --json`（健康）、`device list`（清单）、`web:N` 多槽位、`fake:` 无设备回归。**HTTP 框架已定 = axum**（`remote-api.md` §10：hyper/tower 栈本来就被 genai→reqwest 拖进来了，增量≈0；SSE+WS 内置正好覆盖 L2；TLS 交反代不进 tke）。**下一步 = P1 `tke serve`**（租约+exec 白名单+产物），验收是 `fake:` 在 CI 跑通全链路 + 本机 web 真跑一次 |
+| **服务化 / 远程 API（P1）** | ✅ **已落地并真机实测通过**（web 9/9 + 安卓真机 8/8）；P2 起未做 | **ADR-0022** + **INV-16/17** + `docs/remote-api.md`（§11 = P1 实况）。`tke serve` 单节点：9 个端点（hello/health/devices/sessions×4/exec/artifacts/workspace），**没 token 只准绑回环**。`src/serve/`：allowlist（三道关）/ lease（独占+隔离+TTL+复位计划）/ exec（子进程+注入+分层计时）/ routes（鉴权走中间件）。**测试三层**：单测 30 + 黑盒接口 10（`tests/serve.rs`，起真二进制发真 HTTP，**不需要设备**）+ 真设备 e2e（`tests/e2e/serve-smoke.sh`）。**守卫** `check-serve-paths.sh` 已挂 pre-commit，写它当天抓到两个真洞（`refresh --out`、`control browser-download --dir` 能读写工作区外）。**单测逼出一个真 bug**：acquire 顺手 retain 掉过期租约 → 设备绕过复位给下一个租户（违反 INV-17），已改成"复位完才回池"。**量了**（Q-17）：进程启动 0～1ms、占比 <0.1%，耗时全在设备 → D2 子进程模型的重审条件没出现。依赖只多 5 个 crate。**有意没做**：`tke file` 不进白名单（宿主路径与设备路径混在一起）、TLS 交反代、fake 驱动跨进程状态。**下一步 = P2** `TKE_REMOTE` 客户端 + 两条 remote skill |
 
 ## 本次会话不要碰
 

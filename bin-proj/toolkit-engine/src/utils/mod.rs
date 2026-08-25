@@ -13,8 +13,10 @@ pub mod xml;
 pub mod update;
 pub mod redact;
 pub mod text;
+pub mod sandbox;
 
 pub use json_output::JsonOutput;
 pub use workarea::Workarea;
 pub use config::{TkeConfig, AiConfig, KnowledgeConfig};
 pub use params::Params;
+pub use sandbox::resolve_in_workspace;

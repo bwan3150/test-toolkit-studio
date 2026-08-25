@@ -18,6 +18,7 @@ bash "$S/check-prompts.sh" || exit 1
 # shell 里的 `"$VAR中文"`:macOS bash 3.2 会吃字节。**必须拦死**——
 # Linux 上两种写法都对,这类问题只会在用户的 mac 上现形(P-42 犯过两次)
 bash "$S/check-shell-vars.sh" || exit 1
+bash "$S/check-serve-paths.sh" || exit 1
 bash "$S/check-linecount.sh"
 bash "$S/check-state.sh"
 # 编译检查(快,秒级增量)

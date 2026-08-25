@@ -5,6 +5,7 @@
 | 脚本 | 干什么 | 跑法 |
 |---|---|---|
 | `smoke.sh` | 两件套回放冒烟:辅助驾驶开/关各跑一遍 | `./tests/e2e/smoke.sh path/to/case.tks [device]` |
+| `serve-smoke.sh` | **远程 e2e**:起 `tke serve`,纯靠 HTTP 租设备→操作→取证据→释放并确认复位(INV-17)。补的是 `tests/serve.rs` 唯一测不到的那环——接口调用**真的把设备操作了** | `./tests/e2e/serve-smoke.sh [web\|android\|ios] [URL]` |
 
 约定:
 - 前提不满足(缺 tke/缺设备/缺两件套)要**说清楚再退出**,不许假绿

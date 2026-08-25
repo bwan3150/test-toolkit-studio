@@ -30,10 +30,14 @@ pub mod workflow;
 // ④ 自有工具
 pub mod tools;
 
+// ⑤ 服务化：把本机能力开成 HTTP 接口（ADR-0022）
+pub mod serve;
+
 // ===== 统一导出（保持 crate 根路径简洁） =====
 
 // 基础设施
 pub use utils::{JsonOutput, Workarea, TkeConfig, AiConfig, KnowledgeConfig, Params};
+pub use utils::resolve_in_workspace;
 
 // 二进制定位
 pub use passthrough::ToolManager;

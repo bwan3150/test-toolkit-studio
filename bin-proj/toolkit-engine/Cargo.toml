@@ -61,6 +61,7 @@ ratatui = "0.29"
 crossterm = "0.28"
 # trait 内 async 方法（Frontend 前端抽象用）
 async-trait = "0.1"
+axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio", "query", "matched-path"] }
 
 [features]
 # 默认启用在线和离线 OCR

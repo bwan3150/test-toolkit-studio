@@ -10,6 +10,7 @@
 
 use serde_json::json;
 
+use crate::utils::resolve_in_workspace;
 use crate::models::Platform;
 use crate::{Frontend, LlmReply, LlmSession, LlmTool, Result, UiCommand, UiEvent};
 
@@ -690,30 +691,6 @@ async fn ask_permission(
         }
         _ => false, // 拒绝 / 取消（Esc）
     }
-}
-
-/// 把用户给的相对路径解析到**工作区 `root`**（= params.workspace_root()：--current-dir 或进程当前目录）内。
-/// 允许相对子目录（如 `docs/policy.md`，会自动建目录），但**拒绝绝对路径和 `..` 跳出**
-/// ——与 coding agent 一致：只能动工作区树内的文件。返回解析后的路径或一句拒绝原因。
-fn resolve_in_workspace(root: &std::path::Path, requested: &str) -> std::result::Result<std::path::PathBuf, String> {
-    use std::path::{Component, Path};
-    let req = Path::new(requested.trim());
-    if req.as_os_str().is_empty() {
-        return Err("未提供 filename。".to_string());
-    }
-    if req.is_absolute() {
-        return Err("只能保存到当前工作目录树内，不接受绝对路径。请给相对文件名（可含子目录，如 docs/policy.md）。".to_string());
-    }
-    let mut p = root.to_path_buf();
-    for comp in req.components() {
-        match comp {
-            Component::Normal(c) => p.push(c),
-            Component::CurDir => {}
-            // ParentDir / RootDir / Prefix 一律拒绝（防跳出工作区）
-            _ => return Err("路径不能用 `..` 跳出当前目录。".to_string()),
-        }
-    }
-    Ok(p)
 }
 
 /// 取一段文字的首行（用于事件里简短展示用例）

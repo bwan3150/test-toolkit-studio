@@ -160,6 +160,12 @@ enum Commands {
         args: FixArgs,
     },
 
+    /// [服务] 把这台机器的能力开成 HTTP 接口，供远程调用（ADR-0022）
+    Serve {
+        #[command(flatten)]
+        args: cli::serve::ServeArgs,
+    },
+
     // ==================== ④ 自有工具 ====================
     /// [工具] OCR 图片文字识别
     Ocr {
@@ -344,6 +350,9 @@ async fn main() -> tke::Result<()> {
         // 已发布的 install.sh 和用户脚本里全是这条
         Commands::Fix { args } => {
             fix::handle_as(args, true).await
+        }
+        Commands::Serve { args } => {
+            cli::serve::handle(args).await
         }
         // ④ 自有工具
         Commands::Ocr { image, online, url, lang } => {

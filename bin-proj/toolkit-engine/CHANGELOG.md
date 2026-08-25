@@ -22,6 +22,29 @@
 - ROADMAP 加「新主线：服务化」；README 导航加 remote-api.md
 - **代码零改动**，全量测试与构建状态不变
 
+### 2026-08-26 · P1 落地：`tke serve` 单节点（租约 + exec 白名单 + 产物）
+ADR-0022 的 P1。**代码 + 三层测试 + 守卫**一起进来。
+- **`src/serve/`**：`allowlist`（命令白名单 + 禁用旗标 + 宿主路径表，INV-16 的执行点）/
+  `lease`（设备独占 + 目录隔离 + TTL/心跳 + 复位计划，INV-17）/ `exec`（子进程 + 参数注入 +
+  分层计时）/ `routes`（9 个端点，鉴权走中间件——"忘记查"是这类代码最典型的洞）
+- **`tke serve`**：`--bind/--port/--token/--root/--ttl/--exec-timeout/--web-slots/--max-upload-mb`。
+  **没 token 就只准绑回环**；`--port 0` 时打印真实监听地址（这行是契约，接口测试靠它）
+- **依赖只多了 5 个 crate**（axum/axum-core/httpdate/matchit/serde_path_to_error）——
+  hyper/tower 栈本来就被 genai→reqwest 拖进来了，实测印证了 §10 的判断
+- **`utils::sandbox::resolve_in_workspace`**：从 orchestrator 搬到 utils。远程要用同一条规则挡
+  `--image /etc/passwd`，一条规则只能有一处实现
+- **测试三层**（ADR-0008）：单测 30（`src/serve/**`）+ 黑盒接口 10（`tests/serve.rs`：起真二进制、
+  发真 HTTP、跑真子进程，**不需要设备**）+ 真设备 e2e（`tests/e2e/serve-smoke.sh`）
+- **真机实测通过**：本机 Linux amd64，**无头 Chrome 9/9**（纯 HTTP 起浏览器→打开页面→落 8 个证据
+  文件→下回 52KB 截图→释放时浏览器真的被关掉）+ **安卓真机 CPH2305 8/8**
+- **守卫 `check-serve-paths.sh`**（已挂 pre-commit）：扫 CLI 里带 `#[arg(long)]` 的 PathBuf 参数，
+  漏登记就报红。**写它的当天就抓到两个真洞**——`refresh --out`、`control browser-download --dir`，
+  两个都能读写会话工作区外。按 P-12 造了违规现场验证它真的会红
+- **单测逼出一个真 bug**：`acquire` 里顺手 `retain` 掉过期租约 → 设备**绕过复位**直接给下一个租户
+  （违反 INV-17）。改成过期租约照样占着设备，直到 sweep 复位完才回池
+- **量了才知道**（Q-17）：进程启动 **0～1ms**，占比 <0.1%，耗时全在设备（起浏览器 690ms / 打开页面
+  5.0s / 安卓一步 10.4s）。ADR-0022 D2 的重新审视触发条件**没有出现**，别为此重构
+
 ### 2026-08-26 · HTTP 框架定为 axum（`remote-api.md` §10）
 上一条里「别顺手 cargo add axum」的顾虑，查完 `Cargo.lock` 后被自己推翻了。
 - **决定性事实**：hyper 1.7 / hyper-util / tower / tower-http / h2 **早就在依赖图里**——
