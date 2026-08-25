@@ -70,6 +70,8 @@ pub struct Task {
     pub started_at: u64,
     pub finished_at: Option<u64>,
     pub callback_url: Option<String>,
+    /// 调用方带来的归账标签，原样回传
+    pub meta: Option<serde_json::Value>,
     /// 往子进程 stdin 写（交互式任务回答问题用）
     pub answer_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     /// 全程 token 用量（引擎的 `summary` 事件给）。**测不到时是 null 不是 0**——
@@ -97,6 +99,7 @@ impl Task {
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "usage": self.usage,
+            "meta": self.meta,
             "events": self.events.len(),
             "report": format!("/v1/tasks/{}/report", self.id),
         })
@@ -148,6 +151,18 @@ impl TaskTable {
 }
 
 /// 起任务用的参数（路由层校验后传进来）
+/// 调用方交下来的 AI 凭据（ADR-0023 D3 修订：平台把 App 自己的 key 交下来，
+/// token 计到那个 App 账上）。**key 只走环境变量**——进 argv 会被 `ps aux` 看见，
+/// 写配置文件会落到磁盘上
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct AiOverride {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub reasoning_effort: Option<String>,
+}
+
 pub struct SpawnTask {
     pub kind: String,
     pub target: Option<String>,
@@ -157,6 +172,12 @@ pub struct SpawnTask {
     pub max_rounds: Option<u32>,
     pub timeout: Duration,
     pub callback_url: Option<String>,
+    /// 调用方的 AI 凭据；None = 用节点自己的配置
+    pub ai: Option<AiOverride>,
+    /// **不解释、原样带回**的标签（平台的 app_id / user_id / 计费单号…）。
+    /// tke 不认识"用户"（ADR-0022 D1），归账靠调用方自己带的这张纸条——
+    /// 设备租赁与 AI 计费共用同一条透传路
+    pub meta: Option<serde_json::Value>,
 }
 
 /// 把任务参数翻译成子进程 argv。**注意与 L1 的区别**：这里是服务端主动跑 AI 编排，
@@ -315,6 +336,7 @@ pub async fn spawn(
         started_at: super::lease::now_secs(),
         finished_at: None,
         callback_url: req.callback_url.clone(),
+        meta: req.meta.clone(),
         answer_tx: req.interactive.then_some(ans_tx),
         usage: None,
         stderr_tail: Arc::new(Mutex::new(Vec::new())),
@@ -329,9 +351,30 @@ pub async fn spawn(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env_remove("TKE_ALLOW_IOS")
+        // 上一次任务的凭据不能漏进这一次：一律先清干净再按本次的设
+        .env_remove("TKE_AI_PROVIDER")
+        .env_remove("TKE_AI_MODEL")
+        .env_remove("TKE_AI_KEY")
+        .env_remove("TKE_AI_BASE_URL")
+        .env_remove("TKE_AI_REASONING")
         // 节点自己也可能配了 TKE_REMOTE（比如运维在同一台机器上试过客户端）——
         // 不清掉的话，任务里的 tke 会把命令再转发出去，兜圈子
         .env_remove("TKE_REMOTE");
+    // **key 只走环境变量**（argv 会被 `ps aux` 看见，配置文件会落到磁盘上）
+    let secret = req.ai.as_ref().and_then(|a| a.api_key.clone()).filter(|k| k.len() >= 8);
+    if let Some(ai) = &req.ai {
+        for (k, v) in [
+            ("TKE_AI_PROVIDER", &ai.provider),
+            ("TKE_AI_MODEL", &ai.model),
+            ("TKE_AI_KEY", &ai.api_key),
+            ("TKE_AI_BASE_URL", &ai.base_url),
+            ("TKE_AI_REASONING", &ai.reasoning_effort),
+        ] {
+            if let Some(v) = v.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                cmd.env(k, v);
+            }
+        }
+    }
     let mut child = cmd.spawn().map_err(|e| (500u16, format!("起任务进程失败: {e}")))?;
 
     let mut stdin = child.stdin.take().expect("stdin 已接管");
@@ -355,8 +398,10 @@ pub async fn spawn(
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(l)) = lines.next_line().await {
             tracing::debug!(target: "tke::task", "{l}");
+            // stderr 会原样回给调用方（任务挂了它是唯一线索），
+            // 所以凭据必须在**进缓冲之前**抹掉——一旦进去就会经 detail 流出去
             let mut t = tail.lock().expect("stderr_tail 锁中毒");
-            t.push(l);
+            t.push(scrub(&l, secret.as_deref()));
             if t.len() > 50 {
                 t.remove(0);
             }
@@ -385,6 +430,15 @@ pub async fn spawn(
     });
 
     Ok(view)
+}
+
+/// 把凭据从一行文本里抹掉。**长度 <8 的不抹**——太短的"密钥"多半是占位符，
+/// 拿它做全局替换会把正常文本切得七零八落，反而更难查
+pub fn scrub(line: &str, secret: Option<&str>) -> String {
+    match secret {
+        Some(s) if s.len() >= 8 && line.contains(s) => line.replace(s, "••••••"),
+        _ => line.to_string(),
+    }
 }
 
 /// 逐行读子进程 stdout：进事件缓冲 + 广播 + 认终局
@@ -541,6 +595,7 @@ mod tests {
             created_at: 0,
             expires_at: u64::MAX,
             launched_apps: vec![],
+            meta: None,
         }
     }
 
@@ -561,7 +616,7 @@ mod tests {
         let ui = build_task_argv(
             &SpawnTask {
                 kind: "ui".into(), target: None, testcase: Some("登录能用吗".into()), mode: None,
-                interactive: false, max_rounds: Some(20), timeout: Duration::from_secs(60), callback_url: None,
+                interactive: false, max_rounds: Some(20), timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None,
             },
             &l,
         ).unwrap();
@@ -574,7 +629,7 @@ mod tests {
             &SpawnTask {
                 kind: "security".into(), target: Some("https://x".into()), testcase: None,
                 mode: Some("safe".into()), interactive: false, max_rounds: None,
-                timeout: Duration::from_secs(60), callback_url: None,
+                timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None,
             },
             &lease(""),
         ).unwrap();
@@ -587,7 +642,7 @@ mod tests {
         let e = build_task_argv(
             &SpawnTask {
                 kind: "security".into(), target: None, testcase: None, mode: None, interactive: false,
-                max_rounds: None, timeout: Duration::from_secs(1), callback_url: None,
+                max_rounds: None, timeout: Duration::from_secs(1), callback_url: None, ai: None, meta: None,
             },
             &lease(""),
         ).unwrap_err();
@@ -652,6 +707,33 @@ mod tests {
         assert_eq!(u["model"], "claude-sonnet-4-6");
         // 别的事件不给用量 —— **测不到时是 null 不是 0**,0 会被当成"这次没花钱"
         assert!(usage_from_event(&serde_json::json!({"type":"phase"})).is_none());
+    }
+
+    #[test]
+    fn 凭据不许进stderr尾巴() {
+        // stderr 会原样回给调用方（任务挂了它是唯一线索），所以凭据必须在进缓冲前抹掉。
+        // 平台交下来的是**用户自己的 key**，漏一次就是把它送出去了
+        let key = "sk-ant-api03-verysecret";
+        assert_eq!(scrub(&format!("Error: bad key {key} rejected"), Some(key)), "Error: bad key •••••• rejected");
+        // 太短的不抹：那多半是占位符，全局替换会把正常文本切碎，反而更难查
+        assert_eq!(scrub("abc in text", Some("abc")), "abc in text");
+        assert_eq!(scrub("没有凭据的一行", Some(key)), "没有凭据的一行");
+        assert_eq!(scrub("没配 key 的时候", None), "没配 key 的时候");
+    }
+
+    #[test]
+    fn 归账标签原样带回() {
+        // tke 不认识"用户"（ADR-0022 D1），归账靠调用方自己带的这张纸条。
+        // 它必须**原样**回去——tke 一旦开始解释它，D1 的边界就松了
+        let l = lease("web:1");
+        let meta = serde_json::json!({"app_id": "a-1", "user_id": "u-9", "bill_no": 42});
+        let t = Task {
+            id: "t1".into(), kind: "ui".into(), target: None, mode: None, interactive: false,
+            lease: l, state: TaskState::Running, outcome: None, detail: None, events: vec![],
+            started_at: 0, finished_at: None, callback_url: None, meta: Some(meta.clone()),
+            answer_tx: None, usage: None, stderr_tail: Default::default(),
+        };
+        assert_eq!(t.view()["meta"], meta);
     }
 
     #[test]

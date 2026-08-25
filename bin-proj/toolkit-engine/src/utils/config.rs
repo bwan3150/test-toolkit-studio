@@ -70,7 +70,9 @@ pub struct AiConfig {
     pub model: Option<String>,
     /// API Key（也可由各家标准环境变量提供，如 ANTHROPIC_API_KEY）
     pub api_key: Option<String>,
-    /// 自定义服务端点（OpenAI 兼容端点专用：doubao 火山方舟 / qwen 百炼）
+    /// 自定义服务端点。两种用法：① OpenAI 兼容端点（doubao 火山方舟 / qwen 百炼）
+    /// ② **AI 网关**——provider 照实写，只换地址，各家原生协议保留
+    /// （平台把用户的 key 留在自己那儿，节点只拿短期任务令牌，见 ADR-0023）
     pub base_url: Option<String>,
     /// 探索循环最大轮数上限（防失控烧 token），缺省见 AgentRunner 默认值
     pub max_rounds: Option<u32>,
@@ -80,6 +82,39 @@ pub struct AiConfig {
     /// openai o-系列 / gemini thinking / deepseek reasoner）。取值：
     /// none(关) / low / medium / high / xhigh / max / budget:N。缺省 = medium。
     pub reasoning_effort: Option<String>,
+}
+
+impl AiConfig {
+    /// 用环境变量覆盖 `[ai]`（**优先级在配置文件之上、CLI 显式参数之下**）。
+    ///
+    /// 为什么要有这条路：远程任务层要**每次任务换一把调用方的 key**（平台把 App 自己的
+    /// API Key 交下来，token 计到那个 App 账上，见 ADR-0023 D3 修订）。另外两条路都不合适——
+    /// **`--ai-key` 会出现在 `ps aux` 里**（同一台节点上任何人都看得见），
+    /// 写临时配置文件则是把密钥落到磁盘上。环境变量是这三者里唯一不留痕的。
+    ///
+    /// 非密的那几项（provider/model/base_url/reasoning）也一并支持，纯粹是为了成套——
+    /// 只让 key 走 env、其余走别的路，调用方要记两套规矩。
+    pub fn apply_env(mut self) -> Self {
+        fn get(k: &str) -> Option<String> {
+            std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+        }
+        if let Some(v) = get("TKE_AI_PROVIDER") {
+            self.provider = Some(v);
+        }
+        if let Some(v) = get("TKE_AI_MODEL") {
+            self.model = Some(v);
+        }
+        if let Some(v) = get("TKE_AI_KEY") {
+            self.api_key = Some(v);
+        }
+        if let Some(v) = get("TKE_AI_BASE_URL") {
+            self.base_url = Some(v);
+        }
+        if let Some(v) = get("TKE_AI_REASONING") {
+            self.reasoning_effort = Some(v);
+        }
+        self
+    }
 }
 
 /// [knowledge] 段：mem0 记忆 + RAG 知识库的远端服务地址
@@ -113,4 +148,48 @@ impl TkeConfig {
 
 fn resolve(base: &Path, p: PathBuf) -> PathBuf {
     if p.is_absolute() { p } else { base.join(p) }
+}
+
+#[cfg(test)]
+mod ai_env_tests {
+    use super::*;
+
+    /// 环境变量覆盖 `[ai]` —— 远程任务层靠它每次换一把调用方的 key。
+    /// **串行跑**（环境变量是进程级的），所以四条断言挤在一个测试里
+    #[test]
+    fn 环境变量覆盖配置文件里的ai段() {
+        let base = AiConfig {
+            provider: Some("anthropic".into()),
+            model: Some("老模型".into()),
+            api_key: Some("节点自己的key".into()),
+            ..Default::default()
+        };
+
+        // 没设环境变量 → 原样不动
+        for k in ["TKE_AI_PROVIDER", "TKE_AI_MODEL", "TKE_AI_KEY", "TKE_AI_BASE_URL", "TKE_AI_REASONING"] {
+            std::env::remove_var(k);
+        }
+        let untouched = base.clone().apply_env();
+        assert_eq!(untouched.model.as_deref(), Some("老模型"));
+        assert_eq!(untouched.api_key.as_deref(), Some("节点自己的key"));
+
+        // 设了 → 覆盖掉；这正是"平台把 App 的 key 交下来"那一下
+        std::env::set_var("TKE_AI_KEY", "调用方的key");
+        std::env::set_var("TKE_AI_MODEL", "新模型");
+        std::env::set_var("TKE_AI_BASE_URL", "https://ark.example/v1");
+        let overridden = base.clone().apply_env();
+        assert_eq!(overridden.api_key.as_deref(), Some("调用方的key"));
+        assert_eq!(overridden.model.as_deref(), Some("新模型"));
+        assert_eq!(overridden.base_url.as_deref(), Some("https://ark.example/v1"));
+        assert_eq!(overridden.provider.as_deref(), Some("anthropic"), "没设的那项不该被清掉");
+
+        // 空串等于没设——否则 `TKE_AI_KEY=` 会把节点自己的 key 抹成空的，
+        // 报错还是"没有 key"，查起来完全摸不着头脑
+        std::env::set_var("TKE_AI_KEY", "   ");
+        assert_eq!(base.clone().apply_env().api_key.as_deref(), Some("节点自己的key"));
+
+        for k in ["TKE_AI_PROVIDER", "TKE_AI_MODEL", "TKE_AI_KEY", "TKE_AI_BASE_URL", "TKE_AI_REASONING"] {
+            std::env::remove_var(k);
+        }
+    }
 }

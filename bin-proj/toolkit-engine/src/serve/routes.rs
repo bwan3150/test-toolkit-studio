@@ -153,6 +153,9 @@ struct CreateSession {
     #[serde(default)]
     capabilities: Caps,
     ttl_s: Option<u64>,
+    /// 原样带回的归账标签。设备租赁与 AI 计费用**同一条**透传路——
+    /// tke 不认识"用户"，归账靠调用方自己带的这张纸条（ADR-0022 D1）
+    meta: Option<serde_json::Value>,
 }
 
 fn lease_view(l: &Lease) -> serde_json::Value {
@@ -164,6 +167,7 @@ fn lease_view(l: &Lease) -> serde_json::Value {
         "workspace": format!("/v1/sessions/{}/workspace", l.id),
         "artifacts": format!("/v1/sessions/{}/artifacts", l.id),
         "launched_apps": l.launched_apps,
+        "meta": l.meta,
     })
 }
 
@@ -174,7 +178,11 @@ async fn session_create(
     let req = body.map(|Json(b)| b).unwrap_or_default();
     let ttl = req.ttl_s.map(Duration::from_secs);
     match st.leases.acquire(req.capabilities.platform.as_deref(), req.capabilities.device_id.as_deref(), ttl) {
-        Ok(l) => Ok((StatusCode::CREATED, Json(lease_view(&l)))),
+        Ok(mut l) => {
+            st.leases.set_meta(&l.id, req.meta.clone());
+            l.meta = req.meta;
+            Ok((StatusCode::CREATED, Json(lease_view(&l))))
+        }
         // 409 而不是 404：设备存在、只是被占着，调用方该等而不是换节点
         Err(e @ AcquireError::AllBusy(_)) => Err(ApiError(StatusCode::CONFLICT, e.to_string())),
         Err(e) => Err(not_found(e.to_string())),
@@ -400,6 +408,10 @@ struct CreateTask {
     max_rounds: Option<u32>,
     timeout_s: Option<u64>,
     callback_url: Option<String>,
+    /// 调用方的 AI 凭据（平台把 App 自己的 key 交下来，token 记那个 App 账上）
+    ai: Option<super::task::AiOverride>,
+    /// 原样带回的归账标签（app_id / user_id / 计费单号…）
+    meta: Option<serde_json::Value>,
 }
 
 async fn task_create(
@@ -416,6 +428,8 @@ async fn task_create(
         // 分钟级、几万 token 的东西必须有个头：预算和超时是一等公民，服务端硬执行
         timeout: Duration::from_secs(body.timeout_s.unwrap_or(1800).clamp(30, 7200)),
         callback_url: body.callback_url,
+        ai: body.ai,
+        meta: body.meta,
     };
     match super::task::spawn(st.clone(), &st.leases, req).await {
         Ok(v) => Ok((StatusCode::ACCEPTED, Json(v))),

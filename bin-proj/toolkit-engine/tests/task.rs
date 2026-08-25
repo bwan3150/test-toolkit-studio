@@ -190,6 +190,85 @@ fn 终态会回调webhook() {
 }
 
 #[test]
+fn 调用方的凭据不会从任何出口漏回来() {
+    let s = Server::start();
+    // 平台交下来的是**用户 App 自己的 key**,漏一次就是把它送出去了。
+    // 这条任务必然失败(key 是假的),而**失败路径恰恰是最危险的**——stderr 会原样回给调用方
+    let key = "sk-ant-api03-THIS-IS-THE-SECRET-VALUE";
+    let (code, v) = post(
+        &s,
+        "/v1/tasks",
+        serde_json::json!({
+            "kind": "security", "target": "http://127.0.0.1:9", "timeout_s": 60,
+            "ai": {"provider": "anthropic", "model": "claude-sonnet-4-6", "api_key": key},
+            "meta": {"app_id": "app-1", "user_id": "u-9"}
+        }),
+    );
+    assert_eq!(code, 202, "{v}");
+    let id = v["task_id"].as_str().unwrap().to_string();
+    let done = wait_finished(&s, &id, 60);
+
+    // 终态、事件流、列表——所有回给调用方的东西里都不许有它
+    let whole = done.to_string();
+    assert!(!whole.contains(key), "凭据漏进了任务终态: {done}");
+    let (_, list) = get(&s, "/v1/tasks");
+    assert!(!list.to_string().contains(key), "凭据漏进了任务列表");
+    // 模型名是非密的,该在(证明 ai 覆盖真的生效了、不是被整段忽略)
+    assert!(whole.contains("claude-sonnet-4-6") || done["detail"].to_string().contains("Anthropic"), "{done}");
+}
+
+#[test]
+fn 归账标签原样回来并进webhook() {
+    use std::io::{BufRead, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut reader = std::io::BufReader::new(stream.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 { break; }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap_or(0);
+                }
+                if line.trim().is_empty() { break; }
+            }
+            let mut buf = vec![0u8; len];
+            let _ = reader.read_exact(&mut buf);
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            let _ = tx.send(String::from_utf8_lossy(&buf).to_string());
+        }
+    });
+
+    let s = Server::start();
+    // tke 不认识"用户"(ADR-0022 D1),归账靠这张纸条原样带回。
+    // 设备租赁与 AI 计费共用同一条透传路
+    let meta = serde_json::json!({"app_id": "app-1", "user_id": "u-9", "bill_no": 42});
+    let (_, v) = post(&s, "/v1/tasks", serde_json::json!({
+        "kind": "security", "target": "http://127.0.0.1:9", "timeout_s": 60,
+        "meta": meta, "callback_url": format!("http://127.0.0.1:{port}/hook")
+    }));
+    let id = v["task_id"].as_str().unwrap().to_string();
+    assert_eq!(v["meta"], meta, "建任务时就该带回来");
+    let done = wait_finished(&s, &id, 60);
+    assert_eq!(done["meta"], meta);
+    let body = rx.recv_timeout(std::time::Duration::from_secs(20)).expect("没收到回调");
+    let hook: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(hook["meta"], meta, "回调里也要有——平台就是靠它把这笔账记到 App 名下");
+
+    // 会话（设备租赁）走同一条路
+    let (code, sess) = post(&s, "/v1/sessions", serde_json::json!({
+        "capabilities": {"platform": "fake"}, "meta": {"app_id": "app-2"}
+    }));
+    assert_eq!(code, 201);
+    assert_eq!(sess["meta"]["app_id"], "app-2", "{sess}");
+    let (_, again) = get(&s, &format!("/v1/sessions/{}", sess["session_id"].as_str().unwrap()));
+    assert_eq!(again["meta"]["app_id"], "app-2", "查回来也要在: {again}");
+}
+
+#[test]
 fn 任务列表看得到跑过的() {
     let s = Server::start();
     let (_, v) = post(&s, "/v1/tasks", serde_json::json!({"kind":"security","target":"http://127.0.0.1:9","timeout_s":60}));

@@ -85,6 +85,8 @@ pub struct Lease {
     pub dirs: SessionDirs,
     pub created_at: u64,
     pub expires_at: u64,
+    /// 调用方带来的归账标签，原样回传（设备租赁计费靠它归到 App/用户名下）
+    pub meta: Option<serde_json::Value>,
     /// 这次会话里启动过的 App 包名——释放时要挨个停掉（复位的依据来自事实，不靠猜）
     pub launched_apps: Vec<String>,
 }
@@ -229,6 +231,7 @@ impl LeaseTable {
             created_at: now,
             expires_at: now + ttl.as_secs(),
             launched_apps: Vec::new(),
+            meta: None,
         };
         self.leases.lock().expect("leases 锁中毒").insert(sid, lease.clone());
         lease
@@ -250,6 +253,16 @@ impl LeaseTable {
         }
         l.expires_at = now + ttl.as_secs();
         Some(l.expires_at)
+    }
+
+    /// 挂上归账标签（建租约时调用方给的）
+    pub fn set_meta(&self, sid: &str, meta: Option<serde_json::Value>) {
+        if meta.is_none() {
+            return;
+        }
+        if let Some(l) = self.leases.lock().expect("leases 锁中毒").get_mut(sid) {
+            l.meta = meta;
+        }
     }
 
     /// 记下这次会话启动过的 App（复位时要停掉）。从 exec 的 argv 里认，不靠调用方申报

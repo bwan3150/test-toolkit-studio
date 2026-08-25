@@ -232,7 +232,9 @@ impl Params {
                 None => HeadlessMode::Auto,
             },
             harness: HarnessLimits::from_config(&config.harness),
-            ai: config.ai,
+            // 环境变量覆盖 [ai]：远程任务层每次任务换一把调用方的 key 走的就是这条
+            // （key 进 argv 会被 `ps aux` 看见，落配置文件会留在磁盘上）
+            ai: config.ai.apply_env(),
             knowledge: config.knowledge,
         }
     }
