@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tke-ui-test skill 一键安装器
+# tke skill 一键安装器（多 skill：tke-ui-test / tke-security-test，--skill 选装）
 #
 #   curl -fsSL <BASE_URL>/install.sh | bash
 #   curl -fsSL <BASE_URL>/install.sh | bash -s -- --profile web --project
@@ -52,25 +52,35 @@ kv()      { printf '  %s%-9s%s %s\n' "$C_DIM" "$1" "$C_R" "$2"; }
 DEFAULT_BASE_URL="https://cloud.test-toolkit.app/sl/preview/tookit-engine-resource/tke"
 BASE_URL="${TKE_BASE_URL:-$DEFAULT_BASE_URL}"
 TKE_HOME="${TKE_HOME:-$HOME/.tke/bin}"
-PROFILE="all"
+PROFILE=""        # 空 = 按 skill 自动选默认（ui→all，security→none）
 SCOPE="user"      # user=~/.claude/skills(默认,所有项目通用) ；project=<当前目录>/.claude/skills
+SKILL="${TKE_SKILL:-tke-ui-test}"   # 要装哪个 skill；多 skill 分发（tke-ui-test / tke-security-test）
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --profile) PROFILE="${2:-all}"; shift 2 ;;
+        --skill)   SKILL="${2:-tke-ui-test}"; shift 2 ;;
         --user)    SCOPE="user"; shift ;;
         --project) SCOPE="project"; shift ;;
         --base-url) BASE_URL="${2:-$BASE_URL}"; shift 2 ;;
         -h|--help)
             sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
-        *) echo "未知参数: $1（可用: --profile web|android|ios|all / --user / --project / --base-url）" >&2; exit 2 ;;
+        *) echo "未知参数: $1（可用: --skill tke-ui-test|tke-security-test / --profile web|android|ios|all|none / --user / --project / --base-url）" >&2; exit 2 ;;
     esac
 done
 
+# skill 决定默认 profile：安全测试只用 tke 的 http/recon，不需要任何设备驱动 → none。
+if [ -z "$PROFILE" ]; then
+    case "$SKILL" in
+        tke-security-test) PROFILE="none" ;;
+        *)                 PROFILE="all" ;;
+    esac
+fi
+
 case "$PROFILE" in
-    web|android|ios|all) ;;
-    *) echo "❌ --profile 只能是 web / android / ios / all" >&2; exit 2 ;;
+    web|android|ios|all|none) ;;
+    *) echo "❌ --profile 只能是 web / android / ios / all / none" >&2; exit 2 ;;
 esac
 
 # —— 平台探测 ——（与 bin/<platform>/ 目录命名一致）
@@ -191,10 +201,10 @@ else
 fi
 mkdir -p "$SKILL_ROOT"
 section "SKILL"
-if fetch "$BASE_URL/skill/tke-ui-test.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
-    rm -rf "$SKILL_ROOT/tke-ui-test"
+if fetch "$BASE_URL/skill/$SKILL.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
+    rm -rf "$SKILL_ROOT/$SKILL"
     tar -xzf "$TMP/skill.tar.gz" -C "$SKILL_ROOT" || { printf '  %s skill 包解压失败\n' "$S_ERR" >&2; exit 1; }
-    printf '  %s %s%s%s\n' "$S_OK" "$C_DIM" "$SKILL_ROOT/tke-ui-test" "$C_R"
+    printf '  %s %s%s%s\n' "$S_OK" "$C_DIM" "$SKILL_ROOT/$SKILL" "$C_R"
     # 旧名 ui-check 的残留：不清掉的话两个 skill 同时在册,description 几乎一样,
     # AI 会在两者间乱挑,用户也看不出该用哪个。改名是 2026-08-13。
     if [ -d "${SKILL_ROOT}/ui-check" ]; then
@@ -202,7 +212,7 @@ if fetch "$BASE_URL/skill/tke-ui-test.tar.gz$Q" "$TMP/skill.tar.gz" gz; then
         printf '  %s 已清除旧版 ui-check（本 skill 已更名）\n' "$S_DOT"
     fi
 else
-    printf '  %s 取不到 skill 包：%s\n' "$S_ERR" "$BASE_URL/skill/tke-ui-test.tar.gz" >&2
+    printf '  %s 取不到 skill 包：%s\n' "$S_ERR" "$BASE_URL/skill/$SKILL.tar.gz" >&2
     printf '    %s（若返回的是网页而非文件，多半是这个路径还没上传）%s\n' "$C_DIM" "$C_R" >&2
     exit 1
 fi
@@ -339,13 +349,18 @@ HEALTH=0
 # 用别名 `fix --check` 而不是 `doctor`：这一步跑的是**刚下下来那个** tke，
 # 万一分发源上还是旧版（没有 doctor 子命令），用新名字会直接报"命令不存在"。
 # 别名永久保留，新旧二进制都认（ADR-0014）。
-"$TKE_HOME/tke" fix --check --profile "$PROFILE" || HEALTH=1
+# none 档不装任何驱动（安全测试只用 http/recon）——只验 tke 本身能跑，别拿设备 profile 去体检
+if [ "$PROFILE" = "none" ]; then
+    "$TKE_HOME/tke" --version >/dev/null 2>&1 || HEALTH=1
+else
+    "$TKE_HOME/tke" fix --check --profile "$PROFILE" || HEALTH=1
+fi
 
 printf '\n'
 # 结论**上面的体检已经说过了**（"✓ 全局已就绪" / "✗ 环境不完整 · 补齐：…"），
 # 这里再说一遍就是重复。只补一句体检不会讲的、装完才有意义的事：怎么用。
 if [ "$HEALTH" = "0" ]; then
-    printf '  在 Claude Code 中输入 %s/tke-ui-test%s 以调用\n' "$C_B" "$C_R"
+    printf '  在 Claude Code 中输入 %s/%s%s 以调用\n' "$C_B" "$SKILL" "$C_R"
 fi
 printf '  %s升级 tke update  ·  卸载 tke uninstall%s\n' "$C_DIM" "$C_R"
 [ "$HEALTH" = "0" ] || exit 1

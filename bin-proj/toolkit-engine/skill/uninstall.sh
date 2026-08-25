@@ -82,7 +82,7 @@ rm_path() {
 section "$([ "$DRY" = 1 ] && echo 'DRY RUN' || echo 'REMOVED')"
 # 用户级 + 当前项目级都清；旧名 ui-check 一并带走
 for root in "$HOME/.claude/skills" "$PWD/.claude/skills"; do
-    for name in tke-ui-test ui-check; do
+    for name in tke-ui-test tke-security-test ui-check; do
         rm_path "$root/$name" "skill     "
     done
 done

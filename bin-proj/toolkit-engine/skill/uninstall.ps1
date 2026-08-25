@@ -74,7 +74,7 @@ function RemovePath {
 
 Section $(if ($DryRun) { 'DRY RUN' } else { 'REMOVED' })
 foreach ($root in @((Join-Path $env:USERPROFILE '.claude\skills'), (Join-Path (Get-Location) '.claude\skills'))) {
-    foreach ($name in @('tke-ui-test', 'ui-check')) {   # 旧名一并带走
+    foreach ($name in @('tke-ui-test', 'tke-security-test', 'ui-check')) {   # 旧名一并带走
         $p = Join-Path $root $name
         if (Test-Path $p) { RemovePath -Path $p -Label 'skill     ' }
     }

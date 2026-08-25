@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · 分发管线泛化到多 skill（tke-ui-test + tke-security-test 一行装）
+skill 分发原本写死 tke-ui-test；泛化成「凡 skill/<名>/SKILL.md 存在就打一个包」，install 用 `--skill` 选装。
+- **publish.sh + CI（tke-publish.yml）**：循环打所有 skill 包（各含 VERSION），自查也循环校验
+- **install.sh / install.ps1 加 `--skill`**（默认 tke-ui-test）：装指定 skill；错误/提示/解压路径全参数化
+- **新增 `none` profile**：只装 tke、不装任何驱动——安全 skill 用不到浏览器/adb。
+  `--skill tke-security-test` 时 profile **自动=none**；none 档体检只验 `tke --version`
+- **uninstall.sh/.ps1**：一并卸载 tke-security-test
+- **README**：加安全 skill 装机命令
+- 本机端到端验过：起本地分发源 → `install.sh --skill tke-security-test` → 只装 tke + security skill、
+  提示 `/tke-security-test`；publish 打出两个包都含 VERSION、源码树无残留
+
 ### 2026-08-25 · tke-security-test skill（借调用方 AI 做黑盒安全测试，承 ADR-0010/0020/0021）
 安全轨的 skill 本体：教 Claude Code/Codex 等编程 agent 用**自己的**能力 + tke 的 primitive 做安全测试。
 命令全部基于本会话真机跑通的流程（konechome 两轨实测）。

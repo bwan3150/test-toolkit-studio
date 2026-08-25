@@ -76,10 +76,15 @@ echo "build: $(date -u +%Y%m%d-%H%M%S)" >> "$OUT/VERSION"
 # **VERSION 要一起打进 skill 包**：装完之后，本地这份 skill 是哪一批就有据可查了。
 # 没有它的话 `tke doctor` 只能比 tke 二进制的版本号，而版本号只在 bump 时才变、
 # SKILL.md 却天天改 —— 用户抱着两天前的旧文档，体检照样说"一致"（Q-11 就是这么发生的）。
-cp "$OUT/VERSION" "$SCRIPT_DIR/tke-ui-test/VERSION"
-tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/tke-ui-test.tar.gz" -C "$SCRIPT_DIR" tke-ui-test
-rm -f "$SCRIPT_DIR/tke-ui-test/VERSION"   # 不留在源码树里（它是发布产物，不是源文件）
-echo "   ✅ skill/tke-ui-test.tar.gz（含 VERSION）"
+# 多 skill：凡是 skill/<名>/SKILL.md 存在的目录都打一个包（tke-ui-test / tke-security-test / 未来的）
+for skill_dir in "$SCRIPT_DIR"/*/; do
+    name="$(basename "$skill_dir")"
+    [ -f "$skill_dir/SKILL.md" ] || continue    # 跳过 dist/ 等非 skill 目录
+    cp "$OUT/VERSION" "$skill_dir/VERSION"
+    tar --exclude=".DS_Store" --exclude="__pycache__" -czf "$OUT/skill/$name.tar.gz" -C "$SCRIPT_DIR" "$name"
+    rm -f "$skill_dir/VERSION"                  # 不留在源码树里（它是发布产物，不是源文件）
+    echo "   ✅ skill/$name.tar.gz（含 VERSION）"
+done
 
 # —— 二进制 ——（逐个 gzip，install.sh 按名字取；缺的跳过）
 # 默认只打 tke —— 驱动几乎不变，云上已有的不会因为没重传而消失。

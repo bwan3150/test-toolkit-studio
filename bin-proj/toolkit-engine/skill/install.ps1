@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  tke-ui-test skill 一键安装器（Windows）
+  tke skill 一键安装器（Windows；多 skill：-Skill tke-ui-test|tke-security-test）
 
 .DESCRIPTION
   与 install.sh 一一对应，干三件事：装 skill 文件 → 装 tke 及同目录驱动 → 装 Chrome for Testing。
@@ -23,9 +23,12 @@
 #>
 [CmdletBinding()]
 param(
-    # 只装这一类：web / android / ios / all
-    [ValidateSet('web', 'android', 'ios', 'all')]
-    [string]$Profile = 'all',
+    # 装哪个 skill：tke-ui-test / tke-security-test
+    [string]$Skill = 'tke-ui-test',
+
+    # 只装这一类：web / android / ios / all / none（none = 只装 tke，安全测试用）
+    [ValidateSet('web', 'android', 'ios', 'all', 'none', '')]
+    [string]$Profile = '',
 
     # 装到当前项目的 .claude\skills（默认装用户级）
     [switch]$Project,
@@ -39,6 +42,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # 不显进度条：管道执行时它会刷屏且拖慢下载
+
+# skill 决定默认 profile：安全测试只用 tke 的 http/recon，不需要设备驱动 → none
+if (-not $Profile) { $Profile = if ($Skill -eq 'tke-security-test') { 'none' } else { 'all' } }
 
 # ── 外观 ──（与 install.sh 同一套；PowerShell 5.1 不认 $PSStyle，用原始转义序列）
 # ⚠️ 两个 PowerShell 标识符坑（实测踩过，见 uninstall.ps1 头注释）：
@@ -146,12 +152,12 @@ try {
     Section 'SKILL'
 
     $skillTgz = Join-Path $tmp 'skill.tar.gz'
-    if (Get-File -Url "$BaseUrl/skill/tke-ui-test.tar.gz$q" -Out $skillTgz -Kind 'gz') {
-        Remove-Item (Join-Path $skillRoot 'tke-ui-test') -Recurse -Force -ErrorAction SilentlyContinue
+    if (Get-File -Url "$BaseUrl/skill/$Skill.tar.gz$q" -Out $skillTgz -Kind 'gz') {
+        Remove-Item (Join-Path $skillRoot $Skill) -Recurse -Force -ErrorAction SilentlyContinue
         # Windows 10 1803+ 自带 bsdtar，能直接解 .tar.gz
         tar -xzf $skillTgz -C $skillRoot
         if ($LASTEXITCODE -ne 0) { throw "skill 包解压失败（需要 Windows 10 1803+ 自带的 tar）" }
-        Write-Host "  $SOK $Dm$skillRoot\tke-ui-test$Rs"
+        Write-Host "  $SOK $Dm$skillRoot\$Skill$Rs"
         # 旧名残留：两个 skill 同时在册、description 几乎一样，AI 会乱挑
         $old = Join-Path $skillRoot 'ui-check'
         if (Test-Path $old) {
@@ -159,7 +165,7 @@ try {
             Write-Host "  $SDOT 已清除旧版 ui-check（本 skill 已更名）"
         }
     } else {
-        Write-Error "取不到 skill 包：$BaseUrl/skill/tke-ui-test.tar.gz`n（若返回的是网页而非文件，多半是这个路径还没上传）"
+        Write-Error "取不到 skill 包：$BaseUrl/skill/$Skill.tar.gz`n（若返回的是网页而非文件，多半是这个路径还没上传）"
         exit 1
     }
 
@@ -257,13 +263,14 @@ try {
 
     # ── 5. 体检 ──（结论要如实反映，别装完就说"好了"）
     $tkeExe = Join-Path $TkeHome 'tke.exe'
-    & $tkeExe fix --check --profile $Profile
+    # none 档不装驱动（安全测试只用 http/recon）——只验 tke 能跑，别拿设备 profile 体检
+    if ($Profile -eq 'none') { & $tkeExe --version *> $null } else { & $tkeExe fix --check --profile $Profile }
     $health = $LASTEXITCODE
 
     Write-Host ""
     # 结论上面的体检已经说过了，这里只补一句它不会讲的：怎么用
     if ($health -eq 0) {
-        Write-Host "  在 Claude Code 中输入 $Bd/tke-ui-test$Rs 以调用"
+        Write-Host "  在 Claude Code 中输入 $Bd/$Skill$Rs 以调用"
     }
     Write-Host "  $Dim升级 tke update  ·  卸载 tke uninstall$Rs"
     if ($health -ne 0) { exit 1 }

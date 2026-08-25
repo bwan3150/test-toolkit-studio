@@ -258,10 +258,15 @@ jobs:
           # **VERSION 要一起打进包里**（ADR-0014）：装完之后 `tke doctor` 才知道本地这份
           # skill 是哪一批。否则只能比 tke 二进制的版本号——而版本号只在 bump 时才变、
           # SKILL.md 却天天改，用户抱着两天前的旧文档，体检照样报"一致"（Q-11 就是这么发生的）。
-          cp dist/VERSION "${ENGINE_DIR}/skill/tke-ui-test/VERSION"
-          tar --exclude=".DS_Store" -czf dist/skill/tke-ui-test.tar.gz \
-              -C "${ENGINE_DIR}/skill" tke-ui-test
-          rm -f "${ENGINE_DIR}/skill/tke-ui-test/VERSION"   # 不留在工作树里
+          # 多 skill：凡是 skill/<名>/SKILL.md 存在的目录都打一个包（tke-ui-test / tke-security-test / …）
+          for skill_dir in "${ENGINE_DIR}/skill"/*/; do
+            name="$(basename "$skill_dir")"
+            [ -f "$skill_dir/SKILL.md" ] || continue
+            cp dist/VERSION "$skill_dir/VERSION"
+            tar --exclude=".DS_Store" -czf "dist/skill/$name.tar.gz" \
+                -C "${ENGINE_DIR}/skill" "$name"
+            rm -f "$skill_dir/VERSION"   # 不留在工作树里
+          done
           # 四个脚本：装/卸 × bash/PowerShell（Windows 跑不了 bash 那些）
           for f in install.sh install.ps1 uninstall.sh uninstall.ps1; do
             cp "${ENGINE_DIR}/skill/$f" "dist/$f"
@@ -279,8 +284,11 @@ jobs:
 
           # 自查：skill 包里必须有 VERSION，否则装到用户机器上就永远看不出过期
           # （这条静默失效的代价是"改完的东西送不到用户手上"，值得在 CI 里挡一道）
-          tar -tzf dist/skill/tke-ui-test.tar.gz | grep -qx 'tke-ui-test/VERSION' \
-            || { echo "❌ skill 包里没有 VERSION —— doctor 将无法判断 skill 是否过期" >&2; exit 1; }
+          for tgz in dist/skill/*.tar.gz; do
+            name="$(basename "$tgz" .tar.gz)"
+            tar -tzf "$tgz" | grep -qx "$name/VERSION" \
+              || { echo "❌ skill 包 $name 里没有 VERSION —— doctor 将无法判断 skill 是否过期" >&2; exit 1; }
+          done
 
           echo "== 待上传 =="
           find dist -type f | sort

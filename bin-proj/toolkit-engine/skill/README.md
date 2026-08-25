@@ -24,6 +24,14 @@ iwr https://<你的CDN>/tke/install.ps1 -OutFile install.ps1; .\install.ps1 -Pro
 它会按平台自动下载 skill 文件、tke、对应驱动、Chrome for Testing，最后自动跑体检。
 **环境不完整时会明确告诉你缺什么并以非 0 退出**，不会装完就说"好了"。
 
+默认装 **tke-ui-test**（UI 实机检查）。装**安全测试** skill 用 `--skill`：
+
+```bash
+# 安全测试 skill（tke-security-test）——只装 tke，不要任何设备驱动（profile 自动=none）
+curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --skill tke-security-test
+# Windows: iwr ... install.ps1 -OutFile install.ps1; .\install.ps1 -Skill tke-security-test
+```
+
 ```bash
 # 只装网页相关（不要安卓/iOS 工具，快很多）
 curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --profile web
@@ -32,7 +40,8 @@ curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --profile web
 curl -fsSL https://<你的CDN>/tke/install.sh | bash -s -- --project
 ```
 
-`--profile web|android|ios|all`；`TKE_HOME` 可改 tke 落点（默认 `~/.tke/bin`）。
+`--skill tke-ui-test|tke-security-test`（默认 ui-test）；`--profile web|android|ios|all|none`
+（安全 skill 默认 none=只装 tke）；`TKE_HOME` 可改 tke 落点（默认 `~/.tke/bin`）。
 
 **默认装用户级**（`~/.claude/skills/`）——装一次，所有项目都能用。
 
