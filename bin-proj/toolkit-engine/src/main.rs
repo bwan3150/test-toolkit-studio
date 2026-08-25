@@ -124,7 +124,14 @@ enum Commands {
         args: HarnessArgs,
     },
 
-    /// [工作流] 把一次检查里散落的多批产物汇总成一份全流程报告: tke report <检查目录> [--embed]
+    /// [UI 测试] 设备/UI 测试轨命令: tke ui report <检查目录>（与安全轨 tke security report 对称）
+    Ui {
+        #[command(subcommand)]
+        action: cli::report::UiCommands,
+    },
+
+    /// [兼容别名] 旧的 `tke report`——等价 `tke ui report`（已改名，隐藏但仍可用）
+    #[command(hide = true)]
     Report {
         #[command(flatten)]
         args: ReportArgs,
@@ -319,7 +326,12 @@ async fn main() -> tke::Result<()> {
         Commands::Harness { args } => {
             workflow::harness::handle(args, params.clone()).await
         }
+        Commands::Ui { action } => {
+            let cli::report::UiCommands::Report { args } = action;
+            report::handle(args).await
+        }
         Commands::Report { args } => {
+            // 隐藏别名：等价 tke ui report
             report::handle(args).await
         }
         Commands::Update { args } => {

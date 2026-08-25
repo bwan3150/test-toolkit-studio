@@ -22,6 +22,42 @@ pub struct ReportPaths {
     pub vulns: Vec<PathBuf>,
 }
 
+/// `tke security report` 的输入 JSON：调用方（skill / 脚本 / CI）自己收集的 findings。
+/// 只有 target/findings 必填，其余给默认——让调用方喂最小结构就能出报告。
+#[derive(serde::Deserialize)]
+pub struct ReportInput {
+    pub target: String,
+    #[serde(default = "default_mode")]
+    pub mode: String,
+    #[serde(default)]
+    pub summary: String,
+    pub findings: Vec<Finding>,
+}
+
+fn default_mode() -> String {
+    "safe".to_string()
+}
+
+impl ReportInput {
+    fn into_analyzed(self) -> AnalyzedReport {
+        let summary = if self.summary.trim().is_empty() {
+            let confirmed = self.findings.iter().filter(|f| f.confirmed).count();
+            format!("{} 项发现（{confirmed} 已确认）。", self.findings.len())
+        } else {
+            self.summary
+        };
+        AnalyzedReport { target: self.target, mode: self.mode, findings: self.findings, summary, dropped: 0 }
+    }
+}
+
+/// 从调用方给的 findings JSON（字符串）确定性生成报告——`tke security report` 的核心。
+/// 无 AI，纯渲染：skill 的调用方 AI 自己判好 findings，喂进来就得到品牌报告（单一实现）。
+pub fn write_reports_from_json(dir: &Path, json: &str) -> Result<ReportPaths> {
+    let input: ReportInput = serde_json::from_str(json)
+        .map_err(|e| TkeError::InvalidArgument(format!("findings JSON 解析失败：{e}")))?;
+    write_reports(dir, &input.into_analyzed())
+}
+
 /// 在 `dir` 下生成全部报告文件。
 pub fn write_reports(dir: &Path, r: &AnalyzedReport) -> Result<ReportPaths> {
     std::fs::create_dir_all(dir).map_err(TkeError::IoError)?;
@@ -329,6 +365,23 @@ mod tests {
         assert!(paths.vulns.is_empty(), "无确认发现不该产 vuln 文件");
         let json = std::fs::read_to_string(&paths.json).unwrap();
         assert!(json.contains("\"outcome\": \"clean\""));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn report_from_json_minimal_input() {
+        // 调用方（skill）喂最小 findings JSON → 出报告（confirmed 缺省=false → 疑似，不出 vuln 文件）
+        let json = r#"{"target":"https://t.example/","findings":[
+            {"id":"x","severity":"high","category":"config","title":"缺 CSP","detail":"无 CSP","confirmed":true},
+            {"id":"y","severity":"low","category":"transport","title":"疑似弱传输","detail":"待验"}
+        ]}"#;
+        let tmp = std::env::temp_dir().join(format!("tke-rep-json-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let paths = write_reports_from_json(&tmp, json).unwrap();
+        assert_eq!(paths.vulns.len(), 1, "只有 confirmed 的出 vuln 文件");
+        let g = std::fs::read_to_string(&paths.html).unwrap();
+        assert!(g.contains(">D<"), "有 high 应评 D");
+        assert!(g.contains("缺 CSP"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

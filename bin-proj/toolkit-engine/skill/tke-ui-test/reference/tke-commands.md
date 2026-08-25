@@ -181,12 +181,12 @@ tke -d <序列号> app stop <包名>        # 安卓关掉启动过的 App
 ## 收尾：写结论 + 打开报告
 
 ```bash
-tke report ~/.tke/logs/<任务简称>/ \
+tke ui report ~/.tke/logs/<任务简称>/ \
   --task "用户让我验的那件事" \
   --verdict pass|fail|blocked \
   --summary "一句话结果" \      # 长的/带表格的用 --summary - 接 heredoc，不用写临时文件
   --open                      # 用系统浏览器打开（无图形界面时自动跳过）
-tke report <目录> --full-image  # 原图版，逐像素复核用
+tke ui report <目录> --full-image  # 原图版，逐像素复核用
 ```
 
 `--verdict`：`pass`=功能可用 / `fail`=**被测对象有问题** / `blocked`=没验成。

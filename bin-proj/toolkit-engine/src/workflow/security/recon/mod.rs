@@ -27,7 +27,7 @@ pub use endpoints::endpoints_check;
 pub use tls::tls_check;
 
 /// 严重度（与报告 spec 的五级一致）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Info,

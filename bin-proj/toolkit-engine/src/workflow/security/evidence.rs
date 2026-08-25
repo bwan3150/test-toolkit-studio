@@ -12,7 +12,7 @@ use crate::{Result, TkeError};
 use super::http::{HttpRequest, HttpResponse};
 
 /// 一次探测落盘后的引用（相对任务目录），进报告与 findings.json。
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EvidenceRef {
     pub seq: usize,
     pub request: PathBuf,

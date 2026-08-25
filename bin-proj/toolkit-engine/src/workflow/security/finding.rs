@@ -10,7 +10,7 @@ pub use super::recon::Severity;
 use super::evidence::EvidenceRef;
 
 /// 漏洞类别（与报告 spec 的维度一致）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Category {
     Auth,
@@ -36,7 +36,7 @@ impl Category {
 }
 
 /// 一条候选发现。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct Finding {
     pub id: String,
     pub severity: Severity,
@@ -44,10 +44,13 @@ pub struct Finding {
     pub title: String,
     pub detail: String,
     /// 硬证据（已黑盒复现）= true；疑似·待复现 = false。
+    #[serde(default)]
     pub confirmed: bool,
     /// 可直接执行的复现命令（curl 等），可空。
+    #[serde(default)]
     pub repro: Option<String>,
     /// 关联证据（evidence/step_NNN_*）的相对路径序号。
+    #[serde(default)]
     pub evidence: Vec<EvidenceRef>,
 }
 
@@ -73,7 +76,7 @@ impl Finding {
 }
 
 /// prober 一次运行的产出。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct ProbeReport {
     pub target: String,
     pub mode: String,

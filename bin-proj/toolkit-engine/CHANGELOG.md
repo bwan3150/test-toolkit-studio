@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+### 2026-08-25 · tke security report primitive + 多轨命名约定 tke <track> report（ADR-0020）
+为安全 skill 轨（tke-security-test，下一步）铺路：把 reporter 暴露成确定性命令，并统一多轨报告命名。
+- **feat `tke security report <findings.json> [--out]`**：无 AI 纯渲染——调用方（skill/脚本/CI）自己
+  收集 findings 喂进来，得到与 `tke security` 同一套品牌报告。`Finding/Severity/Category/EvidenceRef`
+  加 Deserialize，可选字段给 serde 默认（喂最小结构即可）。`tke security` 仍是裸进交互（子命令与裸命令
+  用 args_conflicts_with_subcommands 并存）
+- **feat 命名约定 `tke <track> report`**：`tke report` 改名 `tke ui report`（↔ skill tke-ui-test），
+  与 `tke security report`（↔ tke-security-test）对称；**`tke report` 保留为隐藏别名**向后兼容。
+  更新 tke-ui-test skill 文档 + 顶层 help
+- **doc ADR-0020**：命名约定 + 安全 skill 轨决策（承 ADR-0010）
+- 全量 138 绿。skill 本体（tke-security-test）是下一步
+
 ### 2026-08-25 · orchestrator 多行消息改用 Assistant 事件（修 TUI 阶梯缩进）
 真机 TUI 里 agent 的长回复（带 Markdown 项目符号）渲染成逐行右移的阶梯——因为我用了 `Notice`
 事件发对话消息，而 `Notice` 的渲染走带缩进的包裹逻辑，多行就累加缩进。

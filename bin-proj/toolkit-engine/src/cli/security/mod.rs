@@ -59,6 +59,7 @@ pub enum ReconCommands {
 /// `--json` / 非终端 → **无头一次性**（内部 探测→复核→出报告，输出给 Electron/CI）。
 /// prober/analyst/reporter 是内部阶段，不是子命令。
 #[derive(clap::Args)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct SecurityArgs {
     /// 目标 URL（可选：不给则由主 agent 在 TUI 里问你）
     pub url: Option<String>,
@@ -74,6 +75,23 @@ pub struct SecurityArgs {
     /// 单个内部 agent 的最大推理步数（兜底防跑飞）
     #[arg(long, default_value = "24")]
     pub max_steps: usize,
+    /// 子命令（目前只有 report）；不给 = 进对话式编排
+    #[command(subcommand)]
+    pub action: Option<SecuritySub>,
+}
+
+/// `tke security` 的子命令。与设备轨的 `tke ui report` 对称：`tke <track> report`。
+#[derive(clap::Subcommand)]
+pub enum SecuritySub {
+    /// 从 findings JSON 确定性出报告（无 AI）——给 skill / 脚本 / CI 用，
+    /// 调用方自己收集 findings、喂进来就得到品牌 HTML 报告 + 每个确认漏洞一份。
+    Report {
+        /// findings JSON 文件路径（含 target/mode/findings；结构见 findings.json）
+        findings: PathBuf,
+        /// 报告输出目录（证据也应在此；不给则用 --log，再不给用临时目录）
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 /// 把 `-H 'K: V'` 列表解析成键值对（容忍无空格的 `K:V`）。
@@ -171,6 +189,24 @@ async fn run_prober(
 ///   `--json` / 非终端 → 无头一次性（探测→复核→出报告，一次性 JSON 输出，给 Electron/CI）。
 pub async fn security(args: SecurityArgs, params: Arc<Params>) -> Result<()> {
     use std::io::IsTerminal;
+
+    // 子命令：report（确定性出报告，无 AI）——与交互/无头分流之前先处理
+    if let Some(SecuritySub::Report { findings, out }) = &args.action {
+        let dir = out.clone().or_else(|| params.log.clone())
+            .unwrap_or_else(|| std::env::temp_dir().join(format!("tke-security-report-{}", std::process::id())));
+        let json = std::fs::read_to_string(findings)
+            .map_err(|e| tke::TkeError::InvalidArgument(format!("读不到 findings 文件 {}：{e}", findings.display())))?;
+        let paths = tke::workflow::security::report::write_reports_from_json(&dir, &json)?;
+        JsonOutput::print(serde_json::json!({
+            "success": true,
+            "report_html": paths.html.to_string_lossy(),
+            "findings_json": paths.json.to_string_lossy(),
+            "vuln_reports": paths.vulns.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>(),
+            "out_dir": dir.to_string_lossy(),
+        }));
+        return Ok(());
+    }
+
     let task_dir = task_dir_of(&params);
     let prompts = SecurityPrompts::load(args.prompts_dir.clone());
 

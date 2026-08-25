@@ -12,6 +12,17 @@ use std::path::{Path, PathBuf};
 
 use tke::{JsonOutput, Result, Verdict};
 
+/// `tke ui <子命令>`：设备/UI 测试轨的收尾命令。与安全轨 `tke security report` 对称
+/// （`tke <track> report`）。目前只有 report；`tke report` 保留为隐藏别名（向后兼容）。
+#[derive(clap::Subcommand)]
+pub enum UiCommands {
+    /// 汇总一次 UI/设备测试的证据目录成报告 + 写结论（= 老的 `tke report`）
+    Report {
+        #[command(flatten)]
+        args: ReportArgs,
+    },
+}
+
 /// Report 命令参数
 #[derive(clap::Args)]
 pub struct ReportArgs {

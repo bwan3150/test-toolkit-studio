@@ -331,7 +331,7 @@ tke -d <序列号> steps '启动 ["com.x", ".Main"] # 去手机上验收'   --lo
 ```
 
 **已经散了怎么办**：把各目录的 `screenshots/`、`pages/` 按时间顺序合并、编号重排后放进
-一个目录，再 `tke report <目录>` 重建——但那很麻烦，**一开始别改名**便宜得多。
+一个目录，再 `tke ui report <目录>` 重建——但那很麻烦，**一开始别改名**便宜得多。
 
 ---
 
@@ -374,7 +374,7 @@ tke -d web steps '输入 ["密码", "用户给的"] # 用户授权代填'
 **做法**：收尾时用 `--verdict` **把结论说出来**：
 
 ```bash
-tke report ~/.tke/logs/<任务简称>/ --task "用户要验的事" --verdict pass \
+tke ui report ~/.tke/logs/<任务简称>/ --task "用户要验的事" --verdict pass \
   --summary "中间定位换了个方式，功能本身正常" --open
 ```
 
