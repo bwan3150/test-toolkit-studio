@@ -68,6 +68,9 @@ fn 任务跑完要收束并把设备还回去() {
     let tail = done["detail"]["stderr_tail"].as_array().expect("错误终态要带 stderr 尾巴");
     assert!(!tail.is_empty() && tail.iter().any(|l| l.as_str().unwrap_or("").contains("Error")), "{done}");
     assert!(done["finished_at"].is_number());
+    // 用量字段必须**在**(平台按它计费),这次测不到所以是 null —— null 与 0 是两回事:
+    // 0 会被读成"这次没花钱",而真相是"没测量到"
+    assert!(done.get("usage").is_some() && done["usage"].is_null(), "{done}");
 
     // 安全任务不该占设备;而且不管成败,会话都要还回去
     let (_, d) = get(&s, "/v1/devices");

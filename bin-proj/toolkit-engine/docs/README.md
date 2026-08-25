@@ -36,6 +36,7 @@
 | [`driver-mapping.md`](driver-mapping.md) | 原子指令在三端驱动的**底层**映射对照（落成什么 adb/HTTP 调用）。面向排查 |
 | [`skill-integration.md`](skill-integration.md) | tke 作为 skill 融入 coding agent 工作流的**早期设计稿**。⚠️ 其中的 `tke task` 方案已被 **ADR-0010** 推翻（skill 借调用方的 AI，不内置）；实际落地物是 `skill/tke-ui-test/` + `skill/install.sh` |
 | [`security-report-spec.md`](security-report-spec.md) | **`tke security` 报告规范**：段落/评级/品牌/**材料库区块**/机器可读伴生。关联 ADR-0019（生效）。可视化基线见 [`security-report-template.sample.html`](security-report-template.sample.html) |
+| [`platform-integration`](adr/0023-platform-integration.md) | **与测试管理平台（TOOLKIT/bug）对接**：平台是客户端、执行分两层对应计费、tke 侧只补 `usage` 口子。平台侧设计在 `bug/docs/11_device_cloud.md` + `12_security_entity.md` |
 | [`remote-api.md`](remote-api.md) | **tke 服务化远程 API 契约（v1 设计稿）**：三层 API（命令/任务/产物）、租约模型、白名单、计费口径、分阶段路线。关联 ADR-0022 + INV-16/17 |
 | [`ci-publishing.md`](ci-publishing.md) | **GitHub Actions 发布**：改 tke/skill 跑 Publish TKE，换 Chrome/驱动跑 Publish TKE Deps；含各家下载源的实测结构 |
 | [`publishing-to-toolkit-cloud.md`](publishing-to-toolkit-cloud.md) | 打包 skill 分发包并用 curl 一次性上传到 Toolkit Cloud 的操作手册 |

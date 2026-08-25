@@ -72,6 +72,9 @@ pub struct Task {
     pub callback_url: Option<String>,
     /// 往子进程 stdin 写（交互式任务回答问题用）
     pub answer_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    /// 全程 token 用量（引擎的 `summary` 事件给）。**测不到时是 null 不是 0**——
+    /// 0 会被平台当成"这次没花钱"，而真相是"没测量到"（INV-9：查不了要说出来）
+    pub usage: Option<serde_json::Value>,
     /// stderr 的最后几行。它不是给调用方的协议（所以不进事件流），
     /// 但任务挂掉时**它就是唯一的线索**（缺 API key 之类）——吞掉等于把最有用的那句话删了（P-46）
     pub stderr_tail: Arc<Mutex<Vec<String>>>,
@@ -93,6 +96,7 @@ impl Task {
             "session_id": self.lease.id,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "usage": self.usage,
             "events": self.events.len(),
             "report": format!("/v1/tasks/{}/report", self.id),
         })
@@ -216,6 +220,33 @@ pub fn check_mode(mode: Option<&str>) -> Result<(), String> {
     }
 }
 
+/// 从 `summary` 事件里抽全程用量（计费要它，ADR-0023 D3）
+pub fn usage_from_event(ev: &serde_json::Value) -> Option<serde_json::Value> {
+    if ev.get("type").and_then(|t| t.as_str()) != Some("summary") {
+        return None;
+    }
+    let t = ev.get("tokens")?;
+    let prompt = t.get("prompt").and_then(|v| v.as_i64()).unwrap_or(0);
+    let completion = t.get("completion").and_then(|v| v.as_i64()).unwrap_or(0);
+    Some(serde_json::json!({
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": prompt + completion,
+        "model": ev.get("model"),
+    }))
+}
+
+/// 一次性命令（`tke security --json` 这类）的终局输出：**没有 `type` 字段的那个 JSON**。
+/// 它不是 UiEvent 流的一部分——安全轨无头跑完只打一个结果对象就退出。
+/// 判据是它的 `success` 字段；认不出来就返回 None，交给"没有 done = 没跑完"兜底
+pub fn oneshot_outcome(ev: &serde_json::Value) -> Option<(Outcome, serde_json::Value)> {
+    if ev.get("type").is_some() {
+        return None;
+    }
+    let ok = ev.get("success")?.as_bool()?;
+    Some((if ok { Outcome::Passed } else { Outcome::Failed }, ev.clone()))
+}
+
 /// 从一行 NDJSON 事件推断终态。返回 None = 还没到终局
 pub fn outcome_from_event(ev: &serde_json::Value, interactive: bool) -> Option<(Outcome, serde_json::Value)> {
     match ev.get("type").and_then(|t| t.as_str()) {
@@ -285,6 +316,7 @@ pub async fn spawn(
         finished_at: None,
         callback_url: req.callback_url.clone(),
         answer_tx: req.interactive.then_some(ans_tx),
+        usage: None,
         stderr_tail: Arc::new(Mutex::new(Vec::new())),
     };
     let view = task.view();
@@ -365,6 +397,7 @@ async fn pump_events(
 ) -> Option<(Outcome, serde_json::Value)> {
     let mut lines = BufReader::new(stdout).lines();
     let mut terminal = None;
+    let mut oneshot = None;
     while let Ok(Some(line)) = lines.next_line().await {
         let line = line.trim().to_string();
         if line.is_empty() {
@@ -375,6 +408,15 @@ async fn pump_events(
             // 解析不出来的行不丢：调用方看得到原文才查得下去（P-46）
             Err(_) => serde_json::json!({"type": "raw", "line": line}),
         };
+        if let Some(u) = usage_from_event(&ev) {
+            if let Some(t) = st.tasks.tasks.lock().expect("tasks 锁中毒").get_mut(id) {
+                t.usage = Some(u);
+            }
+        }
+        // 一次性命令的结果对象:每来一个就覆盖,最后那个才算终局
+        if let Some(o) = oneshot_outcome(&ev) {
+            oneshot = Some(o);
+        }
         if let Some(t) = st.tasks.tasks.lock().expect("tasks 锁中毒").get_mut(id) {
             t.events.push(ev.clone());
         }
@@ -390,7 +432,8 @@ async fn pump_events(
             }
         }
     }
-    terminal
+    // UiEvent 流的终局优先;没有的话看一次性命令的结果对象(安全轨无头就是这条路)
+    terminal.or(oneshot)
 }
 
 /// 收尾：写终态 + 广播一条 task_end + 释放会话 + 回调
@@ -564,6 +607,32 @@ mod tests {
         assert_eq!(outcome_from_event(&bad, false).unwrap().0, Outcome::Failed);
         // 中途事件不算终局
         assert!(outcome_from_event(&serde_json::json!({"type":"phase"}), false).is_none());
+    }
+
+    #[test]
+    fn 一次性命令的结果对象也算终局() {
+        // `tke security --json` 无头跑完只打一个**没有 type 字段**的结果对象就退出。
+        // 不认它的话,一次**成功**的安全扫描会被判成"没跑完"(P3 只测了失败路径,漏了这条)
+        let ok = serde_json::json!({"success":true,"target":"https://x","finding_count":3,"report_html":"/p/r.html"});
+        let (o, d) = oneshot_outcome(&ok).unwrap();
+        assert_eq!(o, Outcome::Passed);
+        assert_eq!(d["finding_count"], 3, "结果对象原样带走,平台要靠它拿报告路径");
+        assert_eq!(oneshot_outcome(&serde_json::json!({"success":false,"error":"x"})).unwrap().0, Outcome::Failed);
+        // UiEvent 流里的东西不走这条路(它们有 type)
+        assert!(oneshot_outcome(&serde_json::json!({"type":"done","success":true})).is_none());
+        assert!(oneshot_outcome(&serde_json::json!({"foo":1})).is_none());
+    }
+
+    #[test]
+    fn 用量从summary事件里抽() {
+        let ev = serde_json::json!({"type":"summary","model":"claude-sonnet-4-6","tokens":{"prompt":1200,"completion":340}});
+        let u = usage_from_event(&ev).unwrap();
+        assert_eq!(u["prompt_tokens"], 1200);
+        assert_eq!(u["completion_tokens"], 340);
+        assert_eq!(u["total_tokens"], 1540, "平台按总量计费,别让它自己加");
+        assert_eq!(u["model"], "claude-sonnet-4-6");
+        // 别的事件不给用量 —— **测不到时是 null 不是 0**,0 会被当成"这次没花钱"
+        assert!(usage_from_event(&serde_json::json!({"type":"phase"})).is_none());
     }
 
     #[test]
