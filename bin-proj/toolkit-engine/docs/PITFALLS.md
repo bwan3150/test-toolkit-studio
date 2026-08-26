@@ -938,3 +938,32 @@ harness 本就为「主 AI 说话」设计了 `UiEvent::Assistant`——它按 `
 
 **反过来也成立**：如果你的服务端只在"看见字面量 `..`"时才拒绝，那它挡不住 `%2e%2e`——
 沙箱要在**解码之后**的路径上判断（axum 的 Path 提取器已经解码，我们的检查在它之后，所以是对的）。
+
+## P-55 (2026-08-26) 传了 `skill/` 目录，漏了 `skills` 这个文件 —— 安装器静默少装
+
+用户 mac 上 `tke doctor` 只报了一个 skill：`tke-security-test` 明明打了包也传上去了
+（分发源上 `skill/tke-security-test.tar.gz` 9848 字节，取得回来），却谁也装不到。
+
+根因：`install.sh` 读 `<分发源>/skills` 这个 **manifest 文件**（一行一个 skill 名）决定装哪些，
+而 CI 的上传那行是
+
+```
+up dist/skill dist/install.sh …          # 只有目录 skill/，没有文件 skills
+```
+
+`dist/skills` 生成了、从没上传过 → 分发源 404 → 安装器走兜底 `SKILL_LIST="tke-ui-test"`。
+**兜底不报错**，于是三方都显得正常：CI 绿、安装成功、doctor 说"已是最新"。
+
+两个放大它的因素：
+
+1. **名字差一个 s**：`skill/`（目录，装的东西）与 `skills`（文件，装哪些）平级又同名，
+   写上传清单时眼睛会自动把它们归成同一样东西。
+2. **复验只遍历目录**：`for f in $(cd dist && find bin skill -type f)` —— `skills` 在
+   `bin/` 与 `skill/` **之外**，够不着。于是"复验分发源"这一步给了虚假的安心。
+
+修法（三处）：上传清单加 `dist/skills`；复验**逐个名字比对 manifest 内容**（平台对不存在
+的路径回落 200 + HTML，P-19，"取回来了"什么都不证明）；兜底那行**往 stderr 说一句**。
+
+**共性**：兜底逻辑（`|| SKILL_LIST="tke-ui-test"`）把"少了一个文件"表现成"功能少了一半"
+而不是"报错"。凡是写 `|| 默认值` 的地方，问一句：**默认值生效时，有没有任何人看得出来？**
+这里的答案是没有。

@@ -324,7 +324,11 @@ jobs:
           else
             echo "（本次没有二进制，只发 skill）"
           fi
-          up dist/skill dist/install.sh dist/install.ps1 dist/uninstall.sh dist/uninstall.ps1
+          # ⚠️ dist/skills 是 **manifest 文件**（一行一个 skill 名），install.sh 读它决定装哪些。
+          # 早先这行漏了它 → 分发源上一直 404 → install.sh 走兜底"只装 tke-ui-test"，
+          # 于是 tke-security-test 打好包传上去了却没人装得到，而 CI 全绿（复验只遍历
+          # bin/ 与 skill/ 两个**目录**，够不着这个平级的文件）。
+          up dist/skill dist/skills dist/install.sh dist/install.ps1 dist/uninstall.sh dist/uninstall.ps1
           up dist/VERSION
 
       - name: 复验分发源
@@ -343,6 +347,19 @@ jobs:
           esac
 
           BUILD_KEY="$(printf '%s' "$REMOTE" | sed -n 's/^build: *//p' | head -1)"
+
+          # manifest：**必须逐个名字比对**，不能只看取不取得回来。
+          # 平台对不存在的路径回落 200 + HTML（P-19），"取回来了"什么都证明不了。
+          MANIFEST="$(curl -fsSL --max-time 30 "$BASE/skills?b=$BUILD_KEY" | tr -d '\r')"
+          for name in $(cat dist/skills); do
+            if printf '%s\n' "$MANIFEST" | grep -qx "$name"; then
+              echo "  ✅ manifest 有 $name"
+            else
+              echo "  ❌ manifest 里没有 $name —— install.sh 会走兜底、装不到它" >&2
+              echo "取回的 manifest 是：" >&2; printf '%s\n' "$MANIFEST" | head -5 >&2
+              exit 1
+            fi
+          done
           # ⚠️ 不能写成 `curl ... | head -c2`：head 读够就退出，curl 还在往管道写会拿到
           # EPIPE、以退出码 23 失败（10MB 的 tke.gz 上必炸，小文件才侥幸躲过）。
           # 也不能用 `curl -r 0-1` 只取头两字节——这个平台不支持 Range，会回 520（P-19）。

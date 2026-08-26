@@ -206,7 +206,12 @@ if [ -n "$SKILL" ]; then
     SKILL_LIST="$SKILL"
 else
     SKILL_LIST="$(curl -fsSL --max-time 20 "$BASE_URL/skills$Q" 2>/dev/null | tr -d '\r' | grep -E '^[a-z0-9][a-z0-9-]*$')"
-    [ -n "$SKILL_LIST" ] || SKILL_LIST="tke-ui-test"   # manifest 取不到时兜底装 ui-test
+    if [ -z "$SKILL_LIST" ]; then
+        # **兜底要出声**：manifest 取不到就只装一个，而这在用户看来是"装成功了"——
+        # 别的 skill 明明在分发源上却谁也没装到，一句话都不说的话没人查得出来（P-55）
+        echo "⚠️  取不到 skill 清单（$BASE_URL/skills），只装 tke-ui-test；其余 skill 需 --skill 指定" >&2
+        SKILL_LIST="tke-ui-test"
+    fi
 fi
 INSTALLED=""
 for name in $SKILL_LIST; do

@@ -141,8 +141,11 @@ Chrome 太大想分开传（其余先上、Chrome 单独失败可续）：
 
 ```bash
 # 先传轻的
+# ⚠️ **别漏 <dist>/skills**（没有 s 的 skill/ 是目录，带 s 的 skills 是 manifest 文件）——
+# install.sh 读它决定装哪些 skill；漏了它分发源上 404，安装器会走兜底「只装 tke-ui-test」，
+# 别的 skill 打好包传上去了也没人装得到（P-55，真发生过）
 curl -fsSL https://cloud.test-toolkit.app/script/upload.sh | bash -s -- \
-  <dist>/skill/ <dist>/bin/ <dist>/install.sh <dist>/VERSION  tookit-engine-resource:tke/
+  <dist>/skill/ <dist>/skills <dist>/bin/ <dist>/install.sh <dist>/VERSION  tookit-engine-resource:tke/
 
 # 大块单独传
 curl -fsSL https://cloud.test-toolkit.app/script/upload.sh | bash -s -- \
