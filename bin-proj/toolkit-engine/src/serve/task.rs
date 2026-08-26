@@ -585,7 +585,7 @@ mod tests {
     fn lease(device: &str) -> Lease {
         Lease {
             id: "s1".into(),
-            device: PoolDevice { id: device.into(), kind: "web".into(), label: "x".into() },
+            device: PoolDevice { id: device.into(), kind: "web".into(), label: "x".into() , model: String::new(), os: String::new() },
             dirs: SessionDirs {
                 root: "/w".into(),
                 workspace: "/w/ws".into(),

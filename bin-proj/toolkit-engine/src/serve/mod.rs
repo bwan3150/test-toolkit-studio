@@ -17,6 +17,7 @@
 
 pub mod allowlist;
 pub mod exec;
+pub mod heartbeat;
 pub mod lease;
 pub mod routes;
 pub mod task;
@@ -50,6 +51,8 @@ pub struct ServeOptions {
     pub web_slots: u8,
     /// 测试专用：往池里塞 `fake:` 设备（不参与真实调度）
     pub fake_devices: Vec<String>,
+    /// 向测试管理平台报到（不配则不报到，节点照常独立可用）
+    pub platform: Option<heartbeat::PlatformLink>,
     pub max_upload_bytes: usize,
 }
 
@@ -62,6 +65,8 @@ pub fn build_pool(web_slots: u8, fake_devices: &[String]) -> Vec<PoolDevice> {
             id: format!("web:{i}"),
             kind: "web".into(),
             label: format!("Chrome 无头 #{i}"),
+            model: "Chrome 无头".into(),
+            os: String::new(),
         })
         .collect();
 
@@ -75,11 +80,16 @@ pub fn build_pool(web_slots: u8, fake_devices: &[String]) -> Vec<PoolDevice> {
             id: t.id,
             kind: t.kind.to_string(),
             label: format!("{} · {}", t.model, t.os),
+            model: t.model,
+            os: t.os,
         });
     }
 
     for id in fake_devices {
-        pool.push(PoolDevice { id: id.clone(), kind: "fake".into(), label: id.clone() });
+        pool.push(PoolDevice {
+            id: id.clone(), kind: "fake".into(), label: id.clone(),
+            model: "fake".into(), os: String::new(),
+        });
     }
     pool
 }
@@ -128,6 +138,12 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
         "auth": if state.token.is_some() { "bearer" } else { "none (loopback only)" },
     }));
 
+    // 向平台报到（节点主动心跳，见 heartbeat 模块头注释）。
+    // **连不上平台不影响节点自己干活**——报不上去只是平台看不见它
+    if let Some(link) = opts.platform.clone() {
+        heartbeat::spawn(state.clone(), link, local.to_string());
+    }
+
     // 清扫过期租约：断了心跳的会话不能永久占着设备，还要顺手复位（INV-17）
     let sweeper = state.clone();
     tokio::spawn(async move {
@@ -174,6 +190,7 @@ mod tests {
             exec_timeout: Duration::from_secs(5),
             web_slots: 1,
             fake_devices: vec![],
+            platform: None,
             max_upload_bytes: 1024,
         };
         let e = run(opts).await.unwrap_err().to_string();

@@ -32,6 +32,12 @@ pub struct PoolDevice {
     pub kind: String,
     /// 给人看的名字
     pub label: String,
+    /// 机型 / 系统 —— 分开留着而不是拼进 label：
+    /// 平台的设备表要按机型筛、按系统排，拼成一个串就切不开了
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub os: String,
 }
 
 impl PoolDevice {
@@ -183,7 +189,7 @@ impl LeaseTable {
         // 无设备会话：不占池、不互斥、不复位——它只要一个隔离的工作区
         if want == "none" && device_id.is_none() {
             return Ok(self.insert_lease(
-                PoolDevice { id: String::new(), kind: "none".into(), label: "无设备（只用工作区）".into() },
+                PoolDevice { id: String::new(), kind: "none".into(), label: "无设备（只用工作区）".into(), model: String::new(), os: String::new() },
                 ttl,
             ));
         }
@@ -331,7 +337,7 @@ mod tests {
     use super::*;
 
     fn dev(id: &str, kind: &str) -> PoolDevice {
-        PoolDevice { id: id.into(), kind: kind.into(), label: id.into() }
+        PoolDevice { id: id.into(), kind: kind.into(), label: id.into(), model: String::new(), os: String::new() }
     }
 
     fn table(pool: Vec<PoolDevice>) -> (LeaseTable, tempdir::Tmp) {

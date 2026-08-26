@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use tke::Result;
+use tke::{Result, TkeError};
 
 #[derive(clap::Args)]
 pub struct ServeArgs {
@@ -44,6 +44,25 @@ pub struct ServeArgs {
     /// 测试专用：往设备池里塞 `fake:` 设备（可多次给）
     #[arg(long, hide = true)]
     pub fake_device: Vec<String>,
+
+    // ===== 向测试管理平台报到（可选）=====
+    /// 平台地址，如 `https://test-platform.example`。给了就每隔十几秒报一次到
+    #[arg(long)]
+    pub platform: Option<String>,
+
+    /// 节点报到用的凭据（也可用环境变量 `TKE_PLATFORM_TOKEN`）。
+    /// **这是节点唯一的第二样凭据**——业务凭据（AI key 之类）一概由平台随任务下发
+    #[arg(long)]
+    pub platform_token: Option<String>,
+
+    /// 这个节点在平台上显示的名字（默认取主机名）
+    #[arg(long)]
+    pub node_name: Option<String>,
+
+    /// **平台怎么够着我** —— 如 `https://node-1.internal:8787`。
+    /// 不给就用监听地址，但那多半是 `0.0.0.0`/`127.0.0.1`，平台照着它连不上
+    #[arg(long)]
+    pub advertise: Option<String>,
 }
 
 pub async fn handle(args: ServeArgs) -> Result<()> {
@@ -51,6 +70,37 @@ pub async fn handle(args: ServeArgs) -> Result<()> {
         dirs::home_dir().unwrap_or_else(std::env::temp_dir).join(".tke").join("serve")
     });
     let token = args.token.or_else(|| std::env::var("TKE_SERVE_TOKEN").ok()).filter(|t| !t.is_empty());
+
+    // 平台对接：地址与凭据缺一不可，只给一个多半是配漏了——直接说出来，
+    // 而不是"静默不报到"（那会让人对着平台上空空的节点列表查半天）
+    let platform_token = args
+        .platform_token
+        .or_else(|| std::env::var("TKE_PLATFORM_TOKEN").ok())
+        .filter(|t| !t.is_empty());
+    let platform = match (args.platform.as_deref(), platform_token) {
+        (Some(base), Some(token)) => Some(tke::serve::heartbeat::PlatformLink {
+            base: base.to_string(),
+            token,
+            name: args.node_name.unwrap_or_else(|| {
+                std::env::var("HOSTNAME")
+                    .ok()
+                    .filter(|h| !h.is_empty())
+                    .unwrap_or_else(|| "tke-node".to_string())
+            }),
+            advertise: args.advertise,
+        }),
+        (Some(_), None) => {
+            return Err(TkeError::InvalidArgument(
+                "给了 --platform 但没有凭据：加 --platform-token 或设环境变量 TKE_PLATFORM_TOKEN".into(),
+            ))
+        }
+        (None, Some(_)) => {
+            return Err(TkeError::InvalidArgument(
+                "给了平台凭据但没有 --platform：不知道该报到哪儿".into(),
+            ))
+        }
+        (None, None) => None,
+    };
 
     tke::serve::run(tke::serve::ServeOptions {
         bind: args.bind,
@@ -61,6 +111,7 @@ pub async fn handle(args: ServeArgs) -> Result<()> {
         exec_timeout: Duration::from_secs(args.exec_timeout),
         web_slots: args.web_slots,
         fake_devices: args.fake_device,
+        platform,
         max_upload_bytes: args.max_upload_mb * 1024 * 1024,
     })
     .await
