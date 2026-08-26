@@ -46,6 +46,11 @@ pub struct FixArgs {
     #[arg(short = 'y', long)]
     pub yes: bool,
 
+    /// 建几台安卓模拟器（只对 `--profile android-emu` 有效）。
+    /// **镜像只下一次**，多出来的只是几份配置——设备农场上一台机器跑两三台是常态
+    #[arg(long, default_value_t = 1)]
+    pub emulators: usize,
+
     /// 分发源地址（默认走官方源；也可用环境变量 TKE_BASE_URL）
     #[arg(long)]
     pub base_url: Option<String>,
@@ -70,7 +75,10 @@ fn report_android_emu() -> Result<()> {
         let size = sdk::installed_size_mb().unwrap_or(0);
         println!("  {} {}", dim("状态    "), format!("已装 · {} MB", size));
         println!("  {} {}", dim("落点    "), sdk::sdk_dir().map(|d| d.display().to_string()).unwrap_or_default());
-        println!("  {} {}", dim("AVD     "), sdk::AVD_NAME);
+        // 列**实际有哪些**，不是写死一个名字 —— 一台机器可以有好几台模拟器
+        let avds = tke::drivers::avd::list_avds();
+        println!("  {} {}", dim("AVD     "),
+                 if avds.is_empty() { "（一台都没建）".to_string() } else { avds.join(" / ") });
         println!();
         println!("  {} {}", sym_ok(), "可用");
         println!("    {}", dim(&format!("起它：tke -d avd:{} control boot", sdk::AVD_NAME)));
@@ -104,7 +112,7 @@ pub async fn handle_as(args: FixArgs, invoked_as_fix: bool) -> Result<()> {
         if !download {
             return report_android_emu();
         }
-        return crate::cli::android_sdk::install(args.yes).await;
+        return crate::cli::android_sdk::install(args.yes, args.emulators).await;
     }
 
     let exe_dir = tke_dir()?;

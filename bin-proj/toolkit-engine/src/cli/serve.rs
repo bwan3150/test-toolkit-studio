@@ -60,9 +60,20 @@ pub struct ServeArgs {
     pub node_name: Option<String>,
 
     /// **平台怎么够着我** —— 如 `https://node-1.internal:8787`。
-    /// 不给就用监听地址，但那多半是 `0.0.0.0`/`127.0.0.1`，平台照着它连不上
+    /// 不给就用监听地址，但那多半是 `0.0.0.0`/`127.0.0.1`，平台照着它连不上。
+    /// 走 `--link` 时用不上它（那条路平台不需要够得着节点）
     #[arg(long)]
     pub advertise: Option<String>,
+
+    /// **反向通道**：节点主动连平台，之后所有指令都在这条连接上跑（ADR-0024）。
+    ///
+    /// 内网机器用这个：只出不进，不需要公网地址、不需要隧道、不需要 VPN；
+    /// 连上即注册，断开即注销。
+    ///
+    /// 不加则走老路（平台按 `--advertise` 反过来敲节点）—— 同内网部署时那条更简单。
+    /// **两条路不自动切换**：自动切换会让"到底走的哪条"变成运行时才知道的事
+    #[arg(long)]
+    pub link: bool,
 }
 
 pub async fn handle(args: ServeArgs) -> Result<()> {
@@ -112,6 +123,7 @@ pub async fn handle(args: ServeArgs) -> Result<()> {
         web_slots: args.web_slots,
         fake_devices: args.fake_device,
         platform,
+        link: args.link,
         max_upload_bytes: args.max_upload_mb * 1024 * 1024,
     })
     .await

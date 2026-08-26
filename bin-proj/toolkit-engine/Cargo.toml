@@ -63,6 +63,10 @@ crossterm = "0.28"
 async-trait = "0.1"
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "tokio", "query", "matched-path", "ws"] }
 tokio-stream = { version = "0.1.19", default-features = false, features = ["sync"] }
+# 反向通道（ADR-0024）：节点主动连平台。rustls 而不是 native-tls ——
+# 少一个系统依赖，交叉编译时省事
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 
 [features]

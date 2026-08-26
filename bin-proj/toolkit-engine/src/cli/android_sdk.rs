@@ -83,7 +83,10 @@ pub fn emulator_path() -> Option<PathBuf> {
 }
 
 /// 装：emulator → 系统镜像 → 建 AVD。每一步单独报，失败就停在那一步
-pub async fn install(yes: bool) -> Result<()> {
+/// count = 建几台模拟器。**镜像只下一次**，多出来的只是几份配置文件
+/// （一台 AVD 的配置几 KB，磁盘上真正占地方的是启动后各自的 userdata）。
+/// 设备农场上一台机器跑两三台是常态，所以这里给个数量，而不是让人自己去 copy 配置
+pub async fn install(yes: bool, count: usize) -> Result<()> {
     let Some((host_os, host_arch)) = host_tags() else {
         return Err(TkeError::InvalidArgument(format!(
             "{}-{} 上没有官方 Android 模拟器（Google 不发布 linux-arm64 / windows-arm64）。\n\
@@ -93,6 +96,12 @@ pub async fn install(yes: bool) -> Result<()> {
         )));
     };
     let sdk = sdk_dir().ok_or_else(|| TkeError::InvalidArgument("找不到用户目录".into()))?;
+
+    // **已经装过就只补 AVD，不重下**：加一台模拟器只是多几 KB 配置，
+    // 为此再拖一遍 1GB 的镜像毫无道理（"我已经装了一台，想再加一台"是常见需求）
+    if installed() {
+        return add_avds(&sdk, count);
+    }
 
     // 先把清单取下来，**把要下什么、多大、从哪来说清楚再问**——
     // 这不是我们的分发源，人有权先知道字节从哪儿来（许可关系是他 ↔ Google）
@@ -145,14 +154,20 @@ pub async fn install(yes: bool) -> Result<()> {
     // emulator 靠 `platform-tools/` 认 SDK root，缺了直接 FATAL（实测踩过）
     tke::drivers::avd::ensure_sdk_layout()?;
 
-    print!("  {} 建 AVD `{}` … ", sym_dot(), AVD_NAME);
-    flush();
-    create_avd(&sdk, DEFAULT_API, image_abi())?;
-    println!("{}", sym_ok());
+    let count = count.max(1);
+    for n in 1..=count {
+        let name = avd_name(n);
+        print!("  {} 建 AVD `{}` … ", sym_dot(), name);
+        flush();
+        create_avd(&sdk, DEFAULT_API, image_abi(), &name)?;
+        println!("{}", sym_ok());
+    }
 
     println!();
     println!("  {} 装好了", sym_ok());
-    println!("    {}", dim(&format!("起它：tke -d avd:{} control boot", AVD_NAME)));
+    for n in 1..=count {
+        println!("    {}", dim(&format!("起它：tke -d avd:{} control boot", avd_name(n))));
+    }
     println!("    {}", dim("看设备：tke device list"));
     if cfg!(target_os = "linux") && !kvm_ok() {
         // Linux 上没有 KVM 权限，模拟器会以纯软件模拟跑——慢到没法用。
@@ -438,9 +453,45 @@ fn unzip_into(zip_path: &Path, dest: &Path) -> Result<()> {
 
 /// 建 AVD。**不用 `avdmanager`**（它要 JDK）——AVD 本质就是两个 ini：
 /// 一个指路的 `<名字>.ini`，一个描述硬件的 `<名字>.avd/config.ini`
-fn create_avd(sdk: &Path, api: u32, abi: &str) -> Result<()> {
+/// 第 n 台模拟器叫什么。第一台就叫 `tke`（老名字不变，已有脚本不受影响），
+/// 后面的是 `tke-2`、`tke-3`…
+pub fn avd_name(n: usize) -> String {
+    if n <= 1 { AVD_NAME.to_string() } else { format!("{}-{}", AVD_NAME, n) }
+}
+
+/// 在已装好的 SDK 上补齐到 count 台 AVD。已存在的跳过（不覆盖用户改过的配置）。
+fn add_avds(sdk: &Path, count: usize) -> Result<()> {
+    let count = count.max(1);
     let dir = avd_dir().ok_or_else(|| TkeError::InvalidArgument("找不到用户目录".into()))?;
-    let avd = dir.join(format!("{}.avd", AVD_NAME));
+    let mut made = 0;
+    for n in 1..=count {
+        let name = avd_name(n);
+        // 已经在了就别动 —— 用户可能改过分辨率、内存这些
+        if dir.join(format!("{}.avd", name)).is_dir() {
+            println!("  {} AVD `{}` 已在，跳过", sym_dot(), name);
+            continue;
+        }
+        print!("  {} 建 AVD `{}` … ", sym_dot(), name);
+        flush();
+        create_avd(sdk, DEFAULT_API, image_abi(), &name)?;
+        println!("{}", sym_ok());
+        made += 1;
+    }
+    println!();
+    if made == 0 {
+        println!("  {} 已经有 {} 台了，没有新建", sym_ok(), count);
+    } else {
+        println!("  {} 新建了 {} 台", sym_ok(), made);
+    }
+    for n in 1..=count {
+        println!("    {}", dim(&format!("起它：tke -d avd:{} control boot", avd_name(n))));
+    }
+    Ok(())
+}
+
+fn create_avd(sdk: &Path, api: u32, abi: &str, name: &str) -> Result<()> {
+    let dir = avd_dir().ok_or_else(|| TkeError::InvalidArgument("找不到用户目录".into()))?;
+    let avd = dir.join(format!("{}.avd", name));
     std::fs::create_dir_all(&avd).map_err(TkeError::IoError)?;
 
     let cpu_arch = if abi == "arm64-v8a" { "arm64" } else { "x86_64" };
@@ -469,7 +520,7 @@ fn create_avd(sdk: &Path, api: u32, abi: &str) -> Result<()> {
          hw.audioInput=no\n\
          hw.audioOutput=no\n\
          showDeviceFrame=no\n",
-        name = AVD_NAME,
+        name = name,
         abi = abi,
         cpu = cpu_arch,
         api = api,
@@ -480,7 +531,7 @@ fn create_avd(sdk: &Path, api: u32, abi: &str) -> Result<()> {
     let ini = format!(
         "avd.ini.encoding=UTF-8\npath={}\npath.rel=avd/{}.avd\ntarget=android-{}\n",
         avd.display(),
-        AVD_NAME,
+        name,
         api
     );
     std::fs::write(dir.join(format!("{}.ini", AVD_NAME)), ini).map_err(TkeError::IoError)?;
@@ -547,5 +598,34 @@ mod tests {
             assert!(!os.is_empty() && !arch.is_empty());
         }
         assert_eq!(image_abi(), if cfg!(target_arch = "aarch64") { "arm64-v8a" } else { "x86_64" });
+    }
+}
+
+#[cfg(test)]
+mod avd_name_tests {
+    use super::*;
+
+    /// 第一台**必须还叫 `tke`**：已有的脚本、文档、别人机器上的配置全按这个名字来。
+    /// 加了多台支持之后顺手给它改名，等于把所有人的 `-d avd:tke` 打断
+    #[test]
+    fn 第一台仍叫tke() {
+        assert_eq!(avd_name(1), "tke");
+        assert_eq!(avd_name(0), "tke", "0 也当第一台，别造出个空名字");
+    }
+
+    #[test]
+    fn 后面的按序号排() {
+        assert_eq!(avd_name(2), "tke-2");
+        assert_eq!(avd_name(3), "tke-3");
+    }
+
+    /// 名字之间不能撞 —— 撞了两台模拟器会共用同一份 userdata，互相踩数据
+    #[test]
+    fn 名字互不重复() {
+        let names: Vec<String> = (1..=5).map(avd_name).collect();
+        let mut uniq = names.clone();
+        uniq.sort();
+        uniq.dedup();
+        assert_eq!(uniq.len(), names.len(), "重名了：{names:?}");
     }
 }

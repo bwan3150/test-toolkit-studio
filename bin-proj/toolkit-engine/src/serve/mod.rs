@@ -18,6 +18,7 @@
 pub mod allowlist;
 pub mod exec;
 pub mod heartbeat;
+pub mod link;
 pub mod lease;
 pub mod routes;
 pub mod task;
@@ -53,6 +54,10 @@ pub struct ServeOptions {
     pub fake_devices: Vec<String>,
     /// 向测试管理平台报到（不配则不报到，节点照常独立可用）
     pub platform: Option<heartbeat::PlatformLink>,
+    /// 走**反向通道**：节点主动连平台，平台不再需要够得着节点（ADR-0024）。
+    /// 给内网机器用。**与心跳二选一，不自动切换** ——
+    /// 自动切换会让"到底走的哪条路"变成运行时才知道的事
+    pub link: bool,
     pub max_upload_bytes: usize,
 }
 
@@ -140,8 +145,18 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
 
     // 向平台报到（节点主动心跳，见 heartbeat 模块头注释）。
     // **连不上平台不影响节点自己干活**——报不上去只是平台看不见它
-    if let Some(link) = opts.platform.clone() {
-        heartbeat::spawn(state.clone(), link, local.to_string());
+    if let Some(pl) = opts.platform.clone() {
+        if opts.link {
+            // 反向通道：节点主动连上去，此后平台的调用都在这条连接上跑。
+            // 连上即注册、断开即离线，不需要 --advertise，也不需要公网入口
+            link::spawn(
+                state.clone(),
+                link::LinkConfig { base: pl.base.clone(), token: pl.token.clone(), name: pl.name.clone() },
+                app.clone(),
+            );
+        } else {
+            heartbeat::spawn(state.clone(), pl, local.to_string());
+        }
     }
 
     // 清扫过期租约：断了心跳的会话不能永久占着设备，还要顺手复位（INV-17）
