@@ -398,6 +398,10 @@ mod tests {
 #[derive(serde::Deserialize)]
 struct CreateTask {
     kind: String,
+    /// 要哪一类设备：web / android / ios（不给按 android）
+    platform: Option<String>,
+    /// 点名某一台，优先于 platform
+    device_id: Option<String>,
     target: Option<String>,
     testcase: Option<String>,
     mode: Option<String>,
@@ -420,6 +424,8 @@ async fn task_create(
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     let req = SpawnTask {
         kind: body.kind,
+        platform: body.platform,
+        device_id: body.device_id,
         target: body.target,
         testcase: body.testcase,
         mode: body.mode,

@@ -128,6 +128,21 @@ impl ScriptParser {
             )));
         }
 
+        // **一步都没有的脚本不是"跑成功了"**（INV-9 同类）：最常见的成因是漏写
+        // `步骤:` 标记——所有行都落在标记之前，被整段跳过，于是 total_steps=0、
+        // success=true、退出码 0。实测踩过：一个语法完全正确的脚本"跑通"了，
+        // 什么也没做，而调用方（人或平台排期器）只看得到绿色。
+        if script.steps.is_empty() {
+            return Err(crate::TkeError::ScriptParseError(format!(
+                "这个脚本里一步都没有{}",
+                if content.lines().any(|l| !l.trim().is_empty() && !l.trim().starts_with('#')) {
+                    "——有内容但都在 `步骤:` 之前。指令必须写在 `步骤:` 这一行的下面"
+                } else {
+                    "（文件是空的）"
+                }
+            )));
+        }
+
         Ok(script)
     }
 
@@ -233,5 +248,36 @@ mod comment_tests {
         assert_eq!(script.steps[0].note.as_deref(), Some("打开首页"));
         assert_eq!(script.steps[1].note.as_deref(), Some("退回去"));
         assert_eq!(script.steps[0].raw, r#"启动 ["https://x"]"#, "raw 不该含注释");
+    }
+}
+
+#[cfg(test)]
+mod empty_script_tests {
+    use super::*;
+
+    /// 漏写 `步骤:` 时，整个脚本被跳过——**不能当成跑成功**。
+    /// 这是实跑里撞出来的：语法正确的脚本 total_steps=0 / success=true / 退出码 0
+    #[test]
+    fn 缺步骤标记要报错而不是空跑成功() {
+        let p = ScriptParser::new();
+        let err = p
+            .parse("# 注释\n启动 [\"https://example.com\"]\n断言 [\"x\"]\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("一步都没有"), "实际：{err}");
+        assert!(err.contains("步骤:"), "得告诉人少了什么：{err}");
+    }
+
+    #[test]
+    fn 空文件也要报错() {
+        assert!(ScriptParser::new().parse("\n\n# 只有注释\n").is_err());
+    }
+
+    #[test]
+    fn 有步骤的正常脚本照常解析() {
+        let s = ScriptParser::new()
+            .parse("步骤:\n启动 [\"https://example.com\"]\n")
+            .unwrap();
+        assert_eq!(s.steps.len(), 1);
     }
 }

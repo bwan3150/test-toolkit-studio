@@ -165,6 +165,12 @@ pub struct AiOverride {
 
 pub struct SpawnTask {
     pub kind: String,
+    /// 要哪一类设备：web / android / ios。**调用方必须说**——
+    /// 从前这里写死 android，平台明明选了 web 也会撞上"本节点没有 android 设备可租"，
+    /// 而错误看起来像是节点没设备（真因是这个字段压根没传过来）
+    pub platform: Option<String>,
+    /// 点名某一台（优先于 platform）
+    pub device_id: Option<String>,
     pub target: Option<String>,
     pub testcase: Option<String>,
     pub mode: Option<String>,
@@ -292,6 +298,21 @@ pub fn outcome_from_event(ev: &serde_json::Value, interactive: bool) -> Option<(
     }
 }
 
+/// 这个任务要哪一类设备。
+///
+/// security 只打 URL，开无设备会话（不计设备时长）；其余按调用方给的来。
+/// **不给才回落 android** —— 从前这里是写死的，平台选了 web 也照样去租 android，
+/// 报出来的却是「本节点没有 android 设备可租」，看着像节点缺设备
+fn wanted_platform(req: &SpawnTask) -> &str {
+    if req.kind == "security" {
+        return "none";
+    }
+    match req.platform.as_deref().map(str::trim) {
+        Some(p) if !p.is_empty() => p,
+        _ => "android",
+    }
+}
+
 /// 起一个任务：租会话 → spawn 子进程 → 后台泵事件 → 终态回调
 pub async fn spawn(
     st: Arc<super::ServeState>,
@@ -309,8 +330,14 @@ pub async fn spawn(
     }
 
     // ui 任务要设备；security 只打 URL，开无设备会话（不计设备时长）
-    let platform = if req.kind == "security" { "none" } else { "android" };
-    let want = req.target.as_deref().filter(|_| req.kind == "ui");
+    let platform = wanted_platform(&req);
+    // 点名优先；没点名就按 kind 走：ui 任务的 target 是"打开哪个 App/URL"，
+    // 不是设备号，别拿它当设备用
+    let want = req
+        .device_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| req.target.as_deref().filter(|_| req.kind == "ui"));
     let lease = leases
         .acquire(Some(platform), want, Some(Duration::from_secs(req.timeout.as_secs().max(600))))
         .map_err(|e| (409u16, e.to_string()))?;
@@ -452,6 +479,9 @@ async fn pump_events(
     let mut lines = BufReader::new(stdout).lines();
     let mut terminal = None;
     let mut oneshot = None;
+    // 最后一条错误播报。**失败必须带上理由**：只回一个 failed，
+    // 平台那边会把它记成"用例没通过"，人就去查产品——而真因可能是这台节点没配 AI
+    let mut last_err: Option<String> = None;
     while let Ok(Some(line)) = lines.next_line().await {
         let line = line.trim().to_string();
         if line.is_empty() {
@@ -482,6 +512,9 @@ async fn pump_events(
         }
         let _ = tx.send(ev.to_string());
 
+        if let Some(t) = error_notice(&ev) {
+            last_err = Some(t);
+        }
         if terminal.is_none() {
             if let Some(o) = outcome_from_event(&ev, interactive) {
                 terminal = Some(o);
@@ -493,7 +526,40 @@ async fn pump_events(
         }
     }
     // UiEvent 流的终局优先;没有的话看一次性命令的结果对象(安全轨无头就是这条路)
-    terminal.or(oneshot)
+    terminal.or(oneshot).map(|(o, d)| classify(o, d, last_err))
+}
+
+/// 抽出错误播报的正文（`{"type":"notice","level":"err","text":…}`）。
+fn error_notice(ev: &serde_json::Value) -> Option<String> {
+    if ev.get("type").and_then(|t| t.as_str()) != Some("notice") {
+        return None;
+    }
+    if ev.get("level").and_then(|l| l.as_str()) != Some("err") {
+        return None;
+    }
+    ev.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+}
+
+/// **跑不起来 ≠ 用例没通过**（ADR-0022 D6）。
+///
+/// 编排官自己出错（没配 AI、模型拒答、连不上）时什么也没测成，判 `failed` 会让平台
+/// 把它记成"这条用例不通过"，人于是去查产品代码——查的是错的方向。
+/// 这种归 `error`，并且**一定带上理由**。
+fn classify(
+    o: Outcome,
+    mut detail: serde_json::Value,
+    last_err: Option<String>,
+) -> (Outcome, serde_json::Value) {
+    let Some(why) = last_err else { return (o, detail) };
+    if let Some(m) = detail.as_object_mut() {
+        m.insert("why".into(), serde_json::Value::String(why.clone()));
+    }
+    if o != Outcome::Failed {
+        return (o, detail);
+    }
+    // 编排官层面就崩了 = 一步都没测成
+    let broke = why.contains("编排官出错") || why.contains("AI模型错误");
+    (if broke { Outcome::Error } else { o }, detail)
 }
 
 /// 收尾：写终态 + 广播一条 task_end + 释放会话 + 回调
@@ -611,10 +677,41 @@ mod tests {
     }
 
     #[test]
+    /// 调用方选了 web，就得去租 web。
+    /// 实跑撞过：平台下发 platform=web，节点却按写死的 android 去租，报
+    /// 「本节点没有 android 设备可租」——看着像节点缺设备，真因是字段没传过来
+    #[test]
+    fn 任务按调用方要的平台选设备() {
+        let mut req = task_req();
+        assert_eq!(wanted_platform(&req), "android", "不给就回落 android");
+        req.platform = Some("web".into());
+        assert_eq!(wanted_platform(&req), "web");
+        req.platform = Some("  ios ".into());
+        assert_eq!(wanted_platform(&req), "ios", "两边的空格要剃掉");
+        // 只填空格等于没填 —— 否则会拿一个空字符串去匹配设备，一台也匹配不上
+        req.platform = Some("   ".into());
+        assert_eq!(wanted_platform(&req), "android");
+        // security 不占设备，调用方填什么都不改这一点
+        req.kind = "security".into();
+        req.platform = Some("web".into());
+        assert_eq!(wanted_platform(&req), "none");
+    }
+
+    fn task_req() -> SpawnTask {
+        SpawnTask {
+            platform: None, device_id: None,
+            kind: "ui".into(), target: None, testcase: Some("看看首页".into()), mode: None,
+            interactive: false, max_rounds: Some(1), timeout: Duration::from_secs(60),
+            callback_url: None, ai: None, meta: None,
+        }
+    }
+
     fn ui任务跑harness安全任务跑security() {
         let l = lease("web:1");
         let ui = build_task_argv(
             &SpawnTask {
+                platform: None,
+                device_id: None,
                 kind: "ui".into(), target: None, testcase: Some("登录能用吗".into()), mode: None,
                 interactive: false, max_rounds: Some(20), timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None,
             },
@@ -627,6 +724,8 @@ mod tests {
 
         let sec = build_task_argv(
             &SpawnTask {
+                platform: None,
+                device_id: None,
                 kind: "security".into(), target: Some("https://x".into()), testcase: None,
                 mode: Some("safe".into()), interactive: false, max_rounds: None,
                 timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None,
@@ -641,6 +740,8 @@ mod tests {
     fn 缺目标的安全任务当场报错() {
         let e = build_task_argv(
             &SpawnTask {
+                platform: None,
+                device_id: None,
                 kind: "security".into(), target: None, testcase: None, mode: None, interactive: false,
                 max_rounds: None, timeout: Duration::from_secs(1), callback_url: None, ai: None, meta: None,
             },
@@ -743,5 +844,55 @@ mod tests {
                 .map(|o| o.exit_code()),
             [0, 1, 2, 3, 4]
         );
+    }
+}
+
+#[cfg(test)]
+mod classify_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn done_failed() -> serde_json::Value {
+        json!({"script": null, "conversation": ""})
+    }
+
+    /// **跑不起来 ≠ 用例没通过**。实跑撞过：节点没配 [ai]，编排官当场报错，
+    /// 任务却回了 failed 且 detail 里没有任何理由 —— 平台把它记成"用例不通过"，
+    /// 人会去查产品代码，而真因是这台机器缺配置
+    #[test]
+    fn 编排官崩了判error而不是failed() {
+        let why = "编排官出错：AI模型错误: ApiKeyEnvNotFound { env_name: \"ANTHROPIC_API_KEY\" }";
+        let (o, d) = classify(Outcome::Failed, done_failed(), Some(why.into()));
+        assert_eq!(o, Outcome::Error, "缺配置不是用例失败");
+        assert_eq!(d["why"], why, "理由必须带上，否则查不下去");
+    }
+
+    #[test]
+    fn 真的没通过还是failed但要带理由() {
+        let (o, d) = classify(Outcome::Failed, done_failed(), Some("断言失败: 找不到「下一步」".into()));
+        assert_eq!(o, Outcome::Failed);
+        assert!(d["why"].as_str().unwrap().contains("断言失败"));
+    }
+
+    #[test]
+    fn 没有错误播报时原样不动() {
+        let (o, d) = classify(Outcome::Failed, done_failed(), None);
+        assert_eq!(o, Outcome::Failed);
+        assert!(d.get("why").is_none());
+    }
+
+    /// 通过的任务不该因为中途有过一条错误播报就被改判 —— 那条可能只是某一步重试过
+    #[test]
+    fn 通过的任务不被改判() {
+        let (o, d) = classify(Outcome::Passed, done_failed(), Some("编排官出错：某次重试".into()));
+        assert_eq!(o, Outcome::Passed);
+        assert!(d["why"].is_string(), "理由仍然记下来，但结论不变");
+    }
+
+    #[test]
+    fn 只认err级别的播报() {
+        assert!(error_notice(&json!({"type":"notice","level":"info","text":"x"})).is_none());
+        assert!(error_notice(&json!({"type":"phase","level":"err","text":"x"})).is_none());
+        assert_eq!(error_notice(&json!({"type":"notice","level":"err","text":"炸了"})).unwrap(), "炸了");
     }
 }
