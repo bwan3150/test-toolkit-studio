@@ -47,7 +47,15 @@ pub struct Workarea {
 impl Workarea {
     /// 设备缓存区（跨进程共享，不删除）
     pub fn for_device(device_id: Option<&str>) -> Result<Self> {
-        let dir = cache_root()
+        Self::for_device_under(&cache_root(), device_id)
+    }
+
+    /// 指定 cache 根下的设备缓存区。
+    /// 给 `serve` 用 —— 它要按**某一条租约的** cache 目录去取那张截图，
+    /// 而进程级的 cache 根是整个节点的，不是某条租约的。
+    /// **路径拼装只此一份**：两份迟早不一致，而不一致的表现是"截图突然取不到了"。
+    pub fn for_device_under(root: &Path, device_id: Option<&str>) -> Result<Self> {
+        let dir = root
             .join("workarea")
             .join(sanitize(device_id.unwrap_or("default")));
         std::fs::create_dir_all(&dir).map_err(TkeError::IoError)?;

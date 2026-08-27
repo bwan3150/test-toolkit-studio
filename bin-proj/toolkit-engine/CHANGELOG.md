@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-27 · `GET /v1/sessions/{sid}/screen`：一张没有标注的原图
+平台的云设备页要显示"设备现在长什么样"，此前只能绕道 `steps '等待 [1ms]'` 再去产物里捡截图 ——
+而 steps 落的是**给报告用的标注图**，顶部烧着「Step 1 OK | 等待 [1ms]」，糊在实况屏幕上没人看得懂。
+- 根因是产物接口只服务会话**工作区**，而 `refresh` 写的是设备缓存区（`--cache` 下），
+  两者是兄弟目录，调用方够不着。开一个端点比把缓存区暴露成产物干净：
+  产物是"这次跑完留下的证据"，屏幕是"此刻长什么样"，两件事。
+- 端点先 `refresh` 再回那张 PNG。路径拼装复用 `Workarea::for_device_under`，
+  **不另写一份** —— 两份迟早不一致，而不一致的表现是"截图突然取不到了"。
+- 平台侧优先要它、404 退回旧办法，所以**老节点不会因此坏掉**。
+
+
 ### 2026-08-27 · 非 reasoning 世代的模型不再收到 `reasoning_effort`
 云设备真机验对话式 Agent 时撞到 400：`Unrecognized request argument supplied: reasoning_effort`。
 `gpt-4o-mini` 不认这个参数，而 reasoning 默认常开。

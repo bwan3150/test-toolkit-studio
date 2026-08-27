@@ -54,6 +54,10 @@ pub fn router(state: Arc<ServeState>) -> Router {
         .route("/v1/sessions/{sid}", delete(session_delete))
         .route("/v1/sessions/{sid}/heartbeat", post(session_heartbeat))
         .route("/v1/sessions/{sid}/exec", post(session_exec))
+        // 「现在屏幕长什么样」—— 一张**没有标注**的原图。
+        // 平台的云设备页要它:steps 落的截图带着 tke 报告用的顶部横幅
+        // （"Step 2 OK | 等待 [1ms]"），糊在实况屏幕上没人看得懂
+        .route("/v1/sessions/{sid}/screen", get(session_screen))
         // 不带路径 = 整个工作区（拉产物时最常用的那一次，别让人非得先知道有哪些目录）
         .route("/v1/sessions/{sid}/artifacts", get(artifact_root))
         .route("/v1/sessions/{sid}/artifacts/{*path}", get(artifact_get))
@@ -286,6 +290,36 @@ async fn session_exec(
     st.leases.note_launch(&sid, &body.argv);
 
     Ok(Json(serde_json::to_value(&out).unwrap_or_else(|e| json!({"error": e.to_string()}))))
+}
+
+/// 当前屏幕的原图。
+///
+/// 先 `refresh` 采一次，再把设备缓存区里的那张 PNG 原样回去。
+///
+/// **为什么不让调用方自己 `exec refresh` 然后去产物里取**：`refresh` 写的是
+/// 设备缓存区（`--cache` 下），而产物接口只服务会话**工作区**，两者是兄弟目录。
+/// 调用方够不着它 —— 这正是平台此前只能绕道 `steps` 的原因，而 steps 的截图
+/// 是给报告用的、带标注横幅。
+async fn session_screen(State(st): St, Path(sid): Path<String>) -> Result<Response, ApiError> {
+    let lease = need_lease(&st, &sid)?;
+    let validated = allowlist::validate(&["refresh".to_string()]).map_err(|e| bad(e.0))?;
+    let req = ExecRequest {
+        validated,
+        dirs: lease.dirs.clone(),
+        device: (!lease.device.id.is_empty()).then(|| lease.device.id.clone()),
+        timeout: st.default_timeout,
+    };
+    exec::run(&st.bin, &req).await.map_err(bad)?;
+
+    // 落点与 Workarea::for_device 同一套算法。**这里不另写一份路径拼装**——
+    // 两份拼装迟早不一致，而不一致的表现是"截图突然取不到了"，查起来很贵
+    let wa = crate::utils::Workarea::for_device_under(&lease.dirs.cache, Some(&lease.device.id))
+        .map_err(|e| bad(e.to_string()))?;
+    let path = wa.screenshot_path();
+    let bytes = std::fs::read(&path).map_err(|e| {
+        not_found(format!("这台设备上还没有可截的画面（{}）", e))
+    })?;
+    Ok(([(axum::http::header::CONTENT_TYPE, "image/png")], bytes).into_response())
 }
 
 // ===================== 产物 / 工作区 =====================
