@@ -411,7 +411,7 @@ async fn main() -> tke::Result<()> {
             } else {
                 let what = args.first().map(String::as_str).unwrap_or("");
                 eprintln!("未知命令：{}", what);
-                eprintln!("tke 不再透传原生工具——设备操作一律走 tke 指令，由 tke 转译后落到二进制上。");
+                eprintln!("tke 不再透传原生工具，设备操作一律走 tke 指令。");
                 eprintln!("  看日志       tke -d <设备> app log -p <包名>");
                 eprintln!("  应用/文件/信息 tke app|file|device --help");
                 eprintln!("  操作设备      tke control --help  /  tke steps '点击 [\"登录\"]'");

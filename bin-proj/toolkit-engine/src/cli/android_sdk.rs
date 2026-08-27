@@ -114,13 +114,10 @@ pub async fn install(yes: bool, count: usize) -> Result<()> {
     println!("    emulator      {:>6} MB", emu.size / 1_000_000);
     println!("    系统镜像       {:>6} MB   {}", img.size / 1_000_000, dim(&img.pkg));
     println!("    落点          {}", sdk.display());
-    // 下载多少 ≠ 占盘多少。系统镜像是稀疏的，展开后逻辑 8GB 上下、
-    // 实占约 2GB——两个数字都说，人才好判断这台机器塞不塞得下
-    println!("    {}", dim("装完约占 2.5GB（系统镜像是稀疏的，逻辑大小会显示 8GB 上下）"));
     println!();
-    println!("  {}", dim("这是 Google 的 Android SDK，下载即表示你接受 Android SDK 许可"));
-    println!("  {}", dim("（https://developer.android.com/studio/terms）"));
-    println!("  {}", dim("tke 不转发这些文件——我们只替你把它们取下来放好"));
+    // 许可这句留着 —— 它不是解说，是下载前必须让人看到的一句话（字节来自 Google）
+    println!("  {}", dim("下载即表示你接受 Android SDK 许可"));
+    println!("  {}", dim("https://developer.android.com/studio/terms"));
 
     if !yes && !crate::cli::fix::confirm("\n  开始下载吗？")? {
         println!("  {}", dim("已取消"));
@@ -175,7 +172,6 @@ pub async fn install(yes: bool, count: usize) -> Result<()> {
         println!();
         println!("  {} 这台机器还不能用 KVM 加速，模拟器会慢到没法用", crate::cli::doctor::sym_warn());
         println!("    {}", dim("修：sudo usermod -aG kvm $USER  然后重新登录（或重启）"));
-        println!("    {}", dim("（`setfacl` 那条路没用——emulator 读的是 /etc/group）"));
     }
     Ok(())
 }

@@ -85,7 +85,6 @@ fn report_android_emu() -> Result<()> {
     } else {
         println!("  {} {}", dim("状态    "), dim("未安装（选装）"));
         println!();
-        println!("  {}", dim("安卓真机插上即用，模拟器不是必经之路——要装再装："));
         println!("    tke doctor --fix --profile android-emu");
         println!("  {}", dim("约 1GB（emulator + 系统镜像），从 Google 官方源下载"));
     }
@@ -238,7 +237,7 @@ fn fix_sim_wda(base_url: &str, q: &str, tmp: &Path, profile: &str) {
         return;
     }
     println!();
-    println!("  {} {}", dim("iOS模拟器"), "装 WebDriverAgent（模拟器的点击与元素采集靠它）");
+    println!("  {} {}", dim("iOS模拟器"), "装 WebDriverAgent");
     match install_sim_wda(base_url, q, tmp) {
         Ok(()) => println!("  {} 装好了", sym_ok()),
         Err(e) => {
