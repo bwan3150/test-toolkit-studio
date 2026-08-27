@@ -462,10 +462,16 @@ fn add_avds(sdk: &Path, count: usize) -> Result<()> {
     let mut made = 0;
     for n in 1..=count {
         let name = avd_name(n);
-        // 已经在了就别动 —— 用户可能改过分辨率、内存这些
-        if dir.join(format!("{}.avd", name)).is_dir() {
+        let (ini, avd) = avd_paths(&dir, &name);
+        // **判据要跟"算不算一台 AVD"一致**：两样都在才算已装。
+        // 从前只看目录在不在 —— 上一版的 bug 建出了没有指路文件的半台，
+        // 重跑时被判成"已在，跳过"，那半台永远补不回来（实测踩过）
+        if avd.is_dir() && ini.is_file() {
             println!("  {} AVD `{}` 已在，跳过", sym_dot(), name);
             continue;
+        }
+        if avd.is_dir() {
+            println!("  {} AVD `{}` 只有一半，补齐", sym_dot(), name);
         }
         print!("  {} 建 AVD `{}` … ", sym_dot(), name);
         flush();
@@ -485,9 +491,18 @@ fn add_avds(sdk: &Path, count: usize) -> Result<()> {
     Ok(())
 }
 
+/// 一个 AVD 落盘的两样东西：指路的 `<名字>.ini` 和装配置的 `<名字>.avd/`。
+///
+/// **两样都得按 name 来**：少了指路文件，emulator 和 `tke device list` 都当它不存在。
+/// 抽成函数是为了能测 —— 从前 .ini 那行写死了 AVD_NAME，建第二台时覆盖了第一台的，
+/// 建的时候一路 ✓，只有去起它才发现（实测：建了 tke-2，列表里只有 tke）
+fn avd_paths(dir: &Path, name: &str) -> (PathBuf, PathBuf) {
+    (dir.join(format!("{name}.ini")), dir.join(format!("{name}.avd")))
+}
+
 fn create_avd(sdk: &Path, api: u32, abi: &str, name: &str) -> Result<()> {
     let dir = avd_dir().ok_or_else(|| TkeError::InvalidArgument("找不到用户目录".into()))?;
-    let avd = dir.join(format!("{}.avd", name));
+    let (ini_path, avd) = avd_paths(&dir, name);
     std::fs::create_dir_all(&avd).map_err(TkeError::IoError)?;
 
     let cpu_arch = if abi == "arm64-v8a" { "arm64" } else { "x86_64" };
@@ -530,7 +545,7 @@ fn create_avd(sdk: &Path, api: u32, abi: &str, name: &str) -> Result<()> {
         name,
         api
     );
-    std::fs::write(dir.join(format!("{}.ini", AVD_NAME)), ini).map_err(TkeError::IoError)?;
+    std::fs::write(&ini_path, ini).map_err(TkeError::IoError)?;
     let _ = sdk; // 路径已写成相对 SDK 根，emulator 靠 ANDROID_SDK_ROOT 找过去
     Ok(())
 }
@@ -623,5 +638,31 @@ mod avd_name_tests {
         uniq.sort();
         uniq.dedup();
         assert_eq!(uniq.len(), names.len(), "重名了：{names:?}");
+    }
+}
+
+#[cfg(test)]
+mod avd_paths_tests {
+    use super::*;
+
+    /// 指路文件和配置目录**都要跟着名字走**。
+    /// 从前 .ini 那行写死了 AVD_NAME：建 tke-2 时它覆盖了 tke.ini，
+    /// tke-2.ini 从没生成 —— 建的时候一路 ✓，去起它才报「没有叫 tke-2 的 AVD」
+    #[test]
+    fn 两个文件都按名字走() {
+        let dir = Path::new("/x/avd");
+        let (ini, avd) = avd_paths(dir, "tke-2");
+        assert_eq!(ini, dir.join("tke-2.ini"), "指路文件没跟着名字走");
+        assert_eq!(avd, dir.join("tke-2.avd"), "配置目录没跟着名字走");
+    }
+
+    /// 两台之间不能有任何一样是共用的 —— 共用哪个都会把前一台覆盖掉
+    #[test]
+    fn 不同名字不共用任何文件() {
+        let dir = Path::new("/x/avd");
+        let (i1, a1) = avd_paths(dir, avd_name(1).as_str());
+        let (i2, a2) = avd_paths(dir, avd_name(2).as_str());
+        assert_ne!(i1, i2, "两台共用了同一个指路文件");
+        assert_ne!(a1, a2, "两台共用了同一个配置目录");
     }
 }
