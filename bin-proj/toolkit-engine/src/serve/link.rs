@@ -203,7 +203,7 @@ fn hello_frame(st: &Arc<ServeState>, cfg: &LinkConfig) -> serde_json::Value {
         "tke_version": env!("BUILD_VERSION"),
         "devices": st.leases.pool().iter().map(|d| serde_json::json!({
             "id": d.id, "kind": d.kind, "platform": d.platform(),
-            "model": d.model, "os": d.os, "label": d.label, "ready": true,
+            "model": d.model, "os": d.os, "label": d.label, "ready": true, "physical": d.physical(),
         })).collect::<Vec<_>>(),
     })
 }

@@ -65,7 +65,7 @@ fn payload(st: &ServeState, link: &PlatformLink, listen: &str) -> serde_json::Va
         "devices": pool.iter().map(|d| serde_json::json!({
             "id": d.id, "kind": d.kind, "platform": d.platform(),
             "model": d.model, "os": d.os, "label": d.label,
-            "ready": true,
+            "ready": true, "physical": d.physical(),
         })).collect::<Vec<_>>(),
         // 节点自己认为正被占用的。**对账用，不作为真相**——计时以平台为准（节点会重启）
         "busy": busy,

@@ -463,15 +463,22 @@ fn add_avds(sdk: &Path, count: usize) -> Result<()> {
     for n in 1..=count {
         let name = avd_name(n);
         let (ini, avd) = avd_paths(&dir, &name);
-        // **判据要跟"算不算一台 AVD"一致**：两样都在才算已装。
-        // 从前只看目录在不在 —— 上一版的 bug 建出了没有指路文件的半台，
-        // 重跑时被判成"已在，跳过"，那半台永远补不回来（实测踩过）
-        if avd.is_dir() && ini.is_file() {
-            println!("  {} AVD `{}` 已在，跳过", sym_dot(), name);
-            continue;
-        }
-        if avd.is_dir() {
-            println!("  {} AVD `{}` 只有一半，补齐", sym_dot(), name);
+        // **判据要跟"算不算一台 AVD"一致**：两样都在、而且指路文件**指对了地方**。
+        //
+        // 光看文件在不在不够：上一版的 bug 里，指路文件的文件名写死了 tke.ini、
+        // 内容却用的是当前名字 —— 于是 tke.ini 里写着 `path=.../tke-2.avd`。
+        // 两个 ini 指向同一个目录，emulator 直接 FATAL：
+        // 「Running multiple emulators with the same AVD」（用户实测撞上）。
+        // 那种坏掉的指路文件"在"，只看存在性会一直跳过它，永远修不好
+        match avd_state(&ini, &avd, &name) {
+            AvdState::Ok => {
+                println!("  {} AVD `{}` 已在，跳过", sym_dot(), name);
+                continue;
+            }
+            AvdState::Missing => {}
+            AvdState::Broken(why) => {
+                println!("  {} AVD `{}` {}，重写", sym_dot(), name, why);
+            }
         }
         print!("  {} 建 AVD `{}` … ", sym_dot(), name);
         flush();
@@ -489,6 +496,47 @@ fn add_avds(sdk: &Path, count: usize) -> Result<()> {
         println!("    {}", dim(&format!("起它：tke -d avd:{} control boot", avd_name(n))));
     }
     Ok(())
+}
+
+/// 一台 AVD 现在是什么状况。
+enum AvdState {
+    /// 两样都在，指路文件也指对了
+    Ok,
+    /// 还没建
+    Missing,
+    /// 建过但坏了（指路文件缺、或指向了别处）
+    Broken(String),
+}
+
+/// 查一台 AVD 是不是**真的可用**。
+///
+/// 不只看文件在不在 —— 指路文件里的 `path=` 必须落在同名的 `.avd` 目录上。
+/// 指错了的话 emulator 会把两个名字解析到同一份内容，起第二台时直接 FATAL
+fn avd_state(ini: &Path, avd: &Path, name: &str) -> AvdState {
+    if !avd.is_dir() && !ini.is_file() {
+        return AvdState::Missing;
+    }
+    if !ini.is_file() {
+        return AvdState::Broken("缺指路文件".into());
+    }
+    let Ok(text) = std::fs::read_to_string(ini) else {
+        return AvdState::Broken("指路文件读不了".into());
+    };
+    let points_to = text
+        .lines()
+        .find_map(|l| l.strip_prefix("path="))
+        .map(str::trim)
+        .unwrap_or("");
+    if points_to.is_empty() {
+        return AvdState::Broken("指路文件里没有 path".into());
+    }
+    if Path::new(points_to) != avd {
+        return AvdState::Broken(format!("指向了 {points_to}（应当是 {name}.avd）"));
+    }
+    if !avd.is_dir() {
+        return AvdState::Broken("配置目录不在".into());
+    }
+    AvdState::Ok
 }
 
 /// 一个 AVD 落盘的两样东西：指路的 `<名字>.ini` 和装配置的 `<名字>.avd/`。
@@ -644,6 +692,45 @@ mod avd_name_tests {
 #[cfg(test)]
 mod avd_paths_tests {
     use super::*;
+
+    fn write(dir: &Path, name: &str, points_to: &str, make_dir: bool) {
+        if make_dir {
+            std::fs::create_dir_all(dir.join(format!("{name}.avd"))).unwrap();
+        }
+        std::fs::write(dir.join(format!("{name}.ini")),
+                       format!("avd.ini.encoding=UTF-8\npath={points_to}\n")).unwrap();
+    }
+
+    /// **指路文件指错了地方要能查出来**。
+    /// 上一版 bug 里 tke.ini 写着 `path=.../tke-2.avd`，两个名字解析到同一份内容，
+    /// 起第二台时 emulator 直接 FATAL「Running multiple emulators with the same AVD」。
+    /// 只看文件在不在的话，那种坏掉的会被一直判成"已在，跳过"，永远修不好
+    #[test]
+    fn 指错地方的算坏掉() {
+        let root = std::env::temp_dir().join(format!("tke-avdstate-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let (ini, avd) = avd_paths(&root, "tke");
+        write(&root, "tke", root.join("tke-2.avd").to_str().unwrap(), true);
+        assert!(matches!(avd_state(&ini, &avd, "tke"), AvdState::Broken(_)), "指错了却说没问题");
+
+        write(&root, "tke", avd.to_str().unwrap(), true);
+        assert!(matches!(avd_state(&ini, &avd, "tke"), AvdState::Ok), "指对了却说坏了");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 没建过 vs 建坏了要分开 —— 前者是正常的"该建了"，后者要重写
+    #[test]
+    fn 没建过与建坏了分得开() {
+        let root = std::env::temp_dir().join(format!("tke-avdstate2-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let (ini, avd) = avd_paths(&root, "tke-9");
+        assert!(matches!(avd_state(&ini, &avd, "tke-9"), AvdState::Missing));
+
+        // 只有目录没有指路文件 = 上一版 bug 留下的半台
+        std::fs::create_dir_all(&avd).unwrap();
+        assert!(matches!(avd_state(&ini, &avd, "tke-9"), AvdState::Broken(_)));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     /// 指路文件和配置目录**都要跟着名字走**。
     /// 从前 .ini 那行写死了 AVD_NAME：建 tke-2 时它覆盖了 tke.ini，

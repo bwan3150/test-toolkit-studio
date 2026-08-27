@@ -42,6 +42,27 @@ pub struct PoolDevice {
 
 impl PoolDevice {
     /// 归一到 `capabilities.platform` 那四个值
+    /// 这是**一台实物**吗。
+    ///
+    /// 平台据此决定"这次没报上来"意味着什么：
+    ///   实物（插着的手机、连着的 iPhone）→ 可能只是拔了线，标离线留着，
+    ///     人看得出这台机器上平时有什么
+    ///   非实物（web 槽、AVD、模拟器）→ **就是没有了**：调小 --web-slots、
+    ///     删掉一个 AVD、关掉模拟器，那东西不存在，显示成"离线"是误导
+    ///
+    /// **由节点判定，不让平台猜**：booted 的安卓模拟器经 adb 报上来时
+    /// kind 就是 "android"（跟真机一样），只有序列号 `emulator-` 前缀能区分 ——
+    /// 让平台去认这个前缀，等于把 adb 的实现细节搬到另一个仓库里
+    pub fn physical(&self) -> bool {
+        match self.kind.as_str() {
+            "web" | "android-avd" | "ios-sim" | "none" | "fake" => false,
+            // adb 把 booted 的模拟器和真机都报成 android，序列号前缀是唯一的分界
+            "android" => !self.id.starts_with("emulator-"),
+            "ios" => true,
+            _ => false,
+        }
+    }
+
     pub fn platform(&self) -> &str {
         match self.kind.as_str() {
             "android" | "android-avd" => "android",
@@ -476,5 +497,40 @@ mod tests {
                 let _ = std::fs::remove_dir_all(&self.0);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod physical_tests {
+    use super::PoolDevice;
+
+    fn dev(id: &str, kind: &str) -> PoolDevice {
+        PoolDevice { id: id.into(), kind: kind.into(), label: String::new(),
+                     model: String::new(), os: String::new() }
+    }
+
+    /// 实物：拔了线只是"离线"，平台要留着记录
+    #[test]
+    fn 真机是实物() {
+        assert!(dev("f64b3b4d", "android").physical());
+        assert!(dev("00008030-001", "ios").physical());
+    }
+
+    /// 非实物：不报上来就是**没有了**，平台该删掉而不是显示成离线。
+    /// 调小 --web-slots 之后 web:3 显示成"离线"是误导（用户实测反馈）
+    #[test]
+    fn 槽位与模拟器不是实物() {
+        assert!(!dev("web:3", "web").physical());
+        assert!(!dev("avd:tke", "android-avd").physical());
+        assert!(!dev("sim:ABC", "ios-sim").physical());
+    }
+
+    /// **booted 的安卓模拟器经 adb 报上来时 kind 就是 android**，跟真机一样，
+    /// 只有 `emulator-` 前缀能区分。这个判断放在节点这边，
+    /// 别让平台去认 adb 的命名习惯
+    #[test]
+    fn 起来的模拟器不算实物() {
+        assert!(!dev("emulator-5554", "android").physical());
+        assert!(dev("emulator5554", "android").physical(), "少了连字符就不是 adb 的模拟器命名");
     }
 }
