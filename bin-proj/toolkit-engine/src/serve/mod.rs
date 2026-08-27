@@ -61,6 +61,21 @@ pub struct ServeOptions {
     pub max_upload_bytes: usize,
 }
 
+/// 把重扫的结果与**正在被租用的设备**合并。
+///
+/// 在用的设备不许从池子里消失 —— 那会让一次跑到一半的任务对着一台"不存在"的设备
+/// 继续操作，而且它占的租约也就没了着落。重扫时那台可能恰好没被扫到
+/// （adb 抖一下、模拟器正在重启），不能因此判它不在。
+pub fn merge_pool(fresh: Vec<PoolDevice>, busy: &[PoolDevice]) -> Vec<PoolDevice> {
+    let mut out = fresh;
+    for d in busy {
+        if !d.id.is_empty() && !out.iter().any(|x| x.id == d.id) {
+            out.push(d.clone());
+        }
+    }
+    out
+}
+
 /// 组装设备池。浏览器是**槽位**（一个槽一份会话文件，天然可并发），
 /// 真机/模拟器来自 `tools::discover`——与 `tke device list` 同一套，
 /// 同一个问题不该有两套答案
@@ -159,6 +174,40 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
         }
     }
 
+    // 定期重扫设备。
+    //
+    // **设备是会变的**：起一台模拟器、插一根数据线、拔掉一台真机。
+    // 从前池子在进程启动时扫一次就定死了（set_pool 这个函数一直没人调用）——
+    // 后来起的模拟器节点和平台都看不见，非重启服务不可（用户实测问到）。
+    //
+    // 正在被租用的设备**不许从池子里消失**：那会让一次跑到一半的任务对着
+    // 一台"不存在"的设备继续操作。所以重扫结果里缺了在用的那些，就把它们补回去
+    let rescan = state.clone();
+    let rescan_slots = opts.web_slots;
+    let rescan_fake = opts.fake_devices.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            let fresh = tokio::task::spawn_blocking({
+                let fake = rescan_fake.clone();
+                move || build_pool(rescan_slots, &fake)
+            })
+            .await
+            .unwrap_or_default();
+            if fresh.is_empty() {
+                continue; // 扫出来一台都没有多半是扫的时候出了岔子，别把池子清空
+            }
+            let busy: Vec<PoolDevice> = rescan.leases.active().into_iter().map(|l| l.device).collect();
+            let fresh = merge_pool(fresh, &busy);
+            let before: Vec<String> = rescan.leases.pool().iter().map(|d| d.id.clone()).collect();
+            let after: Vec<String> = fresh.iter().map(|d| d.id.clone()).collect();
+            if before != after {
+                tracing::info!(target: "tke::serve", "设备池变了：{} → {}", before.join(","), after.join(","));
+                rescan.leases.set_pool(fresh);
+            }
+        }
+    });
+
     // 清扫过期租约：断了心跳的会话不能永久占着设备，还要顺手复位（INV-17）
     let sweeper = state.clone();
     tokio::spawn(async move {
@@ -178,6 +227,39 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::merge_pool;
+
+    fn dev(id: &str) -> PoolDevice {
+        PoolDevice { id: id.into(), kind: "android".into(), label: id.into(),
+                     model: String::new(), os: String::new() }
+    }
+
+    /// **在用的设备不许从池子里消失**：重扫时它可能恰好没被扫到
+    /// （adb 抖一下、模拟器正在重启），不能因此判它不在 ——
+    /// 那会让一次跑到一半的任务对着一台"不存在"的设备继续操作
+    #[test]
+    fn 重扫时保住在用的设备() {
+        let fresh = vec![dev("web:1")];
+        let busy = vec![dev("emulator-5554")];
+        let out = merge_pool(fresh, &busy);
+        assert!(out.iter().any(|d| d.id == "emulator-5554"), "在用的设备被扫没了");
+        assert!(out.iter().any(|d| d.id == "web:1"));
+    }
+
+    /// 新插上的设备要进来（这正是加重扫的原因：起了模拟器却看不见）
+    #[test]
+    fn 新设备会被扫进来() {
+        let out = merge_pool(vec![dev("web:1"), dev("emulator-5556")], &[]);
+        assert_eq!(out.len(), 2);
+    }
+
+    /// 别把同一台加两遍 —— 池子里出现两个同 id，排期会以为有两台
+    #[test]
+    fn 在用的设备已在结果里就不重复() {
+        let out = merge_pool(vec![dev("emulator-5554")], &[dev("emulator-5554")]);
+        assert_eq!(out.len(), 1, "同一台被加了两遍");
+    }
+
     use super::*;
 
     #[test]

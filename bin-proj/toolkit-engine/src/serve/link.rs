@@ -128,18 +128,10 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
     tracing::info!(target: "tke::link", "已连上平台（{}）", cfg.base);
 
     // 连上先报一次自己是谁、有哪些设备 —— 平台据此建/更新节点行
-    let hello = serde_json::json!({
-        "event": "hello",
-        "name": cfg.name,
-        "host_os": std::env::consts::OS,
-        "arch": std::env::consts::ARCH,
-        "tke_version": env!("BUILD_VERSION"),
-        "devices": st.leases.pool().iter().map(|d| serde_json::json!({
-            "id": d.id, "kind": d.kind, "platform": d.platform(),
-            "model": d.model, "os": d.os, "label": d.label, "ready": true,
-        })).collect::<Vec<_>>(),
-    });
-    tx.send(Message::Text(hello.to_string().into())).await.map_err(|e| e.to_string())?;
+    tx.send(Message::Text(hello_frame(st, cfg).to_string().into()))
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut last_devices = device_ids(st);
 
     // 节点这头也定期报一次活。**两边都不说话的连接会被中间层悄悄切掉**，
     // 而谁都不知道 —— 表现就是"连上又断、每秒重连一次"（实测撞过）。
@@ -161,6 +153,15 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
                 None => break,
             },
             _ = ping_rx.recv() => {
+                // **设备变了就重报**：起了一台模拟器、插了根线，平台得知道。
+                // hello 是全量替换，重发一次就对上了（少发一次不会永久错位）
+                let now = device_ids(st);
+                if now != last_devices {
+                    last_devices = now;
+                    if tx.send(Message::Text(hello_frame(st, cfg).to_string().into())).await.is_err() {
+                        break;
+                    }
+                }
                 if tx.send(Message::Ping(Vec::new().into())).await.is_err() {
                     break;
                 }
@@ -189,6 +190,26 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
         }
     }
     Ok(())
+}
+
+/// 「我是谁、有哪些设备」。**每次都是全量**，平台整份替换 ——
+/// 事件式（插了一台推一条）漏一条就永久错位，全量替换会自愈
+fn hello_frame(st: &Arc<ServeState>, cfg: &LinkConfig) -> serde_json::Value {
+    serde_json::json!({
+        "event": "hello",
+        "name": cfg.name,
+        "host_os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "tke_version": env!("BUILD_VERSION"),
+        "devices": st.leases.pool().iter().map(|d| serde_json::json!({
+            "id": d.id, "kind": d.kind, "platform": d.platform(),
+            "model": d.model, "os": d.os, "label": d.label, "ready": true,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn device_ids(st: &Arc<ServeState>) -> Vec<String> {
+    st.leases.pool().iter().map(|d| d.id.clone()).collect()
 }
 
 /// 把一帧翻成 Request 交给 Router，再把 Response 翻回一帧。
