@@ -157,7 +157,7 @@ pub async fn handle(args: ReportArgs) -> Result<()> {
 fn open_in_browser(path: &Path) {
     // 无桌面就别费劲了：xdg-open 在无 DISPLAY 时会报一串看不懂的错
     if !tke::utils::params::desktop_available() {
-        eprintln!("（无图形界面，没有打开浏览器；报告在上面那个路径）");
+        eprintln!("（无图形界面，没有打开浏览器）");
         return;
     }
     let (prog, pre): (&str, &[&str]) = if cfg!(target_os = "macos") {

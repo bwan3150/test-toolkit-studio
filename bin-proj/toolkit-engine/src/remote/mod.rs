@@ -168,7 +168,7 @@ pub fn open_session(c: &Client, device: Option<&str>) -> Result<RemoteSession, S
         return Err(format!("节点没给出 session_id：{v}"));
     }
     if sess.device_id.is_empty() {
-        eprintln!("🔗 已开会话（无设备，只用工作区——不计设备时长）");
+        eprintln!("🔗 已开会话（无设备，只用工作区）");
     } else {
         eprintln!("🔗 租到 {}（{}）", sess.device_label, sess.device_id);
     }
