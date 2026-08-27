@@ -1079,3 +1079,34 @@ cache 目录，`refresh` 也报 `success:true` 并回了截图路径，但平台
 不逐层透传 —— 一次进程就一个 `--cache`，这是事实本身的形状；
 透传要动十几处签名，含 agent 执行引擎深处。与 `set_ocr_url` / `set_web_headless` 同一套路。
 回归测试在 `src/utils/workarea.rs`：断言设备缓存区与运行临时区都在 cache 根之下。
+
+---
+
+## P-61 (2026-08-27) 只在「默认值」上绕开的坑，调用方一显式配置就又踩回去
+
+**现象**：云设备的对话式 Agent 在真机上起不来。整条链都对（凭据下发到了、
+`session_info` 显示 `model: gpt-4o-mini, provider: openai`），上游回 400：
+
+```
+Unrecognized request argument supplied: reasoning_effort
+```
+
+**根因**：`reasoning` 默认常开，而 `gpt-4o-mini` 是非 reasoning 世代的模型，
+不认这个参数。
+
+**这件事代码里早就知道** —— `default_model()` 的注释白纸黑字写着
+「旧的 gpt-4o 非 reasoning，reasoning 默认常开下会 400，故缺省升到 gpt-5.5-mini」。
+**但那只改了默认值**：调用方（这里是平台按 App 配置下发的 `model`）
+显式给一个旧模型时，照样发。
+
+**规则**：**兼容性判据要跟着「实际用的东西」走，不是跟着「我们建议用的东西」走。**
+在默认值上绕开一个不兼容，等于只保护了不做选择的人 ——
+而会显式配置的人恰恰是更可能配出问题的那一批。
+
+**改法**：`model_supports_reasoning(model)` 按实际模型判，
+**用拒绝名单不用允许名单** —— 允许名单会在上游出新模型时静默关掉思考，
+那种退化没有任何症状，只会让探索质量悄悄变差。
+
+**顺带**：`session_info` 原本照抄配置里的值，模型不支持时界面上仍写着
+「推理 medium」而实际压根没开。改成如实说「关闭（xxx 不支持）」。
+**说配置里写了什么，不等于说实际会发生什么** —— 这类不一致谁也看不出来。

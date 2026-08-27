@@ -38,6 +38,28 @@ fn parse_reasoning_effort(spec: Option<&str>) -> Option<ReasoningEffort> {
     }
 }
 
+/// 这个模型认不认 reasoning 参数。
+///
+/// **拒绝名单而不是允许名单**：认不出来的模型一律放行 ——
+/// 允许名单会在每次上游出新模型时静默关掉思考，而那种退化没有任何症状，
+/// 只会让探索质量悄悄变差。这里只写下我们**确知会 400** 的那些。
+///
+/// 实测（2026-08-27，云设备真机）：App 显式配了 `gpt-4o-mini`，
+/// 上游回 400「Unrecognized request argument supplied: reasoning_effort」。
+/// 代码里其实早就知道这件事 —— `default_model()` 的注释写着「旧的 gpt-4o 非
+/// reasoning，reasoning 默认常开下会 400，故缺省升到 gpt-5.5-mini」——
+/// **但那只绕开了默认值**：调用方显式配一个旧模型时照样发。
+/// 判据要跟着**实际用的模型**走，不是跟着"我们建议用哪个"走。
+pub fn model_supports_reasoning(model: &str) -> bool {
+    let m = model.trim().to_lowercase();
+    // OpenAI 的非 reasoning 世代：gpt-4o / gpt-4 / gpt-3.5 / chatgpt-4o
+    // （gpt-5.x 与 o1/o3/o4 系列是 reasoning 模型，不在此列）
+    if m.starts_with("gpt-4") || m.starts_with("gpt-3.5") || m.starts_with("chatgpt-4") {
+        return false;
+    }
+    true
+}
+
 /// 一次 AI 探索会话：内部持有 genai 客户端 + 累积的对话请求
 ///
 /// 典型用法（探索循环）：
@@ -172,7 +194,16 @@ impl LlmSession {
         // normalize_reasoning_content：把 deepseek/qwen 等 <think>…</think> 抽成 reasoning_content。
         let mut options = ChatOptions::default().with_normalize_reasoning_content(true);
         if let Some(effort) = parse_reasoning_effort(cfg.reasoning_effort.as_deref()) {
-            options = options.with_reasoning_effort(effort);
+            if model_supports_reasoning(&model) {
+                options = options.with_reasoning_effort(effort);
+            } else {
+                // **不静默**：用户显式配了 reasoning 却没生效，得让他知道为什么，
+                // 否则"我明明开了思考"和"这模型压根不支持"长得一模一样
+                tracing::warn!(
+                    "模型 {model} 不接受 reasoning 参数，本次不发送（它是非 reasoning 世代；\
+                     要用思考请换 gpt-5.x / o 系列 / claude / gemini-2.5）"
+                );
+            }
         }
 
         Ok(Self::assemble(Backend::Real(client), model, options, system.into(), tools))
@@ -465,6 +496,28 @@ impl LlmSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 回归 2026-08-27 云设备真机撞到的 400：
+    /// 「Unrecognized request argument supplied: reasoning_effort」。
+    #[test]
+    fn 非reasoning世代的模型不发思考参数() {
+        for m in ["gpt-4o-mini", "gpt-4o", "GPT-4", "gpt-3.5-turbo", "chatgpt-4o-latest"] {
+            assert!(!model_supports_reasoning(m), "{m} 不该被当成 reasoning 模型");
+        }
+    }
+
+    /// **拒绝名单要窄**：认不出来的一律放行。
+    /// 反过来（允许名单）会在上游出新模型时静默关掉思考，而那种退化没有症状
+    #[test]
+    fn 其余模型一律照常开思考() {
+        for m in [
+            "gpt-5.5-mini", "gpt-5.4", "o3-mini", "o4-mini",
+            "claude-sonnet-4-6", "gemini-2.5-flash", "deepseek-chat",
+            "某个还没出生的模型",
+        ] {
+            assert!(model_supports_reasoning(m), "{m} 不该被误伤");
+        }
+    }
 
     fn fake(turns: Vec<FakeTurn>) -> LlmSession {
         LlmSession::new_fake("测试系统提示词", Vec::new(), turns)

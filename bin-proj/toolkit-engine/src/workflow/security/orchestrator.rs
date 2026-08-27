@@ -123,7 +123,11 @@ pub async fn run(
         platform: format!("强度 {mode} · 聚焦 {focus}"),
         model: ai.model.clone().unwrap_or_else(|| "默认".into()),
         provider: ai.provider.clone().unwrap_or_else(|| "anthropic（默认）".into()),
-        reasoning: ai.reasoning_effort.clone().unwrap_or_else(|| "medium".into()),
+        // 同 harness:说实际会发生什么(模型不支持思考时我们不发那个参数)
+        reasoning: match ai.model.as_deref() {
+            Some(m) if !crate::model_supports_reasoning(m) => format!("关闭（{m} 不支持）"),
+            _ => ai.reasoning_effort.clone().unwrap_or_else(|| "medium".into()),
+        },
     });
 
     let system = prompts.system("orchestrator");

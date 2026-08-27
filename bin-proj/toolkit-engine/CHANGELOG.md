@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+### 2026-08-27 · 非 reasoning 世代的模型不再收到 `reasoning_effort`
+云设备真机验对话式 Agent 时撞到 400：`Unrecognized request argument supplied: reasoning_effort`。
+`gpt-4o-mini` 不认这个参数，而 reasoning 默认常开。
+- 代码里**早就知道**这件事（`default_model()` 的注释就写着），**但只改了默认值** ——
+  调用方显式配一个旧模型时照样发。判据改成跟着**实际用的模型**走。
+- 用**拒绝名单**不用允许名单：允许名单会在上游出新模型时静默关掉思考，那种退化没有症状。
+- `session_info` 也跟着说实话：模型不支持时显示「关闭（xxx 不支持）」，
+  不再照抄配置里的 `medium`。
+- 记 P-61。修完在真机上跑通：AI 真的在操作手机（滚动 / 看图点击 / 返回 / 进设置）。
+
+
 ### 2026-08-27 · 反向通道支持长流（对话式 Agent 要用）
 此前这条通道是**严格的一问一答**（`call` → `reply` 按 id 配对），
 而 `/v1/tasks/{id}/session` 是个 WebSocket：事件不断推、回答不断写，一问一答装不下。

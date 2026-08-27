@@ -167,7 +167,10 @@ pub async fn handle(
         platform: platform.map(|p| p.name().to_string()).unwrap_or_else(|| "(推断)".to_string()),
         model: merged_ai.model.clone().unwrap_or_else(|| "默认（按供应商）".to_string()),
         provider: merged_ai.provider.clone().unwrap_or_else(|| "anthropic（默认）".to_string()),
-        reasoning: merged_ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string()),
+        // **说实际会发生什么,不是说配置里写了什么**:非 reasoning 世代的模型
+        // 我们不发思考参数(否则上游 400),这一行要跟着变 ——
+        // 否则界面上写着"推理 medium"而实际压根没开,那种不一致谁也看不出来
+        reasoning: effective_reasoning_label(&merged_ai),
     });
 
     // 提示词来源：CLI 文本/文件优先；目录 CLI > 配置 [ai].prompts_dir
@@ -317,4 +320,15 @@ async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<Set
 
     // 模型/供应商/推理不再打进消息流——随 SessionInfo 一次性下发，TUI 用 /model 查询
     Some(SetupResult { device, platform })
+}
+
+/// 这次实际会用的推理强度(给 SessionInfo 显示)。
+/// 模型不支持时如实说"关闭",别照抄配置里的值 —— 见 provider::session::model_supports_reasoning
+fn effective_reasoning_label(ai: &tke::AiConfig) -> String {
+    let configured = ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string());
+    let model = ai.model.clone().unwrap_or_default();
+    if !model.is_empty() && !tke::model_supports_reasoning(&model) {
+        return format!("关闭（{model} 不支持）");
+    }
+    configured
 }
