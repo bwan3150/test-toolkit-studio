@@ -676,7 +676,6 @@ mod tests {
         assert!(check_mode(Some("随便编的")).is_err());
     }
 
-    #[test]
     /// 调用方选了 web，就得去租 web。
     /// 实跑撞过：平台下发 platform=web，节点却按写死的 android 去租，报
     /// 「本节点没有 android 设备可租」——看着像节点缺设备，真因是字段没传过来
@@ -706,6 +705,7 @@ mod tests {
         }
     }
 
+    #[test]
     fn ui任务跑harness安全任务跑security() {
         let l = lease("web:1");
         let ui = build_task_argv(
