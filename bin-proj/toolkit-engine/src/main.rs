@@ -302,9 +302,16 @@ async fn main() -> tke::Result<()> {
     let is_unknown_command = !tool_is_script && matches!(cli.command, Commands::Tool(_));
 
     if !is_unknown_command {
-        // 默认只输出 WARN 以上保持 CLI 干净；-v 输出 DEBUG；日志一律走 stderr
+        // 默认只输出 WARN 以上保持 CLI 干净；-v 输出 DEBUG；日志一律走 stderr。
+        //
+        // **`serve` 例外，默认 INFO**：它是常驻服务，不是一次性命令 ——
+        // 连上平台 / 断开 / 重连失败这些是运维必须看得见的事件。
+        // 从前跟别的命令一样默认 WARN，结果是排查时盯着一个空日志文件，
+        // 得先想起来加 -v 才看得到「已连上平台」（实测浪费过两轮）
         let level = if cli.verbose {
             tracing::Level::DEBUG
+        } else if matches!(cli.command, Commands::Serve { .. }) {
+            tracing::Level::INFO
         } else {
             tracing::Level::WARN
         };
