@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-27 · 反向通道支持长流（对话式 Agent 要用）
+此前这条通道是**严格的一问一答**（`call` → `reply` 按 id 配对），
+而 `/v1/tasks/{id}/session` 是个 WebSocket：事件不断推、回答不断写，一问一答装不下。
+- 新增三种帧：`stream_open` / `stream_data` / `stream_close`（回：`stream_open_ok` /
+  `stream_data` / `stream_close` / `stream_error`）。`type` 缺省仍是 HTTP 调用，老平台不受影响。
+- 节点收到 `stream_open` 就**回拨自己的本地 WS**再两头对拷。不在进程里手工造 WS 升级 ——
+  那等于把 handler 拆成两份实现，跟这条通道"帧就地拼成 Request 交给已有 Router"是同一条理由。
+- **顺带修掉一个一直都在的问题**：读循环原本是"读一帧 → 等它跑完 → 回一帧"，
+  一条慢命令会把整条连接堵死（心跳发不出去、别的调用排队）。
+  改成写端集中一个协程 + 每个调用一个协程。
+- 回归测试：流帧认得出来、`path` 可缺省、缺 `type` 的帧仍按 HTTP 调用走。
+
+
 ### 2026-08-27 · 采集产物跟着 `--cache` 走（修一处**跨租户可读**的洞）
 `Workarea::for_device` 写死 `$TMPDIR/tke/workarea/<设备>`，根本不看 `--cache` ——
 而 `cache_root()` 的文档注释写着「截图/页面结构/会话日志/临时元素库等都落这里」。

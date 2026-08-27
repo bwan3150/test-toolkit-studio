@@ -39,6 +39,11 @@ pub struct ServeState {
     pub leases: LeaseTable,
     pub default_timeout: Duration,
     pub max_upload_bytes: usize,
+    /// 自己的 WS 地址（`ws://127.0.0.1:<port>`）。反向通道要开一条流到
+    /// `/v1/tasks/{id}/session` 时，**回拨自己**比在进程里手工造一次 WS 升级简单得多，
+    /// 也不必把那个 handler 拆成两份实现（双份实现迟早漂移）。
+    /// 一律走回环 —— 这一跳不该出机器。
+    pub local_ws_base: String,
 }
 
 pub struct ServeOptions {
@@ -139,6 +144,7 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
         leases: LeaseTable::new(opts.root.clone(), pool, opts.session_ttl),
         default_timeout: opts.exec_timeout,
         max_upload_bytes: opts.max_upload_bytes,
+        local_ws_base: format!("ws://127.0.0.1:{}", opts.port),
     });
 
     let app = routes::router(state.clone());

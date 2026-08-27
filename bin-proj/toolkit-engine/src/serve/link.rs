@@ -19,18 +19,29 @@ use tower::ServiceExt;
 
 use super::ServeState;
 
-/// 平台发过来的一帧：一个 HTTP 调用。
+/// 平台发过来的一帧。
+///
+/// 两类：**一问一答的 HTTP 调用**（`type` 缺省），和**长流**（`type` 以 `stream_` 开头）。
+/// 长流是为对话式 Agent 加的：`/v1/tasks/{id}/session` 是个 WebSocket，
+/// 事件不断推、回答不断写，一问一答那套装不下它。
 #[derive(serde::Deserialize)]
 struct Call {
     id: String,
+    /// 缺省 = HTTP 调用；`stream_open` / `stream_data` / `stream_close` 是长流
+    #[serde(default, rename = "type")]
+    kind: String,
     #[serde(default = "default_method")]
     method: String,
+    #[serde(default)]
     path: String,
     #[serde(default)]
     body: Option<serde_json::Value>,
     /// 二进制正文（平台往工作区放 .tklib 这种）。JSON 装不下字节流
     #[serde(default)]
     b64: Option<String>,
+    /// 长流的一帧文本（浏览器写给 tke 进程的回答）
+    #[serde(default)]
+    text: Option<String>,
 }
 fn default_method() -> String {
     "GET".into()
@@ -127,11 +138,27 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
     let (mut tx, mut rx) = stream.split();
     tracing::info!(target: "tke::link", "已连上平台（{}）", cfg.base);
 
+    // **发送集中到一个协程**。此前是"读一帧 → 等它跑完 → 回一帧"，
+    // 于是一条慢命令会把整条连接堵死：心跳发不出去、别的调用排在后面 ——
+    // 长流更是直接不可能（它根本不会"跑完"）。
+    // 改成谁要发就往 channel 里塞，写端只有这一个所有者。
+    let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+    let writer = tokio::spawn(async move {
+        while let Some(m) = out_rx.recv().await {
+            if tx.send(m).await.is_err() {
+                break;
+            }
+        }
+        let _ = tx.close().await;
+    });
+
     // 连上先报一次自己是谁、有哪些设备 —— 平台据此建/更新节点行
-    tx.send(Message::Text(hello_frame(st, cfg).to_string().into()))
-        .await
+    out_tx
+        .send(Message::Text(hello_frame(st, cfg).to_string().into()))
         .map_err(|e| e.to_string())?;
     let mut last_devices = device_ids(st);
+    // 活着的长流：stream_id → 写给本地 WS 的那一头
+    let streams: Streams = Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new()));
 
     // 节点这头也定期报一次活。**两边都不说话的连接会被中间层悄悄切掉**，
     // 而谁都不知道 —— 表现就是"连上又断、每秒重连一次"（实测撞过）。
@@ -158,11 +185,11 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
                 let now = device_ids(st);
                 if now != last_devices {
                     last_devices = now;
-                    if tx.send(Message::Text(hello_frame(st, cfg).to_string().into())).await.is_err() {
+                    if out_tx.send(Message::Text(hello_frame(st, cfg).to_string().into())).is_err() {
                         break;
                     }
                 }
-                if tx.send(Message::Ping(Vec::new().into())).await.is_err() {
+                if out_tx.send(Message::Ping(Vec::new().into())).is_err() {
                     break;
                 }
                 continue;
@@ -171,7 +198,9 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
         let text = match msg {
             Message::Text(t) => t.to_string(),
             Message::Ping(p) => {
-                tx.send(Message::Pong(p)).await.map_err(|e| e.to_string())?;
+                if out_tx.send(Message::Pong(p)).is_err() {
+                    break;
+                }
                 continue;
             }
             Message::Close(_) => break,
@@ -184,11 +213,128 @@ async fn connect_once(st: &Arc<ServeState>, cfg: &LinkConfig, router: Router) ->
                 continue;
             }
         };
-        let reply = dispatch(router.clone(), &call, st.token.as_deref()).await;
-        if tx.send(Message::Text(reply.into())).await.is_err() {
-            break;
+
+        if call.kind.starts_with("stream_") {
+            handle_stream_frame(st, &streams, &out_tx, call).await;
+            continue;
+        }
+
+        // **每个调用一个协程**：慢命令不再堵住后面的（包括心跳）
+        let router = router.clone();
+        let token = st.token.clone();
+        let out = out_tx.clone();
+        tokio::spawn(async move {
+            let reply = dispatch(router, &call, token.as_deref()).await;
+            let _ = out.send(Message::Text(reply.into()));
+        });
+    }
+    // 读循环结束 = 这条连接没了：把还开着的流一并收掉，别留下没人管的本地 WS
+    {
+        let mut map = streams.lock().await;
+        map.clear();
+    }
+    drop(out_tx);
+    let _ = writer.await;
+    Ok(())
+}
+
+/// 活着的长流：stream_id → 写给本地 WS 的那一头
+type Streams = Arc<tokio::sync::Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<String>>>>;
+
+/// 处理一帧长流。
+///
+/// `stream_open` 时**回拨自己的本地 WS**（`ws://127.0.0.1:<port>/v1/tasks/{id}/session`），
+/// 然后两头对拷。为什么不在进程里直接调那个 handler：它要的是一次真实的 WS 升级，
+/// 手工造一个等于把 handler 拆成两份实现 —— 双份实现迟早漂移，而且漂移了没人看得出来
+/// （这正是这条通道一开始"帧就地拼成 Request 交给已有 Router"的同一条理由）。
+/// 这一跳只走回环，不出机器。
+async fn handle_stream_frame(
+    st: &Arc<ServeState>,
+    streams: &Streams,
+    out: &tokio::sync::mpsc::UnboundedSender<Message>,
+    call: Call,
+) {
+    match call.kind.as_str() {
+        "stream_open" => {
+            let id = call.id.clone();
+            let url = format!("{}{}", st.local_ws_base, call.path);
+            let (to_local_tx, to_local_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+            streams.lock().await.insert(id.clone(), to_local_tx);
+            let out = out.clone();
+            let streams = streams.clone();
+            let token = st.token.clone();
+            tokio::spawn(async move {
+                if let Err(e) = pump_stream(&url, token.as_deref(), &id, to_local_rx, &out).await {
+                    // **失败要说出来**：平台那头在等，静默的话浏览器就是一直转圈
+                    let _ = out.send(Message::Text(
+                        serde_json::json!({"id": id, "type": "stream_error", "error": e}).to_string().into(),
+                    ));
+                }
+                streams.lock().await.remove(&id);
+                let _ = out.send(Message::Text(
+                    serde_json::json!({"id": id, "type": "stream_close"}).to_string().into(),
+                ));
+            });
+        }
+        "stream_data" => {
+            if let Some(tx) = streams.lock().await.get(&call.id) {
+                let _ = tx.send(call.text.unwrap_or_default());
+            }
+        }
+        "stream_close" => {
+            // 丢掉发送端 → pump 那头的 recv 返回 None → 本地 WS 关掉
+            streams.lock().await.remove(&call.id);
+        }
+        other => {
+            tracing::warn!(target: "tke::link", "不认识的流帧：{other}");
         }
     }
+}
+
+/// 连上本地 WS，两头对拷，直到任一头断开。
+async fn pump_stream(
+    url: &str,
+    token: Option<&str>,
+    id: &str,
+    mut from_platform: tokio::sync::mpsc::UnboundedReceiver<String>,
+    out: &tokio::sync::mpsc::UnboundedSender<Message>,
+) -> Result<(), String> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut req = url.into_client_request().map_err(|e| e.to_string())?;
+    if let Some(t) = token {
+        req.headers_mut().insert(
+            "Authorization",
+            format!("Bearer {t}").parse().map_err(|_| "token 里有非法字符".to_string())?,
+        );
+    }
+    let (stream, _) = tokio_tungstenite::connect_async(req).await.map_err(|e| e.to_string())?;
+    let (mut lw, mut lr) = stream.split();
+
+    let _ = out.send(Message::Text(
+        serde_json::json!({"id": id, "type": "stream_open_ok"}).to_string().into(),
+    ));
+
+    loop {
+        tokio::select! {
+            m = lr.next() => match m {
+                Some(Ok(Message::Text(t))) => {
+                    if out.send(Message::Text(
+                        serde_json::json!({"id": id, "type": "stream_data", "text": t.to_string()})
+                            .to_string().into())).is_err() { break; }
+                }
+                Some(Ok(Message::Close(_))) | None => break,
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => return Err(e.to_string()),
+            },
+            t = from_platform.recv() => match t {
+                Some(t) => {
+                    if lw.send(Message::Text(t.into())).await.is_err() { break; }
+                }
+                None => break,   // 平台说这条流结束了
+            },
+        }
+    }
+    let _ = lw.close().await;
     Ok(())
 }
 
@@ -292,6 +438,30 @@ mod tests {
         assert_eq!(ws_url("http://127.0.0.1:7777/"), "ws://127.0.0.1:7777/api/v1/node/link");
         // 没写协议的按 ws 处理，别拼出个 `ws://https://…`
         assert_eq!(ws_url("p.example"), "ws://p.example/api/v1/node/link");
+    }
+
+    #[test]
+    fn 长流帧认得出来且不占用path以外的字段() {
+        let c: Call = serde_json::from_str(
+            r#"{"id":"s1","type":"stream_open","path":"/v1/tasks/t1/session"}"#,
+        )
+        .unwrap();
+        assert_eq!(c.kind, "stream_open");
+        assert_eq!(c.path, "/v1/tasks/t1/session");
+        assert!(c.text.is_none());
+
+        // 数据帧没有 path —— 老的 Call 里 path 是必填，加流之后必须能缺省，
+        // 否则每一帧数据都要带一份没人用的路径
+        let d: Call = serde_json::from_str(r#"{"id":"s1","type":"stream_data","text":"hi"}"#).unwrap();
+        assert_eq!(d.kind, "stream_data");
+        assert_eq!(d.text.as_deref(), Some("hi"));
+        assert!(d.path.is_empty());
+    }
+
+    #[test]
+    fn 普通http帧不会被当成流() {
+        let c: Call = serde_json::from_str(r#"{"id":"1","path":"/v1/hello"}"#).unwrap();
+        assert!(!c.kind.starts_with("stream_"), "缺 type 的帧必须还是 HTTP 调用");
     }
 
     #[test]

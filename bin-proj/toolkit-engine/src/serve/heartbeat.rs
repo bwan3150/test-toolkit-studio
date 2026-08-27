@@ -160,6 +160,7 @@ mod tests {
             leases: LeaseTable::new(tmp, pool, Duration::from_secs(600)),
             default_timeout: Duration::from_secs(10),
             max_upload_bytes: 1024,
+            local_ws_base: "ws://127.0.0.1:0".into(),
         })
     }
 
