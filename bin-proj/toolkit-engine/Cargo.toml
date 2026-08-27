@@ -66,6 +66,10 @@ tokio-stream = { version = "0.1.19", default-features = false, features = ["sync
 # 反向通道（ADR-0024）：节点主动连平台。rustls 而不是 native-tls ——
 # 少一个系统依赖，交叉编译时省事
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# 依赖树里 ring 和 aws-lc-rs 同时存在（别的 crate 各拉了一个），rustls 0.23 遇到
+# 多个候选**不猜、直接 panic**。所以要在进程启动时显式装一个 —— 见 serve::link::spawn。
+# 选 ring：纯 Rust、不需要 cmake/NASM，交叉编译时省事
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
 

@@ -64,6 +64,7 @@ pub struct LinkConfig {
 /// **连不上不影响节点自己干活**：本地 HTTP 口照常听着，只是平台暂时看不见它。
 /// 所以这里只退避重试、只记日志，绝不退出进程。
 pub fn spawn(st: Arc<ServeState>, cfg: LinkConfig, router: Router) {
+    install_crypto_provider();
     tokio::spawn(async move {
         let mut failures = 0u32;
         loop {
@@ -85,6 +86,20 @@ pub fn spawn(st: Arc<ServeState>, cfg: LinkConfig, router: Router) {
             tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
         }
     });
+}
+
+/// 装 rustls 的加密后端。
+///
+/// 依赖树里 ring 和 aws-lc-rs 同时存在（别的 crate 各拉了一个），rustls 0.23 遇到
+/// 多个候选**不猜、直接 panic**：
+///   「Could not automatically determine the process-level CryptoProvider」
+///
+/// 而且只在真的建 TLS 连接时才炸 —— 平台是 http:// 的话一路正常，
+/// 换成 https:// 立刻挂（实测：本地测 http 全绿，用户连线上 https 当场 panic）。
+///
+/// 已经装过就跳过（install_default 第二次会返回 Err，不是错误）
+fn install_crypto_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
 fn ws_url(base: &str) -> String {
