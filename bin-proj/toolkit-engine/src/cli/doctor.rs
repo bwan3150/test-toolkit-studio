@@ -272,8 +272,19 @@ impl Health {
     // ── 段三：东西落在哪 ──（人找报告时不用回头问 AI）
     fn print_paths(&self) {
         row("Engine落点", &self.exe_dir.display().to_string(), "", Tone::Plain);
-        match self.st.as_ref().and_then(|s| s.skill_dir.clone()).or_else(tke::utils::update::skill_dir) {
-            Some(d) => row("Skill落点", &d.display().to_string(), "", Tone::Plain),
+        // 报**装 skill 的那个目录**，后面缀上装了哪几个。
+        // 从前报的是 tke-ui-test 这一个子目录 —— 现在装的不止一个，
+        // 那样写会让人以为只装了它（用户实测反馈）
+        match tke::utils::update::skills_root() {
+            Some(d) => {
+                let names = tke::utils::update::installed_skills();
+                let note = if names.is_empty() {
+                    String::from("（还没装 skill）")
+                } else {
+                    format!("{} 个：{}", names.len(), names.join(" / "))
+                };
+                row("Skill落点", &d.display().to_string(), &note, Tone::Plain)
+            }
             None => row("Skill落点", "未安装", "", Tone::Muted),
         }
         if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {

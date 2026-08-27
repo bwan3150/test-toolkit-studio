@@ -206,6 +206,7 @@ mod tests {
             web_slots: 1,
             fake_devices: vec![],
             platform: None,
+            link: false,
             max_upload_bytes: 1024,
         };
         let e = run(opts).await.unwrap_err().to_string();

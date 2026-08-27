@@ -127,6 +127,38 @@ pub fn parse_remote(text: &str) -> Option<Remote> {
 
 /// 找已安装的 skill 目录。两处都看：用户级（所有项目通用）与项目级（跟着仓库走）。
 /// 项目级优先——它更贴近"当前这个仓库用的是哪一份"。
+/// 装 skill 的那个目录（`.claude/skills`）。
+///
+/// **落点要报这个，不是某一个 skill 的子目录** —— 现在装的不止一个
+/// （tke-ui-test / tke-security-test …），报着其中一个会让人以为只装了它
+pub fn skills_root() -> Option<PathBuf> {
+    let mut cands: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        cands.push(cwd.join(".claude/skills"));
+    }
+    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+        cands.push(PathBuf::from(home).join(".claude/skills"));
+    }
+    cands.into_iter().find(|p| p.is_dir())
+}
+
+/// 这台机器上装了哪些 tke 的 skill（按名字排序）。
+/// 只认带 SKILL.md 的目录 —— 空壳目录不算装上了
+pub fn installed_skills() -> Vec<String> {
+    let Some(root) = skills_root() else { return Vec::new() };
+    let Ok(rd) = std::fs::read_dir(&root) else { return Vec::new() };
+    let mut out: Vec<String> = rd
+        .flatten()
+        .filter_map(|e| {
+            let p = e.path();
+            let name = p.file_name()?.to_str()?.to_string();
+            (name.starts_with("tke-") && p.join("SKILL.md").is_file()).then_some(name)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
 pub fn skill_dir() -> Option<PathBuf> {
     let mut cands: Vec<PathBuf> = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
@@ -280,5 +312,31 @@ mod tests {
         };
         assert!(!s.skill_stale);
         assert!(s.hint().is_none());
+    }
+}
+
+#[cfg(test)]
+mod skills_root_tests {
+    use super::*;
+
+    /// 落点报的是**装 skill 的那个目录**，不是某一个 skill 的子目录。
+    /// 从前报 `.claude/skills/tke-ui-test`，现在装的不止一个，
+    /// 那样写会让人以为只装了它（用户实测反馈）
+    #[test]
+    fn 落点不指向单个skill() {
+        if let Some(root) = skills_root() {
+            let last = root.file_name().and_then(|s| s.to_str()).unwrap_or("");
+            assert_eq!(last, "skills", "落点指到了 {last}，应当是 skills 目录本身");
+        }
+    }
+
+    /// 列出来的必须都是**真装上了的**（有 SKILL.md）——
+    /// 空壳目录报成"已装"，人会去用一个不存在的能力
+    #[test]
+    fn 只认带SKILL文件的目录() {
+        for name in installed_skills() {
+            let dir = skills_root().unwrap().join(&name);
+            assert!(dir.join("SKILL.md").is_file(), "{name} 没有 SKILL.md 却被列出来");
+        }
     }
 }
