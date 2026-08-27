@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+### 2026-08-27 · 采集产物跟着 `--cache` 走（修一处**跨租户可读**的洞）
+`Workarea::for_device` 写死 `$TMPDIR/tke/workarea/<设备>`，根本不看 `--cache` ——
+而 `cache_root()` 的文档注释写着「截图/页面结构/会话日志/临时元素库等都落这里」。
+- **后果一（安全）**：`serve` 给每个会话分了独立 cache，采集产物却落在**设备级共享目录**，
+  不随租约走、释放也不清 —— 下一个租户 `fetch --cached` 读得到上一个租户的页面。
+  正是 INV-17 说的「设备脏状态」，且网络可达。
+- **后果二**：平台按会话取产物永远是空的（云设备「点一下截一张」卡在这儿）。
+- **改法**：cache 根做成进程级（`workarea::set_cache_root`，main 里解析完 params 就设）。
+  一次进程就一个 `--cache`，这是事实的形状；逐层透传要动十几处签名含 agent 引擎深处。
+  与 `set_ocr_url` / `set_web_headless` 同一套路。
+- 回归测试：`src/utils/workarea.rs` 断言设备缓存区与运行临时区都在 cache 根之下。
+- 踩坑记 P-60。**节点要更新 tke 才生效。**
+
+
 ### 2026-08-26 · 服务化定调：ADR-0022 + 远程 API 契约（**只有文档，未落代码**）
 用户提出把 tke 变成可远程调用的服务：测试服务器上部署 tke + 模拟器/真机/无头浏览器，
 云平台租设备下发任务/交互式探索/脱手收报告；再出 `tke-ui-test-remote` / `tke-security-test-remote`

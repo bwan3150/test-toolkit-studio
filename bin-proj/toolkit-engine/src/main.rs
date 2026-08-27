@@ -285,6 +285,8 @@ async fn main() -> tke::Result<()> {
     // 参数层：CLI + config 解析一次，形成统一参数表（Arc 共享，编排层各模块持有并查表）
     let params = Arc::new(tke::Params::resolve(cli.device, cli.log, cli.scripts, cli.cache, cli.current_dir, cli.json, cli.copilot, cli.headless, config));
     // 进程级设置在线 OCR 地址（识别引擎深处查询）
+    // cache 根要在**任何采集发生之前**定下来 —— workarea 是进程级的（见 utils/workarea.rs）
+    tke::utils::workarea::set_cache_root(params.cache_root());
     tke::utils::params::set_ocr_url(params.ocr_url.clone());
     // 进程级设置 web 无头模式（web 驱动建会话时查询）
     tke::utils::params::set_web_headless(params.headless);
