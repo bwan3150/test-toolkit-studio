@@ -912,6 +912,21 @@ mod not_ready_tests {
         assert_eq!(not_ready_kind(false, false), NotReady::NeedLaunch);
     }
 
+    /// 设备说的原话必须**原样**出现在给 AI 的那句提示里，而且不能再催 launch。
+    /// 光分对类还不够：AI 手上没有那句原文，就只剩"读截图猜"这一条路（那正是打转的成因）。
+    #[test]
+    fn 采集失败的原因原样转给ai() {
+        let prompts = crate::workflow::agent::prompt::PromptSet::resolve(&Default::default()).unwrap();
+        let tmpl = prompts.message("explorer", hint_key(NotReady::CaptureFailed));
+        assert!(!tmpl.is_empty(), "提示词没登记进 defaults.rs（P-05：运行时静默空串）");
+        let out = crate::workflow::agent::prompt::render(
+            &tmpl,
+            &[("reason", "ERROR: could not get idle state.")],
+        );
+        assert!(out.contains("could not get idle state"), "设备报的原因没转给 AI：{out}");
+        assert!(!out.contains("请先调用 launch"), "已经在操作了还催 launch：{out}");
+    }
+
     #[test]
     fn 主动关闭后不催launch() {
         // 已收尾还催 launch 会把干净的 finish(success=true) 搅黄
