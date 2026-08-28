@@ -117,13 +117,16 @@
 
 **下一步**：P1 只做 `changed_surfaces`，判据是探索轮数/token 降幅，降不下来就停。
 
-## 还欠着的两刀（这一场答了办法，没实现）
+## 那两刀已经做掉了（c2975eb3，P-65）
 
-- **孤儿 harness 子进程**：Linux 用 `prctl(PR_SET_PDEATHSIG)`；macOS 没等价物，
-  配「启动时收尸」（节点起来先扫上一代 pid）。两条一起才三平台都覆盖。
-- **uiautomator dump 空输出**：根因是 `run_adb_command_with_timeout` 在**退出码 0 时
-  把 stderr 丢了**，设备说的话一个字都没带回来。三刀：成功路径也留 stderr、
-  错误文案按 INV-18 说清怎么办、加一次 `--compressed` 兜底重试。
+- **孤儿 harness 子进程**：`PR_SET_PDEATHSIG`（Linux，实测 kill -9 节点后
+  harness 5 秒内自退）+ 启动时收尸（三平台，实测清掉过一个）。
+  收尸的判据是「命令行含 tke 和 session id」，不是「pid 还在」—— 防 pid 复用误杀。
+- **adb 成功路径丢 stderr**：已带上；dump 第二次重试改带 `--compressed`；
+  「没有输出」的文案按 INV-18 重写。
+
+**注意**：`pgrep -f "tke serve …"` / `pkill -f` 会匹配到发起命令的那个 shell 自己，
+kill 下去把自己杀了（退出码 144）。这一场又踩了两次 —— 写验证脚本时尤其容易中招。
 
 
 ---
@@ -149,10 +152,13 @@
 
 **下一步**：P1 只做 `changed_surfaces`，判据是探索轮数/token 降幅，降不下来就停。
 
-## 还欠着的两刀（这一场答了办法，没实现）
+## 那两刀已经做掉了（c2975eb3，P-65）
 
-- **孤儿 harness 子进程**：Linux 用 `prctl(PR_SET_PDEATHSIG)`；macOS 没等价物，
-  配「启动时收尸」（节点起来先扫上一代 pid）。两条一起才三平台都覆盖。
-- **uiautomator dump 空输出**：根因是 `run_adb_command_with_timeout` 在**退出码 0 时
-  把 stderr 丢了**，设备说的话一个字都没带回来。三刀：成功路径也留 stderr、
-  错误文案按 INV-18 说清怎么办、加一次 `--compressed` 兜底重试。
+- **孤儿 harness 子进程**：`PR_SET_PDEATHSIG`（Linux，实测 kill -9 节点后
+  harness 5 秒内自退）+ 启动时收尸（三平台，实测清掉过一个）。
+  收尸的判据是「命令行含 tke 和 session id」，不是「pid 还在」—— 防 pid 复用误杀。
+- **adb 成功路径丢 stderr**：已带上；dump 第二次重试改带 `--compressed`；
+  「没有输出」的文案按 INV-18 重写。
+
+**注意**：`pgrep -f "tke serve …"` / `pkill -f` 会匹配到发起命令的那个 shell 自己，
+kill 下去把自己杀了（退出码 144）。这一场又踩了两次 —— 写验证脚本时尤其容易中招。
