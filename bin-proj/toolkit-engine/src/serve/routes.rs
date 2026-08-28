@@ -105,7 +105,7 @@ async fn auth(State(st): St, req: Request, next: Next) -> Result<Response, ApiEr
 async fn hello(State(st): St) -> Json<serde_json::Value> {
     Json(json!({
         "api_version": "v1",
-        "tke_version": env!("BUILD_VERSION"),
+        "tke_version": crate::version_line(),
         "host_os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "devices": st.leases.pool().len(),

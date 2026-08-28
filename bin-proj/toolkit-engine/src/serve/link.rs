@@ -346,7 +346,7 @@ fn hello_frame(st: &Arc<ServeState>, cfg: &LinkConfig) -> serde_json::Value {
         "name": cfg.name,
         "host_os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
-        "tke_version": env!("BUILD_VERSION"),
+        "tke_version": crate::version_line(),
         "devices": st.leases.pool().iter().map(|d| serde_json::json!({
             "id": d.id, "kind": d.kind, "platform": d.platform(),
             "model": d.model, "os": d.os, "label": d.label, "ready": true, "physical": d.physical(),

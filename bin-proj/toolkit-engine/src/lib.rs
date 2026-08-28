@@ -64,6 +64,20 @@ pub use workflow::{
     RunEvent, RunArtifacts, ScriptRunner, FlowRunner, FlowDef, FlowResult,
     TksRunner, ScriptParser, ScriptInterpreter, ActionTrace,
 };
+/// 版本 + 具体是哪一次构建，如 `0.7.4-beta (30f5cde8)`。
+///
+/// **版本号整个 beta 期不变**，于是"这台节点装没装上某个修复"谁也说不清 ——
+/// 实测吃过亏：用户更新完节点，两头都无法判断他拿到的是哪一版，只能靠猜。
+/// 并进同一个串里，平台那边零改动就看得见（不用加列、不用迁移）。
+pub fn version_line() -> String {
+    let commit = env!("BUILD_COMMIT");
+    if commit.is_empty() || commit == "unknown" {
+        env!("BUILD_VERSION").to_string()
+    } else {
+        format!("{} ({})", env!("BUILD_VERSION"), commit)
+    }
+}
+
 // ③ 工作流 - AI 探索（tke harness）
 pub use workflow::agent::{
     LlmSession, LlmTool, LlmToolCall, LlmReply,
