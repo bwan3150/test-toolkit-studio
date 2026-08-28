@@ -31,6 +31,17 @@ pub struct UIElement {
     /// 全存下来，而那些是要发给别人看的（实测：代填的密码会明文烧进截图横幅）。
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_password: bool,
+    /// **子孙节点上的文字**，本体没有 text/content-desc 时才有。
+    ///
+    /// 安卓最常见的行结构是「可点的 LinearLayout 容器 + 里面一个不可点的 TextView」——
+    /// 文字长在子节点上。`fetch --interactive` 只留可交互的，于是那些行**一个字都没有**：
+    /// 元素表里连着几条「—」，谁也认不出哪条是"摄氏度"、哪条是"华氏度"，
+    /// 只能退回按坐标点（最脆的定位方式）。
+    ///
+    /// **不写进 `text`**：那是节点自己的属性，改了就是撒谎，对着原始 XML 一比就对不上。
+    /// 单开一格，取用方按 text → content-desc → child_text 的顺序找一个能给人看的名字。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_text: Option<String>,
     /// 用于前端渲染的z-index，基于元素面积计算
     #[serde(skip_serializing_if = "Option::is_none")]
     pub z_index: Option<usize>,

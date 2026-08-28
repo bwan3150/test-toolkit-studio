@@ -288,6 +288,9 @@ async fn session_exec(
         device: (!lease.device.id.is_empty()).then(|| lease.device.id.clone()),
         timeout,
     };
+    // 同一会话排队：设备是一份物理资源，两条命令同时下去会互相踩（见 LeaseTable::gate）
+    let gate = st.leases.gate(&sid);
+    let _hold = gate.lock().await;
     let out = exec::run(&st.bin, &req).await.map_err(bad)?;
     // 启动过的 App 记下来，释放时要停掉——依据来自事实（argv），不靠调用方申报
     st.leases.note_launch(&sid, &body.argv);
@@ -321,6 +324,11 @@ async fn session_screen(State(st): St, Path(sid): Path<String>) -> Result<Respon
         device: (!lease.device.id.is_empty()).then(|| lease.device.id.clone()),
         timeout: st.default_timeout,
     };
+    // 与 exec 同一把闸：取截图要 refresh 设备，和别人的 fetch 撞上就两败俱伤。
+    // **锁要罩住读文件那一步**：refresh 写的就是下面要读的那张 PNG，
+    // 提前放锁的话，读到的可能是别人刚覆盖上去的画面
+    let gate = st.leases.gate(&sid);
+    let _hold = gate.lock().await;
     exec::run(&st.bin, &req).await.map_err(bad)?;
 
     // 落点与 Workarea::for_device 同一套算法。**这里不另写一份路径拼装**——

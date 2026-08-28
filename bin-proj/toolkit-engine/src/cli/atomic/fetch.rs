@@ -71,7 +71,7 @@ pub async fn handle(args: FetchArgs, params: std::sync::Arc<tke::Params>) -> Res
                 if let Some(hit) = tke::utils::scroll::first_hit(&texts, &cands) {
                     eprintln!("等到了「{}」", hit);
                     let output = if args.interactive {
-                        elements.into_iter().filter(|e| e.clickable).collect::<Vec<_>>()
+                        tke::engines::fetcher::interactive_view(&elements)
                     } else {
                         elements
                     };
@@ -93,8 +93,11 @@ pub async fn handle(args: FetchArgs, params: std::sync::Arc<tke::Params>) -> Res
 
     match fetch.elements(args.cached, ocr_src.as_ref()).await {
         Ok(elements) => {
+            // **走 Fetcher 的那份**，不再内联筛一遍：它顺手把子孙节点的文字
+            // 带进 child_text（安卓的行多半是「可点容器 + 里面的 TextView」，
+            // 只筛可交互的话那些行一个字都没有，元素表里就是一排「—」）
             let output = if args.interactive {
-                elements.into_iter().filter(|e| e.clickable).collect::<Vec<_>>()
+                tke::engines::fetcher::interactive_view(&elements)
             } else {
                 elements
             };

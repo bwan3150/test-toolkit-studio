@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// 池里的一台设备
@@ -167,6 +167,8 @@ pub struct LeaseTable {
     leases: Mutex<HashMap<String, Lease>>,
     default_ttl: Duration,
     seq: AtomicU64,
+    /// 每个会话一把「设备正在被用」的闸（见 `gate`）
+    gates: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl LeaseTable {
@@ -177,6 +179,7 @@ impl LeaseTable {
             leases: Mutex::new(HashMap::new()),
             default_ttl,
             seq: AtomicU64::new(0),
+            gates: Mutex::new(HashMap::new()),
         }
     }
 
@@ -303,8 +306,26 @@ impl LeaseTable {
         }
     }
 
+    /// 这个会话的「设备正在被用」闸门。**同一台设备一次只跑一条命令。**
+    ///
+    /// 一台设备就是一份物理资源：取截图要 refresh 它、取元素要 dump 它的界面。
+    /// 两条同时下去就互相踩 —— 而且**踩了不报错**：`fetch` 照样 exit 0，
+    /// 只是回来的元素表是空的。调用方看到的是"元素面板莫名其妙空着"，
+    /// 谁也想不到是自己并发发的两条请求（实测：并发 353 字节，串行 3824 字节）。
+    ///
+    /// 所以闸门开在这一层，而不是指望每个调用方自己记得串行 —— 这种约定
+    /// 没有任何地方能强制，而违反它的表现又不像出错。
+    ///
+    /// **只管命令层（exec/screen）**：L2 的 harness 任务持有租约的整个生命周期，
+    /// 把它也圈进来的话，任务跑着的时候连截张图都会被堵死。
+    pub fn gate(&self, sid: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut g = self.gates.lock().expect("gates 锁中毒");
+        g.entry(sid.to_string()).or_default().clone()
+    }
+
     /// 摘下租约（复位由调用方按 `reset_plan()` 执行）
     pub fn take(&self, sid: &str) -> Option<Lease> {
+        self.gates.lock().expect("gates 锁中毒").remove(sid);
         self.leases.lock().expect("leases 锁中毒").remove(sid)
     }
 
@@ -355,6 +376,7 @@ fn launched_package(argv: &[String]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     fn dev(id: &str, kind: &str) -> PoolDevice {
@@ -364,6 +386,41 @@ mod tests {
     fn table(pool: Vec<PoolDevice>) -> (LeaseTable, tempdir::Tmp) {
         let tmp = tempdir::Tmp::new("lease");
         (LeaseTable::new(tmp.path().to_path_buf(), pool, Duration::from_secs(600)), tmp)
+    }
+
+    /// 同一个会话拿到的是**同一把**闸 —— 每次新建一把等于没有闸。
+    #[test]
+    fn 同一会话共用一把闸() {
+        let (t, _tmp) = table(vec![dev("web:1", "web"), dev("f64b", "android")]);
+        let a = t.acquire(Some("web"), None, None).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&t.gate(&a.id), &t.gate(&a.id)));
+        // 不同会话之间互不相干：一台设备卡住不该连累另一台
+        let b = t.acquire(Some("android"), None, None).unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&t.gate(&a.id), &t.gate(&b.id)));
+    }
+
+    /// 闸真的会挡住第二条命令。挡不住的话两条命令同时操作同一台设备，
+    /// `fetch` 会 **exit 0 但回一张空元素表**（实测 353 字节 vs 串行 3824 字节）——
+    /// 不报错才是最贵的地方：调用方只看到"元素面板莫名其妙空着"
+    #[tokio::test]
+    async fn 闸挡住同会话的第二条命令() {
+        let (t, _tmp) = table(vec![dev("web:1", "web")]);
+        let a = t.acquire(Some("web"), None, None).unwrap();
+        let g = t.gate(&a.id);
+        let hold = g.lock().await;
+        assert!(t.gate(&a.id).try_lock().is_err(), "第二条命令没被挡住");
+        drop(hold);
+        assert!(t.gate(&a.id).try_lock().is_ok(), "放开之后该能进");
+    }
+
+    /// 租约还回去时闸也要清掉，否则这张表只涨不消
+    #[test]
+    fn 还了租约就不再留着闸() {
+        let (t, _tmp) = table(vec![dev("web:1", "web")]);
+        let a = t.acquire(Some("web"), None, None).unwrap();
+        let _ = t.gate(&a.id);
+        t.take(&a.id);
+        assert!(t.gates.lock().unwrap().is_empty());
     }
 
     #[test]

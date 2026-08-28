@@ -71,6 +71,7 @@ mod tests {
 
     fn el(index: usize, class: &str, text: &str, clickable: bool) -> UIElement {
         UIElement {
+            child_text: None,
             index,
             class_name: class.into(),
             bounds: Bounds::new(0, index as i32 * 100, 100, index as i32 * 100 + 40),

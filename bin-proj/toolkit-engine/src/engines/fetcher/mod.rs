@@ -216,6 +216,7 @@ impl Fetcher {
         }
 
         Some(UIElement {
+            child_text: None,
             index,
             class_name,
             bounds,
@@ -303,11 +304,18 @@ impl Fetcher {
             .collect()
     }
     
-    // 过滤可交互元素
+    /// 过滤可交互元素，并**把子孙节点的文字带上**（填进 `child_text`）。
+    ///
+    /// 安卓最常见的行结构是「可点的 LinearLayout + 里面一个不可点的 TextView」。
+    /// 只留可交互的话，那几行**一个字都没有** —— 元素表里连着几条「—」，
+    /// 谁也认不出哪条是"摄氏度"哪条是"华氏度"，只能退回按坐标点。
+    /// （实测安卓设置页：4 个可交互元素里 3 个没名字，而名字就在它们各自的子节点上。）
+    /// 判据是 **clickable**：`--interactive` 一直就是这么筛的。
+    /// （此前这个函数写的是 `clickable || focusable || checkable || scrollable`，
+    /// 但它**一个调用方都没有** —— 真正在跑的是 fetch.rs 里内联的两份 `.filter(clickable)`。
+    /// 现在合成一份：定义只写一处，改一次两条路都跟着走，INV-09。）
     pub fn filter_interactive_elements(&self, elements: &[UIElement]) -> Vec<UIElement> {
-        self.filter_elements(elements, |e| {
-            e.clickable || e.focusable || e.checkable || e.scrollable
-        })
+        interactive_view(elements)
     }
     
     // 过滤有文本的元素
@@ -567,5 +575,168 @@ impl Fetcher {
 
         // 策略5: 最后使用 className + instance 索引
         format!("//{}[{}]", element.class_name, element.sibling_index)
+    }
+}
+
+
+
+/// 可交互视图：筛出可点的，并**把子孙节点的文字带上**（填进 `child_text`）。
+///
+/// 判据是 clickable —— `fetch --interactive` 一直就是这么筛的。
+/// 做成自由函数是因为 CLI 那边手上只有 `Fetch`（命令参数），拿不到 `Fetcher` 实例；
+/// 而这份判据必须只有一处，否则又会变回"两边各筛各的"。
+pub fn interactive_view(elements: &[UIElement]) -> Vec<UIElement> {
+    let mut out: Vec<UIElement> = elements.iter().filter(|e| e.clickable).cloned().collect();
+    for e in out.iter_mut() {
+        if e.text.is_none() && e.content_desc.is_none() {
+            e.child_text = descendant_text(elements, e);
+        }
+    }
+    out
+}
+
+/// 找 `parent` 这一支下面的文字，拼成一个能给人看的名字。
+///
+/// **只认后代，不认"框里的"**：按 parent_index 一层层往下走，而不是按 bounds
+/// 包含关系去猜。包含关系在重叠布局上会张冠李戴（一个浮层压在列表上，
+/// 列表里每一行都"包含"浮层的文字）。
+///
+/// 三条闸，防止把半屏文字都塞进一个名字里：
+///   - 可滚动的容器直接跳过 —— 它装着整页内容，"名字"无从谈起
+///   - 最多取前 MAX_PARTS 段
+///   - 总长超过 MAX_LEN 就不要了：那已经不是名字，是一段正文
+fn descendant_text(all: &[UIElement], parent: &UIElement) -> Option<String> {
+    const MAX_PARTS: usize = 2;
+    const MAX_LEN: usize = 60;
+    if parent.scrollable {
+        return None;
+    }
+    let mut parts: Vec<String> = Vec::new();
+    let mut stack: Vec<usize> = vec![parent.index];
+    // 深度封顶：uiautomator 的树不深，给足余量的同时挡住环（parent_index 理论上不会成环）
+    let mut guard = 0usize;
+    while let Some(cur) = stack.pop() {
+        guard += 1;
+        if guard > 4096 || parts.len() >= MAX_PARTS {
+            break;
+        }
+        for child in all.iter().filter(|c| c.parent_index == Some(cur)) {
+            let t = child
+                .text
+                .as_deref()
+                .or(child.content_desc.as_deref())
+                .map(str::trim)
+                .filter(|t| !t.is_empty());
+            if let Some(t) = t {
+                if !parts.iter().any(|p| p == t) {
+                    parts.push(t.to_string());
+                }
+            }
+            stack.push(child.index);
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    let joined = parts.join(" ");
+    if joined.chars().count() > MAX_LEN {
+        return None;
+    }
+    Some(joined)
+}
+
+#[cfg(test)]
+mod child_text_tests {
+    use super::*;
+    use crate::models::Bounds;
+
+    fn el(index: usize, parent: Option<usize>, class: &str, text: Option<&str>, clickable: bool) -> UIElement {
+        UIElement {
+            index,
+            class_name: class.into(),
+            bounds: Bounds { x1: 0, y1: 0, x2: 100, y2: 100 },
+            text: text.map(str::to_string),
+            content_desc: None,
+            resource_id: None,
+            hint: None,
+            clickable,
+            checkable: false,
+            checked: false,
+            focusable: false,
+            focused: false,
+            scrollable: false,
+            selected: false,
+            enabled: true,
+            xpath: None,
+            options: None,
+            is_password: false,
+            child_text: None,
+            z_index: None,
+            parent_index: parent,
+            depth: 0,
+            sibling_index: 1,
+        }
+    }
+
+    /// 安卓最常见的行：可点的容器 + 里面不可点的 TextView。
+    /// 不把子节点的字带上来，元素表里就是一排「—」，只能退回按坐标点。
+    #[test]
+    fn 可点容器继承子节点的文字() {
+        let all = vec![
+            el(0, None, "android.widget.LinearLayout", None, true),
+            el(1, Some(0), "android.widget.TextView", Some("Celsius (°C)"), false),
+        ];
+        let f = Fetcher::new();
+        let out = f.filter_interactive_elements(&all);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].child_text.as_deref(), Some("Celsius (°C)"));
+        // **本体的 text 不动** —— 那是节点自己的属性，改了对着原始 XML 就对不上
+        assert!(out[0].text.is_none());
+    }
+
+    /// 本体自己有名字就别再往下捞 —— 捞上来只会把真名字挤掉
+    #[test]
+    fn 本体有文字就不去捞子节点() {
+        let all = vec![
+            el(0, None, "android.widget.Button", Some("保存"), true),
+            el(1, Some(0), "android.widget.TextView", Some("别捞我"), false),
+        ];
+        let out = Fetcher::new().filter_interactive_elements(&all);
+        assert!(out[0].child_text.is_none());
+    }
+
+    /// 可滚动容器装的是整页内容，"名字"无从谈起：捞上来就是半屏文字
+    #[test]
+    fn 可滚动容器不捞文字() {
+        // 可点**又**可滚：不挡的话，整页文字会被捞成这一个元素的"名字"
+        let mut root = el(0, None, "androidx.recyclerview.widget.RecyclerView", None, true);
+        root.scrollable = true;
+        let all = vec![root, el(1, Some(0), "android.widget.TextView", Some("第一行"), false)];
+        let out = Fetcher::new().filter_interactive_elements(&all);
+        assert!(out[0].child_text.is_none());
+    }
+
+    /// 一整段正文不是名字：超长就不要
+    #[test]
+    fn 太长的不当名字() {
+        let long = "这是一段很长的说明文字".repeat(10);
+        let all = vec![
+            el(0, None, "android.widget.LinearLayout", None, true),
+            el(1, Some(0), "android.widget.TextView", Some(&long), false),
+        ];
+        let out = Fetcher::new().filter_interactive_elements(&all);
+        assert!(out[0].child_text.is_none());
+    }
+
+    /// 隔一层也要找得到 —— 真实布局里 TextView 常在容器的容器里
+    #[test]
+    fn 隔层的子孙也算() {
+        let all = vec![
+            el(0, None, "android.widget.LinearLayout", None, true),
+            el(1, Some(0), "android.widget.RelativeLayout", None, false),
+            el(2, Some(1), "android.widget.TextView", Some("华氏度"), false),
+        ];
+        let out = Fetcher::new().filter_interactive_elements(&all);
+        assert_eq!(out[0].child_text.as_deref(), Some("华氏度"));
     }
 }
