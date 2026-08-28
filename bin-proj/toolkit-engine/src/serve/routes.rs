@@ -231,8 +231,11 @@ async fn session_heartbeat(
 /// Q-19 还没定"复位要做到什么程度"，先把事实量出来
 async fn session_delete(State(st): St, Path(sid): Path<String>) -> Result<Json<serde_json::Value>, ApiError> {
     let lease = st.leases.take(&sid).ok_or_else(|| not_found(format!("会话 {sid} 不存在。")))?;
+    // **先停任务，再复位**：任务还在跑的话，复位命令和它会在同一台设备上打架 ——
+    // 而且不停的话那个 harness 会继续操作一台"已经还回去"的设备
+    let killed = super::reap::kill_session_task(&lease.dirs.root);
     let reset = run_reset(&st, &lease).await;
-    Ok(Json(json!({"session_id": sid, "released": true, "reset": reset})))
+    Ok(Json(json!({"session_id": sid, "released": true, "task_killed": killed, "reset": reset})))
 }
 
 /// 执行复位计划。**尽力而为但如实回报**：某一条失败不阻断后面的，

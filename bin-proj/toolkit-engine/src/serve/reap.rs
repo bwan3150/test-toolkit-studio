@@ -60,6 +60,32 @@ pub fn clear_pid(session_root: &Path) {
     let _ = std::fs::remove_file(session_root.join(PID_FILE));
 }
 
+/// 停掉某个会话上正在跑的任务子进程（释放会话时调）。
+///
+/// **释放会话必须连任务一起停**：不停的话那个 harness 还在操作设备 ——
+/// 平台以为设备还回来了，下一个人租到手却发现有人在上面点来点去
+/// （实测：归还之后 harness 进程还活着，web 设备一直占着，新任务全起不来，
+/// 而错误信息只有一个空的 `failed`）。
+///
+/// 判据与收尸同一套（命令行含 tke + session id），防 pid 复用误杀。
+pub fn kill_session_task(session_root: &Path) -> bool {
+    let f = session_root.join(PID_FILE);
+    let Ok(txt) = std::fs::read_to_string(&f) else {
+        return false;
+    };
+    let _ = std::fs::remove_file(&f);
+    let Ok(pid) = txt.trim().parse::<u32>() else {
+        return false;
+    };
+    let sid = session_root.file_name().and_then(|s| s.to_str()).unwrap_or("");
+    if !is_our_task(pid, sid) {
+        return false;
+    }
+    kill(pid);
+    tracing::info!(target: "tke::serve", "释放会话时停掉了它的任务进程 pid={} session={}", pid, sid);
+    true
+}
+
 /// 扫 `<root>/sessions/*/task.pid`，把上一代还活着的任务子进程杀掉。
 ///
 /// 返回杀掉的个数（给启动日志用）。
@@ -187,6 +213,22 @@ mod tests {
         assert_eq!(reap_previous(&d), 0);
         // 记录要清掉 —— 留着的话每次启动都去查一个早就没了的 pid
         assert!(!s.join(PID_FILE).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// 释放会话要连它的任务进程一起停 —— 不停的话 harness 会继续操作一台
+    /// "已经还回去"的设备，而平台以为它空闲了（实测：新任务全起不来，
+    /// 错误只有一个空的 failed）。
+    #[test]
+    fn 释放会话时认不出的pid不杀但清记录() {
+        let d = tmp("kill");
+        let s = d.join("sessions").join("s_gone");
+        std::fs::create_dir_all(&s).unwrap();
+        std::fs::write(s.join(PID_FILE), "4194303").unwrap();
+        assert!(!kill_session_task(&s), "认不出来就不该杀");
+        assert!(!s.join(PID_FILE).exists(), "记录要清掉");
+        // 没有 pid 文件时也不该炸
+        assert!(!kill_session_task(&s));
         let _ = std::fs::remove_dir_all(&d);
     }
 
