@@ -287,12 +287,21 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                 if !text.trim().is_empty() {
                     emit_orch(ui, &sess, &text);
                 }
-                if !ui.is_interactive() && !ran_any && nudge < 2 {
+                // **判据是"有没有人能回答我"（supports_prompts），不是"是不是全屏 TUI"。**
+                //
+                // 此前这里用 is_interactive()，而 JsonFrontend 只有 supports_prompts=true ——
+                // 于是 `--json` 那条路（Studio 桌面 app、serve/API）跑完一轮就退出：
+                // 云设备页上表现成"答完一件事，对话就没了、输入框变灰"。
+                // 而 JSON 明明有真实的输入通道（NDJSON 那头有人在）。
+                //
+                // Plain（管道 / CI）仍然一轮结束 —— 那边**真的没人可问**，
+                // 等 stdin 会永久挂起。
+                if !ui.supports_prompts() && !ran_any && nudge < 2 {
                     nudge += 1;
                     sess.user("请直接用 explore 开始在设备上操作（要可回放测试脚本就 make_test=true），不要只用文字回复。".to_string());
                     continue;
                 }
-                if !ui.is_interactive() {
+                if !ui.supports_prompts() {
                     break;
                 }
                 // REPL 等下一句：问题传空串——不往消息流灌"你的回复…"提示行（每轮都发太吵）。
@@ -644,6 +653,19 @@ pub(crate) async fn serve(opts: &AgentRunOptions, ui: &dyn Frontend) -> Result<A
                             let reason = arg_str(&call.arguments, "reason");
                             let reason = if reason.trim().is_empty() { "会话结束".to_string() } else { reason };
                             emit_orch(ui, &sess, &reason);
+                            // **有人能回答就别退场**：`finish` 是"这件事做完了"，
+                            // 不是"这场对话结束了"。一做完就退出的话，人想接着说下一件
+                            // 就只能重新起一场 —— 而重起等于失忆（设备状态还在，AI 的上下文没了）。
+                            //
+                            // 收尾结果先留住（last_result），真结束时照常用它发 Done。
+                            if ui.supports_prompts() {
+                                last_result = Some(finalize(last_result.take(), ran_any, &reason));
+                                sess.tool_result(
+                                    call.call_id,
+                                    "已收尾并把结果告诉用户。会话继续 —— 等用户说下一件事。",
+                                );
+                                continue;
+                            }
                             return Ok(finalize(last_result, ran_any, &reason));
                         }
                         other => {

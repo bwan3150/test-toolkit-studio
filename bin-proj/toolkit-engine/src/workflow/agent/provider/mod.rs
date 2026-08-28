@@ -13,5 +13,5 @@ pub mod client;
 pub mod session;
 pub mod types;
 
-pub use session::{enqueue_fake_role_session, reasoning_allowed, FakeTurn, LlmSession};
+pub use session::{enqueue_fake_role_session, FakeTurn, LlmSession};
 pub use types::{LlmReply, LlmTool, LlmToolCall};

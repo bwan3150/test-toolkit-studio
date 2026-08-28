@@ -33,6 +33,6 @@ pub mod transcript;
 pub mod ui;
 
 pub use prompt::{PromptSet, PromptSpec};
-pub use provider::{reasoning_allowed, LlmReply, LlmSession, LlmTool, LlmToolCall};
+pub use provider::{LlmReply, LlmSession, LlmTool, LlmToolCall};
 pub use runner::{AgentResult, AgentRunOptions, AgentRunner};
 pub use ui::{Frontend, JsonFrontend, Level, PlainFrontend, TuiFrontend, UiCommand, UiEvent};

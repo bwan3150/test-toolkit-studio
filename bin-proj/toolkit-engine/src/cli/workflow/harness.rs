@@ -322,14 +322,10 @@ async fn interactive_setup(ui: &dyn tke::Frontend, _ai: &AiConfig) -> Option<Set
     Some(SetupResult { device, platform })
 }
 
-/// 这次实际会用的推理强度(给 SessionInfo 显示)。
-/// 模型不支持时如实说"关闭",别照抄配置里的值 —— 见 provider::session::reasoning_allowed
+/// 这次打算用的推理强度（给 SessionInfo 显示）。
+///
+/// **是"打算"不是"一定"**：上游若拒绝这个参数，会在第一次调用时自动摘掉重试
+/// （探测 + 回退，见 provider::session）。这里不预判 —— 预判就又变成一张追不上的名单。
 fn effective_reasoning_label(ai: &tke::AiConfig) -> String {
-    let configured = ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string());
-    let model = ai.model.clone().unwrap_or_default();
-    let provider = ai.provider.clone().unwrap_or_default();
-    if !model.is_empty() && !tke::reasoning_allowed(&provider, &model) {
-        return format!("关闭（{provider}/{model} 这条路不支持）");
-    }
-    configured
+    ai.reasoning_effort.clone().unwrap_or_else(|| "medium（默认）".to_string())
 }

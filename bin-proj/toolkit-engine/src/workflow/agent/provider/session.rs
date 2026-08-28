@@ -38,39 +38,28 @@ fn parse_reasoning_effort(spec: Option<&str>) -> Option<ReasoningEffort> {
     }
 }
 
-/// 这次能不能发 reasoning 参数。
+/// 这条路**先照常发** reasoning 参数 —— 拒了再摘（见 `rejects_reasoning_param`）。
 ///
-/// **两个维度：供应商 + 模型**。只看模型不够 —— 同一个模型在不同端点上规矩不一样。
+/// 曾经这里是一张"哪些模型不支持"的名单，栽过两次：
+///   · 第一版按 `gpt-4*` 挡 → `gpt-5.4-mini` 是新模型，按名字放行，然后 400
+///   · 第二版按 provider 挡整个 OpenAI → 一刀切，把本来能用思考的路也关了
 ///
-/// 实测撞到两次（都在 OpenAI 的 `/v1/chat/completions` 上）：
+/// **名单永远追不上上游**，而漏判的代价是整场跑不起来（用户那边表现成
+/// "进去什么也没发生"）。改成让上游自己说：它拒绝时会指名是哪个参数。
 ///
-/// 1. `gpt-4o-mini`：**根本不认这个参数** ——
-///    `Unrecognized request argument supplied: reasoning_effort`
-/// 2. `gpt-5.4-mini`：认，但**跟 function tools 不能同时用** ——
-///    「Function tools with reasoning_effort are not supported … use /v1/responses
-///    or set reasoning_effort to 'none'」
+/// 代价：不兼容的组合每场会多一次被拒的请求（400 不产生 token）。
+/// 换来的是**新模型出来不用改代码**。
+/// 上游是不是在嫌弃 `reasoning_effort` 这个参数。
 ///
-/// 而 harness / security 这两条路**永远带着 tools**（工具调用就是它们干活的方式）。
-/// 所以对 OpenAI 这个适配器，结论是一样的：**不发**。
+/// 两种真实回话（都来自 OpenAI 的 `/v1/chat/completions`）：
+///   · `Unrecognized request argument supplied: reasoning_effort`（gpt-4o 那一代）
+///   · `Function tools with reasoning_effort are not supported for …`（gpt-5.x + 工具）
 ///
-/// 只挡模型名的第一版漏了第二种 —— 它是"新模型"，按名字判会放行，
-/// 然后在真机上 400。**判据要跟着"这次请求长什么样"走**，不是只看模型叫什么。
-///
-/// 其它供应商（anthropic / gemini / deepseek …）不在此列：
-/// 它们的思考与工具调用是能共存的，这也正是 harness 质量的来源之一。
-pub fn reasoning_allowed(provider: &str, model: &str) -> bool {
-    let p = provider.trim().to_lowercase();
-    let m = model.trim().to_lowercase();
-
-    // OpenAI 官方端点：无论哪一代，带 tools 时都不能发（见上面两条实测）
-    if p == "openai" {
-        return false;
-    }
-    // 认不出供应商时按模型名兜底：`gpt-*` 大概率是 OpenAI 兼容端点
-    if m.starts_with("gpt-") || m.starts_with("chatgpt-") {
-        return false;
-    }
-    true
+/// **只认"提到了这个参数名"**，不去解析具体措辞 —— 措辞会变，参数名不会。
+/// 宁可偶尔多摘一次（代价是这一场不发思考参数），也别漏判（漏判＝整场跑不起来）。
+fn rejects_reasoning_param(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("reasoning_effort") || m.contains("reasoning effort")
 }
 
 /// 一次 AI 探索会话：内部持有 genai 客户端 + 累积的对话请求
@@ -167,6 +156,8 @@ pub struct LlmSession {
     model: String,
     /// 每轮请求选项（含供应商无关的 reasoning effort）。一次会话固定，每次 exec_chat 复用。
     options: ChatOptions,
+    /// 这次会话已经因为上游拒绝而摘掉了 reasoning 参数（只摘一次，别反复试）
+    dropped_reasoning: bool,
     /// 累积的对话请求（genai 以"整段 messages"为请求单位，逐轮 append）
     req: ChatRequest,
     /// 最近一次 next() 的 token 用量 (上行/输入, 下行/输出)
@@ -207,17 +198,8 @@ impl LlmSession {
         // normalize_reasoning_content：把 deepseek/qwen 等 <think>…</think> 抽成 reasoning_content。
         let mut options = ChatOptions::default().with_normalize_reasoning_content(true);
         if let Some(effort) = parse_reasoning_effort(cfg.reasoning_effort.as_deref()) {
-            let provider = cfg.provider.clone().unwrap_or_default();
-            if reasoning_allowed(&provider, &model) {
-                options = options.with_reasoning_effort(effort);
-            } else {
-                // **不静默**：用户显式配了 reasoning 却没生效，得让他知道为什么，
-                // 否则"我明明开了思考"和"这条路发不了"长得一模一样
-                tracing::warn!(
-                    "{provider}/{model} 这条路不发 reasoning 参数（OpenAI 官方端点上，\
-                     reasoning_effort 与 function tools 不能同时用；而 harness 一直带着 tools）"
-                );
-            }
+            // 照常发 —— 上游若拒绝，next() 里摘掉重试一次并记下（探测 + 回退）
+            options = options.with_reasoning_effort(effort);
         }
 
         Ok(Self::assemble(Backend::Real(client), model, options, system.into(), tools))
@@ -279,6 +261,7 @@ impl LlmSession {
         }
 
         Self {
+            dropped_reasoning: false,
             backend,
             model,
             options,
@@ -464,6 +447,25 @@ impl LlmSession {
                 Ok(r) => break r,
                 Err(e) => {
                     let msg = e.to_string();
+                    // **上游嫌弃某个参数 → 摘掉它重来一次**，不退避、不算重试次数。
+                    //
+                    // 这条比"维护一张不支持的模型名单"可靠：名单永远追不上上游
+                    // （已经栽过两次 —— gpt-4o 一次、gpt-5.4-mini 一次，
+                    //  每次都表现成"进去什么也没发生"）。
+                    // 让**上游告诉我们**：它拒绝时会指名是哪个参数。
+                    //
+                    // 只摘一次：摘完还挂就是别的问题，接着走正常的错误/重试路径。
+                    if !self.dropped_reasoning && rejects_reasoning_param(&msg) {
+                        self.dropped_reasoning = true;
+                        // genai 没有"取消某个选项"的接口 —— 重建一份不带它的
+                        self.options = ChatOptions::default().with_normalize_reasoning_content(true);
+                        tracing::warn!(
+                            "{} 拒绝了 reasoning_effort，已摘掉重试一次（上游原话：{}）",
+                            self.model,
+                            msg.chars().take(160).collect::<String>()
+                        );
+                        continue;
+                    }
                     if attempt >= MAX_ATTEMPTS || !is_retryable_llm_err(&msg) {
                         let suffix = if attempt > 1 { format!("（已自动重试 {} 次）", attempt - 1) } else { String::new() };
                         return Err(TkeError::LlmError(format!("{}{}", msg, suffix)));
@@ -513,34 +515,27 @@ mod tests {
 
     /// 回归 2026-08-27 云设备真机撞到的 400：
     /// 「Unrecognized request argument supplied: reasoning_effort」。
-    /// 回归两次真机 400：
-    ///   gpt-4o-mini  → 根本不认 reasoning_effort
-    ///   gpt-5.4-mini → 认，但跟 function tools 不能同时用（而 harness 一直带 tools）
+    /// 回归两次真机 400 —— **认参数名，不认措辞**（措辞会变，参数名不会）
     #[test]
-    fn openai这条路一律不发思考参数() {
-        for m in ["gpt-4o-mini", "gpt-5.4-mini", "gpt-5.5-mini", "o3-mini", "随便什么"] {
-            assert!(!reasoning_allowed("openai", m), "openai/{m} 不该发 reasoning");
-        }
+    fn 认得出上游在嫌弃思考参数() {
+        assert!(rejects_reasoning_param(
+            "Unrecognized request argument supplied: reasoning_effort"
+        ));
+        assert!(rejects_reasoning_param(
+            "Function tools with reasoning_effort are not supported for gpt-5.4-mini in /v1/chat/completions."
+        ));
     }
 
-    /// 认不出供应商时按模型名兜底：`gpt-*` 大概率是 OpenAI 兼容端点
+    /// **别把别的错误也当成"摘掉参数就能好"**：摘错了这一场就白白不带思考了
     #[test]
-    fn 认不出供应商时按模型名兜底() {
-        assert!(!reasoning_allowed("", "gpt-4o"));
-        assert!(!reasoning_allowed("某个自建网关", "gpt-5.4-mini"));
-    }
-
-    /// **别误伤其它供应商**：它们的思考与工具调用能共存，
-    /// 而那正是 harness 质量的来源之一
-    #[test]
-    fn 其它供应商照常开思考() {
-        for (p, m) in [
-            ("anthropic", "claude-sonnet-4-6"),
-            ("gemini", "gemini-2.5-flash"),
-            ("deepseek", "deepseek-chat"),
-            ("某个还没出生的供应商", "某个还没出生的模型"),
+    fn 别的错误不触发摘参数() {
+        for m in [
+            "rate limit exceeded",
+            "The model xxx does not exist",
+            "Connection reset by peer",
+            "insufficient_quota",
         ] {
-            assert!(reasoning_allowed(p, m), "{p}/{m} 不该被误伤");
+            assert!(!rejects_reasoning_param(m), "{m} 不该触发摘参数");
         }
     }
 

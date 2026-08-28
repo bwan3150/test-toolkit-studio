@@ -124,15 +124,8 @@ pub async fn run(
         model: ai.model.clone().unwrap_or_else(|| "默认".into()),
         provider: ai.provider.clone().unwrap_or_else(|| "anthropic（默认）".into()),
         // 同 harness:说实际会发生什么(这条路发不了思考参数时如实说"关闭")
-        reasoning: {
-            let p = ai.provider.clone().unwrap_or_default();
-            let m = ai.model.clone().unwrap_or_default();
-            if !m.is_empty() && !crate::reasoning_allowed(&p, &m) {
-                format!("关闭（{p}/{m} 这条路不支持）")
-            } else {
-                ai.reasoning_effort.clone().unwrap_or_else(|| "medium".into())
-            }
-        },
+        // 照常发；上游若拒绝会自动摘掉重试一次（探测+回退，见 provider::session）
+        reasoning: ai.reasoning_effort.clone().unwrap_or_else(|| "medium".into()),
     });
 
     let system = prompts.system("orchestrator");
