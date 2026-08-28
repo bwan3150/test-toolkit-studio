@@ -77,3 +77,18 @@
 - 节点被 kill 时 harness 子进程成孤儿（本场清掉 3 个），release 路径是否会留孤儿未验
 - `uiautomator dump` 在部分页面**连超时都不报**，只回空输出，
   错误文案退化成「没有输出」——原因还在设备侧，tke 这边只是转述
+
+
+---
+
+## 2026-08-28 补记（云设备体验走查）
+
+两刀，都是"不报错所以一直被当成别的问题"：
+
+- **P-63 同一台设备并发两条命令 → 静默回空表**（并发 353 字节 vs 串行 3824，
+  exit 0）。serve 加了会话闸 `LeaseTable::gate`：一个租约一次只跑一条命令，
+  只管命令层（exec/screen），不圈 L2 的 harness（否则任务跑着时连截图都被堵）。
+- **P-64 `fetch --interactive` 的元素一半没名字**（安卓的行是「可点容器 +
+  里面的 TextView」）。新增 `UIElement.child_text`，沿 parent_index 往下取，
+  不覆盖 `text`。踩到的坑：先改的 `filter_interactive_elements` **没有任何调用方**，
+  真正在跑的是 fetch.rs 里内联的两份 —— 改 pub fn 之前先 grep 谁在调它。
