@@ -1,6 +1,6 @@
 ---
 Last-Updated: 2026-08-28
-Last-Commit: 0680eb56
+Last-Commit: 292f6a28
 ---
 
 # 当前状态
@@ -60,6 +60,8 @@ Electron App（studio）只是 tke 的外围封装——**当前主线只做 too
 | **平台对接（TOOLKIT/bug）** | 📐 方案已定（ADR-0023），tke 侧只补了 `usage` | 用户拍板四条：①平台是客户端(先直连,不做节点反向注册) ②自动化 run 与手工 run **同一实体**（"手工用例也能交给 AI 跑"，区别只在 `executor`）③安全是平台的**第七个实体**（未来放巡检/看门狗/HealthCheck），不塞 bug 列表 ④设备池是**平台级**页面（跨 App）。**tke 侧几乎不用改**：回归回放走 L1（零 LLM·只计设备时长）、AI 探索/安全扫描走 L2（平台 key·记 token）。已补 `usage`（从 `Summary` 抽，测不到给 null 不给 0）；**顺带修了真 bug**——安全轨无头输出没有 `type` 字段，成功的扫描被判成"没跑完"。✅ **安全轨用量已补齐**（`security/usage.rs`：prober/analyst/orchestrator 三处会话分角色记账，走「终局 JSON 的 usage」+「findings.json 的 usage」两条交付路；没量到给 null 不给 0）。**D6（形状变了）**：AI 不下发 key，改走**平台 AI 网关**——用户的 key 一步不离开平台，计量也变成网关侧权威的（tke 回的 usage 只作对账）。为此把 `[ai].base_url` 放开给所有 provider 并**保留原生适配器**（走 OpenAI 兼容会丢 anthropic 思考块）。凭据经 `TKE_AI_*` 环境变量交给子进程（argv 会被 `ps aux` 看见）、stderr 尾巴脱敏。**`meta` 透传**做归账：任务与会话都收、原样回到视图/列表/webhook——设备租赁与 AI 计费共用同一条路。**D7 节点主动报到**（用户拍板：轮询不稳定且容易炸服务器）：`tke serve --platform/--platform-token/--advertise`，一个端点幂等 upsert、**第一次心跳即注册**、每次带**全量**设备清单（事件式漏一条就永久错位，全量会自愈）、周期由平台回、连不上平台不影响节点干活。**本机端到端验过**：真 tke 报到 → 平台 online + 设备进池 → 杀节点 → 56s 自动判 offline。节点仍**零业务凭据**（不认识 App/用户、不持 AI key、产物是平台去拉）。平台侧实现见 `bug` 仓库 commit `e0c522a`（迁移 116 三张表 + `api/node`）+ 设计 `bug/docs/11_device_cloud.md`。**✅ 2026-08-27 全链路实测通过**：case → 两件套 → suite → run → 下发回放 → 回写用例结果 → 产物落对象存储（3/3 passed、各 14 个产物）。实跑逼出的都在 P-56~P-59 与 bug 仓库的提交里 |
 | **反向通道（内网节点）** | ✅ **真实内网机器 + 公网平台验过** | **ADR-0024**。心跳只解决了"平台知道有这台机器"，任务通道仍是平台 → 节点的 HTTP，节点必须够得着 —— 而真机大多插在办公室的机器上（内网、IP 会变、没有公网入口），用户明确不要隧道也不要 VPN。`tke serve --link`：节点主动连平台，**连上即注册、断开即注销**，之后所有指令在这条连接上跑。关键设计：**帧就地拼成 Request 交给已有的 axum Router**（Router 本身是 `tower::Service`），七个 handler 一个字没改，不会出现"HTTP 一套 / WS 一套"的双份实现；鉴权也不绕过中间件（绕过等于给自己开个不走鉴权的入口）。二进制正文走 b64。两条路**不自动切换**（自动切换会让"走的哪条"变成运行时才知道的事）。实跑撞出五个洞：`tkeclient` 三个出口漏改一个 → **整个后端 panic**（补上之余加了兜底：没有传输方式时返回能查下去的错误）／重连时旧连接的协程把新连接刚标的在线覆盖掉／判离线用 `last_seen_at` 超时而反向通道**不发心跳** → 连着却被判死／后端重启后 `assigned` 的任务永远占着设备／`conn_mode` 的 CHECK 约束按默认命名猜错了名字，DROP IF EXISTS 什么也没删。**只在平台单副本下正确**（节点连在哪个副本，任务就得在那个副本派）——用户说暂时没多副本计划 |
 | **多台安卓模拟器** | ✅ | `tke doctor --fix --profile android-emu --emulators N`：镜像只下一次，已装过只补配置。第一台仍叫 `tke`（改名会打断所有现成的 `-d avd:tke`）。两次踩同一类坑：参数化漏了指路文件那一处 → 第二台建了却认不出来；判"已装"只看文件在不在 → 坏掉的指路文件（指向别的 AVD，emulator 直接 FATAL）永远修不好，改成校验 `path=` 落点 |
+| **源码沙盒 P1（changed_surfaces）** | 🟢 **已落地，判据未量** | **ADR-0025 / INV-19**。harness 多一个 `changed_surfaces` 工具：这次改动碰了哪些界面（名字/类型/文件/行数，**没有一行代码**）。P1 只做路径映射不解析源码；宁可漏不可错（`components/` 的零件、逻辑类、测试文件一律不算界面）。红线靠**结构**兑现：`Surface` 没有内容字段、唯一出口 `render_for_ai` 带「渲染里不能有代码」的测试、无设备回归断言源码内容不进会话。`tke serve --sandbox` 才启用；`--source-tree/--source-base/--tree` 进 BANNED_FLAGS。自查 `tke sandbox surfaces --tree . --base main`（实测平台仓库 `--base HEAD~3` 正确报出三个页面）。**⚠️ 判据（探索轮数/token 降幅）还没量 —— P2 之前必须先量，降不下来就停** |
+| **security 目标对话式** | ✅ 云设备页真机走通 | `--json` 给了 URL 仍走一次性（现有调用方零破坏），**没给才进对话外壳**。serve 侧 target 可空但要 `interactive=true`（headless 没人可问）。平台侧补了「安全扫描」入口 |
 | **设备池会变** | ✅ | `set_pool` 这个函数一直没人调用，池子进程启动时扫一次就定死 —— 后来起的模拟器、插上的真机都看不见。现在每 30 秒重扫，变了才写回；**在用的设备不许消失**（重扫时它可能恰好没被扫到），合并逻辑抽成 `merge_pool()` 并加了回归 |
 
 ## 本次会话不要碰
