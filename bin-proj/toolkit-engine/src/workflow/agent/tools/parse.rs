@@ -15,6 +15,7 @@ pub fn parse_tool_call(call: &LlmToolCall) -> Result<(AgentAction, Option<String
             activity: opt_str(a, "activity"),
         },
         "close" => AgentAction::Close { target: req_str(a, "target")? },
+        "changed_surfaces" => AgentAction::ChangedSurfaces,
         "click" => AgentAction::Click {
             element_id: req_usize(a, "element_id")?,
             name: opt_str(a, "name").unwrap_or_default(),

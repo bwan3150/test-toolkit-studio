@@ -41,6 +41,13 @@ pub struct ServeArgs {
     #[arg(long, default_value_t = 256)]
     pub max_upload_mb: usize,
 
+    /// 开源码沙盒（ADR-0025）：任务带了 `source` 就在这个目录下按 App 存 repo 工作副本，
+    /// harness 因此多一个 `changed_surfaces` 工具。不给这个参数 = **不启用**：
+    /// 一台随手接上来的机器不该因为接上了就自动开始存别人的源码。
+    /// 给 `--sandbox` 不带值 = 用默认的 `~/.tke/sandbox`
+    #[arg(long, num_args = 0..=1, default_missing_value = "")]
+    pub sandbox: Option<String>,
+
     /// 测试专用：往设备池里塞 `fake:` 设备（可多次给）
     #[arg(long, hide = true)]
     pub fake_device: Vec<String>,
@@ -125,6 +132,10 @@ pub async fn handle(args: ServeArgs) -> Result<()> {
         platform,
         link: args.link,
         max_upload_bytes: args.max_upload_mb * 1024 * 1024,
+        // `--sandbox` 不带值 = 默认根目录；不给这个参数 = 不启用
+        sandbox_root: args.sandbox.map(|v| {
+            if v.trim().is_empty() { tke::sandbox::Sandbox::default_root() } else { PathBuf::from(v) }
+        }),
     })
     .await
 }

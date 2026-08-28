@@ -37,6 +37,8 @@ pub(crate) struct TestRun {
     platform: Platform,
     case: String,
     prompts: PromptSet,
+    /// 源码沙盒（ADR-0025 P1）：有它才有 `changed_surfaces` 工具。None 是常态
+    source: Option<super::options::SourceContext>,
     // —— 产物目录 / 元素库 ——
     artifacts: RunArtifacts,
     run_dir: PathBuf,
@@ -102,6 +104,7 @@ macro_rules! drive_ctx {
             ui: $ui,
             task_mode: $r.task_mode,
             ask_mode: $r.ask_mode,
+            source: $r.source.as_ref(),
         }
     };
 }
@@ -172,7 +175,7 @@ impl TestRun {
             }),
         );
 
-        let tools = build_tools(&prompts, platform);
+        let tools = build_tools(&prompts, platform, opts.source.is_some());
         tx.log(
             "tools",
             serde_json::json!({
@@ -196,6 +199,18 @@ impl TestRun {
             tx.log("llm_message", serde_json::json!({ "content": nav_only }));
             sess.user(nav_only.to_string());
         }
+        // 有源码沙盒时点一句 —— **不把变更面直接铺进上下文**：
+        // 塞进去的成本是每次探索都付，而 AI 未必用得上；一句话换来的是
+        // "它知道有这个工具、且值得先调一次"。真要看再花那一轮（ADR-0025 P1）
+        if let Some(src) = &opts.source {
+            let hint = format!(
+                "【源码线索可用】这次被测的分支已经在本机（{}），基线 {}。\n                 想知道这次改动碰了哪些界面，先调一次 `changed_surfaces` —— 它能让你直接去看该看的地方，\n                 而不是一层层点着找。**它只告诉你去哪儿看，不告诉你该看到什么**：结果对不对，仍然只看用例和你在设备上看到的。",
+                &src.sha.chars().take(8).collect::<String>(),
+                if src.base.is_empty() { "（没配）" } else { &src.base },
+            );
+            tx.log("llm_message", serde_json::json!({ "content": hint.clone() }));
+            sess.user(hint);
+        }
         // 编排官下发的额外约束（用户纠偏/已否定路径等）：作为硬约束追加在用例之后
         if let Some(n) = note.map(str::trim).filter(|s| !s.is_empty()) {
             let guide = format!("【编排官下发的约束/提示，请务必遵守】\n{}", n);
@@ -215,6 +230,7 @@ impl TestRun {
             platform,
             case: case.to_string(),
             prompts,
+            source: opts.source.clone(),
             artifacts,
             run_dir,
             element_path,
@@ -311,7 +327,7 @@ impl TestRun {
             run.discarded_pt += dp;
             run.discarded_ct += dc;
             // 全新探索会话 + 用例 + 重探指导，从头带指导重探
-            run.sess = LlmSession::new_for_role(&opts.ai, "explorer", run.prompts.role_system("explorer", &run.device, run.platform.name()), build_tools(&run.prompts, run.platform))?;
+            run.sess = LlmSession::new_for_role(&opts.ai, "explorer", run.prompts.role_system("explorer", &run.device, run.platform.name()), build_tools(&run.prompts, run.platform, run.source.is_some()))?;
             let case_msg = render(&run.prompts.message("explorer", "case_intro"), &[("case", run.case.as_str())]);
             run.tx.log("llm_message", serde_json::json!({ "content": case_msg.clone() }));
             run.sess.user(case_msg);

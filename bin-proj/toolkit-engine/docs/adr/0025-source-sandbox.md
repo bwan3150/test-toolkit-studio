@@ -152,7 +152,7 @@ AI 可见的东西一旦包含答案，它就不再去现场求证。
 
 | 阶段 | 做什么 | 判据（可量化，达不到就停） |
 |---|---|---|
-| P1 | `changed_surfaces` —— 只做变更面聚焦 | 同一个用例的探索轮数 / token 降幅 |
+| P1 | `changed_surfaces` —— 只做变更面聚焦 ✅**已落地 2026-08-28** | 同一个用例的探索轮数 / token 降幅 |
 | P2 | `find_locator` + `find_route` | 定位失败率降幅；生成的 `.tks` 里文字定位占比下降 |
 | P3 | 接 CI 产物（apk/ipa/预览 URL）装上测 | 从"CI 出包"到"测完出报告"的人工步骤数 |
 
@@ -180,3 +180,38 @@ AI 手里有实现，就不会去现场求证。
 
 **让 harness 自己 clone。** 凭据、配额、并发、清理全要它自己管，
 而它是个 LLM 驱动的循环——这些必须是结构，不能是它记得做。
+
+
+---
+
+## P1 落地记录（2026-08-28）
+
+**做了什么**
+
+- `src/sandbox/`：`surfaces.rs`（路径 → 界面映射，不解析源码）+ `repo.rs`
+  （裸镜像 + 按会话开 worktree、短期 token 只在内存里拼）
+- harness 多一个工具 `changed_surfaces`。**只在配了源码时才暴露** ——
+  让 AI 看见一个"调了也没用"的工具，只会换来一次白跑的往返
+- 开场加一句话提示它去调，而**不是把变更面直接铺进上下文**：
+  铺进去的成本每次探索都付，而 AI 未必用得上；一句话换来的是"它知道有这东西且值得先调一次"
+- `tke serve --sandbox` 才启用（默认不启用：一台随手接上来的机器不该自动开始存别人的源码）；
+  任务体多一个 `source` 块（repo / ref / base / token / commit）
+- `tke sandbox surfaces --tree . --base main` 自查入口 —— **判据要能量得出来**
+
+**界面识别的判据（P1 只做路径映射）**
+
+| 平台 | 认什么 |
+|---|---|
+| Android | `*Activity.kt/java`、`*Fragment.*`、`res/layout/*.xml` |
+| iOS | `*ViewController.swift`、`*View.swift`、`.storyboard/.xib` |
+| Web | `pages/ views/ screens/ routes/` 下的 `.vue/.tsx/.jsx/.svelte`、`router/*` |
+
+**宁可漏不可错**：报一个不存在的界面，AI 会去找一个不存在的东西 ——
+那比没有线索更慢。所以 `components/` 下的零件、逻辑类、测试文件一律不算界面。
+
+**实测**：在本项目的平台仓库上跑 `--base HEAD~3`，正确报出
+DeviceCloudAdminPage(248 行) / ReleaseListPage(48) / FilesPage(22) —— 与那三个提交实际改的页面一致。
+驱动循环里的无设备回归也过了（调用不落 .tks 步骤、不碰设备、源码内容不进会话）。
+
+**还没量的**：探索轮数 / token 降幅 —— 那要同一个用例在"有源码/没源码"下各跑一次真实探索。
+**P2 之前必须先量这个**，降不下来就该停（ADR 原文）。

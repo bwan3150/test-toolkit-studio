@@ -242,6 +242,8 @@ macro_rules! op_ctx {
             ui: $ui,
             task_mode: false,
             ask_mode: super::ctx::AskMode::Ask,
+            // 修复/优化脚本不是探索 —— 变更面对它没用
+            source: None,
         }
     };
 }
@@ -369,7 +371,7 @@ pub(crate) async fn resume_explore(
         &opts.ai,
         "explorer",
         env.prompts.role_system("explorer", &env.device, platform.name()),
-        super::super::tools::build_tools(&env.prompts, platform),
+        super::super::tools::build_tools(&env.prompts, platform, false),
     )?;
     let failure = if note.trim().is_empty() {
         "回放在保留步之后失败/未到达目标（具体原因见上一次回放报告）。".to_string()
@@ -527,6 +529,8 @@ pub async fn align_start(params: &Arc<crate::Params>, ui: &dyn Frontend, tks: &P
         platform: None,
         device: device.clone(),
         params: params.clone(),
+        // 导航是"回原地"，不是探索 —— 变更面对它没用
+        source: None,
     };
     let report = match super::testrun::navigate(&opts, ui, &goal, None).await {
         Ok(r) => r,

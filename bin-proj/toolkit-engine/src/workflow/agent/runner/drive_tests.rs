@@ -68,6 +68,7 @@ async fn drive_click_then_finish() {
         ui: &ui,
         task_mode: true, // 跳过踩实官/监督官（它们各起独立 LLM 会话）
         ask_mode: super::ctx::AskMode::Ask,
+        source: None,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -131,6 +132,7 @@ async fn drive_autostops_on_repeated_noop_click() {
         ui: &ui,
         task_mode: true,
         ask_mode: super::ctx::AskMode::Ask,
+        source: None,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -221,6 +223,7 @@ async fn full_test_asserter_inserts_and_supervisor_gates() {
         ui: &ui,
         task_mode: false, // 完整测试：开踩实官 + 监督官
         ask_mode: super::ctx::AskMode::Ask,
+        source: None,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -291,6 +294,7 @@ async fn supervisor_reject_limit_fails_the_run() {
         ui: &ui,
         task_mode: false,
         ask_mode: super::ctx::AskMode::Ask,
+        source: None,
     };
 
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
@@ -362,6 +366,7 @@ async fn ask_user_auto_mode_advisor_answers() {
         ui: &ui,
         task_mode: true,
         ask_mode: super::ctx::AskMode::Ask, // Plain 无提问能力 → flow 强制按托管处理
+        source: None,
     };
     let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
 
@@ -369,6 +374,102 @@ async fn ask_user_auto_mode_advisor_answers() {
     assert!(outcome.subagent_pt > 0 || outcome.subagent_ct >= 0, "参谋 token 应计入子 agent 账目");
     let taps: Vec<_> = fake::events(device).into_iter().filter(|e| e.starts_with("tap")).collect();
     assert_eq!(taps.len(), 1, "代答后应发生点击：{:?}", taps);
+
+    fake::remove(device);
+}
+
+/// 源码沙盒 P1（ADR-0025）：AI 调 `changed_surfaces` 拿到变更面 →
+/// **不落 .tks 步骤、不碰设备**，然后照常继续探索。
+///
+/// 这条同时是 INV-19 的回归：返回给 AI 的那段话里只有界面名/类型/规模，
+/// 一行代码都没有。
+#[tokio::test]
+async fn drive_changed_surfaces_不落步骤也不碰设备() {
+    let device = "fake:drive-surfaces";
+    fake::install(
+        device,
+        vec![
+            fake::page(&[&fake::node("进入结算", 100, 200, 300, 260)]),
+            fake::page(&[&fake::node("结算页", 100, 100, 400, 160)]),
+        ],
+    );
+
+    let tmp = temp_dir("surfaces");
+    // 造一个真的 git 仓库当"源码"：主干一个文件，分支上改一个页面组件
+    let repo = tmp.join("repo");
+    let _ = std::fs::remove_dir_all(&repo);
+    std::fs::create_dir_all(repo.join("src/pages")).unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git").args(args).current_dir(&repo).output().unwrap()
+    };
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "user.email", "t@t"]);
+    git(&["config", "user.name", "t"]);
+    std::fs::write(repo.join("README.md"), "x").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "init"]);
+    git(&["checkout", "-qb", "feat"]);
+    std::fs::write(repo.join("src/pages/Checkout.vue"), "<template>a</template>\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "改结算页"]);
+
+    let prompts = PromptSet::resolve(&PromptSpec::default()).unwrap();
+    let ai = crate::utils::AiConfig::default();
+    let ui = PlainFrontend::new();
+    let workarea = Workarea::for_device(Some(device)).unwrap();
+    let fetcher = Fetcher::new();
+    let artifacts = RunArtifacts::create(&tmp, "drive-surfaces").unwrap();
+    let element_path = tmp.join("element-surfaces.json");
+    let mut tx = Transcript::create(tmp.join("conversation-surfaces.jsonl")).unwrap();
+
+    let mut sess = LlmSession::new_fake(
+        "你是测试探索官",
+        Vec::new(),
+        vec![
+            // 第 1 轮：先问改了哪些界面（不该产生任何设备事件、任何 .tks 行）
+            FakeTurn::tool("changed_surfaces", serde_json::json!({})),
+            FakeTurn::tool("click", serde_json::json!({ "element_id": 0, "comment": "去结算页" })),
+            FakeTurn::tool("finish", serde_json::json!({ "success": true, "reason": "到了", "script_name": "checkout" })),
+            FakeTurn::text("{}"),
+        ],
+    );
+
+    let source = super::options::SourceContext {
+        tree: repo.clone(),
+        base: "main".into(),
+        sha: "deadbeef".into(),
+    };
+    let ctx = DriveCtx {
+        device,
+        element_path: &element_path,
+        workarea: &workarea,
+        fetcher: &fetcher,
+        artifacts: &artifacts,
+        ocr: None,
+        max_rounds: 6,
+        prompts: &prompts,
+        case: "结算流程能不能走通",
+        ai: &ai,
+        ui: &ui,
+        task_mode: true,
+        ask_mode: super::ctx::AskMode::Ask,
+        source: Some(&source),
+    };
+
+    let outcome = drive(&mut sess, &mut tx, &ctx, false, "").await.unwrap();
+
+    assert!(outcome.success, "{}", outcome.reason);
+    // 只有点击那一步落了 .tks —— changed_surfaces 是线索，不是操作
+    assert_eq!(outcome.lines.len(), 1, "changed_surfaces 不该落步骤：{:?}", outcome.lines);
+    assert!(outcome.lines[0].starts_with("点击"));
+    // 设备只被点了一次
+    assert_eq!(fake::events(device), vec!["tap 200,230".to_string()]);
+
+    // 给 AI 的那段话里有界面名、没有代码（INV-19）
+    let conv = std::fs::read_to_string(tmp.join("conversation-surfaces.jsonl")).unwrap();
+    assert!(conv.contains("changed_surfaces"), "transcript 里该有这次调用");
+    assert!(conv.contains("Checkout"), "该报出被改的那个界面");
+    assert!(!conv.contains("<template>"), "**绝不能**把源码内容带出来");
 
     fake::remove(device);
 }

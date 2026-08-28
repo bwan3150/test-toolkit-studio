@@ -69,6 +69,9 @@ pub enum AgentAction {
     AskUser { question: String, options: Vec<String> },
     /// 结束探索（给出成功与否及依据）；script_name=给生成脚本起的简短文件名（不含扩展名）
     Finish { success: bool, reason: String, script_name: Option<String> },
+    /// 查这次改动碰到了哪些界面（源码沙盒 P1，ADR-0025）。不碰设备、不产生 .tks 步骤。
+    /// 返回值**只有界面名/文件路径/改动规模**，没有代码 —— INV-19 在接口层的兑现
+    ChangedSurfaces,
     /// 纠正已知元素的名字（当初起错了名，如把 logo 当成导航选项）。不改变页面、不产生 .tks 步骤。
     Rename { old_name: String, new_name: String },
 }
@@ -93,6 +96,7 @@ impl AgentAction {
                 | AgentAction::AskUser { .. }
                 | AgentAction::Finish { .. }
                 | AgentAction::Rename { .. }
+                | AgentAction::ChangedSurfaces
         )
     }
 }

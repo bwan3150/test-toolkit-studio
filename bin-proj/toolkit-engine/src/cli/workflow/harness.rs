@@ -83,6 +83,15 @@ pub struct HarnessArgs {
     /// 提示词目录（约定 agents/<role>.md、tools/...、messages/...；可覆盖任意角色，含编排官与各 worker）
     #[arg(long)]
     pub prompts_dir: Option<PathBuf>,
+
+    // ===== 源码沙盒（ADR-0025 P1）=====
+    /// 被测项目的源码工作树（已 checkout 到待测分支）。给了它，AI 多一个
+    /// `changed_surfaces` 工具：这次改动碰了哪些界面。**只回界面名/文件/行数，不回代码**
+    #[arg(long)]
+    pub source_tree: Option<PathBuf>,
+    /// 变更面的对照基线（通常是主干分支名，如 main）。不给就算不出变更面
+    #[arg(long)]
+    pub source_base: Option<String>,
 }
 
 /// 处理 Harness 命令
@@ -195,6 +204,14 @@ pub async fn handle(
     // verify：CLI --verify 出现 或 config.verify=true 即开启
     let verify = args.verify || params.verify;
 
+    // 源码沙盒：给了工作树才有。**拿不到就当没有**，退回盲盒探索 ——
+    // 把它做成硬依赖会让"源码那边出了点问题"变成"测试全线停摆"（ADR-0025）
+    let source = args.source_tree.as_ref().map(|tree| {
+        let base = args.source_base.clone().unwrap_or_default();
+        let sha = tke::sandbox::head_sha(tree);
+        tke::workflow::agent::runner::options::SourceContext { tree: tree.clone(), base, sha }
+    });
+
     // —— 运行 ——（无论成败都先 emit Done + shutdown 恢复终端，再决定退出码/报错）
     let run_result = AgentRunner::run(
         AgentRunOptions {
@@ -207,6 +224,7 @@ pub async fn handle(
             platform,
             device: dev_override,
             params: params.clone(),
+            source,
         },
         frontend.as_ref(),
     )

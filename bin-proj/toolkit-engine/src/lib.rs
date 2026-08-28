@@ -33,6 +33,9 @@ pub mod tools;
 // ⑤ 服务化：把本机能力开成 HTTP 接口（ADR-0022）
 pub mod serve;
 
+// ⑤'' 源码沙盒：让 harness 拿着图纸测（ADR-0025 / INV-19）
+pub mod sandbox;
+
 // ⑤' 远程客户端：TKE_REMOTE 一设，同一条命令发给远端节点（ADR-0022 D4）
 pub mod remote;
 

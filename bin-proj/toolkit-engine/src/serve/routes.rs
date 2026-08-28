@@ -473,6 +473,9 @@ struct CreateTask {
     ai: Option<super::task::AiOverride>,
     /// 原样带回的归账标签（app_id / user_id / 计费单号…）
     meta: Option<serde_json::Value>,
+    /// 源码坐标（ADR-0025 P1）：repo / ref / base / 短期只读 token / commit。
+    /// 节点没开 `--sandbox` 就忽略它
+    source: Option<crate::sandbox::SourceSpec>,
 }
 
 async fn task_create(
@@ -493,6 +496,7 @@ async fn task_create(
         callback_url: body.callback_url,
         ai: body.ai,
         meta: body.meta,
+        source: body.source,
     };
     match super::task::spawn(st.clone(), &st.leases, req).await {
         Ok(v) => Ok((StatusCode::ACCEPTED, Json(v))),

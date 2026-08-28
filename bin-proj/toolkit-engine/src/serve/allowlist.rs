@@ -75,6 +75,9 @@ const BANNED_FLAGS: &[&str] = &[
     "--device", "-d",
     "--copilot",
     "--headless",
+    // 源码沙盒的三个（ADR-0025）：工作树落点由**服务端**按租约算，
+    // 让调用方指定等于让它说"去读这台机器上的哪个目录"
+    "--source-tree", "--source-base", "--tree",
 ];
 
 /// 过关后的 argv：已把 `--k=v` 拆成两个 token（下游只需处理一种形态），

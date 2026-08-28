@@ -45,6 +45,10 @@ pub struct ServeState {
     /// 也不必把那个 handler 拆成两份实现（双份实现迟早漂移）。
     /// 一律走回环 —— 这一跳不该出机器。
     pub local_ws_base: String,
+    /// 源码沙盒根目录（ADR-0025）。**None = 不启用** ——
+    /// 一台随手接上来的机器不该因为接上了就自动开始存别人的源码，
+    /// 要显式 `--sandbox` 才有
+    pub sandbox_root: Option<PathBuf>,
 }
 
 pub struct ServeOptions {
@@ -65,6 +69,8 @@ pub struct ServeOptions {
     /// 自动切换会让"到底走的哪条路"变成运行时才知道的事
     pub link: bool,
     pub max_upload_bytes: usize,
+    /// 源码沙盒根目录（`--sandbox`）；None = 不启用
+    pub sandbox_root: Option<PathBuf>,
 }
 
 /// 把重扫的结果与**正在被租用的设备**合并。
@@ -153,6 +159,7 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
         default_timeout: opts.exec_timeout,
         max_upload_bytes: opts.max_upload_bytes,
         local_ws_base: format!("ws://127.0.0.1:{}", opts.port),
+        sandbox_root: opts.sandbox_root.clone(),
     });
 
     let app = routes::router(state.clone());
@@ -297,6 +304,7 @@ mod tests {
             port: 0,
             token: None,
             root: std::env::temp_dir().join("tke-serve-test-guard"),
+            sandbox_root: None,
             session_ttl: Duration::from_secs(60),
             exec_timeout: Duration::from_secs(5),
             web_slots: 1,

@@ -30,6 +30,23 @@ pub struct AgentRunOptions {
     pub device: Option<String>,
     /// 统一参数表（device/element/log/knowledge 查表取参）
     pub params: Arc<Params>,
+    /// 源码沙盒（ADR-0025 P1）：有它才暴露 `changed_surfaces` 工具。
+    /// **None 是常态** —— 源码是增益不是前置条件，没有就退回盲盒探索
+    pub source: Option<SourceContext>,
+}
+
+/// 一次探索能看到的源码坐标 —— **只有路径，没有内容**。
+///
+/// 这是 INV-19（源码只回答"怎么找"，不回答"结果应该是什么"）在类型层的形状：
+/// 沙盒工作树和基线都在这儿，但从这里出去的东西一行代码都没有。
+#[derive(Clone, Debug)]
+pub struct SourceContext {
+    /// 已经 checkout 好的工作树
+    pub tree: PathBuf,
+    /// 变更面的对照基线（通常是主干分支名）
+    pub base: String,
+    /// 实际 checkout 到的 sha —— 报告里要写清它
+    pub sha: String,
 }
 
 impl AgentRunOptions {
@@ -49,6 +66,7 @@ impl AgentRunOptions {
             platform: Some(crate::models::Platform::from_device(Some(device))),
             device: Some(device.to_string()),
             params: self.params.clone(),
+            source: self.source.clone(),
         }
     }
 

@@ -666,6 +666,30 @@ pub async fn drive(
                     sess.tool_result(primary.call_id.as_str(), format!("用户答复：{}", answer));
                     continue; // 不前进，重新询问
                 }
+                AgentAction::ChangedSurfaces => {
+                    // 变更面（ADR-0025 P1）：只回界面名/文件/行数，**没有一行代码**（INV-19）。
+                    // 不碰设备、不落 .tks 步骤 —— 它是"往哪儿看"的线索，不是一次操作
+                    let text = match ctx.source {
+                        Some(src) => match crate::sandbox::changed_surfaces(&src.tree, &src.base) {
+                            Ok(list) => {
+                                tx.log("changed_surfaces", serde_json::json!({
+                                    "round": round, "sha": src.sha, "base": src.base,
+                                    "count": list.len(),
+                                    // 落 transcript 的也只有名字与规模 —— 报告会被分享出去
+                                    "surfaces": list.iter().map(|x| serde_json::json!({
+                                        "name": x.name, "kind": x.kind, "churn": x.churn
+                                    })).collect::<Vec<_>>(),
+                                }));
+                                crate::sandbox::render_for_ai(&list, 12)
+                            }
+                            // 算不出来就说算不出来，别让 AI 以为"这次什么都没改"
+                            Err(e) => format!("变更面读不出来（{e}）。按没有源码线索继续探索。"),
+                        },
+                        None => "这次没有配源码，拿不到变更面。按没有线索继续探索。".to_string(),
+                    };
+                    sess.tool_result(primary.call_id.as_str(), text);
+                    continue; // 不前进，重新询问
+                }
                 AgentAction::Rename { old_name, new_name } => {
                     // 纠正起错的已知元素名：改库 + 同步已生成的 .tks 引用 + 当前轮已知名映射
                     let ok = crate::tools::element::rename_element(ctx.element_path, &old_name, &new_name)

@@ -14,6 +14,7 @@ pub mod fix;
 /// tke report：把散落的多批检查汇总成一份全流程报告
 pub mod report;
 pub mod task;
+pub mod sandbox;
 pub mod serve;
 pub mod remote;
 

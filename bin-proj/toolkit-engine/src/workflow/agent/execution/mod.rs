@@ -375,7 +375,8 @@ pub async fn apply(
         AgentAction::RequestScreenshot { .. }
         | AgentAction::AskUser { .. }
         | AgentAction::Finish { .. }
-        | AgentAction::Rename { .. } => {
+        | AgentAction::Rename { .. }
+        | AgentAction::ChangedSurfaces => {
             Err(TkeError::ScriptExecuteError("控制流动作不应进入执行器".to_string()))
         }
     }

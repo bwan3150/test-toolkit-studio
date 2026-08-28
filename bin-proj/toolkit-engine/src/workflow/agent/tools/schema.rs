@@ -10,7 +10,7 @@ pub struct ToolSchema {
 }
 
 /// 全部工具的 name + schema 表
-pub fn tool_schemas(platform: crate::Platform) -> Vec<ToolSchema> {
+pub fn tool_schemas(platform: crate::Platform, with_source: bool) -> Vec<ToolSchema> {
     // 元素工具只需 element_id（选哪个元素）；**不必起名**——系统按元素特征自动命名、
     // 落临时库，定稿时再统一起正式名。extra 注入各自附加字段（如 input 的 text）。
     let el_props = |extra: serde_json::Value| -> serde_json::Value {
@@ -235,6 +235,14 @@ pub fn tool_schemas(platform: crate::Platform) -> Vec<ToolSchema> {
             }),
         },
     ];
+    // 源码沙盒开着才有的工具（ADR-0025 P1）。**没配源码就根本不暴露** ——
+    // 让 AI 看见一个"调了也没用"的工具，只会换来一次白跑的往返
+    if with_source {
+        tools.push(ToolSchema {
+            name: "changed_surfaces",
+            schema: empty_schema(),
+        });
+    }
     // 平台独有工具（gate）：hover 为 web 独有——只有网页才有"鼠标悬停展开下拉/菜单"的交互，
     // 移动端没有悬停概念。按平台只给 web 会话暴露，移动端 AI 根本看不到这个工具。
     // 这是「按平台下发不同工具集」的第一个口子；后续可把 switch/back 等也归类到各自平台。

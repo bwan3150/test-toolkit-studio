@@ -42,6 +42,9 @@ pub struct DriveCtx<'a> {
     /// explorer 提问模式：Ask=转给用户(参谋先生成候选选项)；Auto=完全托管(参谋代答,不打扰用户)。
     /// 无提问能力的前端(Plain/CI)运行时强制按 Auto 处理。
     pub ask_mode: AskMode,
+    /// 源码沙盒（ADR-0025 P1）：`changed_surfaces` 从这里取工作树与基线。
+    /// **None 是常态** —— 没配源码就没这个工具，主循环也走不到那一支
+    pub source: Option<&'a super::options::SourceContext>,
 }
 
 /// 循环结果

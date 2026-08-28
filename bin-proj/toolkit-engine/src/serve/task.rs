@@ -184,11 +184,24 @@ pub struct SpawnTask {
     /// tke 不认识"用户"（ADR-0022 D1），归账靠调用方自己带的这张纸条——
     /// 设备租赁与 AI 计费共用同一条透传路
     pub meta: Option<serde_json::Value>,
+    /// 源码坐标（ADR-0025 P1）。节点没开 `--sandbox` 就忽略它 ——
+    /// **不静默地当成"开了"**：那样源码会落到一台没打算存源码的机器上
+    pub source: Option<crate::sandbox::SourceSpec>,
 }
 
 /// 把任务参数翻译成子进程 argv。**注意与 L1 的区别**：这里是服务端主动跑 AI 编排，
 /// 所以 `harness`/`security` 出现在这儿是对的——它们只是不在**命令层**白名单里
 pub fn build_task_argv(req: &SpawnTask, lease: &Lease) -> Result<Vec<String>, String> {
+    build_task_argv_with_source(req, lease, None)
+}
+
+/// 同上，外加已经准备好的源码工作树（ADR-0025 P1）。
+/// 分成两个函数是为了让 argv 的组装保持可无 IO 单测 —— 工作树的准备是有 IO 的
+pub fn build_task_argv_with_source(
+    req: &SpawnTask,
+    lease: &Lease,
+    source: Option<(&std::path::Path, &str)>,
+) -> Result<Vec<String>, String> {
     let mut argv: Vec<String> = vec![
         "--json".into(),
         "--log".into(),
@@ -216,6 +229,15 @@ pub fn build_task_argv(req: &SpawnTask, lease: &Lease) -> Result<Vec<String>, St
                 argv.push("--max-rounds".into());
                 argv.push(n.to_string());
             }
+            // 源码线索只给 ui 任务 —— security 的判据不接源码通道（INV-19）
+            if let Some((tree, base)) = source {
+                argv.push("--source-tree".into());
+                argv.push(tree.to_string_lossy().into_owned());
+                if !base.trim().is_empty() {
+                    argv.push("--source-base".into());
+                    argv.push(base.to_string());
+                }
+            }
         }
         "security" => {
             argv.push("security".into());
@@ -229,6 +251,43 @@ pub fn build_task_argv(req: &SpawnTask, lease: &Lease) -> Result<Vec<String>, St
         other => return Err(format!("不认识的任务类型 `{other}`（只有 ui / security）")),
     }
     Ok(argv)
+}
+
+/// 准备这次任务的源码工作树。
+///
+/// 三个"不做"都是刻意的：
+///   · 节点没开 `--sandbox` → 直接不做（不静默启用，见 SpawnTask.source 的注释）
+///   · 坐标不全 → 不做（`usable()`）
+///   · 拉失败 → **只记日志，返回 None**，任务照常跑。
+///     把源码做成硬依赖，会让"源码那边出了点问题"变成"测试全线停摆"（ADR-0025）
+fn prepare_source(
+    st: &crate::serve::ServeState,
+    req: &SpawnTask,
+    lease: &Lease,
+) -> Option<crate::sandbox::PreparedTree> {
+    let root = st.sandbox_root.as_ref()?;
+    let spec = req.source.as_ref().filter(|s| s.usable())?;
+    // 按 App 隔离 —— app_id 从调用方那张纸条（meta）里取；没有就退到租约 id，
+    // 那样至少不会把两个 App 的源码混在一个目录里
+    let app = req
+        .meta
+        .as_ref()
+        .and_then(|m| m.get("app_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or(&lease.id)
+        .to_string();
+    let sb = crate::sandbox::Sandbox::new(root, &app);
+    match sb.prepare(spec, &lease.id) {
+        Ok(t) => {
+            tracing::info!(session = %lease.id, sha = %t.sha, "源码沙盒就绪");
+            Some(t)
+        }
+        Err(e) => {
+            // **说出来**：静默退回盲盒模式的话，人会以为源码线索生效了却没效果
+            tracing::warn!(session = %lease.id, err = %e, "源码沙盒没准备成，这次按无源码跑");
+            None
+        }
+    }
 }
 
 /// 强度阶梯的远程口子：`red-team` **服务端硬拒**（ADR-0022 D5）——
@@ -342,7 +401,15 @@ pub async fn spawn(
         .acquire(Some(platform), want, Some(Duration::from_secs(req.timeout.as_secs().max(600))))
         .map_err(|e| (409u16, e.to_string()))?;
 
-    let argv = build_task_argv(&req, &lease).map_err(|e| (400u16, e))?;
+    // 源码沙盒：节点开了 `--sandbox` 且任务带了坐标才准备。
+    // **拉不到就说拉不到，然后照常跑** —— 源码是增益不是前置条件（ADR-0025）
+    let prepared = prepare_source(&st, &req, &lease);
+    let argv = build_task_argv_with_source(
+        &req,
+        &lease,
+        prepared.as_ref().map(|t| (t.path.as_path(), req.source.as_ref().map(|s| s.base.as_str()).unwrap_or(""))),
+    )
+    .map_err(|e| (400u16, e))?;
     let id = st.tasks.next_id();
 
     let (tx, _) = broadcast::channel::<String>(1024);
@@ -710,7 +777,7 @@ mod tests {
             platform: None, device_id: None,
             kind: "ui".into(), target: None, testcase: Some("看看首页".into()), mode: None,
             interactive: false, max_rounds: Some(1), timeout: Duration::from_secs(60),
-            callback_url: None, ai: None, meta: None,
+            callback_url: None, ai: None, meta: None, source: None,
         }
     }
 
@@ -722,7 +789,7 @@ mod tests {
                 platform: None,
                 device_id: None,
                 kind: "ui".into(), target: None, testcase: Some("登录能用吗".into()), mode: None,
-                interactive: false, max_rounds: Some(20), timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None,
+                interactive: false, max_rounds: Some(20), timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None, source: None,
             },
             &l,
         ).unwrap();
@@ -737,7 +804,7 @@ mod tests {
                 device_id: None,
                 kind: "security".into(), target: Some("https://x".into()), testcase: None,
                 mode: Some("safe".into()), interactive: false, max_rounds: None,
-                timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None,
+                timeout: Duration::from_secs(60), callback_url: None, ai: None, meta: None, source: None,
             },
             &lease(""),
         ).unwrap();
@@ -752,7 +819,7 @@ mod tests {
                 platform: None,
                 device_id: None,
                 kind: "security".into(), target: None, testcase: None, mode: None, interactive: false,
-                max_rounds: None, timeout: Duration::from_secs(1), callback_url: None, ai: None, meta: None,
+                max_rounds: None, timeout: Duration::from_secs(1), callback_url: None, ai: None, meta: None, source: None,
             },
             &lease(""),
         ).unwrap_err();

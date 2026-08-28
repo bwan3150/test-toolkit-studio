@@ -149,3 +149,12 @@ harness 拿得到被测项目源码时（源码沙盒，ADR-0025），源码**�
 - 引用了源码线索的步骤，在报告里标注它**只用于定位**
 
 与「提示词不得泄题」同源：AI 可见的东西一旦包含答案，它就不再去现场求证。
+
+**P1 已落地（`changed_surfaces`）**，这条不变量在代码里的落点：
+
+- `src/sandbox/surfaces.rs` 的 `Surface` 只有 `name / kind / files / churn` —— **没有内容字段**，
+  想泄题得先改结构体
+- `src/sandbox/mod.rs::render_for_ai` 是给 AI 的唯一出口，带一条「渲染里不能有代码」的测试
+- `flow.rs` 落 transcript 时也只写名字与规模 —— 报告会被分享出去（同 P-45 密码打码）
+- 无设备回归 `drive_changed_surfaces_不落步骤也不碰设备` 断言
+  `!conv.contains("<template>")`：**源码内容一个字节都不许进会话**

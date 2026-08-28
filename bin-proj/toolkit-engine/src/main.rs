@@ -166,6 +166,12 @@ enum Commands {
         args: cli::serve::ServeArgs,
     },
 
+    /// [服务] 源码沙盒：这次改动碰了哪些界面（ADR-0025）
+    Sandbox {
+        #[command(subcommand)]
+        action: cli::sandbox::SandboxCommands,
+    },
+
     /// [服务] 远程会话管理（配了 TKE_REMOTE 后，普通命令会自动发给节点）
     Remote {
         #[command(subcommand)]
@@ -377,6 +383,9 @@ async fn main() -> tke::Result<()> {
         }
         Commands::Serve { args } => {
             cli::serve::handle(args).await
+        }
+        Commands::Sandbox { action } => {
+            cli::sandbox::handle(action, cli.json).await
         }
         Commands::Remote { action } => {
             cli::remote::handle(action).await

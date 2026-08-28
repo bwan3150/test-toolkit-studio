@@ -166,6 +166,7 @@ pub fn default_tool_description(name: &str) -> &'static str {
         "request_screenshot" => include_str!("builtin/tools/request_screenshot.md"),
         "ask_user" => include_str!("builtin/tools/ask_user.md"),
         "rename_element" => include_str!("builtin/tools/rename_element.md"),
+        "changed_surfaces" => include_str!("builtin/tools/changed_surfaces.md"),
         "finish" => include_str!("builtin/tools/finish.md"),
         _ => "",
     }
