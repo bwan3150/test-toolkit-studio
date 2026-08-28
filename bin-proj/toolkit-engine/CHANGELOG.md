@@ -7,6 +7,26 @@
 
 ## [Unreleased]
 
+### 2026-08-28 · OpenAI 这条路一律不发 `reasoning_effort`（第二次栽在同一处）
+上一版按**模型名**挡（`gpt-4*` 那一代），而 `gpt-5.4-mini` 是 reasoning 模型、
+按名字该放行 —— 结果在真机上 400：
+
+> Function tools with reasoning_effort are not supported for gpt-5.4-mini
+> in /v1/chat/completions.
+
+**判据错在维度**：盯着"这个模型会不会思考"，而决定成败的是"这次请求长什么样"
+（哪个端点 + 带不带工具）。harness / security 永远带着 tools。
+
+改成 `reasoning_allowed(provider, model)`：OpenAI 一律不发，其它供应商照常
+（它们的思考与工具能共存，那正是 harness 质量的来源）。
+`session_info` 跟着说实话：「关闭（openai/gpt-5.4-mini 这条路不支持）」。
+
+**这不等于把模型变笨**：gpt-5 这类本身就是推理模型，思考在它内部照常发生，
+只是不再显式指定档位。真正没有思考的是 gpt-4o 那一代。
+
+真机验过：改之前 `gpt-5.4-mini` 起步就挂，改之后正常开口提问。记 P-61 补记。
+
+
 ### 2026-08-28 · `GET /v1/commands`：这个节点能跑哪些命令
 给调用方做输入联想用。**白名单仍然只有 `allowlist.rs` 那一份**（INV-16）——
 平台抄一份的话，节点升级加了新命令、那边还是旧的，而"联想里没有"会被读成"这条不能跑"。

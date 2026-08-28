@@ -66,7 +66,7 @@ pub use workflow::{
 };
 // ③ 工作流 - AI 探索（tke harness）
 pub use workflow::agent::{
-    LlmSession, LlmTool, LlmToolCall, LlmReply, model_supports_reasoning,
+    LlmSession, LlmTool, LlmToolCall, LlmReply, reasoning_allowed,
     AgentRunner, AgentRunOptions, AgentResult,
     PromptSet, PromptSpec,
     Frontend, JsonFrontend, Level, PlainFrontend, TuiFrontend, UiCommand, UiEvent,

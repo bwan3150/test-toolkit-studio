@@ -1110,3 +1110,28 @@ Unrecognized request argument supplied: reasoning_effort
 **顺带**：`session_info` 原本照抄配置里的值，模型不支持时界面上仍写着
 「推理 medium」而实际压根没开。改成如实说「关闭（xxx 不支持）」。
 **说配置里写了什么，不等于说实际会发生什么** —— 这类不一致谁也看不出来。
+
+---
+
+**再补记（2026-08-28，又栽在同一处）**：只挡模型名的那一版**还是漏了**。
+用户换了一个配 `gpt-5.4-mini` 的 App，云设备的 AI Agent 又是"进去没反应"：
+
+```
+Function tools with reasoning_effort are not supported for gpt-5.4-mini
+in /v1/chat/completions. To use function tools, use /v1/responses
+or set reasoning_effort to 'none'.
+```
+
+`gpt-5.4-mini` **是** reasoning 模型，按模型名判必然放行 —— 但它在
+`/v1/chat/completions` 上**跟 function tools 不能同时用**。
+而 harness / security 永远带着 tools（工具调用就是它们干活的方式）。
+
+**判据错在维度**：我盯着"这个模型会不会思考"，而真正决定成败的是
+**"这次请求长什么样"**（哪个端点 + 带不带工具）。
+同一个模型换个端点规矩就不一样，只看名字永远追不上。
+
+改成 `reasoning_allowed(provider, model)`：OpenAI 这条路一律不发；
+其它供应商（思考与工具能共存）照常。
+
+**教训升级**：拒绝名单按"名字"列会一直漏，因为上游的限制不长在名字上。
+能按**机制**判就别按名单判 —— 这次的机制是"这个端点允不允许两者共存"。
