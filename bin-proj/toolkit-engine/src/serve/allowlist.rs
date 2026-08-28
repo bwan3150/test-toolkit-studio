@@ -109,6 +109,13 @@ pub fn allowed_commands() -> Vec<&'static str> {
     ALLOWED.iter().map(|s| s.name).collect()
 }
 
+/// 命令表(名字 + 允许的子命令)。给调用方做输入联想用 ——
+/// **平台不该自己抄一份**:抄一份就有两处真相,而漂移的方向一定是那份抄的更旧。
+/// 返回的是"能跑什么",不是"怎么跑"(参数怎么写还是看 --help)。
+pub fn command_catalog() -> Vec<(&'static str, Option<&'static [&'static str]>)> {
+    ALLOWED.iter().map(|s| (s.name, s.subs)).collect()
+}
+
 /// 三道关：命令白名单 → 禁用旗标 → 宿主路径标记
 pub fn validate(argv: &[String]) -> Result<Validated, Rejected> {
     let cmd = match argv.first() {

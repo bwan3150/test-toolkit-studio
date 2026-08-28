@@ -58,6 +58,9 @@ pub fn router(state: Arc<ServeState>) -> Router {
         // 平台的云设备页要它:steps 落的截图带着 tke 报告用的顶部横幅
         // （"Step 2 OK | 等待 [1ms]"），糊在实况屏幕上没人看得懂
         .route("/v1/sessions/{sid}/screen", get(session_screen))
+        // 能跑哪些命令 —— 给调用方做输入联想。**白名单仍然只有这一份**(INV-16),
+        // 这里只是把它读出来,不是让平台去维护第二份
+        .route("/v1/commands", get(commands))
         // 不带路径 = 整个工作区（拉产物时最常用的那一次，别让人非得先知道有哪些目录）
         .route("/v1/sessions/{sid}/artifacts", get(artifact_root))
         .route("/v1/sessions/{sid}/artifacts/{*path}", get(artifact_get))
@@ -290,6 +293,15 @@ async fn session_exec(
     st.leases.note_launch(&sid, &body.argv);
 
     Ok(Json(serde_json::to_value(&out).unwrap_or_else(|e| json!({"error": e.to_string()}))))
+}
+
+/// 能跑哪些命令。不需要租约 —— 它跟某台设备无关,是这个节点的能力清单。
+async fn commands() -> Json<serde_json::Value> {
+    let list: Vec<serde_json::Value> = allowlist::command_catalog()
+        .into_iter()
+        .map(|(name, subs)| json!({ "name": name, "subs": subs }))
+        .collect();
+    Json(json!({ "commands": list }))
 }
 
 /// 当前屏幕的原图。
