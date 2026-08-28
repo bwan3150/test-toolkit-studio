@@ -183,14 +183,27 @@ pub async fn security(args: SecurityArgs, params: Arc<Params>) -> Result<()> {
     });
     let prompts = SecurityPrompts::load(args.prompts_dir.clone());
 
-    let interactive = !params.json && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    let tty = std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    // 进对话式的两种情形：
+    //   ① 真终端（人坐在这儿）
+    //   ② **`--json` 且没给 URL** —— 平台的云设备页起一个 security 会话时，
+    //      目标是人在对话里说的，不是启动参数里带的。这种情况从前直接报错
+    //      「无头模式需要显式给目标 URL」，于是平台侧只能先弄到 URL 才起得来
+    //
+    // `--json` **给了 URL 仍走一次性**：现有调用方（Electron / CI）拿的是那份
+    // 一次性 JSON，改掉它们会当场坏掉。零破坏地多出一条路，而不是换掉旧的那条
+    let chat = tty || (params.json && args.url.is_none());
 
-    if interactive {
-        // 对话式：复用 harness 的前端（TUI，spawn 失败回落 Plain）。
-        // url/mode/focus 都可能为 None——由主 agent 在 TUI 里用选项/追问补齐（用户要的开场面试）。
-        let frontend: Box<dyn tke::Frontend> = match tke::TuiFrontend::spawn() {
-            Ok(f) => Box::new(f),
-            Err(_) => Box::new(tke::PlainFrontend::new()),
+    if chat {
+        // 对话式：复用 harness 的前端。--json 走 JsonFrontend（NDJSON 双向，
+        // 与 harness 同构，平台那边一套解析吃两种任务）
+        let frontend: Box<dyn tke::Frontend> = if params.json {
+            Box::new(tke::JsonFrontend::spawn())
+        } else {
+            match tke::TuiFrontend::spawn() {
+                Ok(f) => Box::new(f),
+                Err(_) => Box::new(tke::PlainFrontend::new()),
+            }
         };
         tke::workflow::security::orchestrator::run(
             &params.ai, &prompts, frontend, task_dir, args.url, args.mode, args.focus, args.max_steps,
@@ -210,8 +223,9 @@ async fn headless(
 ) -> Result<()> {
     let url = match &args.url {
         Some(u) => u.clone(),
+        // 走到这儿只剩「管道/CI，且没给 URL」—— 那儿没人可问
         None => return Err(tke::TkeError::InvalidArgument(
-            "无头模式（--json/非终端）需要显式给目标 URL：tke security <url> --json".into())),
+            "这条路没法问你要目标：给个 URL（tke security <url>），\n             或者在终端里直接跑 `tke security`（会问你），\n             或者用 --json 起对话式会话（不带 URL）。".into())),
     };
     let mode = args.mode.clone().unwrap_or_else(|| "safe".to_string());
     let focus = args.focus.clone().unwrap_or_else(|| "全量".to_string());

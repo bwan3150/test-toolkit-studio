@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### 2026-08-28 · `tke security` 的目标可以在对话里说
+从前 `--json` 硬要目标 URL（「无头模式需要显式给目标 URL」），于是平台侧
+**必须先弄到 URL 才起得来一个安全会话** —— 而 harness 那边早就是"用例在对话里说"。
+
+改法零破坏：`--json` **给了 URL 仍走一次性 JSON**（Electron / CI 现有调用方拿的就是
+那一份，改掉会当场坏掉）；**没给 URL 才进对话外壳**（JsonFrontend，与 harness 同构）——
+那种情况从前本来就只会报错。多出一条路，不是换掉旧的那条。
+
+serve 侧同步：`security` 任务的 `target` 可以不给，但要 `interactive=true` ——
+headless 没人可问，一进去就是 needs_decision，白起一个会话、占一次租约。
+
+实测：云设备页起会话 → agent 第一句问目标 → 答 example.com → 收下并接着问强度档。
+
 ### 2026-08-28 · 源码沙盒 P1：`changed_surfaces`（ADR-0025）
 harness 今天的输入只有元素表、截图、用户的话 —— 被测对象对它是个盲盒，
 于是"打开设置看版本号"这种事要绕十几轮、每轮一张截图 5.7 万 token。

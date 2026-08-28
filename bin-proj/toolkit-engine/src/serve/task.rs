@@ -241,8 +241,12 @@ pub fn build_task_argv_with_source(
         }
         "security" => {
             argv.push("security".into());
-            let target = req.target.as_ref().ok_or("security 任务必须给 target")?;
-            argv.push(target.clone());
+            // **target 可以不给** —— 不给就进对话式，让人在会话里说测哪儿
+            // （与 ui 任务的 testcase 同构）。从前这里硬要，于是平台侧
+            // 必须先弄到 URL 才起得来一个安全会话
+            if let Some(t) = req.target.as_ref().filter(|s| !s.trim().is_empty()) {
+                argv.push(t.clone());
+            }
             if let Some(m) = &req.mode {
                 argv.push("--mode".into());
                 argv.push(m.clone());
@@ -384,8 +388,18 @@ pub async fn spawn(
     if !matches!(req.kind.as_str(), "ui" | "security") {
         return Err((400u16, format!("不认识的任务类型 `{}`（只有 ui / security）", req.kind)));
     }
-    if req.kind == "security" && req.target.is_none() {
-        return Err((400u16, "security 任务必须给 target（要测哪个 URL）".into()));
+    // **不给 target 只在有人能回答时成立**：对话式会话里目标是人说出来的；
+    // 而 headless（interactive=false）没人可问，一进去就是 needs_decision ——
+    // 白起一个会话、占一次租约，不如当场说清楚
+    if req.kind == "security"
+        && req.target.as_deref().map(str::trim).unwrap_or("").is_empty()
+        && !req.interactive
+    {
+        return Err((
+            400u16,
+            "没给 target 的 security 任务要 interactive=true（目标在对话里问）；             headless 请直接给 target（要测哪个 URL）"
+                .into(),
+        ));
     }
 
     // ui 任务要设备；security 只打 URL，开无设备会话（不计设备时长）
@@ -813,17 +827,21 @@ mod tests {
     }
 
     #[test]
-    fn 缺目标的安全任务当场报错() {
-        let e = build_task_argv(
+    fn 不给目标的安全任务进对话式() {
+        // 目标可以不给 —— 让人在会话里说（与 ui 任务的 testcase 同构）。
+        // "有没有人能回答"由 spawn 那层按 interactive 把关，argv 这层不管
+        let argv = build_task_argv(
             &SpawnTask {
                 platform: None,
                 device_id: None,
-                kind: "security".into(), target: None, testcase: None, mode: None, interactive: false,
+                kind: "security".into(), target: None, testcase: None, mode: None, interactive: true,
                 max_rounds: None, timeout: Duration::from_secs(1), callback_url: None, ai: None, meta: None, source: None,
             },
             &lease(""),
-        ).unwrap_err();
-        assert!(e.contains("target"), "{e}");
+        ).unwrap();
+        assert!(argv.contains(&"security".to_string()), "{argv:?}");
+        // 没有多出一个空的位置参数 —— 那会被 clap 当成 URL 收下
+        assert!(!argv.iter().any(|a| a.is_empty()), "{argv:?}");
     }
 
     #[test]
