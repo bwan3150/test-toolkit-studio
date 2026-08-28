@@ -82,6 +82,7 @@ impl Frontend for PlainFrontend {
                     let s = match nr {
                         NotReady::SessionClosed => "会话已关闭（收尾）",
                         NotReady::NeedLaunch => "待 launch",
+                        NotReady::CaptureFailed => "页面结构没采到",
                     };
                     line.push_str(&format!("  · {}", s));
                 }

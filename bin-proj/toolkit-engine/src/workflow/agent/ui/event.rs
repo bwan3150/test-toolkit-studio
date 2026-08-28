@@ -66,12 +66,14 @@ pub enum StepState {
     Fail,
 }
 
-/// 页面未就绪原因（冷启动还没 launch / 刚主动收尾关闭）
+/// 页面未就绪原因。**三种，别合并**：合并的代价是把"采不到"说成"没启动"，
+/// 而那句话会把 AI 直接引到重新 launch 上去（实测原地打转十几轮）。
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NotReady {
     SessionClosed, // 刚主动关闭/收尾——不催 launch
     NeedLaunch,    // 冷启动从没 launch——提示先 launch
+    CaptureFailed, // 已经在操作了，这一轮就是没采到（多为页面持续动画等不到 idle）
 }
 
 /// token 用量（状态栏累加 + 单条尾注）

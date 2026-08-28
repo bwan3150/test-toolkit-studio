@@ -1135,3 +1135,42 @@ or set reasoning_effort to 'none'.
 
 **教训升级**：拒绝名单按"名字"列会一直漏，因为上游的限制不长在名字上。
 能按**机制**判就别按名单判 —— 这次的机制是"这个端点允不允许两者共存"。
+
+---
+
+## P-62 (2026-08-28) 采集失败被说成「应用没启动」，AI 照着这句话原地打转
+
+自己的模拟器上跑云设备的 AI Agent，任务是「打开设置，看 Android 版本」。
+第 5 轮起每一轮都长这样：
+
+```
+[page] struct_elements: 0, not_ready: "need_launch"
+[agent_thought] 当前页面没有解析到任何元素，需要查看截图…
+[notice] ⚒ request_screenshot
+```
+
+连着十几轮，每轮读一张截图 **5.7 万 token**，什么也没推进。
+
+手工一查，Settings 就在前台（`mCurrentFocus=com.android.settings/.SubSettings`），
+真正的原因是 uiautomator 在这一页等不到界面静止：
+
+```
+ERROR: could not get idle state.
+```
+
+**两处把话说错了**：
+
+1. `not_ready` 只有「刚关闭」和「没 launch」两种，于是**任何**采集失败都归到
+   `need_launch`，提示词跟着说「请先调用 launch 打开应用/网址」。
+   AI 已经在这个 App 里操作十几步了，这句话对它毫无意义 —— 但它也没有别的线索。
+2. **真正的错误原文一个字都没给 AI**。`perceive_error` 只进了 `tx.log`，
+   提示词里是一句写死的通用话。AI 不知道"采不到"和"没启动"是两回事。
+
+改：判据从两分改三分（`not_ready_kind`，hint 与 Page 事件共用一份），
+已经操作过就是 `CaptureFailed`；提示词带 `{reason}` 把设备说的原话转给 AI，
+并明确告诉它别去重新 launch（那会把当前页面丢掉）。
+
+**教训**：这是 INV-18 的一个变体 —— 输出不解释自己，代价不是"人看不懂"，
+而是**AI 拿着一句错误的解释去做决定**。分诊类的字段只要少一个分支，
+多出来的那种情况就会被塞进最像的那个分支里，而"最像"往往就是"最误导"。
+下判断的地方缺分支，比不下判断更贵。

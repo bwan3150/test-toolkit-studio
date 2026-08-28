@@ -14,7 +14,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use super::command::UiCommand;
 use super::event::UiEvent;
-use super::Frontend;
+use super::{ChoiceReply, Frontend};
 
 pub struct JsonFrontend {
     /// 后台 stdin 读取任务投递来的命令（引擎在安全点 try_recv 取）
@@ -81,8 +81,10 @@ impl Frontend for JsonFrontend {
     }
 
     async fn await_answer(&self, round: usize, question: String) -> Option<String> {
-        // 先告知前端「正在等输入」，前端据此提示用户并回 Answer / Abort
-        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new(), free_input: false });
+        // 先告知前端「正在等输入」，前端据此提示用户并回 Answer / Abort。
+        // **free_input=true**：这是纯文本提问，回什么都收 —— 早先写死 false，
+        // 前端照着它把输入框禁掉，于是"等你回答"变成了"没法回答"
+        self.emit(UiEvent::AwaitingInput { round, question, options: Vec::new(), free_input: true });
         // 轮询：每 50ms 取一次命令。不可跨 await 持有 std Mutex——锁只在同步块内用。
         loop {
             {
@@ -99,6 +101,53 @@ impl Frontend for JsonFrontend {
                     }
                 }
             } // 锁在此处释放，再 await
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    /// 「给几个选项，也可以自己写」（`ask_user` 带 options 走这里）。
+    ///
+    /// 默认实现把选项**拼进问题文字**再走 await_answer —— 前端只收到一段长文本，
+    /// 渲染不出可点的选项，`options` 字段也是空的。这里如实发：`options` 给出候选，
+    /// `free_input=true` 表示"选一个或者自己写都行"。
+    /// 选项是**建议**不是**闭集**：AI 想不全用户要什么，堵死自由输入等于逼人从错的里面挑。
+    async fn await_choice_or_text(&self, prompt: String, options: Vec<String>) -> Option<ChoiceReply> {
+        self.emit(UiEvent::AwaitingInput {
+            round: 0,
+            question: prompt,
+            options: options.clone(),
+            free_input: true,
+        });
+        loop {
+            {
+                let mut rx = match self.cmd_rx.lock() {
+                    Ok(rx) => rx,
+                    Err(_) => return None,
+                };
+                while let Ok(c) = rx.try_recv() {
+                    match c {
+                        UiCommand::Answer { text } => {
+                            let t = text.trim();
+                            if t.is_empty() {
+                                return None;
+                            }
+                            // 选项原文精确匹配 → 当作选中（前端点了那个选项）
+                            if let Some(i) = options.iter().position(|o| o == t) {
+                                return Some(ChoiceReply::Pick(i));
+                            }
+                            // 纯数字下标也认（与 await_choice 同口径）；否则就是用户自己写的话
+                            if let Ok(n) = t.parse::<usize>() {
+                                if n < options.len() {
+                                    return Some(ChoiceReply::Pick(n));
+                                }
+                            }
+                            return Some(ChoiceReply::Text(text));
+                        }
+                        UiCommand::Abort => return None,
+                        _ => {}
+                    }
+                }
+            } // 锁在此释放，再 await
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }

@@ -62,9 +62,11 @@ pub async fn handle(cmd: RemoteCommands) -> Result<()> {
                 "success": true,
                 "node": cfg.base,
                 "node_version": hello["tke_version"],
-                "local_version": env!("BUILD_VERSION"),
-                // 对不上就说出来：沉默会让人得出"没改善"的假结论（Q-11）
-                "version_match": hello["tke_version"].as_str() == Some(env!("BUILD_VERSION")),
+                "local_version": tke::version_line(),
+                // 对不上就说出来：沉默会让人得出"没改善"的假结论（Q-11）。
+                // **两边都用 version_line()**：节点报的是"版本号 (构建号)"，
+                // 只拿 BUILD_VERSION 去比，同一份二进制也会判成不一致。
+                "version_match": hello["tke_version"].as_str() == Some(tke::version_line().as_str()),
                 "host_os": hello["host_os"],
                 "session": sess.as_ref().map(|s| serde_json::json!({
                     "session_id": s.session_id, "device": s.device_id,

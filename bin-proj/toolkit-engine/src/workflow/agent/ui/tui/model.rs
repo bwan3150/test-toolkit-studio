@@ -192,6 +192,7 @@ impl TuiModel {
                         match nr {
                             NotReady::SessionClosed => "会话已关闭（收尾）",
                             NotReady::NeedLaunch => "页面未就绪，待 launch",
+                            NotReady::CaptureFailed => "页面结构没采到（多为持续动画）",
                         }
                         .to_string(),
                     );

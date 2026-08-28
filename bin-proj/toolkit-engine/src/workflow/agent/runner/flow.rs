@@ -281,11 +281,20 @@ pub async fn drive(
             }),
         );
         // 提示（卡住/无变化/打转）：模板无前导换行，这里统一加 \n 作分隔
-        let hint = if perceive_err.is_some() {
-            // 区分"冷启动从没 launch"和"刚主动收尾关闭"——后者不催 launch，提示可直接 finish，
-            // 否则会逼着 AI 在已完成任务后重新打开网址，把干净的 finish(success=true) 搅黄。
-            let key = if last_was_close { "hint_after_close" } else { "hint_perceive_error" };
-            format!("\n{}", ctx.prompts.message("explorer", key))
+        let hint = if let Some(err) = &perceive_err {
+            // 三种情况，别混成一种：
+            //   刚主动收尾关闭  → 不催 launch，提示可直接 finish，
+            //                     否则会逼着 AI 在已完成任务后重新打开网址，把干净的
+            //                     finish(success=true) 搅黄。
+            //   一步都还没走    → 冷启动（web/iOS 尚无会话），催 launch 是对的。
+            //   已经操作过了    → **采集这一轮失败**，跟"没 launch"毫无关系。
+            //
+            // 最后一种此前也被塞了"请先 launch"，而且**真正的错误原文一个字都没给 AI**
+            // （只进了 tx.log）。实测：安卓 Settings 明明在前台，uiautomator 等不到 idle
+            // 采不到页面，AI 被告知"先 launch"，于是十几轮原地读截图打转，每轮 5.7 万 token。
+            // 采集失败的原因是**设备说的话**，照原样转给 AI —— 它才判断得了下一步（INV-18）。
+            let key = hint_key(not_ready_kind(last_was_close, !lines.is_empty()));
+            format!("\n{}", render(&ctx.prompts.message("explorer", key), &[("reason", err.as_str())]))
         } else if last_no_pagecheck {
             // 上一步是断言/等待/隐藏键盘——页面没变是预期，不发"无变化/打转"提示
             String::new()
@@ -372,11 +381,9 @@ pub async fn drive(
             known: n_known,
             unknown: n_unknown,
             revisits,
-            not_ready: if perceive_err.is_some() {
-                Some(if last_was_close { NotReady::SessionClosed } else { NotReady::NeedLaunch })
-            } else {
-                None
-            },
+            not_ready: perceive_err
+                .as_ref()
+                .map(|_| not_ready_kind(last_was_close, !lines.is_empty())),
         });
         // OCR 接口报错：单列具体报错 + 记日志，绝不让它被"0"掩盖。
         if let Some(err) = &p.ocr_error {
@@ -860,4 +867,55 @@ pub async fn drive(
     }
 
     Ok(DriveOutcome { success, reason, lines, steps, rounds: round, created, updated, aborted, script_name, renames, step_comments, subagent_pt, subagent_ct })
+}
+
+/// 采集失败了，到底是哪一种「未就绪」——**判据只此一份**（INV-09），
+/// hint 文案与 Page 事件共用它，免得两处慢慢说出两套话。
+///
+/// 回归的是这个真问题：此前只有"关闭过"和"没 launch"两种，于是**任何**采集失败
+/// 都会告诉 AI「请先 launch」。安卓上 Settings 明明在前台、只是 uiautomator
+/// 等不到 idle 采不到，AI 照着这句话原地打转十几轮，每轮 5.7 万 token 读截图。
+fn not_ready_kind(last_was_close: bool, any_step_run: bool) -> NotReady {
+    if last_was_close {
+        NotReady::SessionClosed
+    } else if any_step_run {
+        // 都已经在设备上操作过了，"没启动"这个解释不成立
+        NotReady::CaptureFailed
+    } else {
+        NotReady::NeedLaunch
+    }
+}
+
+/// 未就绪原因 → 提示词条目名
+fn hint_key(kind: NotReady) -> &'static str {
+    match kind {
+        NotReady::SessionClosed => "hint_after_close",
+        NotReady::NeedLaunch => "hint_perceive_error",
+        NotReady::CaptureFailed => "hint_capture_failed",
+    }
+}
+
+#[cfg(test)]
+mod not_ready_tests {
+    use super::*;
+
+    #[test]
+    fn 操作过之后采集失败不再被说成没启动() {
+        // 这条钉的就是那次原地打转：已经走过步骤了，采不到页面是采集的事，
+        // 跟"应用没启动"无关——催 launch 会把当前页面丢掉
+        assert_eq!(not_ready_kind(false, true), NotReady::CaptureFailed);
+        assert_eq!(hint_key(not_ready_kind(false, true)), "hint_capture_failed");
+    }
+
+    #[test]
+    fn 冷启动一步没走才催launch() {
+        assert_eq!(not_ready_kind(false, false), NotReady::NeedLaunch);
+    }
+
+    #[test]
+    fn 主动关闭后不催launch() {
+        // 已收尾还催 launch 会把干净的 finish(success=true) 搅黄
+        assert_eq!(not_ready_kind(true, false), NotReady::SessionClosed);
+        assert_eq!(not_ready_kind(true, true), NotReady::SessionClosed);
+    }
 }
