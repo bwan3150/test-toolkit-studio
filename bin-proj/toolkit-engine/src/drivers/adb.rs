@@ -174,25 +174,39 @@ impl AdbDriver {
         // 而真正的原因（页面一直在动/设备正在关机）完全看不出来（用户实测撞上）。
         // 成功时那行是 "UI hierchary dumped to: <路径>"（upstream 的拼写就是这样）
         let dumped = |out: &str| out.contains("dumped to");
-        let dump_once = || {
-            self.run_adb_command_with_timeout(
-                &["shell", "uiautomator", "dump", temp_path],
-                UI_DUMP_TIMEOUT_SECS,
-            )
-            .and_then(|out| {
-                if dumped(&out) {
-                    Ok(out)
-                } else {
-                    Err(TkeError::AdbError(format!(
-                        "采集页面失败：uiautomator 没能导出界面（{}）",
-                        out.lines().find(|l| l.contains("ERROR")).unwrap_or("没有输出").trim()
-                    )))
-                }
-            })
+        // 第二次带 `--compressed`：它跳过纯布局节点，**对 idle 的要求松得多**，
+        // 于是"等不到界面静止"的页面上常常这一次就成了。树会瘦一点（少一层层容器），
+        // 对定位没影响 —— 采不到才是真损失。
+        let dump_once = |compressed: bool| {
+            let mut argv: Vec<&str> = vec!["shell", "uiautomator", "dump"];
+            if compressed {
+                argv.push("--compressed");
+            }
+            argv.push(temp_path);
+            self.run_adb_command_with_timeout(&argv, UI_DUMP_TIMEOUT_SECS)
+                .and_then(|out| {
+                    if dumped(&out) {
+                        return Ok(out);
+                    }
+                    // 设备说了什么就转述什么（现在 stderr 也带回来了）。
+                    // 一个字都没有时**别只说"没有输出"** —— 那句话不改变任何人的下一步（INV-18）。
+                    let said = out
+                        .lines()
+                        .find(|l| l.contains("ERROR"))
+                        .map(str::trim)
+                        .filter(|l| !l.is_empty());
+                    Err(TkeError::AdbError(match said {
+                        Some(l) => format!("采集页面失败：uiautomator 没能导出界面（{}）", l),
+                        None => format!(
+                            "采集页面失败：uiautomator 什么也没输出就退出了（多为它在设备上被系统杀掉）。\n                             先试 `adb -s <设备> shell uiautomator dump /sdcard/t.xml` 看设备怎么说；\n                             仍失败就 `adb -s <设备> reboot` 或换一页再采（当前页可能一直在动）"
+                        ),
+                    }))
+                })
         };
-        if let Err(first) = dump_once() {
+        if let Err(first) = dump_once(false) {
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-            dump_once().map_err(|_| first)?;
+            // 报第一次的错：`--compressed` 是兜底手段，它的失败信息对人没有增量
+            dump_once(true).map_err(|_| first)?;
         }
         
         // 拉取XML到本地
@@ -550,11 +564,24 @@ impl AdbDriver {
                     let output = child
                         .wait_with_output()
                         .map_err(|e| TkeError::AdbError(format!("读取ADB输出失败: {}", e)))?;
+                    let stderr = String::from_utf8_lossy(&output.stderr);
                     if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", stderr)));
+                        // 空 stderr 时把命令本身带上 —— 光一句"执行失败:"什么也说明不了（INV-18）
+                        let why = if stderr.trim().is_empty() {
+                            format!("{}（adb 没给理由，退出码 {}）", what, output.status)
+                        } else {
+                            stderr.trim().to_string()
+                        };
+                        return Err(TkeError::AdbError(format!("ADB命令执行失败: {}", why)));
                     }
-                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                    // **成功也要带上 stderr**：设备上的命令（uiautomator 等）常常
+                    // 退出码 0 却把真正的原因写在 stderr 上，此前这里直接丢掉，
+                    // 于是上层只剩一句"没有输出"，设备说的话一个字都没带回来。
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if stdout.trim().is_empty() && !stderr.trim().is_empty() {
+                        return Ok(stderr.into_owned());
+                    }
+                    return Ok(stdout.into_owned());
                 }
                 Ok(None) => {
                     if std::time::Instant::now() >= deadline {

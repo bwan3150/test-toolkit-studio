@@ -80,3 +80,8 @@ default = ["ocr-online", "ocr-offline"]
 ocr-online = ["reqwest"]
 # 离线 OCR 功能（Tesseract）
 ocr-offline = ["tesseract-rs"]
+
+# 孤儿进程防线（src/serve/reap.rs）：PR_SET_PDEATHSIG 让子进程在父进程被 kill -9 时
+# 自己也退出；收尸时也用它发信号。只在 unix 上需要。
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

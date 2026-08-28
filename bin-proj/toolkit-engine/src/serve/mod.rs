@@ -20,6 +20,7 @@ pub mod exec;
 pub mod heartbeat;
 pub mod link;
 pub mod lease;
+pub mod reap;
 pub mod routes;
 pub mod task;
 
@@ -135,6 +136,13 @@ pub async fn run(opts: ServeOptions) -> crate::Result<()> {
     let bin = std::env::current_exe()
         .map_err(|e| TkeError::InvalidArgument(format!("取不到 tke 自身路径: {e}")))?;
     std::fs::create_dir_all(&opts.root)?;
+
+    // **先收尸再干活**：上一次节点若是被 kill -9 掉的，它起的 harness 子进程还活着，
+    // 而那些进程仍在操作设备。新节点对它们一无所知，于是"设备行为诡异"查无可查。
+    let reaped = reap::reap_previous(&opts.root);
+    if reaped > 0 {
+        tracing::info!(target: "tke::serve", "清掉上一代遗留的任务进程 {} 个", reaped);
+    }
 
     let pool = build_pool(opts.web_slots, &opts.fake_devices);
     let state = Arc::new(ServeState {

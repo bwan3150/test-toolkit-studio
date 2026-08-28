@@ -372,6 +372,9 @@ pub async fn spawn(
     st.tasks.tasks.lock().expect("tasks 锁中毒").insert(id.clone(), task);
 
     let mut cmd = tokio::process::Command::new(&st.bin);
+    // 父进程被 kill -9 时子进程也走（Linux）。非 Linux 靠节点启动时收尸兜底 ——
+    // 两条都要：只有前者会漏掉 mac，只有后者会留下"节点已死、孤儿还在操作设备"的窗口
+    super::reap::arm_parent_death(&mut cmd);
     cmd.args(&argv)
         .current_dir(&lease.dirs.workspace)
         .stdin(Stdio::piped())
@@ -403,6 +406,10 @@ pub async fn spawn(
         }
     }
     let mut child = cmd.spawn().map_err(|e| (500u16, format!("起任务进程失败: {e}")))?;
+    // pid 落盘：节点若被 kill -9，下一次启动靠它把这个孤儿收掉
+    if let Some(pid) = child.id() {
+        super::reap::note_pid(&lease.dirs.root, pid);
+    }
 
     let mut stdin = child.stdin.take().expect("stdin 已接管");
     let stdout = child.stdout.take().expect("stdout 已接管");
@@ -613,6 +620,8 @@ async fn finish(
     // 设备还回去并复位（INV-17）——任务跑完不还，等于把设备占到 TTL
     let lease = st.tasks.get(id, |t| t.lease.clone());
     if let Some(l) = lease {
+        // 正常结束了，pid 记录就该消失——留着会让下次启动去查一个早就没了的 pid
+        super::reap::clear_pid(&l.dirs.root);
         st.leases.take(&l.id);
         super::routes::run_reset(&st, &l).await;
     }

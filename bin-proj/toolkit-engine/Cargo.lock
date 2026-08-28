@@ -3745,6 +3745,7 @@ dependencies = [
  "genai",
  "image",
  "imageproc",
+ "libc",
  "quick-xml",
  "ratatui",
  "rayon",
