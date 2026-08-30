@@ -84,39 +84,44 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     // ==================== ② 原子方法（必带 -d/--device） ====================
-    /// [原子] 刷新页面状态：采集截图 + UI XML 到工作区 (+ OCR / 剪裁元素图)
+    /// 刷新页面状态：采集截图 + UI XML 到工作区 (+ OCR / 剪裁元素图)
     Refresh {
         #[command(flatten)]
         args: RefreshArgs,
     },
-    /// [原子] 提取当前页面的元素列表（含 xpath），直接输出 JSON 数组
+    /// 提取当前页面的元素列表（含 xpath），直接输出 JSON 数组
     Fetch {
         #[command(flatten)]
         args: FetchArgs,
     },
-    /// [原子] 定位元素：在当前页面找到元素坐标 (xml/ocr/图像匹配)
+    /// 定位元素：在当前页面找到元素坐标 (xml/ocr/图像匹配)
     Recognize {
         #[command(flatten)]
         args: RecognizeArgs,
     },
-    /// [原子] 执行操作：click/press/swipe/input 等统一操作名
+    /// 执行操作：click/press/swipe/input 等统一操作名
     Control {
         #[command(subcommand)]
         action: ControlCommands,
     },
 
     // ==================== ③ 工作流 ====================
-    /// [工作流] 执行 .tks 单脚本 / .toml flow(多脚本顺序执行)
+    /// 执行 .tks 单脚本 / .toml flow(多脚本顺序执行)
     Run {
         #[command(flatten)]
         args: RunArgs,
     },
-    /// [工作流] 不落文件执行一串 .tks 指令: tke steps "点击 [{登录按钮}]" "等待 [2s]"
+    /// 直接执行几条指令，不落文件
+    ///
+    /// 例: tke steps '点击 [{登录按钮}]' '等待 [2s]'
     Steps {
         #[command(flatten)]
         args: StepsArgs,
     },
-    /// [工作流] AI 根据文字用例探索测试并生成 .tks: tke harness <用例.md|文字> --scripts <输出目录>（文件名由 AI 起）
+    /// AI 探索测试并生成 .tks 脚本
+    ///
+    /// 例: tke harness 用例.md --scripts 脚本目录/
+    /// 文件名由 AI 起
     // 方向已转向"测试 harness"，功能不变；harn 为简写
     #[command(visible_alias = "harn")]
     Harness {
@@ -124,62 +129,66 @@ enum Commands {
         args: HarnessArgs,
     },
 
-    /// [编排] 出报告：按任务类型(ui/security)自动分派: tke report <检查目录>
+    /// 出报告（按任务类型自动分派）
+    ///
+    /// 例: tke report ~/.tke/logs/登录检查/
     Report {
         #[command(flatten)]
         args: ReportArgs,
     },
 
-    /// [编排] 起测试会话：建目录 + 写 task.json 标记（ui/security 共享）: tke task new --kind security --target <url>
+    /// 起一次测试会话：建目录 + 写标记
+    ///
+    /// 例: tke task new --kind security --target <url>
     Task {
         #[command(subcommand)]
         action: cli::task::TaskCommands,
     },
 
-    /// [环境] 升级到最新版（跑官方安装脚本；tke 与 skill 一起更新）
+    /// 升级到最新版（跑官方安装脚本；tke 与 skill 一起更新）
     Update {
         #[command(flatten)]
         args: UpdateArgs,
     },
 
-    /// [环境] 卸载 tke 与 skill（默认保留日志与 Chrome）
+    /// 卸载 tke 与 skill（默认保留日志与 Chrome）
     Uninstall {
         #[command(flatten)]
         args: UninstallArgs,
     },
 
-    /// [环境] 体检：依赖齐不齐、设备连没连、版本跟不跟得上（加 --fix 才联网补依赖）
+    /// 体检：依赖齐不齐、设备连没连、版本跟不跟得上（加 --fix 才联网补依赖）
     Doctor {
         #[command(flatten)]
         args: FixArgs,
     },
 
-    /// [环境] 补齐缺失的运行依赖——**唯一会联网下载的命令**（= `doctor --fix` 的别名）
+    /// 补齐缺失的运行依赖——**唯一会联网下载的命令**（= `doctor --fix` 的别名）
     Fix {
         #[command(flatten)]
         args: FixArgs,
     },
 
-    /// [服务] 把这台机器的能力开成 HTTP 接口，供远程调用（ADR-0022）
+    /// 把这台机器的能力开成 HTTP 接口，供远程调用
     Serve {
         #[command(flatten)]
         args: cli::serve::ServeArgs,
     },
 
-    /// [服务] 源码沙盒：这次改动碰了哪些界面（ADR-0025）
+    /// 源码沙盒：这次改动碰了哪些界面
     Sandbox {
         #[command(subcommand)]
         action: cli::sandbox::SandboxCommands,
     },
 
-    /// [服务] 远程会话管理（配了 TKE_REMOTE 后，普通命令会自动发给节点）
+    /// 远程会话管理（配了 TKE_REMOTE 后，普通命令会自动发给节点）
     Remote {
         #[command(subcommand)]
         action: cli::remote::RemoteCommands,
     },
 
     // ==================== ④ 自有工具 ====================
-    /// [工具] OCR 图片文字识别
+    /// OCR 图片文字识别
     Ocr {
         /// 图片路径
         #[arg(short, long)]
@@ -197,17 +206,17 @@ enum Commands {
         #[arg(long, default_value = "eng")]
         lang: String,
     },
-    /// [工具] Android 设备文件系统管理
+    /// Android 设备文件系统管理
     File {
         #[command(subcommand)]
         action: FileCommands,
     },
-    /// [工具] 设备应用管理
+    /// 设备应用管理
     App {
         #[command(subcommand)]
         action: AppCommands,
     },
-    /// [工具] 设备：list 看有哪些能测 / info 看某台的详情 / prop 读安卓属性
+    /// 设备：list 看有哪些能测 / info 看某台的详情 / prop 读安卓属性
     Device {
         /// 不给子命令就等于 `list`——**问"有哪些设备"是最常见的那次**，
         /// 不该让人多打一个词（`tke device` 直接列出来）
@@ -220,38 +229,45 @@ enum Commands {
         #[arg(long)]
         all: bool,
     },
-    /// [工具] 元素库管理（按坐标取元素落库）
+    /// 元素库管理（按坐标取元素落库）
     Element {
         #[command(subcommand)]
         action: ElementCommands,
     },
 
-    // ==================== ⑤ 安全测试（ADR-0019，P1 侦察底座） ====================
-    /// [安全] 原始 HTTP 探测（落证据）: tke http GET <url> [-H 'K: V'] [-d body]
+    // ==================== ⑤ 安全测试 ====================
+    /// 发一个请求，落证据
+    ///
+    /// 例: tke http GET <url> -H 'Cookie: a=1'
     Http {
         #[command(flatten)]
         args: cli::security::HttpArgs,
     },
-    /// [安全] 侦察检查: tke recon headers <url>（安全响应头等被动判据）
+    /// 侦察：响应头、指纹、TLS 等被动判据
+    ///
+    /// 例: tke recon headers <url>
     Recon {
         #[command(subcommand)]
         action: cli::security::ReconCommands,
     },
-    /// [安全] 安全测试唯一入口: tke security [url]（默认对话式；--json 无头对接，需 [ai]）
+    /// 安全测试
+    ///
+    /// 不给 url 就进对话式，由 agent 问你测什么。
+    /// --json 走无头一次性输出
     Security {
         #[command(flatten)]
         args: cli::security::SecurityArgs,
     },
 
     // ==================== ① 直通（不在静态列表，见 --help 末尾动态清单） ====================
-    /// [直通] 透传任意同目录二进制: tke <工具名> <原生指令>
+    /// 透传任意同目录二进制: tke <工具名> <原生指令>
     #[command(external_subcommand)]
     Tool(Vec<String>),
 }
 
 #[tokio::main]
 async fn main() -> tke::Result<()> {
-    // 远程模式拦截（ADR-0022 D4）：**必须在 clap 之前**——远程要原样转发命令，
+    // 远程模式拦截：**必须在 clap 之前**——远程要原样转发命令，
     // 先过一遍本地 clap 等于要求两端版本严格一致，那正是我们想避免的耦合。
     // 不在白名单里的命令拿不到 Some，照旧走本地
     if let Some(cfg) = tke::remote::RemoteConfig::from_env() {
@@ -408,7 +424,7 @@ async fn main() -> tke::Result<()> {
         Commands::Element { action } => {
             tools::element::handle(action, params.clone()).await
         }
-        // ⑤ 安全测试（ADR-0019）
+        // ⑤ 安全测试
         Commands::Http { args } => {
             cli::security::http(args, params.clone()).await
         }
@@ -419,7 +435,7 @@ async fn main() -> tke::Result<()> {
             cli::security::security(args, params.clone()).await
         }
         // 便捷路由：tke <path.tks|path.toml> 等价于 tke run <path>。
-        // 认不出的就是**未知命令**——CLI 直通已删（ADR-0015），
+        // 认不出的就是**未知命令**——CLI 直通已删，
         // `tke adb shell input tap …` 这类用法绕过证据留存和坐标换算，
         // 点得中、什么都没留下、报告里一片空白
         Commands::Tool(args) => {
@@ -427,13 +443,15 @@ async fn main() -> tke::Result<()> {
                 let path = PathBuf::from(&args[0]);
                 workflow::run::handle(RunArgs { path, ocr: None }, params.clone()).await
             } else {
+                // 认不出来就照 clap 的惯例回一句，**不借机解释 tke 的设计**
+                // （直通为什么删了是 ADR-0015 的事，不是打错一个命令的人要读的）
                 let what = args.first().map(String::as_str).unwrap_or("");
-                eprintln!("未知命令：{}", what);
-                eprintln!("tke 不再透传原生工具，设备操作一律走 tke 指令。");
-                eprintln!("  看日志       tke -d <设备> app log -p <包名>");
-                eprintln!("  应用/文件/信息 tke app|file|device --help");
-                eprintln!("  操作设备      tke control --help  /  tke steps '点击 [\"登录\"]'");
-                eprintln!("  跑脚本        tke run <path.tks>（或直接 tke <path.tks>）");
+                eprintln!("error: 不认识的命令 `{}`", what);
+                eprintln!();
+                eprintln!("USAGE:");
+                eprintln!("    tke [OPTIONS] <COMMAND>");
+                eprintln!();
+                eprintln!("要看有哪些命令：tke --help");
                 std::process::exit(2);
             }
         }
