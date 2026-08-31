@@ -3,7 +3,7 @@
 **会话时间**: 2026-08-26～27（第九场：**平台全链路跑通 + 内网节点**）
 **产出 commit**: `9c369d49`（平台字段/三处假绿）→ `df105e52`（反向通道+多模拟器）→ `76ed4688`（Skill 落点）→ `d6f17004`（删解说词）→ `5535ea72`（第二台 AVD）→ `e7e27a49`（rustls panic）→ `2b94560c`（没跑的测试）→ `29d70449`（INV-18）→ `a71a9946`（设备池重扫）→ `1e50119c`（AVD 指错 + physical）
 
-平台侧在 `~/Documents/GitHub/TOOLKIT/bug`，见那边的 `docs/state/HANDOFF.md`。
+平台侧在 `TOOLKIT/test-system/platform`，见那边的 `docs/state/HANDOFF.md`。
 
 ## 一句话
 
@@ -144,7 +144,7 @@ kill 下去把自己杀了（退出码 144）。这一场又踩了两次 —— 
 | 4 | ADR-0025 P1 `changed_surfaces` | ✅ 落地（判据未量） |
 | 5 | `tke security` 的 target 改成对话式 | ✅ 两侧都改，真机走通 |
 
-平台侧的四件在 `~/Documents/GitHub/TOOLKIT/bug`（commit `34c72e7` → `d2ecf85`）。
+平台侧的四件在 `TOOLKIT/test-system/platform`（commit `34c72e7` → `d2ecf85`）。
 
 ### tke 侧这一场的两刀
 

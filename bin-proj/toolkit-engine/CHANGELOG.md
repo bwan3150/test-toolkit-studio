@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### 2026-08-31 · 跨仓路径修正（平台仓库改名/移位）
+平台仓库从 `TOOLKIT/bug` 移到 `TOOLKIT/test-system/platform`，tke 侧的活文档
+（STATE / HANDOFF / docs/README / ADR-0023）里的指路全部失效，照着找会扑空。
+
+- 上述四份文档统一改为 `TOOLKIT/test-system/platform`；AGENTS.md 补「姊妹仓库」行
+  （相对路径 `../../../platform`），与平台侧 AGENTS.md 的写法对称。
+- **CHANGELOG 里的历史条目一律不动** —— 它记的是当时的事实，改了就不是记录了。
+  要找那些提交，按本条的新路径去。
+
 ### 2026-08-30 · CLI 文案照 clap 惯例重排（INV-18 的第二轮）
 用户拿 zellij 的 `-h` 对照，指了三处：`--help` 该清晰不废话且有颜色区分、
 打错命令不该被科普 tke 的设计、中断提示不该是一大段。

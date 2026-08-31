@@ -4,6 +4,9 @@
 知识刻意粗粒度（模块级一句话职责），逐文件细节以各文件头注释为准（细粒度地图必然滞后，
 教训见 docs/archive/codebase-map.md）。文档导航见 docs/README.md。
 
+姊妹仓库：`../../../platform`（测试管理平台，同一套治理协议）——
+即 `TOOLKIT/test-system/platform`，对接契约见 `docs/remote-api.md` 与 ADR-0022/0023/0024。
+
 ---
 
 ## ⛔ 开始之前（按顺序）

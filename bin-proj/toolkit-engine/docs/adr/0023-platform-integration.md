@@ -3,13 +3,13 @@
 - **状态**: 生效（2026-08-26 用户拍板四条）
 - **日期**: 2026-08-26
 - **关联**: 承 ADR-0022（服务化：D1 单节点边界 / D3 计费分层 / D5 red-team / D6 决策回传）；
-  INV-16 / INV-17；平台侧设计见 `TOOLKIT/bug/docs/11_device_cloud.md` 与 `12_security_entity.md`
-- **对接方**: `TOOLKIT/bug`（Go + Vue 的测试管理平台：bug / release / case / suite / run / script 六大列表）
+  INV-16 / INV-17；平台侧设计见 `TOOLKIT/test-system/platform/docs/11_device_cloud.md` 与 `12_security_entity.md`
+- **对接方**: `test-system/platform`（Go + Vue 的测试管理平台：bug / release / case / suite / run / script 六大列表）
 
 ## 背景
 
 ADR-0022 把 tke 做成了"可远程调用的单节点 agent"，并明确**调度/计费/多租户归云平台**（D1）。
-那个平台就是 `TOOLKIT/bug`。摸过之后发现接缝比预想整齐：
+那个平台就是 `test-system/platform`。摸过之后发现接缝比预想整齐：
 
 - 它的 `scripts` 表原始注释就写着「后续 TestRun 触发自动化跑、回填结果都从这里出」，
   已有 `script_type='ui_auto'` / `repo_path_or_link` / `version` / `is_current` / `trigger_command`；
