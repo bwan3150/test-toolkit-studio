@@ -118,7 +118,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            toolkit-engine/target
             tester-ai/target
             scrcpy-server/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -143,23 +142,15 @@ jobs:
           npm install
           npm audit fix || true
 
-      # 构建 toolkit-engine (TKE)
-      - name: 构建 Toolkit Engine (Rust)
-        working-directory: toolkit-engine
+      # tke 不再从源码构建 —— 它已拆成独立仓库（Test-Toolkit-Engine），
+      # 那边的 CI 把六平台二进制发到分发源，这里取现成的。
+      # 好处不只是省十几分钟编译：打包用的和用户 `tke update` 拿到的是同一份产物
+      - name: 取 Toolkit Engine 二进制
         run: |
-          echo "=== 构建 TKE for macOS ==="
-          echo "版本号: $BUILD_VERSION"
-
-          # 构建（build.rs 会自动从 BUILD_VERSION 环境变量读取版本）
-          cargo build --release
-
-          # 复制到资源目录
-          mkdir -p ../resources/darwin/toolkit-engine
-          cp target/release/tke ../resources/darwin/toolkit-engine/tke
-          chmod +x ../resources/darwin/toolkit-engine/tke
-
-          echo "✅ TKE 构建完成"
-          ls -lh ../resources/darwin/toolkit-engine/tke
+          echo "=== 取 TKE for macOS ==="
+          ./scripts/fetch-tke.sh --remote darwin-arm64 --out resources/darwin/toolkit-engine
+          ls -lh resources/darwin/toolkit-engine/tke
+          resources/darwin/toolkit-engine/tke --version
 
       # 构建 opencv-matcher (Python)
       - name: 构建 OpenCV Matcher (Python)
@@ -423,7 +414,6 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            toolkit-engine/target
             tester-ai/target
             scrcpy-server/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
@@ -451,38 +441,26 @@ jobs:
           npm audit fix
 
       # 构建 toolkit-engine (TKE)
-      - name: 构建 Toolkit Engine (Rust)
-        shell: cmd
-        working-directory: toolkit-engine
+      # 同 macOS：取现成的二进制，不再编译源码（tke 已是独立仓库）
+      - name: 取 Toolkit Engine 二进制
+        shell: bash
         run: |
-          echo === 构建 TKE for Windows ===
-          echo 版本号: %BUILD_VERSION%
+          set -euo pipefail
+          echo "=== 取 TKE for Windows ==="
+          ./scripts/fetch-tke.sh --remote windows-amd64 --out resources/win32/toolkit-engine
 
-          REM 构建（build.rs 会自动从 BUILD_VERSION 环境变量读取版本）
-          cargo build --release
+          # ADB 的 DLL 依赖（Windows 的 adb.exe 要它们）。
+          # 路径从仓根算 —— 这一步以前有 working-directory: toolkit-engine，现在没有了
+          for dll in AdbWinApi.dll AdbWinUsbApi.dll; do
+            if [ -f "resources/win32/$dll" ]; then
+              cp -f "resources/win32/$dll" "resources/win32/toolkit-engine/$dll"
+              echo "已带上 $dll"
+            else
+              echo "注意：resources/win32/$dll 不在，adb 可能起不来"
+            fi
+          done
 
-          REM 创建目标目录
-          if not exist "..\resources\win32\toolkit-engine" mkdir "..\resources\win32\toolkit-engine"
-
-          REM 复制 tke.exe 到资源目录
-          copy /Y "target\release\tke.exe" "..\resources\win32\toolkit-engine\tke.exe"
-
-          REM 复制 ADB 的 DLL 依赖 (Windows adb.exe 需要这些 DLL)
-          if exist "resources\win32\AdbWinApi.dll" (
-            copy /Y "resources\win32\AdbWinApi.dll" "..\resources\win32\toolkit-engine\AdbWinApi.dll"
-            echo ✅ Copied AdbWinApi.dll
-          ) else (
-            echo ⚠️  Warning: AdbWinApi.dll not found in resources\win32\
-          )
-
-          if exist "resources\win32\AdbWinUsbApi.dll" (
-            copy /Y "resources\win32\AdbWinUsbApi.dll" "..\resources\win32\toolkit-engine\AdbWinUsbApi.dll"
-            echo ✅ Copied AdbWinUsbApi.dll
-          ) else (
-            echo ⚠️  Warning: AdbWinUsbApi.dll not found in resources\win32\
-          )
-
-          echo ✅ TKE 构建完成
+          resources/win32/toolkit-engine/tke.exe --version
           dir "..\resources\win32\toolkit-engine\tke.exe"
 
       # 构建 opencv-matcher (Python)

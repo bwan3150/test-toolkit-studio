@@ -21,12 +21,13 @@ echo.
 echo ^>^>^> [2/7] Fixing npm audit issues...
 call npm audit fix
 
-REM 3. 构建 Rust 项目：toolkit-engine (TKE)
+REM 3. 取 TKE 二进制（不再从源码构建：toolkit-engine 已拆成独立仓库，
+REM    见 github.com/bwan3150/Test-Toolkit-Engine，它的 CI 发六平台二进制到分发源）
 echo.
-echo ^>^>^> [3/7] Building Toolkit Engine (Rust)...
-call toolkit-engine\build-win.bat
+echo ^>^>^> [3/7] Fetching Toolkit Engine binary...
+call scripts\fetch-tke.bat
 if errorlevel 1 (
-    echo Error: toolkit-engine build failed
+    echo Error: fetch tke failed
     exit /b 1
 )
 

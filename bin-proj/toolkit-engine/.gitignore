@@ -1,7 +1,0 @@
-
-# 发布产物：publish.sh 打包时临时写入 skill 目录（中断时可能残留），不是源文件
-skill/tke-ui-test/VERSION
-
-# remote skill 是生成物（build-remote.sh：delta + 本地版正文内联），不是源文件。
-# 源头是 skill/remote-delta/*.md + 各 skill 自己的 SKILL.md
-skill/*-remote/

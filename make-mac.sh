@@ -18,10 +18,11 @@ echo ""
 echo ">>> [2/6] Fixing npm audit issues..."
 npm audit fix || true  # 即使失败也继续
 
-# 3. 构建 Rust 项目：toolkit-engine (TKE)
+# 3. 取 TKE 二进制（不再从源码构建：toolkit-engine 已拆成独立仓库，
+#    见 github.com/bwan3150/Test-Toolkit-Engine，它的 CI 发六平台二进制到分发源）
 echo ""
-echo ">>> [3/6] Building Toolkit Engine (Rust)..."
-./bin-proj/toolkit-engine/build-mac.sh
+echo ">>> [3/6] Fetching Toolkit Engine binary..."
+./scripts/fetch-tke.sh
 
 # 4. 构建 Python 项目：opencv-matcher
 echo ""
