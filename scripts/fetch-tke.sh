@@ -66,15 +66,22 @@ case "${VERSION_TXT}" in
     # 这个平台对不存在的路径会回 200 + HTML（SPA 兜底），所以验内容不验状态码
     *) echo "取不到 VERSION，分发源不可用：${BASE}" >&2; exit 1 ;;
 esac
+# 第一行是**二进制的身份**（tke 那边 ADR-0026 起是 build 戳，不是 semver），
+# `build:` 是这一批发布的戳、同时是破缓存的键。两者含义不同，别混用
 VER="$(printf '%s' "${VERSION_TXT}" | head -1 | awk '{print $2}')"
 BUILD_KEY="$(printf '%s' "${VERSION_TXT}" | sed -n 's/^build: *//p' | head -1)"
-echo "分发源版本：${VER}（build ${BUILD_KEY}）"
+echo "分发源的 tke：${VER}"
 
 if [ -f "${TARGET}" ] && [ "${FORCE}" -eq 0 ]; then
-    HAVE="$("${TARGET}" --version 2>/dev/null | head -1 || echo '')"
-    echo "已存在：${TARGET}"
-    [ -n "${HAVE}" ] && echo "        ${HAVE}"
-    echo "        要换成分发源那一版就加 --force"
+    # 比一下**本地这份是不是同一个**。只看文件在不在的话，
+    # 一台机器上的 tke 可以旧上几个月而没有任何地方提起过
+    HAVE="$("${TARGET}" --version 2>/dev/null | head -1 | awk '{print $2}' || echo '')"
+    if [ "${HAVE}" = "${VER}" ]; then
+        echo "已是分发源那一版：${TARGET}"
+    else
+        echo "已存在但不是同一版：${TARGET}（本地 ${HAVE:-读不出来}）"
+        echo "        要换成分发源那一版就加 --force"
+    fi
     exit 0
 fi
 

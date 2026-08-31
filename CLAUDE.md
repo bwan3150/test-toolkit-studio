@@ -73,6 +73,20 @@ scripts\fetch-tke.bat               # Windows
 
 **要改 tke 本身就去 `../tke` 那个仓库改**，改完它的 CI 会发版，这边 `--force` 取一次。
 
+### 两个版本号不是一回事
+
+| 谁 | 长什么样 | 谁在用 |
+|---|---|---|
+| **Toolkit Studio**（这个 App） | `0.7.4-beta` —— semver，`package.json` 是它的家 | 关于页 / DMG 文件名 / S3 发布路径 |
+| **tke** | `20260830-073335 (a9ec2b3)` —— build 戳 + commit | `tke --version` / `tke doctor` |
+
+tke 那边 2026-08-31 起用 build 戳当身份（它的 ADR-0026）：semver 只在 bump 时才变，
+而 tke 的代码天天改 —— 拿 semver 当判据的话，"这台机器上的 tke 是不是最新的"
+永远答不上来。语义版本号因此让给了这个 App。
+
+**所以 App 的版本号不再决定内嵌 tke 是哪一版。** 想知道打进包里的是哪一份，
+看 `bin/<platform>/tke --version`。
+
 ## 代码规范补充
 - **必须**：
   - Frontend 进程：使用 `window.rLog()`, `window.rError()` 等（自动集成 Sentry）
